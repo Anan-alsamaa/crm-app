@@ -1012,7 +1012,13 @@
       "detail": "الطلب",
       "elapsedHint": "منذ إنشاء الطلب",
       "serviceHint": "منذ قبول المندوب",
-      "comments": "التعليقات"
+      "comments": "التعليقات",
+      "driverArrival": "وصول المندوب",
+      "driverArrivalHint": "من القبول حتى الوصول",
+      "delivery": "مدة التوصيل",
+      "deliveryHint": "من الخروج للتوصيل حتى الإغلاق",
+      "preparation": "مدة التحضير",
+      "preparationHint": "من القبول حتى الجاهزية"
     },
     "recordFailed": "تم طلب القسيمة، لكن تعذّر تعليم هذا الطلب كمُعالَج.",
     "cartHeading": "السلة",

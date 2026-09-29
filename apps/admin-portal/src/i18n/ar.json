@@ -1635,19 +1635,43 @@
       "reason": "التفسير",
       "action": "الإجراء المتخذ",
       "businessDay": "يوم العمل",
-      "avgHint": "في القائمة قبل القرار"
+      "avgHint": "في القائمة قبل القرار",
+      "creationTime": "وقت الإنشاء",
+      "brandOnly": "العلامة",
+      "restaurant": "المطعم",
+      "customerMobile": "جوال العميل",
+      "service": "مدة الخدمة",
+      "driverArrival": "وصول المندوب",
+      "deliveryTime": "مدة التوصيل",
+      "preparationTime": "مدة التحضير",
+      "status": "الحالة",
+      "orderStatus": "حالة الطلب",
+      "touched": "تم التعامل معها",
+      "commented": "تم التعليق"
     },
     "filter": {
       "search": "الطلب أو الفرع",
       "searchPlaceholder": "مثال: 1314302، أوكاشي، النرجس"
     },
     "exportCsv": "تصدير CSV",
-    "views": "العرض"
+    "views": "العرض",
+    "total": "الطلبات المتأخرة",
+    "commentedCount": "{{count}} تم التعليق عليها",
+    "summary": "الملخص",
+    "lateCategory": "فئة التأخير",
+    "count": "العدد",
+    "grandTotal": "الإجمالي الكلي",
+    "uncategorised": "لم تُصنَّف بعد"
   },
   "lateOrders": {
     "kind": {
       "late_delivery": "تأخر في التوصيل",
       "late_preparation": "تأخر في التحضير"
+    },
+    "state": {
+      "pending": "قيد الانتظار",
+      "commented": "تم التعليق",
+      "handled": "تمت المعالجة"
     }
   }
 }

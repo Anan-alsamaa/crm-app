@@ -118,15 +118,20 @@ export const commerce = {
    */
   getOrderCart: (orderId: string) => get<YijiOrderCart | null>('/commerce/cart', { orderId }),
   /**
-   * Driver-accept times for a batch of orders — one call, not one per row.
+   * Event times for a batch of orders — one call, not one per row.
    *
-   * Service time is measured from the driver accepting, and that moment is not
-   * in the late-orders list; it lives in each order's status history. Asked for
-   * only the rows on screen, so a long queue never turns into hundreds of calls
-   * against Yiji's production API. The gateway caps the batch at 50.
+   * Returns `orderId -> { status: timestamp }`: the order's whole status
+   * history, flattened. Every duration the late-orders screens show is two
+   * stamps out of this map — service, driver arrival, delivery and preparation
+   * — and they are computed by `orderEventTimes`, never here.
+   *
+   * None of these moments are in the late-orders LIST; they live in each order's
+   * status history. Asked for only the rows on screen, so a long queue never
+   * turns into hundreds of calls against Yiji's production API. The gateway caps
+   * the batch at 50.
    */
-  getServiceTimes: (orderIds: string[]) =>
-    get<Record<string, string | null>>('/commerce/service-times', {
+  getOrderEventTimes: (orderIds: string[]) =>
+    get<Record<string, Record<string, string | null>>>('/commerce/service-times', {
       orderIds: orderIds.join(','),
     }),
 };

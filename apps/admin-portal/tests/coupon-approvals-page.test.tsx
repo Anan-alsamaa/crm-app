@@ -65,7 +65,9 @@ const pending = {
   decision_note: null,
   date_created: '2026-08-13T10:00:00.000Z',
   ticket: { id: 't1', subject: 'Missing item', complaint_type: 'Missing item' },
-  contact: { id: 'k1', name: 'Saad Al-Harbi', phone: '+9665' },
+  /* Stored as Yiji sends it. The card must RENDER it canonically — see the
+     assertion below, and [[phone-one-canonical-form]]. */
+  contact: { id: 'k1', name: 'Saad Al-Harbi', phone: '+966545808075' },
   requested_by: { id: 'a1', first_name: 'Sara', email: 's@yiji.test' },
   decided_by: null,
 };
@@ -122,7 +124,10 @@ describe('CouponApprovalsPage', () => {
     // Name AND phone now, so a supervisor can read the number back on a call
     // without opening the ticket.
     expect(screen.getByText(/Saad Al-Harbi/)).toBeInTheDocument();
-    expect(screen.getByText(/\+9665/)).toBeInTheDocument();
+    /* CANONICAL, not raw: every number in this CRM reads `05XXXXXXXX`, and a
+       supervisor reading one back on a call should not be the one place that
+       shows Yiji's `+966` form. */
+    expect(screen.getByText(/0545808075/)).toBeInTheDocument();
     // The agent's own words. Deciding without them is guessing.
     expect(screen.getAllByText(/Two items missing/).length).toBeGreaterThan(0);
   });

@@ -58,9 +58,9 @@ describe('agentLateStats', () => {
     );
     expect(ayman).toMatchObject({
       agent: 'Ayman',
-      handled: 3,
+      touched: 3,
       compensated: 2,
-      ignored: 1,
+      commented: 1,
       latePreparation: 2,
       lateDelivery: 1,
       /* WAITING time, not order age: 60/80/100 elapsed against a 60 threshold
@@ -70,7 +70,7 @@ describe('agentLateStats', () => {
     });
   });
 
-  it('separates agents and ranks by how many each handled', () => {
+  it('separates agents and ranks by how many each acted on', () => {
     const stats = agentLateStats(
       [
         row({ decided_by: { id: 'a', first_name: 'Quiet', last_name: null } }),
@@ -79,7 +79,7 @@ describe('agentLateStats', () => {
       ],
       UNKNOWN,
     );
-    expect(stats.map((s) => [s.agent, s.handled])).toEqual([
+    expect(stats.map((s) => [s.agent, s.touched])).toEqual([
       ['Busy', 2],
       ['Quiet', 1],
     ]);
@@ -94,7 +94,7 @@ describe('agentLateStats', () => {
     );
     // 90 elapsed - 60 threshold = 30 minutes on the queue.
     expect(s!.avgMinutes).toBe(30);
-    expect(s!.handled).toBe(2);
+    expect(s!.touched).toBe(2);
   });
 
   it('reports no average at all when nothing was recorded', () => {
@@ -204,5 +204,65 @@ describe('latestPerOrder', () => {
 
   it('returns an empty list unchanged', () => {
     expect(latestPerOrder([])).toEqual([]);
+  });
+});
+
+/**
+ * PENDING ROWS ARE NOT AGENT WORK (owner spec §11, 2026-09-29).
+ *
+ * The register now merges Yiji's live queue in, so most rows in a fresh window
+ * have no decision and no agent. If those reached this table they would add a
+ * large "Unassigned" line to a report whose entire subject is what each agent
+ * DID, and inflate the team total with orders nobody has touched — a number
+ * that looks like work and is not.
+ */
+describe('agentLateStats and the merged register', () => {
+  const decided = {
+    id: 'd1',
+    order_id: '1',
+    kind: 'late_delivery' as const,
+    action: 'compensated' as const,
+    reason: 'r',
+    minutes_elapsed: 90,
+    brand_name: null,
+    restaurant_name: null,
+    date_created: '2026-09-29T10:00:00',
+    decided_by: { id: 'a', first_name: 'Ayman', last_name: null },
+    ticket: null,
+  };
+
+  it('skips a pending row entirely', () => {
+    const stats = agentLateStats(
+      [
+        { ...decided, state: 'handled' as const },
+        {
+          ...decided,
+          id: 'pending:2',
+          order_id: '2',
+          action: null,
+          reason: null,
+          decided_by: null,
+          state: 'pending' as const,
+        },
+      ],
+      UNKNOWN,
+    );
+    // One agent, one order. The pending one contributes nothing at all.
+    expect(stats).toHaveLength(1);
+    expect(stats[0]).toMatchObject({ agent: 'Ayman', touched: 1 });
+  });
+
+  /* A row with no action is pending whether or not the caller labelled it —
+     the guard keys on the action so plain decision rows behave as before. */
+  it('skips an actionless row even without a state', () => {
+    expect(agentLateStats([{ ...decided, action: null }], UNKNOWN)).toEqual([]);
+  });
+
+  it('still counts a commented row as agent work', () => {
+    const stats = agentLateStats(
+      [{ ...decided, action: 'commented' as const, state: 'commented' as const }],
+      UNKNOWN,
+    );
+    expect(stats[0]).toMatchObject({ touched: 1, commented: 1, compensated: 0 });
   });
 });

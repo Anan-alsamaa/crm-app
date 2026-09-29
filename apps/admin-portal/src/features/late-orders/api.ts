@@ -165,6 +165,33 @@ export function useLateOrderQueue(fromIso: string, toIso: string) {
   });
 }
 
+/**
+ * Event times for the rows CURRENTLY ON SCREEN.
+ *
+ * The gateway caps a batch at 50 and each id costs a call into Yiji's production
+ * API upstream, so this is deliberately given the visible PAGE rather than the
+ * whole window: a register covering a month can hold thousands of rows, and
+ * asking for all of them would be thousands of calls for columns nobody has
+ * scrolled to.
+ *
+ * `retry: false` and a shared failure: Yiji is external, and three silent
+ * retries leave a skeleton where an answer should be. A failure blanks these
+ * four columns and nothing else — every other column comes from our own
+ * database.
+ */
+export function useLateOrderEventTimes(orderIds: string[]) {
+  // Sorted + joined so the key is stable: the same ids in a different order
+  // must not look like a different query and refetch.
+  const key = [...orderIds].sort().join(',');
+  return useQuery<Record<string, Record<string, string | null>>>({
+    queryKey: ['late-order-event-times', key],
+    enabled: orderIds.length > 0,
+    staleTime: 60_000,
+    retry: false,
+    queryFn: () => commerce.getOrderEventTimes(orderIds),
+  });
+}
+
 export function latestPerOrder(rows: LateOrderDecisionRow[]): LateOrderDecisionRow[] {
   const seen = new Set<string>();
   const out: LateOrderDecisionRow[] = [];
@@ -271,9 +298,11 @@ export function useLateOrderThreshold() {
 
 export interface AgentLateStats {
   agent: string;
-  handled: number;
+  /** Every late order this agent acted on — commented or compensated. */
+  touched: number;
   compensated: number;
-  ignored: number;
+  /** Explained but not compensated. Was `ignored` before that state existed. */
+  commented: number;
   latePreparation: number;
   lateDelivery: number;
   /**
@@ -304,7 +333,7 @@ export interface AgentLateStats {
  * refusing to.
  */
 export function agentLateStats(
-  rows: readonly LateOrderDecisionRow[],
+  rows: readonly (LateOrderDecisionRow & { state?: LateOrderState })[],
   unknown: string,
   /**
    * The threshold the rows were selected by, subtracted to get waiting time.
@@ -317,14 +346,27 @@ export function agentLateStats(
 ): AgentLateStats[] {
   const by = new Map<string, AgentLateStats & { _minutes: number[] }>();
   for (const r of rows) {
+    /*
+     * PENDING ROWS ARE NOT AGENT WORK, and must not enter this table.
+     *
+     * Since the register merges the live queue in (owner spec §11), most rows in
+     * a fresh window have no decision and no agent. Counting them would add a
+     * large "Unassigned" line to a table whose entire subject is what each agent
+     * DID, and inflate the team total with orders nobody has touched.
+     *
+     * Keyed on the absence of an `action` rather than on `state`, so a caller
+     * passing plain decision rows — which have no `state` — behaves exactly as
+     * before.
+     */
+    if (r.state === 'pending' || !r.action) continue;
     const agent = agentName(r, unknown);
     let s = by.get(agent);
     if (!s) {
       s = {
         agent,
-        handled: 0,
+        touched: 0,
         compensated: 0,
-        ignored: 0,
+        commented: 0,
         latePreparation: 0,
         lateDelivery: 0,
         avgMinutes: null,
@@ -332,9 +374,9 @@ export function agentLateStats(
       };
       by.set(agent, s);
     }
-    s.handled += 1;
+    s.touched += 1;
     if (r.action === 'compensated') s.compensated += 1;
-    if (r.action === 'commented') s.ignored += 1;
+    if (r.action === 'commented') s.commented += 1;
     if (r.kind === 'late_preparation') s.latePreparation += 1;
     if (r.kind === 'late_delivery') s.lateDelivery += 1;
     if (typeof r.minutes_elapsed === 'number') {
@@ -349,5 +391,5 @@ export function agentLateStats(
         ? Math.round(_minutes.reduce((a, b) => a + b, 0) / _minutes.length)
         : null,
     }))
-    .sort((a, b) => b.handled - a.handled);
+    .sort((a, b) => b.touched - a.touched);
 }

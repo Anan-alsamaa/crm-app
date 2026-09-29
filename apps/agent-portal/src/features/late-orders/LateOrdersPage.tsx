@@ -30,7 +30,7 @@ import {
   businessDayRange,
   matchStore,
   normalizePhone,
-  serviceMinutes,
+  orderEventTimes,
   type LateOrderRow,
   causeRaisesTicket,
   DEFAULT_LATE_ORDER_CAUSES,
@@ -54,11 +54,28 @@ import {
   useLateOrderCauses,
   useLateOrderDecisions,
   useRecordLateDecision,
-  useServiceTimes,
+  useOrderEventTimes,
   useUpdateLateDecision,
   lateOrderTicket,
   FALLBACK_THRESHOLD,
 } from './api.js';
+
+/**
+ * One of the three leg times: loading, not known, or a duration.
+ *
+ * A SKELETON and a DASH are different answers. The batch is still in flight, or
+ * the two stamps this leg needs are not both in the order's history — an order
+ * that never went out for delivery has no delivery time, and that is a fact, not
+ * a gap. A zero would read as "instant" and is never shown.
+ */
+function LegTime({ loading, minutes }: { loading: boolean; minutes: number | null }) {
+  if (loading)
+    return (
+      <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
+    );
+  if (minutes === null) return <span className="text-muted-foreground/60">&mdash;</span>;
+  return <span className="text-sm text-muted-foreground">{elapsed(minutes)}</span>;
+}
 
 /**
  * Late Delivery Handling - the agent's queue.
@@ -544,7 +561,7 @@ export function LateOrdersPage() {
    * rendered. `nowMs` ticks with the queue's own refresh so a live order's
    * service time advances with everything else rather than freezing at mount.
    */
-  const serviceTimes = useServiceTimes(rows.map((r) => r.orderId));
+  const eventTimes = useOrderEventTimes(rows.map((r) => r.orderId));
   /*
    * THE CAUSES, from the editable list (owner, 2026-09-29).
    *
@@ -570,6 +587,19 @@ export function LateOrdersPage() {
   }, [causes.data, t]);
   const updateDecision = useUpdateLateDecision();
   const nowMs = queue.dataUpdatedAt || Date.now();
+
+  /*
+   * THE FOUR TIMES for a row, from its status history.
+   *
+   * `orderEventTimes` is the one place the rules live — Closed beats
+   * force-closed, each fallback is named, and a missing pair is null rather
+   * than zero. Computed at render against `nowMs` so a live order's service
+   * time ticks with the queue's own refresh.
+   */
+  const timesOf = useCallback(
+    (orderId: string) => orderEventTimes(eventTimes.data?.[orderId] ?? {}, nowMs),
+    [eventTimes.data, nowMs],
+  );
 
   /*
    * What this order is classified as, in order of authority:
@@ -1113,6 +1143,32 @@ export function LateOrdersPage() {
                     {t('lateOrders.col.serviceHint', { defaultValue: 'since driver accepted' })}
                   </span>
                 </Th>
+                {/*
+                  THE THREE LEGS (owner spec §7, 2026-09-29), beside the service
+                  time they break down. Each names what it measures underneath,
+                  because "Delivery" and "Service" are otherwise indistinguishable
+                  at a glance and they start from different moments.
+                */}
+                <Th>
+                  {t('lateOrders.col.driverArrival', { defaultValue: 'Driver arrival' })}
+                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                    {t('lateOrders.col.driverArrivalHint', { defaultValue: 'accept to arrival' })}
+                  </span>
+                </Th>
+                <Th>
+                  {t('lateOrders.col.delivery', { defaultValue: 'Delivery time' })}
+                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                    {t('lateOrders.col.deliveryHint', {
+                      defaultValue: 'out for delivery to close',
+                    })}
+                  </span>
+                </Th>
+                <Th>
+                  {t('lateOrders.col.preparation', { defaultValue: 'Preparation time' })}
+                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                    {t('lateOrders.col.preparationHint', { defaultValue: 'accepted to ready' })}
+                  </span>
+                </Th>
                 <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
                 <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
                 <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
@@ -1173,18 +1229,20 @@ export function LateOrdersPage() {
                     */}
                     <Td className="whitespace-nowrap tabular-nums">
                       {(() => {
-                        if (serviceTimes.isLoading)
+                        if (eventTimes.isLoading)
                           return (
                             /* A skeleton, not a spinner: one spinner per row
                                reads as a page that is broken, and the width is
                                known so nothing reflows when the value lands. */
                             <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
                           );
-                        const mins = serviceMinutes(
-                          serviceTimes.data?.[row.orderId] ?? null,
-                          row.closedAt ?? null,
-                          nowMs,
-                        );
+                        /* `orderEventTimes`, not the old `serviceMinutes`:
+                           that one took the queue's `closedAt`, which is the
+                           CURRENT status's moment and so reads a force-close as
+                           the end. Order 1323407 was closed at 17:30 and
+                           force-closed at 22:31, giving 365 minutes where the
+                           truth is 64 (owner spec §6). */
+                        const mins = timesOf(row.orderId).serviceMinutes;
                         if (mins === null)
                           return <span className="text-muted-foreground/60">&mdash;</span>;
                         /*
@@ -1237,6 +1295,28 @@ export function LateOrdersPage() {
                           </span>
                         );
                       })()}
+                    </Td>
+                    {/* The three legs. Same loading/blank treatment as the
+                        service time beside them, via one helper — three copies
+                        of "skeleton, else dash, else minutes" is three chances
+                        for one of them to say something different. */}
+                    <Td className="whitespace-nowrap tabular-nums">
+                      <LegTime
+                        loading={eventTimes.isLoading}
+                        minutes={timesOf(row.orderId).driverArrivalMinutes}
+                      />
+                    </Td>
+                    <Td className="whitespace-nowrap tabular-nums">
+                      <LegTime
+                        loading={eventTimes.isLoading}
+                        minutes={timesOf(row.orderId).deliveryMinutes}
+                      />
+                    </Td>
+                    <Td className="whitespace-nowrap tabular-nums">
+                      <LegTime
+                        loading={eventTimes.isLoading}
+                        minutes={timesOf(row.orderId).preparationMinutes}
+                      />
                     </Td>
                     <Td className="max-w-[16rem] truncate">
                       {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}

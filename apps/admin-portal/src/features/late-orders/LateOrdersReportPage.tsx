@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -8,6 +8,8 @@ import {
   Pill,
   ReportKpi,
   Skeleton,
+  TablePager,
+  pageCountOf,
   Table,
   Td,
   Th,
@@ -15,13 +17,70 @@ import {
   formatDate,
   formatDateTime,
 } from '@yiji/ui';
-import { businessDay } from '@yiji/shared-types';
+import { businessDay, orderEventTimes, type LateOrderState } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
 import { useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
-import { agentLateStats, agentName, useLateOrderDecisions, useLateOrderThreshold } from './api.js';
+import {
+  agentLateStats,
+  agentName,
+  mergeLateOrders,
+  useLateOrderDecisions,
+  useLateOrderEventTimes,
+  useLateOrderQueue,
+  useLateOrderThreshold,
+} from './api.js';
+
+/**
+ * Rows per page. The same ladder the ticket reports use, 1000 included — a
+ * register over a real date range runs to thousands of rows, and the owner asked
+ * for the breakdown report's treatment (2026-09-29).
+ */
+const REGISTER_PAGE_SIZES = [10, 25, 50, 100, 250, 500, 1000] as const;
+
+/**
+ * How a handling state reads at a glance: waiting, explained, done.
+ *
+ * `highlight` for pending because that is what this palette means by "waiting on
+ * somebody" — not a severity. A pending late order is not an error; it is work
+ * nobody has picked up.
+ */
+const STATE_TONE: Record<LateOrderState, 'highlight' | 'blue' | 'success'> = {
+  pending: 'highlight',
+  commented: 'blue',
+  handled: 'success',
+};
+
+/**
+ * `late_preparation` → `Late preparation` (owner spec §12).
+ *
+ * The fallback when a value has no translation — which is every cause
+ * operations add to the editable list, and every Yiji order status. Printing the
+ * raw enum put underscores in a report people read and export.
+ */
+function causeLabel(value: string): string {
+  const spaced = value.replace(/_/g, ' ').trim();
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : value;
+}
+
+/**
+ * One duration cell: still loading, not knowable, or minutes.
+ *
+ * A SKELETON and a DASH are different answers. The batch may still be in flight,
+ * or the two stamps this leg needs may not both be in the order's history — an
+ * order that never went out for delivery has no delivery time, and that is a
+ * fact rather than a gap. Zero is never shown; it would read as "instant".
+ */
+function Leg({ loading, minutes }: { loading: boolean; minutes: number | null }) {
+  if (loading)
+    return (
+      <span className="inline-block h-4 w-10 animate-pulse rounded bg-muted/60 align-middle" />
+    );
+  if (minutes === null) return <span className="text-muted-foreground/60">&mdash;</span>;
+  return <>{minutes}</>;
+}
 
 /**
  * Late orders - the agent measure.
@@ -46,7 +105,15 @@ export function LateOrdersReportPage() {
   const unknown = t('lateOrdersReport.unknownAgent', { defaultValue: 'Unassigned' });
   const [search, setSearch] = useState('');
   const [kind, setKind] = useState('');
-  const [action, setAction] = useState('');
+  /*
+   * THE HANDLING STATE (owner spec §10, 2026-09-29): Pending, Commented or
+   * Handled. This replaces the old `action` filter, which offered
+   * Compensated/Ignored — a vocabulary that no longer exists. Empty means all.
+   *
+   * NOT the order's own status, which is a separate thing entirely and has its
+   * own column.
+   */
+  const [state, setState] = useState<LateOrderState | ''>('');
   /** One business day, as `YYYY-MM-DD`. Empty means every day in the window. */
   const [bizDay, setBizDay] = useState('');
   /*
@@ -66,7 +133,7 @@ export function LateOrdersReportPage() {
    * one query feed both views, so a route change would remount the filter bar
    * and refetch for a switch that costs nothing.
    */
-  const [tab, setTab] = useState<'decisions' | 'agents'>('decisions');
+  const [tab, setTab] = useState<'decisions' | 'agents' | 'summary'>('decisions');
 
   /*
    * The window is widened at BOTH ends to cover whole BUSINESS days.
@@ -84,11 +151,24 @@ export function LateOrdersReportPage() {
    */
   const toNight = new Date(`${to}T00:00:00Z`);
   toNight.setUTCDate(toNight.getUTCDate() + 1);
-  const q = useLateOrderDecisions(
-    `${from}T00:00:00`,
-    `${toNight.toISOString().slice(0, 10)}T04:00:00`,
-  );
-  const all = useMemo(() => q.data ?? [], [q.data]);
+  const fromIso = `${from}T00:00:00`;
+  const toIso = `${toNight.toISOString().slice(0, 10)}T04:00:00`;
+  const q = useLateOrderDecisions(fromIso, toIso);
+  /*
+   * THE PENDING ONES TOO (owner spec §11, 2026-09-29).
+   *
+   * A pending late order has NO DATABASE ROW — it exists only in Yiji's queue
+   * until somebody comments on it or gives a coupon. So a register built from
+   * `late_order_decisions` alone could only ever show the orders that had
+   * already been dealt with, and "how many are waiting" was the one question it
+   * could not answer.
+   *
+   * Its own query: Yiji is external and can fail on its own. A register that
+   * went blank because the queue timed out would be worse than one showing
+   * every decision, so a failure here costs the pending rows and nothing else.
+   */
+  const queue = useLateOrderQueue(fromIso, toIso);
+  const all = useMemo(() => mergeLateOrders(q.data ?? [], queue.data ?? []), [q.data, queue.data]);
 
   /*
    * Narrowing happens HERE, not upstream: the window is already fetched, so an
@@ -98,7 +178,7 @@ export function LateOrdersReportPage() {
     const term = search.trim().toLowerCase();
     return all.filter((r) => {
       if (kind && r.kind !== kind) return false;
-      if (action && r.action !== action) return false;
+      if (state && r.state !== state) return false;
       // The BUSINESS day (08:00-04:00), not the calendar date — a decision at
       // 01:00 belongs to the night before, and filtering by date would put it
       // on the wrong day.
@@ -112,7 +192,7 @@ export function LateOrdersReportPage() {
         .toLowerCase()
         .includes(term);
     });
-  }, [all, search, kind, action, bizDay, agent, unknown]);
+  }, [all, search, kind, state, bizDay, agent, unknown]);
   /*
    * The business days actually PRESENT in the fetched window, newest first.
    *
@@ -143,6 +223,94 @@ export function LateOrdersReportPage() {
     }
     return [...seen].sort().reverse();
   }, [all]);
+
+  /*
+   * PAGING, the same shape the ticket breakdown report uses (owner,
+   * 2026-09-29): client-side over the window already fetched, up to 1000 rows a
+   * page. No arbitrary date cap — the window is paged through upstream and the
+   * result paged here.
+   */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(100);
+  const pageCount = pageCountOf(rows.length, pageSize);
+  /* Clamped rather than stored: narrowing the filters while sitting on page 9
+     must not strand the reader on a page that no longer exists. */
+  const current = Math.min(Math.max(1, page), pageCount);
+  const paged = useMemo(
+    () => rows.slice((current - 1) * pageSize, current * pageSize),
+    [rows, current, pageSize],
+  );
+
+  /*
+   * THE DURATIONS, for the OPEN PAGE ONLY.
+   *
+   * Each order id costs a call into Yiji's production API upstream and the
+   * gateway caps a batch at 50, so this deliberately asks about what is on
+   * screen rather than the whole window: a month's register is thousands of
+   * rows, and fetching all of them would be thousands of calls for columns
+   * nobody has scrolled to. Changing page fetches the next batch.
+   */
+  const eventTimes = useLateOrderEventTimes(
+    useMemo(
+      () =>
+        paged
+          .slice(0, 50)
+          .map((r) => r.order_id?.trim())
+          .filter((v): v is string => !!v),
+      [paged],
+    ),
+  );
+  const timesOf = useCallback(
+    (orderId: string | null) =>
+      orderEventTimes(eventTimes.data?.[orderId?.trim() ?? ''] ?? {}, Date.now()),
+    [eventTimes.data],
+  );
+
+  /*
+   * THE SUMMARY: how many late orders of each CAUSE (owner spec §15-§17).
+   *
+   * One row per Late Category with its count, and a Grand Total. Built from the
+   * same filtered `rows` every other view uses, so the date range and every
+   * other filter apply to it without a second query — and so the Grand Total
+   * always equals what the register beside it lists.
+   *
+   * Causes are discovered from the DATA rather than enumerated: operations can
+   * add one to the editable list at any time, and a hardcoded pair would leave
+   * a new cause out of the summary silently. Ordered by count, biggest first —
+   * the question this table answers is "what is going wrong most".
+   *
+   * Rows with no cause are counted under their own label rather than dropped:
+   * a pending order has nobody's classification yet, and silently omitting them
+   * would make the Grand Total disagree with the register.
+   */
+  const summary = useMemo(() => {
+    const by = new Map<string, number>();
+    for (const r of rows) {
+      const key = r.kind ?? '';
+      by.set(key, (by.get(key) ?? 0) + 1);
+    }
+    return [...by.entries()]
+      .map(([kind, count]) => ({
+        kind,
+        label: kind
+          ? t(`lateOrders.kind.${kind}`, { defaultValue: causeLabel(kind) })
+          : t('lateOrdersReport.uncategorised', { defaultValue: 'Not yet categorised' }),
+        count,
+      }))
+      .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+  }, [rows, t]);
+
+  const exportSummary = () => {
+    const header = [
+      t('lateOrdersReport.lateCategory', { defaultValue: 'Late category' }),
+      t('lateOrdersReport.count', { defaultValue: 'Count' }),
+    ];
+    const body: Array<Array<string | number>> = summary.map((r) => [r.label, r.count]);
+    /* The Grand Total is a ROW of the file, as it is on screen: somebody opening
+       this in a spreadsheet should see the same table they exported. */
+    body.push([t('lateOrdersReport.grandTotal', { defaultValue: 'Grand total' }), rows.length]);
+    downloadCsv(exportFileName('Late orders summary', {}), toCsv(header, body));
+  };
 
   /* The LIVE threshold, because the waiting figure is `elapsed - threshold`
      and the threshold is an editable setting. */
@@ -182,18 +350,18 @@ export function LateOrdersReportPage() {
   const exportByAgent = () => {
     const header = [
       t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
-      t('lateOrdersReport.col.handled', { defaultValue: 'Handled' }),
+      t('lateOrdersReport.col.touched', { defaultValue: 'Acted on' }),
       t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' }),
-      t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' }),
+      t('lateOrdersReport.col.commented', { defaultValue: 'Commented' }),
       t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' }),
       t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' }),
       t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes waiting' }),
     ];
     const body = stats.map((r) => [
       r.agent,
-      r.handled,
+      r.touched,
       r.compensated,
-      r.ignored,
+      r.commented,
       r.latePreparation,
       r.lateDelivery,
       // Blank, not 0: no measurable orders is not an average of zero minutes.
@@ -204,27 +372,55 @@ export function LateOrdersReportPage() {
 
   const exportDecisions = () => {
     const header = [
-      t('lateOrdersReport.col.when', { defaultValue: 'When' }),
+      t('lateOrdersReport.col.creationTime', { defaultValue: 'Creation time' }),
       t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' }),
       t('lateOrdersReport.col.order', { defaultValue: 'Order' }),
-      t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' }),
+      t('lateOrdersReport.col.brandOnly', { defaultValue: 'Brand' }),
+      t('lateOrdersReport.col.restaurant', { defaultValue: 'Restaurant' }),
+      t('lateOrdersReport.col.customerMobile', { defaultValue: 'Customer mobile' }),
+      t('lateOrdersReport.col.service', { defaultValue: 'Service time' }),
+      t('lateOrdersReport.col.driverArrival', { defaultValue: 'Driver arrival' }),
+      t('lateOrdersReport.col.deliveryTime', { defaultValue: 'Delivery time' }),
+      t('lateOrdersReport.col.preparationTime', { defaultValue: 'Preparation time' }),
       t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
-      t('lateOrdersReport.col.decision', { defaultValue: 'Decision' }),
+      t('lateOrdersReport.col.status', { defaultValue: 'Status' }),
+      t('lateOrdersReport.col.orderStatus', { defaultValue: 'Order status' }),
       t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
       t('lateOrdersReport.col.reason', { defaultValue: 'Reason' }),
       t('lateOrdersReport.col.action', { defaultValue: 'Action taken' }),
     ];
+    /*
+     * EVERY FILTERED ROW, not just the open page — the file is what somebody
+     * takes away, and paging is a reading convenience.
+     *
+     * The four DURATIONS are the exception: they are fetched for the visible
+     * page only (each id is a call into Yiji upstream), so a row on another page
+     * exports them blank rather than wrong. A blank cell is honest; a zero would
+     * read as a measurement.
+     */
     const body = rows.map((r) => {
       const day = businessDay(r.date_created);
+      const times = timesOf(r.order_id);
       return [
         // ISO, not the dd/mm/yyyy on screen: a spreadsheet sorts and filters an
         // ISO stamp correctly and re-formats it for the reader either way.
         r.date_created ?? '',
         day ?? '',
         r.order_id ?? '',
-        [r.brand_name, r.restaurant_name].filter(Boolean).join(' - '),
-        r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '',
-        r.action ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action }) : '',
+        r.brand_name ?? '',
+        r.restaurant_name ?? '',
+        r.customer_phone ?? '',
+        times.serviceMinutes ?? '',
+        times.driverArrivalMinutes ?? '',
+        times.deliveryMinutes ?? '',
+        times.preparationMinutes ?? '',
+        r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: causeLabel(r.kind) }) : '',
+        t(`lateOrders.state.${r.state}`, { defaultValue: r.state }),
+        r.order_status
+          ? t(`commerce.orderStatuses.${r.order_status}`, {
+              defaultValue: causeLabel(r.order_status),
+            })
+          : '',
         agentName(r, unknown),
         // The WHOLE text, not the two clamped lines the table shows: the export
         // exists precisely to get at what does not fit on screen.
@@ -232,18 +428,26 @@ export function LateOrdersReportPage() {
         r.action_taken ?? '',
       ];
     });
-    downloadCsv(exportFileName('Late order decisions', {}), toCsv(header, body));
+    downloadCsv(exportFileName('Late orders', {}), toCsv(header, body));
   };
 
+  /*
+   * THE THREE STATES, counted (owner spec §10/§11).
+   *
+   * `total` is every late order in the window now that pending ones are in the
+   * register — it used to be `rows.length` under the name "handled", which was
+   * true only while the register held decisions alone. Leaving that name on a
+   * merged list would have quietly counted untouched orders as handled work.
+   */
   const totals = useMemo(() => {
-    const compensated = rows.filter((r) => r.action === 'compensated').length;
     const mins = rows
       .map((r) => r.minutes_elapsed)
       .filter((m): m is number => typeof m === 'number');
     return {
-      handled: rows.length,
-      compensated,
-      ignored: rows.filter((r) => r.action === 'commented').length,
+      total: rows.length,
+      pending: rows.filter((r) => r.state === 'pending').length,
+      commented: rows.filter((r) => r.state === 'commented').length,
+      handled: rows.filter((r) => r.state === 'handled').length,
       preparation: rows.filter((r) => r.kind === 'late_preparation').length,
       avgMinutes: mins.length ? Math.round(mins.reduce((a, b) => a + b, 0) / mins.length) : null,
     };
@@ -329,18 +533,24 @@ export function LateOrdersReportPage() {
             ],
           },
           {
-            key: 'action',
-            label: t('lateOrdersReport.col.decision', { defaultValue: 'Decision' }),
-            value: action,
-            onChange: setAction,
+            /* STATUS, not Decision (owner spec §10). The three handling states,
+               in the order an order passes through them. */
+            key: 'state',
+            label: t('lateOrdersReport.col.status', { defaultValue: 'Status' }),
+            value: state,
+            onChange: (v: string) => setState(v as LateOrderState | ''),
             options: [
               {
-                value: 'compensated',
-                label: t('lateOrdersReport.action.compensated', { defaultValue: 'Compensated' }),
+                value: 'pending',
+                label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
               },
               {
                 value: 'commented',
-                label: t('lateOrdersReport.action.ignored', { defaultValue: 'Ignored' }),
+                label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
+              },
+              {
+                value: 'handled',
+                label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
               },
             ],
           },
@@ -348,11 +558,11 @@ export function LateOrdersReportPage() {
         /* The agent belongs in BOTH: omitted from `filtering` the Clear button
            would not appear for an agent-only filter, and omitted from
            `onClear` it would survive a clear that claims to remove everything. */
-        filtering={!!search || !!kind || !!action || !!bizDay || !!agent}
+        filtering={!!search || !!kind || !!state || !!bizDay || !!agent}
         onClear={() => {
           setSearch('');
           setKind('');
-          setAction('');
+          setState('');
           setBizDay('');
           setAgent('');
           reset();
@@ -361,19 +571,25 @@ export function LateOrdersReportPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <ReportKpi
-          label={t('lateOrdersReport.handled', { defaultValue: 'Late orders handled' })}
-          value={String(totals.handled)}
+          label={t('lateOrdersReport.total', { defaultValue: 'Late orders' })}
+          value={String(totals.total)}
           tone="blue"
         />
+        {/* PENDING FIRST among the states: it is the one that needs somebody to
+            do something, and the only one that was invisible before. */}
         <ReportKpi
-          label={t('lateOrdersReport.compensated', { defaultValue: 'Compensated' })}
-          value={String(totals.compensated)}
-          tone="green"
+          label={t('lateOrders.state.pending', { defaultValue: 'Pending' })}
+          value={String(totals.pending)}
+          tone="amber"
         />
         <ReportKpi
-          label={t('lateOrdersReport.ignored', { defaultValue: 'Ignored' })}
-          value={String(totals.ignored)}
-          tone="amber"
+          label={t('lateOrders.state.handled', { defaultValue: 'Handled' })}
+          value={String(totals.handled)}
+          tone="green"
+          hint={t('lateOrdersReport.commentedCount', {
+            count: totals.commented,
+            defaultValue: '{{count}} commented',
+          })}
         />
         <ReportKpi
           label={t('lateOrdersReport.avgMinutes', { defaultValue: 'Average when decided' })}
@@ -407,11 +623,11 @@ export function LateOrdersReportPage() {
         */
         <EmptyState
           title={t('lateOrdersReport.noneTitle', {
-            defaultValue: 'No decisions recorded in this window',
+            defaultValue: 'No late orders in this window',
           })}
           description={t('lateOrdersReport.noneBody', {
             defaultValue:
-              'This report counts what agents did with late orders — compensated or ignored. The late orders themselves are in the agent portal; a row appears here once an agent acts on one.',
+              'No delivery order passed the late threshold in this window, and none was commented on or compensated.',
           })}
         />
       ) : (
@@ -428,6 +644,7 @@ export function LateOrdersReportPage() {
             {(
               [
                 ['decisions', t('lateOrdersReport.register', { defaultValue: 'Order decisions' })],
+                ['summary', t('lateOrdersReport.summary', { defaultValue: 'Summary' })],
                 ['agents', t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })],
               ] as const
             ).map(([key, label]) => (
@@ -453,6 +670,61 @@ export function LateOrdersReportPage() {
             export sit on one line with real padding, and the table starts
             below it rather than immediately under the words.
           */}
+          {/*
+            THE SUMMARY (owner spec §15-§17): Late Category against Count, with
+            a Grand Total, over the date range the filter bar already sets.
+
+            No pager: this table has one row per cause, and there are a handful
+            of causes. A pager on three rows is furniture.
+          */}
+          {tab === 'summary' && (
+            <Card className="p-0">
+              <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+                <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  {t('lateOrdersReport.summary', { defaultValue: 'Summary' })}
+                </h3>
+                {canExport && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="ms-auto"
+                    onClick={exportSummary}
+                    disabled={summary.length === 0}
+                  >
+                    {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                  </Button>
+                )}
+              </div>
+              <Table>
+                <thead>
+                  <Tr>
+                    <Th>{t('lateOrdersReport.lateCategory', { defaultValue: 'Late category' })}</Th>
+                    <Th>{t('lateOrdersReport.count', { defaultValue: 'Count' })}</Th>
+                  </Tr>
+                </thead>
+                <tbody>
+                  {summary.map((r) => (
+                    <Tr key={r.kind || 'uncategorised'}>
+                      <Td>{r.label}</Td>
+                      <Td className="tabular-nums">{r.count}</Td>
+                    </Tr>
+                  ))}
+                  {/* THE GRAND TOTAL is `rows.length`, not a sum of the rows
+                      above — the two are equal by construction, and taking it
+                      from the source means they cannot silently diverge if a
+                      row ever fails to land in a category. */}
+                  <Tr>
+                    <Td className="font-semibold">
+                      {t('lateOrdersReport.grandTotal', { defaultValue: 'Grand total' })}
+                    </Td>
+                    <Td className="font-semibold tabular-nums">{rows.length}</Td>
+                  </Tr>
+                </tbody>
+              </Table>
+            </Card>
+          )}
+
           {/* RENDERED, not hidden: a `hidden` card still builds every row, and
               the register runs to hundreds. Only the open sub-page pays. */}
           {tab === 'agents' && (
@@ -493,11 +765,11 @@ export function LateOrdersReportPage() {
                   <thead>
                     <Tr>
                       <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                      <Th>{t('lateOrdersReport.col.handled', { defaultValue: 'Handled' })}</Th>
+                      <Th>{t('lateOrdersReport.col.touched', { defaultValue: 'Acted on' })}</Th>
                       <Th>
                         {t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}
                       </Th>
-                      <Th>{t('lateOrdersReport.col.ignored', { defaultValue: 'Ignored' })}</Th>
+                      <Th>{t('lateOrdersReport.col.commented', { defaultValue: 'Commented' })}</Th>
                       <Th>
                         {t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}
                       </Th>
@@ -520,9 +792,9 @@ export function LateOrdersReportPage() {
                     {stats.map((s) => (
                       <Tr key={s.agent}>
                         <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
-                        <Td className="tabular-nums">{s.handled}</Td>
+                        <Td className="tabular-nums">{s.touched}</Td>
                         <Td className="tabular-nums">{s.compensated}</Td>
-                        <Td className="tabular-nums">{s.ignored}</Td>
+                        <Td className="tabular-nums">{s.commented}</Td>
                         <Td className="tabular-nums">{s.latePreparation}</Td>
                         <Td className="tabular-nums">{s.lateDelivery}</Td>
                         <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
@@ -531,6 +803,30 @@ export function LateOrdersReportPage() {
                   </tbody>
                 </Table>
               </div>
+              <TablePager
+                page={current}
+                onPage={setPage}
+                pageSize={pageSize}
+                onPageSize={setPageSize}
+                total={rows.length}
+                pageSizes={REGISTER_PAGE_SIZES}
+                labels={{
+                  rowsPerPage: String(
+                    t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                  ),
+                  previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+                  next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                  showing: ({ from: f, to: to2, total }) =>
+                    String(
+                      t('complaintReport.showingRange', {
+                        defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+                        from: f,
+                        to: to2,
+                        total,
+                      }),
+                    ),
+                }}
+              />
             </Card>
           )}
 
@@ -571,23 +867,64 @@ export function LateOrdersReportPage() {
                 <Table>
                   <thead>
                     <Tr>
-                      <Th>{t('lateOrdersReport.col.when', { defaultValue: 'When' })}</Th>
+                      {/* CREATION TIME, not "When" (owner spec §12) — when the
+                          ORDER was created, which is what the column has always
+                          shown and what an admin reading a register needs. */}
+                      <Th>
+                        {t('lateOrdersReport.col.creationTime', { defaultValue: 'Creation time' })}
+                      </Th>
                       <Th>
                         {t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' })}
                       </Th>
                       <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
-                      <Th>{t('lateOrdersReport.col.brand', { defaultValue: 'Brand / branch' })}</Th>
+                      {/* §14 — BRAND AND RESTAURANT AS SEPARATE NAMED COLUMNS,
+                          plus the customer's mobile. They were one joined cell,
+                          which cannot be sorted, filtered or read into a
+                          spreadsheet as two facts. */}
+                      <Th>{t('lateOrdersReport.col.brandOnly', { defaultValue: 'Brand' })}</Th>
+                      <Th>
+                        {t('lateOrdersReport.col.restaurant', { defaultValue: 'Restaurant' })}
+                      </Th>
+                      <Th>
+                        {t('lateOrdersReport.col.customerMobile', {
+                          defaultValue: 'Customer mobile',
+                        })}
+                      </Th>
+                      {/* §12 — SERVICE TIME here too, on the same rule as the
+                          agent's queue: driver-accept to CLOSE. */}
+                      <Th>{t('lateOrdersReport.col.service', { defaultValue: 'Service time' })}</Th>
+                      {/* §13 — the three legs. */}
+                      <Th>
+                        {t('lateOrdersReport.col.driverArrival', {
+                          defaultValue: 'Driver arrival',
+                        })}
+                      </Th>
+                      <Th>
+                        {t('lateOrdersReport.col.deliveryTime', { defaultValue: 'Delivery time' })}
+                      </Th>
+                      <Th>
+                        {t('lateOrdersReport.col.preparationTime', {
+                          defaultValue: 'Preparation time',
+                        })}
+                      </Th>
                       <Th>
                         {t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}
                       </Th>
-                      <Th>{t('lateOrdersReport.col.decision', { defaultValue: 'Decision' })}</Th>
+                      {/* §10 — STATUS, and it is the HANDLING state. The order's
+                          own status is the column beside it, deliberately
+                          separate: an order can be force-closed upstream and
+                          still be pending for WeCare. */}
+                      <Th>{t('lateOrdersReport.col.status', { defaultValue: 'Status' })}</Th>
+                      <Th>
+                        {t('lateOrdersReport.col.orderStatus', { defaultValue: 'Order status' })}
+                      </Th>
                       <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
                       <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
                       <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
                     </Tr>
                   </thead>
                   <tbody>
-                    {rows.map((r) => (
+                    {paged.map((r) => (
                       <Tr key={r.id}>
                         <Td className="whitespace-nowrap text-muted-foreground">
                           {r.date_created ? formatDateTime(r.date_created) : '-'}
@@ -607,18 +944,64 @@ export function LateOrdersReportPage() {
                           })()}
                         </Td>
                         <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
-                        <Td className="max-w-[14rem] truncate">
-                          {[r.brand_name, r.restaurant_name].filter(Boolean).join(' - ') || '-'}
+                        {/* §14 — the NAMES, each in its own column. */}
+                        <Td className="max-w-[12rem] truncate">{r.brand_name || '-'}</Td>
+                        <Td className="max-w-[12rem] truncate">{r.restaurant_name || '-'}</Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          {r.customer_phone || '-'}
                         </Td>
+                        {/* §12/§13 — the four durations, all from the order's
+                            status history via `orderEventTimes`. Only the rows
+                            on the open PAGE are fetched, so these are blank
+                            until that batch lands. */}
+                        <Td className="whitespace-nowrap tabular-nums">
+                          <Leg
+                            loading={eventTimes.isLoading}
+                            minutes={timesOf(r.order_id).serviceMinutes}
+                          />
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          <Leg
+                            loading={eventTimes.isLoading}
+                            minutes={timesOf(r.order_id).driverArrivalMinutes}
+                          />
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          <Leg
+                            loading={eventTimes.isLoading}
+                            minutes={timesOf(r.order_id).deliveryMinutes}
+                          />
+                        </Td>
+                        <Td className="whitespace-nowrap tabular-nums">
+                          <Leg
+                            loading={eventTimes.isLoading}
+                            minutes={timesOf(r.order_id).preparationMinutes}
+                          />
+                        </Td>
+                        {/* §12 — the CAUSE, spelled out. `lateOrders.kind.*`
+                            translates the seeded two; anything operations added
+                            falls back to `causeLabel`, which turns
+                            `late_preparation` into "Late preparation" rather
+                            than printing the raw enum with its underscore. */}
                         <Td className="whitespace-nowrap">
-                          {r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: r.kind }) : '-'}
+                          {r.kind
+                            ? t(`lateOrders.kind.${r.kind}`, { defaultValue: causeLabel(r.kind) })
+                            : '-'}
                         </Td>
+                        {/* §10 — the HANDLING state. */}
                         <Td>
-                          <Pill tone={r.action === 'compensated' ? 'success' : 'neutral'} size="sm">
-                            {r.action
-                              ? t(`lateOrdersReport.action.${r.action}`, { defaultValue: r.action })
-                              : '-'}
+                          <Pill tone={STATE_TONE[r.state]} size="sm">
+                            {t(`lateOrders.state.${r.state}`, { defaultValue: r.state })}
                           </Pill>
+                        </Td>
+                        {/* The ORDER's own status — a different fact, and the
+                            spec is explicit that the two must not be confused. */}
+                        <Td className="whitespace-nowrap text-muted-foreground">
+                          {r.order_status
+                            ? t(`commerce.orderStatuses.${r.order_status}`, {
+                                defaultValue: causeLabel(r.order_status),
+                              })
+                            : '-'}
                         </Td>
                         <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
                         <Td className="max-w-[22rem]">
@@ -641,6 +1024,30 @@ export function LateOrdersReportPage() {
                   </tbody>
                 </Table>
               </div>
+              <TablePager
+                page={current}
+                onPage={setPage}
+                pageSize={pageSize}
+                onPageSize={setPageSize}
+                total={rows.length}
+                pageSizes={REGISTER_PAGE_SIZES}
+                labels={{
+                  rowsPerPage: String(
+                    t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                  ),
+                  previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+                  next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                  showing: ({ from: f, to: to2, total }) =>
+                    String(
+                      t('complaintReport.showingRange', {
+                        defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+                        from: f,
+                        to: to2,
+                        total,
+                      }),
+                    ),
+                }}
+              />
             </Card>
           )}
         </>

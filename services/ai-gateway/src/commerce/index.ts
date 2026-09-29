@@ -380,11 +380,31 @@ export async function registerCommerceRoutes(
             const timeline = await cached(['timeline', orderId], COMMERCE_TTL.order, () =>
               deps.yiji.getOrderTimeline('', orderId),
             );
-            const at = timeline?.events?.find((e) => e.status === 'driver_accepted')?.at ?? null;
+            /*
+             * THE WHOLE HISTORY, flattened to `status -> first timestamp`.
+             *
+             * This used to pick `driver_accepted` out and throw the rest away,
+             * having already paid for the entire timeline. That cost nothing to
+             * keep and made four questions unanswerable — the owner's spec
+             * (2026-09-29) asks for driver arrival, delivery and preparation
+             * times beside the service time, and every one of them is two
+             * stamps from this same response.
+             *
+             * FIRST occurrence wins: an order can re-enter a status (a driver
+             * reassigned, a kitchen re-accepting), and the question is always
+             * when it FIRST reached it. `closed` is the exception that matters
+             * most — see `orderEventTimes`, which prefers it over `force_closed`
+             * rather than taking whichever came last.
+             */
+            const at: Record<string, string | null> = {};
+            for (const ev of timeline?.events ?? []) {
+              if (!ev.status || at[ev.status] !== undefined) continue;
+              at[ev.status] = ev.at ?? null;
+            }
             return [orderId, at] as const;
           } catch {
-            /* One unreachable order must not blank the column for the rest. */
-            return [orderId, null] as const;
+            /* One unreachable order must not blank the columns for the rest. */
+            return [orderId, {}] as const;
           }
         }),
       );

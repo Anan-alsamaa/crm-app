@@ -211,20 +211,20 @@ export function useUpdateLateDecision() {
  * Asking for a 600-row queue would be 600 calls into Yiji's production API per
  * page load; asking for the ~25 a human can see is one batched call.
  *
- * Returns a map of order id → driver-accept timestamp (or null when the driver
- * has not accepted yet). The minutes are computed at render against the same
- * clock the rest of the row uses.
+ * Returns `orderId -> { status: timestamp }` — the whole status history,
+ * flattened. The DURATIONS are computed at render by `orderEventTimes`, against
+ * the same clock the rest of the row uses, so a live order's service time ticks.
  */
-export function useServiceTimes(orderIds: string[]) {
+export function useOrderEventTimes(orderIds: string[]) {
   // Sorted + joined so the key is stable: the same ids in a different order
   // must not look like a different query and refetch.
   const key = [...orderIds].sort().join(',');
-  return useQuery<Record<string, string | null>>({
-    queryKey: ['late-orders', 'service-times', key],
+  return useQuery<Record<string, Record<string, string | null>>>({
+    queryKey: ['late-orders', 'event-times', key],
     enabled: orderIds.length > 0,
     staleTime: 60_000,
     retry: false,
-    queryFn: () => commerce.getServiceTimes(orderIds),
+    queryFn: () => commerce.getOrderEventTimes(orderIds),
   });
 }
 

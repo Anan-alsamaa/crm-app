@@ -43,6 +43,14 @@ export interface CouponApprovalRow {
   item_sku: string | null;
   /** Yes = cannot be used on an already-discounted item. */
   no_other_discounts: boolean | null;
+  /**
+   * The customer's number when the coupon was raised without a CONTACT.
+   *
+   * A late-order coupon has no contact row — the queue knows a phone, not a CRM
+   * customer — so this is the only place the customer appears. It is also what
+   * the coupon's TITLE is built from, which is why the two must agree.
+   */
+  customer_phone: string | null;
   brand_id: string | null;
   restaurant_id: string | null;
   /** True when a supervisor changed those terms before approving. */
@@ -125,6 +133,7 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'item_name',
               'item_sku',
               'no_other_discounts',
+              'customer_phone',
               'brand_id',
               'restaurant_id',
               'edited_by_admin',

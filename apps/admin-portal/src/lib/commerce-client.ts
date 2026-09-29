@@ -45,6 +45,18 @@ export const commerce = {
    */
   getLateOrders: (range: { from: string; to: string }) =>
     get<LateOrderQueue>('/commerce/late-orders', { from: range.from, to: range.to }),
+  /**
+   * Event times for a batch of orders — `orderId -> { status: timestamp }`.
+   *
+   * The register's service, driver-arrival, delivery and preparation columns are
+   * each two stamps out of this map, computed by `orderEventTimes`. Batched so a
+   * page of rows is one call rather than one per row, and the gateway caps it at
+   * 50 — which is why only the VISIBLE page is ever asked for.
+   */
+  getOrderEventTimes: (orderIds: string[]) =>
+    get<Record<string, Record<string, string | null>>>('/commerce/service-times', {
+      orderIds: orderIds.join(','),
+    }),
   getPurchaseActivity: (vendorId: string, customerId: string) =>
     get<YijiPurchaseActivity | null>('/commerce/activity', { vendorId, customerId }),
   getOrders: (vendorId: string, customerId: string, opts: { limit?: number } = {}) =>

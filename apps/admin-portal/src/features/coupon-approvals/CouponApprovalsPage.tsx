@@ -23,8 +23,11 @@ import {
   isPercentageCategory,
   type CouponApprovalStatus,
   couponDecision,
+  normalizePhone,
+  type StoreIndex,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useStoreIndex } from '../restaurants/api.js';
 import {
   useCouponApprovals,
   useDecideCoupon,
@@ -237,6 +240,47 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
   return out;
 }
 
+/**
+ * THE BRANCH, IN NAMES (owner spec §18, 2026-09-29).
+ *
+ * Three sources, in order of how readable they are:
+ *
+ *   1. the TICKET'S STORE — the branch the complaint was filed against, already
+ *      joined and already named;
+ *   2. the STORE MASTER, looked up by the coupon's own `restaurant_id`, which is
+ *      Yiji's identifier — right to send, useless to read;
+ *   3. nothing.
+ *
+ * (2) is the fix. A coupon raised from the LATE-ORDERS queue has no ticket with
+ * a store — the order carries Yiji ids and nothing else — so the branch line
+ * showed a bare "—" while the detail panel below it printed the raw numeric ids
+ * side by side. Both said the same thing badly: we know which branch this is and
+ * are showing the machine's word for it.
+ *
+ * Returns the id as a LAST RESORT rather than nothing, because a store missing
+ * from the master is a data gap somebody must chase — and an id they can search
+ * for beats an em dash that hides it.
+ */
+export function branchLabel(
+  row: Pick<CouponApprovalRow, 'ticket' | 'brand_id' | 'restaurant_id'>,
+  index: StoreIndex | null,
+): string | null {
+  const fromTicket = [row.ticket?.store?.brand?.name, row.ticket?.store?.name]
+    .filter(Boolean)
+    .join(' · ');
+  if (fromTicket) return fromTicket;
+
+  const store = row.restaurant_id
+    ? (index?.byYijiId.get(String(row.restaurant_id).trim()) ?? null)
+    : null;
+  const fromMaster = [store?.brandName, store?.name].filter(Boolean).join(' · ');
+  if (fromMaster) return fromMaster;
+
+  /* Unmapped: show what we do have rather than pretending we have nothing. */
+  const ids = [row.brand_id, row.restaurant_id].filter(Boolean).join(' · ');
+  return ids || null;
+}
+
 function Row({
   row,
   onDecide,
@@ -255,6 +299,10 @@ function Row({
    */
   const { can: hasPrivilege } = useAuth();
   const canDecide = hasPrivilege('approve_coupons');
+  /* The store master, for turning Yiji's restaurant id into a name. Cached by
+     React Query and shared with every other card, so a queue of twenty is one
+     fetch. */
+  const { index: storeIndex } = useStoreIndex();
   const [note, setNote] = useState('');
   const [rejecting, setRejecting] = useState(false);
   /**
@@ -343,8 +391,7 @@ function Row({
     .join(' · ');
 
   /** The branch, as a person would say it. */
-  const branch =
-    [row.ticket?.store?.brand?.name, row.ticket?.store?.name].filter(Boolean).join(' · ') || null;
+  const branch = branchLabel(row, storeIndex);
 
   return (
     <li className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
@@ -495,9 +542,27 @@ function Row({
                 {t('couponApprovals.customer', { defaultValue: 'Customer' })}
               </dt>
               <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-                {/* Both, when both are known: the name is who it is, the phone is
-                what a supervisor searches by and reads back on a call. */}
-                {[row.contact?.name, row.contact?.phone].filter(Boolean).join(' · ') || '—'}
+                {/*
+                  THE CUSTOMER MUST MATCH THE COUPON TITLE (owner spec §18).
+
+                  Both when both are known: the name is who it is, the phone is
+                  what a supervisor searches by and reads back on a call.
+
+                  `customer_phone` is the fix. A coupon raised from the
+                  LATE-ORDERS queue has no CONTACT row — the queue knows a phone,
+                  not a CRM customer — so this read "—" while the Coupon title
+                  right below it showed that very number. The number was never
+                  missing; the query simply did not ask for the column that
+                  holds it.
+                */}
+                {[
+                  row.contact?.name,
+                  normalizePhone(row.contact?.phone ?? row.customer_phone ?? '') ||
+                    row.contact?.phone ||
+                    row.customer_phone,
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || '—'}
               </dd>
             </div>
             <div className="flex items-baseline gap-2">
@@ -515,9 +580,10 @@ function Row({
                 {t('couponApprovals.branch', { defaultValue: 'Branch' })}
               </dt>
               <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-                {/* The readable branch, from the ticket's store. The coupon's own
-                restaurant_id is Yiji's identifier — correct to send, useless
-                to read. */}
+                {/* The readable branch. The ticket's store when there is one,
+                    otherwise resolved from the store master by Yiji's
+                    restaurant id — a late-order coupon has no ticket store at
+                    all, which is why this read "—" (owner spec §18). */}
                 {[
                   row.ticket?.store?.brand?.name,
                   row.ticket?.store?.code,
@@ -525,7 +591,9 @@ function Row({
                   row.ticket?.store?.city,
                 ]
                   .filter(Boolean)
-                  .join(' · ') || '—'}
+                  .join(' · ') ||
+                  branch ||
+                  '—'}
               </dd>
             </div>
             <div className="flex w-full min-w-0 items-baseline gap-2">
@@ -615,10 +683,16 @@ function Row({
               label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
               value={row.usage_limit}
             />
-            {(row.brand_id || row.restaurant_id) && (
+            {/* NAMES, not ids (owner spec §18). This printed `brand_id` and
+                `restaurant_id` raw — Yiji's identifiers, which are exactly right
+                to send with the coupon and unreadable to a supervisor deciding
+                whether to approve it. `branchLabel` resolves them through the
+                store master and only falls back to the ids when the master does
+                not have that branch, which is a gap worth seeing. */}
+            {branch && (
               <Term
                 label={t('couponApprovals.branch', { defaultValue: 'Brand / branch' })}
-                value={[row.brand_id, row.restaurant_id].filter(Boolean).join(' · ')}
+                value={branch}
               />
             )}
           </dl>
