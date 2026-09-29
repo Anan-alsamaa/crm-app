@@ -38,6 +38,43 @@ export interface LateOrderDecisionRow {
   ticket: { id: string } | null;
 }
 
+/**
+ * One row per order: the LATEST decision, newest first.
+ *
+ * A re-decision writes a NEW row — an agent who ignores an order and then
+ * compensates it leaves two — and the register listed both, so orders 1323103
+ * and 1323132 each showed a superseded `late_delivery/ignored` beside the
+ * `late_preparation/compensated` that replaced it (owner, 2026-09-29). Every
+ * count through the report was doubled for those orders.
+ *
+ * The AGENT PORTAL already collapsed this way, which is why the two screens
+ * disagreed and why the agent's view looked correct while the report did not.
+ *
+ * NOTHING IS DELETED. A superseded decision stays in the database and in the
+ * audit trail; it simply is not what the order currently IS.
+ *
+ * EXPORTED so the tests exercise the real function rather than a restatement
+ * of it that would pass whatever the hook does. Expects rows already sorted
+ * `-date_created`, which is how they are queried.
+ */
+export function latestPerOrder(rows: LateOrderDecisionRow[]): LateOrderDecisionRow[] {
+  const seen = new Set<string>();
+  const out: LateOrderDecisionRow[] = [];
+  for (const r of rows) {
+    const key = r.order_id?.trim();
+    /* A row with no order id cannot be deduplicated against anything — keep it
+       rather than silently dropping work somebody did. */
+    if (!key) {
+      out.push(r);
+      continue;
+    }
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(r);
+  }
+  return out;
+}
+
 export function useLateOrderDecisions(fromIso: string, toIso: string) {
   return useQuery({
     queryKey: ['late-order-decisions', fromIso, toIso],
@@ -66,6 +103,25 @@ export function useLateOrderDecisions(fromIso: string, toIso: string) {
           } as never,
         ),
       )) as unknown as LateOrderDecisionRow[],
+    /*
+     * ONE ROW PER ORDER — THE LATEST DECISION (owner, 2026-09-29).
+     *
+     * A re-decision writes a NEW row: an agent who ignores an order and then
+     * compensates it leaves two, and the register listed both. Orders 1323103
+     * and 1323132 each showed a superseded `late_delivery/ignored` beside the
+     * `late_preparation/compensated` that replaced it, so the report read as
+     * duplicated and every count through it was doubled.
+     *
+     * The AGENT PORTAL already collapsed to the newest per order — which is
+     * why the two screens disagreed, and why the agent's view looked right
+     * while the report did not. This makes the report agree with it.
+     *
+     * The rows are sorted `-date_created`, so the FIRST seen for an order is
+     * its latest. Nothing is deleted: a superseded decision is still in the
+     * database and still in the audit trail; it simply is not what the order
+     * currently IS.
+     */
+    select: latestPerOrder,
   });
 }
 

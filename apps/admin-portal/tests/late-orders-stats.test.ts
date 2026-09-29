@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  latestPerOrder,
   agentLateStats,
   agentName,
   type LateOrderDecisionRow,
@@ -149,5 +150,59 @@ describe('avgMinutes is time spent waiting on the queue', () => {
     );
     // (3 + 15) / 2 = 9 — the old reading would have said 69.
     expect(s!.avgMinutes).toBe(9);
+  });
+});
+
+/*
+ * ONE ROW PER ORDER IN THE REGISTER (owner, 2026-09-29).
+ *
+ * A re-decision writes a NEW row, so an agent who ignores an order and then
+ * compensates it leaves two. Orders 1323103 and 1323132 each showed a
+ * superseded `late_delivery/ignored` beside the `late_preparation/compensated`
+ * that replaced it, and every count through the report was doubled for them.
+ *
+ * The agent portal already collapsed this way — which is exactly why the two
+ * screens disagreed.
+ */
+describe('latestPerOrder', () => {
+  it('keeps the newest decision and drops the superseded one', () => {
+    const newest = row({ order_id: '1323103', kind: 'late_preparation', action: 'compensated' });
+    const older = row({ order_id: '1323103', kind: 'late_delivery', action: 'ignored' });
+    // Rows arrive sorted -date_created, so the newest is first.
+    const out = latestPerOrder([newest, older]);
+    expect(out).toHaveLength(1);
+    expect(out[0]!.action).toBe('compensated');
+    expect(out[0]!.kind).toBe('late_preparation');
+  });
+
+  it('leaves orders with a single decision alone', () => {
+    const out = latestPerOrder([row({ order_id: 'a' }), row({ order_id: 'b' })]);
+    expect(out).toHaveLength(2);
+  });
+
+  it('collapses several orders independently', () => {
+    const out = latestPerOrder([
+      row({ order_id: 'a', action: 'compensated' }),
+      row({ order_id: 'b', action: 'compensated' }),
+      row({ order_id: 'a', action: 'ignored' }),
+      row({ order_id: 'b', action: 'ignored' }),
+    ]);
+    expect(out).toHaveLength(2);
+    expect(out.every((r) => r.action === 'compensated')).toBe(true);
+  });
+
+  /* A row with no order id cannot be deduplicated against anything. Dropping
+     it would silently discard work somebody did. */
+  it('keeps every row that has no order id', () => {
+    const out = latestPerOrder([
+      row({ order_id: null }),
+      row({ order_id: null }),
+      row({ order_id: '  ' }),
+    ]);
+    expect(out).toHaveLength(3);
+  });
+
+  it('returns an empty list unchanged', () => {
+    expect(latestPerOrder([])).toEqual([]);
   });
 });
