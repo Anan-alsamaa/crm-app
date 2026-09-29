@@ -349,7 +349,27 @@ function TrackingPanel({ vendorId, orderId }: { vendorId: string; orderId: strin
  * different orders depending on which screen an agent opened it from. This is
  * one component with one idea of what an order is.
  */
-export function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: string }) {
+export function OrderDetails({
+  order,
+  vendorId,
+  modifiersByItem,
+}: {
+  order: YijiOrder;
+  vendorId: string;
+  /**
+   * The add-ons chosen per line, keyed by item name (owner, 2026-09-29).
+   *
+   * OPTIONAL, because they are not on the order payload at all: `YijiOrderItem`
+   * carries sku, name, qty, price and category, and the modifiers live only on
+   * `GetOrderCart`. A caller that has already fetched the cart — the late-order
+   * panel does, for the tracking link — passes them; the inbox does not and
+   * renders exactly as before.
+   *
+   * Keyed by NAME rather than sku: the cart's lines carry no item id at all, so
+   * the name is the only thing the two payloads share.
+   */
+  modifiersByItem?: Map<string, string[]>;
+}) {
   const { t } = useTranslation();
   // Cart and Tracking, requested additions to every inbox order card. A view
   // toggle rather than more rows: the card is already the tallest thing in the
@@ -390,7 +410,12 @@ export function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: 
         <ul className="space-y-1 text-xs">
           {order.items.map((it, i) => (
             <li key={it.sku || i} className="flex items-baseline justify-between gap-2">
-              <span className="min-w-0 truncate">
+              {/* `truncate` only while there is nothing beneath: a modifier line
+                  renders as a block inside this span, and a truncated parent
+                  would clip it to one line and hide the rest. */}
+              <span
+                className={modifiersByItem?.get(it.name)?.length ? 'min-w-0' : 'min-w-0 truncate'}
+              >
                 <span className="text-foreground/80 tabular-nums">{it.qty}×</span> {it.name}
                 {it.qty > 1 && (
                   <span className="ms-1 text-2xs text-muted-foreground tabular-nums">
@@ -400,6 +425,14 @@ export function OrderDetails({ order, vendorId }: { order: YijiOrder; vendorId: 
                 )}
                 {it.category && (
                   <span className="ms-1 text-2xs text-muted-foreground">· {it.category}</span>
+                )}
+                {/* THE CHOICES, under the line they belong to. "Without
+                    Broccoli" is what answers an accuracy complaint, and the
+                    money view alone never showed it. */}
+                {(modifiersByItem?.get(it.name)?.length ?? 0) > 0 && (
+                  <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
+                    {modifiersByItem!.get(it.name)!.join(' · ')}
+                  </span>
                 )}
               </span>
               <span className="shrink-0 tabular-nums text-foreground">

@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Pill, Skeleton } from '@yiji/ui';
 import { commerce } from '../../lib/commerce-client.js';
@@ -213,6 +214,33 @@ export function LateOrderDetail({
     staleTime: 5 * 60_000,
     retry: false,
   });
+  /*
+   * THE CART, for the COURIER'S TRACKING LINK (owner, 2026-09-29).
+   *
+   * `trackingUrl` lives on the cart, not the order — it comes from Yiji's
+   * `deliveryOrder`, which `/commerce/order` does not carry. So when this panel
+   * moved to the inbox's `OrderDetails` the link vanished with the old view: it
+   * was only ever rendered by `CartLines`, which is now the fallback.
+   *
+   * Shares the key with the coupon form's own cart query, so opening both costs
+   * one request rather than two.
+   */
+  const cart = useQuery({
+    queryKey: ['order-cart', orderId],
+    queryFn: () => commerce.getOrderCart(orderId),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+  const trackingUrl = cart.data?.trackingUrl;
+  /* The add-ons per line, keyed by item name — the only field the order payload
+     and the cart share, since cart lines carry no item id. */
+  const modifiersByItem = useMemo(() => {
+    const map = new Map<string, string[]>();
+    for (const line of cart.data?.lines ?? []) {
+      if (line.modifiers.length) map.set(line.name, line.modifiers);
+    }
+    return map;
+  }, [cart.data]);
 
   if (vendorId && order.isLoading) return <Skeleton className="h-40 w-full" />;
 
@@ -220,7 +248,20 @@ export function LateOrderDetail({
     return (
       <div className="space-y-4">
         <OrderHeader order={order.data} />
-        <OrderDetails order={order.data} vendorId={vendorId} />
+        <OrderDetails order={order.data} vendorId={vendorId} modifiersByItem={modifiersByItem} />
+        {/* The courier's own page — the driver, the map, the live status. It is
+            the one thing here that is not ours, so it opens in a new tab and
+            keeps the agent's queue where it was. */}
+        {trackingUrl && (
+          <a
+            href={trackingUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-1 text-xs font-medium text-brand underline decoration-brand/30 underline-offset-4 transition-colors hover:decoration-brand"
+          >
+            {t('lateOrders.cart.trackingLink', { defaultValue: "Open the courier's tracking" })}
+          </a>
+        )}
       </div>
     );
   }
