@@ -30,7 +30,6 @@ import {
   matchStore,
   normalizePhone,
   serviceMinutes,
-  type LateOrderKind,
   type LateOrderRow,
   causeRaisesTicket,
   DEFAULT_LATE_ORDER_CAUSES,
@@ -176,6 +175,57 @@ export function planTicket(
   return prior ? { mode: 'reuse', id: prior } : { mode: 'raise' };
 }
 
+/**
+ * Where a not-yet-submitted classification is kept.
+ *
+ * The agent has told the screen what a late order IS; losing that on a reload
+ * means the next coupon or ticket is filed under the wrong cause without
+ * anybody being told (owner, 2026-09-29).
+ */
+const KINDS_KEY = 'yiji.lateOrders.kinds';
+
+/**
+ * At most this many orders remembered.
+ *
+ * A browser that never forgets would carry every order the agent has ever
+ * glanced at, and `localStorage` is a few megabytes shared with everything else
+ * on the origin. The queue itself holds far fewer than this at once, so the cap
+ * only ever discards orders long since decided.
+ */
+const KINDS_LIMIT = 500;
+
+export function readStoredKinds(): Record<string, string> {
+  /* Every access wrapped: `localStorage` throws in a private window and in
+     some embedded webviews, and a classification is not worth a blank page. */
+  try {
+    const raw = localStorage.getItem(KINDS_KEY);
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === 'string' && v) out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+export function writeStoredKinds(next: Record<string, string>): void {
+  try {
+    const entries = Object.entries(next);
+    /* Newest kept: the object preserves insertion order, so the tail is the
+       most recently classified. */
+    const trimmed = entries.length > KINDS_LIMIT ? entries.slice(-KINDS_LIMIT) : entries;
+    localStorage.setItem(KINDS_KEY, JSON.stringify(Object.fromEntries(trimmed)));
+  } catch {
+    /* Full, blocked or unavailable. The choice still holds for this page — it
+       is in component state either way — so there is nothing to tell the
+       agent that they could act on. */
+  }
+}
+
 export function LateOrdersPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -264,7 +314,23 @@ export function LateOrdersPage() {
   const record = useRecordLateDecision();
 
   /** The classification per row, defaulted to late delivery. */
-  const [kinds, setKinds] = useState<Record<string, LateOrderKind>>({});
+  /*
+   * THE CHOSEN CAUSE, PER ORDER — AND IT HAS TO SURVIVE (owner, 2026-09-29).
+   *
+   * This was component state, so an agent who set "Late preparation" and came
+   * back to the page found it reading "Late delivery" again. The dropdown is a
+   * DECISION being prepared, not a display toggle: losing it means the coupon
+   * or the ticket is filed under the wrong cause, silently.
+   *
+   * `localStorage`, not `sessionStorage`: an agent who opens the queue in a
+   * second tab is the same person working the same orders, and the sessions are
+   * per-tab here precisely so two people can share a machine — the classification
+   * of an order is not a per-tab fact.
+   *
+   * Keyed by order id and pruned on read, so a browser does not accumulate
+   * every order the agent has ever looked at.
+   */
+  const [kinds, setKinds] = useState<Record<string, string>>(() => readStoredKinds());
   const [draft, setDraft] = useState<DecisionDraft | null>(null);
   const [reason, setReason] = useState('');
   /** What the agent DID about it — the second field, and editable later. */
@@ -288,7 +354,9 @@ export function LateOrdersPage() {
     reason: string;
     /** Carried through the coupon form so the decision records it too. */
     actionTaken: string;
-    kind: LateOrderKind;
+    /* A string, not the old two-value union: causes are an editable list now
+       and operations add their own. */
+    kind: string;
     ticketId: string | null;
     /**
      * Raises the ticket, LATER — only if the coupon request is actually made.
@@ -470,7 +538,25 @@ export function LateOrdersPage() {
   const updateDecision = useUpdateLateDecision();
   const nowMs = queue.dataUpdatedAt || Date.now();
 
-  const kindOf = (row: LateOrderRow): LateOrderKind => kinds[row.orderId] ?? 'late_delivery';
+  /*
+   * What this order is classified as, in order of authority:
+   *
+   *   1. the DECISION already recorded — the cause is settled, and a dropdown
+   *      that disagreed with the register would be lying;
+   *   2. what the agent picked and has not yet submitted, restored from storage;
+   *   3. the first cause on the list.
+   *
+   * (3) was hardcoded `'late_delivery'`, which is wrong twice over: it ignores
+   * the order operations put the list in, and it would keep naming a cause that
+   * had been retired.
+   */
+  const kindOf = (row: LateOrderRow): string => {
+    const decided = decisions.data?.get(row.orderId)?.kind;
+    if (decided) return decided;
+    const pending = kinds[row.orderId];
+    if (pending) return pending;
+    return causeOptions[0]?.value ?? 'late_delivery';
+  };
 
   const openDecision = (row: LateOrderRow, action: 'ignored' | 'compensated', viewing = false) => {
     /*
@@ -1083,7 +1169,11 @@ export function LateOrdersPage() {
                           defaultValue: 'Source of delay',
                         })}
                         onChange={(v) =>
-                          setKinds((cur) => ({ ...cur, [row.orderId]: v as LateOrderKind }))
+                          setKinds((cur) => {
+                            const next = { ...cur, [row.orderId]: v };
+                            writeStoredKinds(next);
+                            return next;
+                          })
                         }
                         options={causeOptions}
                       />

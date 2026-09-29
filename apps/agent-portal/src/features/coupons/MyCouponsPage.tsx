@@ -155,7 +155,18 @@ export function MyCouponsPage() {
           the same centered column as the cards below — at 1920px a cluster of
           pills pinned to the far edge belonged to nothing. */}
       <div className="border-b border-border bg-card px-4 py-2.5">
-        <div className="mx-auto mb-2 w-full max-w-3xl">
+        {/*
+          SEARCH AND AGENT ON ONE LINE (owner, 2026-09-29).
+          
+          The dropdown had a row to itself, which put one short control on a
+          full-width line and read as an unfinished layout. The search takes the
+          remaining width instead of all of it, so the two sit as a pair.
+          
+          `min-w-0` on the search: a flex child defaults to its content's
+          width, so without it the input refuses to shrink and pushes the
+          dropdown off the row on a narrow screen. They stack below `sm`.
+        */}
+        <div className="mx-auto mb-2 flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-center">
           <input
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
@@ -163,33 +174,31 @@ export function MyCouponsPage() {
               defaultValue: 'Search by coupon type, code, order ID or customer phone…',
             })}
             aria-label={t('coupons.search', { defaultValue: 'Search compensation requests' })}
-            className="h-9 w-full rounded-xl bg-secondary/60 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            className="h-9 min-w-0 flex-1 rounded-xl bg-secondary/60 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
-        </div>
-        {/* WHOSE, then WHICH STATUS. Two questions, so two rows rather than
-            one long strip in which an agent's name would read as a status.
-
-            A SELECT, not a row of pills: this lists every agent, and a pill per
-            person becomes a wall as the team grows. `SelectMenu` is what the
-            rest of the portal uses, so it carries the keyboard and ARIA
-            behaviour a bare <select> does not. */}
-        <div className="mx-auto mb-2 flex w-full max-w-3xl flex-wrap items-center gap-2">
-          <SelectMenu
-            value={agentId}
-            size="sm"
-            onChange={setAgentId}
-            aria-label={t('coupons.filterByAgent', { defaultValue: 'Filter by agent' })}
-            options={[
-              { value: '', label: t('coupons.allAgents', { defaultValue: 'All agents' }) },
-              ...(agents.data ?? []).map((a) => ({
-                value: a.id,
-                /* The name people know, falling back to the sign-in address —
-                   a staff account has no display name until it is filled in. */
-                label:
-                  [a.first_name, a.last_name].filter(Boolean).join(' ').trim() || (a.email ?? a.id),
-              })),
-            ]}
-          />
+          {/* A SELECT, not a row of pills: this lists every agent, and a pill
+              per person becomes a wall as the team grows. `SelectMenu` is what
+              the rest of the portal uses, so it carries the keyboard and ARIA
+              behaviour a bare <select> does not. */}
+          <div className="shrink-0">
+            <SelectMenu
+              value={agentId}
+              size="sm"
+              onChange={setAgentId}
+              aria-label={t('coupons.filterByAgent', { defaultValue: 'Filter by agent' })}
+              options={[
+                { value: '', label: t('coupons.allAgents', { defaultValue: 'All agents' }) },
+                ...(agents.data ?? []).map((a) => ({
+                  value: a.id,
+                  /* The name people know, falling back to the sign-in address —
+                     a staff account has no display name until it is filled in. */
+                  label:
+                    [a.first_name, a.last_name].filter(Boolean).join(' ').trim() ||
+                    (a.email ?? a.id),
+                })),
+              ]}
+            />
+          </div>
         </div>
         <div className="mx-auto flex w-full max-w-3xl flex-wrap gap-1.5">
           {(

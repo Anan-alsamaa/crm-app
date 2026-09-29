@@ -7,7 +7,6 @@ import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   lateOrderComplaintType,
   DEFAULT_COMPLAINT_SOURCE,
-  type LateOrderKind,
   type LateOrderQueue,
   type LateOrderRow,
   DEFAULT_LATE_ORDER_CAUSES,
@@ -300,7 +299,16 @@ export function useLateOrderCauses() {
 
 export interface RecordLateDecisionInput {
   row: LateOrderRow;
-  kind: LateOrderKind;
+  /**
+   * The cause, as a STRING.
+   *
+   * It was `LateOrderKind` — a two-value union — which stopped compiling the
+   * moment causes became an editable list (owner, 2026-09-29). The seeded two
+   * are still the only ones most deployments will see, but the type can no
+   * longer promise that: operations add their own, and the value stored is
+   * whatever they typed.
+   */
+  kind: string;
   action: 'ignored' | 'compensated';
   reason: string;
   /** What the agent DID about it, free text. Optional. */
@@ -380,7 +388,16 @@ export function useRecordLateDecision() {
  */
 export function lateOrderTicket(opts: {
   row: LateOrderRow;
-  kind: LateOrderKind;
+  /**
+   * The cause, as a STRING.
+   *
+   * It was `LateOrderKind` — a two-value union — which stopped compiling the
+   * moment causes became an editable list (owner, 2026-09-29). The seeded two
+   * are still the only ones most deployments will see, but the type can no
+   * longer promise that: operations add their own, and the value stored is
+   * whatever they typed.
+   */
+  kind: string;
   reason: string;
   contactId: string | null;
   vendorId: string | null;
