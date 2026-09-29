@@ -308,6 +308,19 @@ export interface RecordLateDecisionInput {
   agentId: string | null;
   /** The ticket raised alongside, when one was. */
   ticketId?: string | null;
+  /**
+   * The ORDER as it stood when this was decided — items, totals, payment and
+   * delivery (owner, 2026-09-29).
+   *
+   * FROZEN, like `store_snapshot` on a ticket and for the same reason: an order
+   * edited or refunded upstream must not rewrite what the agent actually saw
+   * and decided against.
+   *
+   * Fetched ONLY on a decision. The queue can hold hundreds of rows and only a
+   * handful are ever decided; fetching per row would be hundreds of calls into
+   * Yiji's production API on every page load.
+   */
+  orderSnapshot?: unknown;
 }
 
 /**
@@ -334,6 +347,7 @@ export function useRecordLateDecision() {
             decided_by: input.agentId,
             ticket: input.ticketId ?? null,
             minutes_elapsed: input.row.minutesElapsed,
+            order_snapshot: input.orderSnapshot ?? null,
             brand_name: input.row.brandName ?? null,
             restaurant_name: input.row.restaurantName ?? null,
           } as never,

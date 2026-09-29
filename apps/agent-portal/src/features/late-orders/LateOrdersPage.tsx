@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem } from '@directus/sdk';
 import {
   Button,
@@ -40,6 +40,8 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { useStoreIndex } from '../tickets/useStoreMatch.js';
+/* The ticket path's own shaper — one idea of what an order snapshot is. */
+import { orderToSnapshot } from '../tickets/OrderSnapshotCard.js';
 import { useVendors } from '../tickets/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
@@ -296,6 +298,13 @@ export function LateOrdersPage() {
      * with no decision and no coupon (order 1323291 collected four).
      */
     raiseTicket?: () => Promise<string | null>;
+    /**
+     * Captures the order, LATER — only if the coupon request is actually made.
+     *
+     * Held as a function for the same reason as `raiseTicket`: opening the form
+     * and closing it must cost nothing, and must leave nothing behind.
+     */
+    captureOrder?: () => Promise<unknown>;
     /* Resolved before the form opens, so the request names the customer it is
        for rather than an anonymous row. */
     contactId: string | null;
@@ -442,6 +451,10 @@ export function LateOrdersPage() {
    * is what decides whether the decision also files a ticket.
    */
   const causes = useLateOrderCauses();
+  /* `fetchQuery`, not a hook: the order is wanted at the MOMENT of deciding,
+     which is an event, not a render. Going through the cache means a row whose
+     cart was already opened costs nothing. */
+  const qc = useQueryClient();
   const causeOptions = useMemo(() => {
     const list = causes.data?.length ? causes.data : [...DEFAULT_LATE_ORDER_CAUSES];
     return list.map((c) => ({
@@ -538,6 +551,37 @@ export function LateOrdersPage() {
        * Returns `null` when there is nothing to raise, and throws when it
        * cannot be raised honestly — the caller stops rather than half-finishing.
        */
+      /*
+       * THE ORDER, FETCHED ONCE, AT THE MOMENT OF DECIDING (owner, 2026-09-29).
+       *
+       * The same endpoint the inbox uses for its order detail —
+       * `/commerce/order`, keyed by order id — so a late order records exactly
+       * what a chat records. `orderToSnapshot` is the ticket path's own shaper,
+       * reused rather than restated.
+       *
+       * NOT on page load. The queue can hold hundreds of rows and only a
+       * handful are ever decided; one call per row would be hundreds into
+       * Yiji's production API every time the page opens, for data nobody asked
+       * for.
+       *
+       * Best-effort: a decision must not be lost because the order could not be
+       * read. The reason, the branch and the elapsed time are already on the
+       * row; the snapshot is additional detail, not the record itself.
+       */
+      const captureOrder = async (): Promise<unknown> => {
+        if (!soleVendorId) return null;
+        try {
+          const order = await qc.fetchQuery({
+            queryKey: ['yiji-order', soleVendorId, draft.row.orderId],
+            queryFn: () => commerce.getOrder(soleVendorId, draft.row.orderId),
+            staleTime: 5 * 60_000,
+          });
+          return order ? { ...orderToSnapshot(order), capturedAt: new Date().toISOString() } : null;
+        } catch {
+          return null;
+        }
+      };
+
       const raiseTicketIfNeeded = async (): Promise<string | null> => {
         const priorTicketId = decisions.data?.get(draft.row.orderId)?.ticket ?? null;
         /* The GROUP of the chosen cause, from the editable list. Falls back to
@@ -609,6 +653,7 @@ export function LateOrdersPage() {
           ticketId: null,
           contactId,
           raiseTicket: raiseTicketIfNeeded,
+          captureOrder,
         });
       } else if (outcome === 'update') {
         /* Editing an existing decision: only the wording changes. The decision
@@ -646,6 +691,9 @@ export function LateOrdersPage() {
            failure here leaves nothing half-done: no ticket, no decision, and
            the order still in the queue for somebody to work. */
         const ignoredTicketId = await raiseTicketIfNeeded();
+        /* The order as it stood — captured for IGNORE too, which recorded
+           nothing about the order until now (owner, 2026-09-29). */
+        const orderSnapshot = await captureOrder();
         await record.mutateAsync({
           row: draft.row,
           kind,
@@ -654,6 +702,7 @@ export function LateOrdersPage() {
           actionTaken,
           agentId: user?.id ?? null,
           ticketId: ignoredTicketId,
+          orderSnapshot,
         });
         toast.success(
           t('lateOrders.ignored', { defaultValue: 'Ignored, and the reason recorded.' }),
@@ -1359,6 +1408,10 @@ export function LateOrdersPage() {
                       }),
                 );
               }
+              /* The order as it stood when the coupon was given. Best-effort,
+                 like the ticket above: the decision is the record, and losing
+                 it because Yiji was slow would be the wrong trade. */
+              const orderSnapshot = (await coupon.captureOrder?.()) ?? null;
               return record.mutateAsync({
                 row: coupon.row,
                 kind: coupon.kind,
@@ -1367,6 +1420,7 @@ export function LateOrdersPage() {
                 actionTaken: coupon.actionTaken,
                 agentId: user?.id ?? null,
                 ticketId,
+                orderSnapshot,
               });
             })().catch(() =>
               toast.error(
