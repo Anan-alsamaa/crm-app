@@ -278,13 +278,20 @@ export async function registerCommerceRoutes(
           to: to || from,
           includeCompleted: true,
           /*
-           * 500 per page. A month measured 631 rows and TWO months 1,062, so
-           * three pages would have silently truncated a two-month window —
-           * the worst shape, because a short answer looks like a complete one.
-           * Six pages covers 3,000 orders; the walk stops early on a short
-           * page, so the extra ceiling costs nothing on smaller ranges.
+           * 500 per page, and the walk runs until the pages run out.
+           *
+           * It was capped at 6 pages — 3,000 orders — which silently truncated
+           * a long range (owner, 2026-09-29: paginate through Yiji as needed
+           * rather than restricting the dates). A short answer that looks
+           * complete is the worst shape a report can take, and it is the one
+           * this codebase keeps producing.
+           *
+           * The walk STOPS EARLY on a short page, so a small range still costs
+           * one call: the ceiling is a guard against a runaway loop, not a
+           * budget. 200 pages is 100,000 orders — far past anything real, and
+           * still finite if Yiji ever returns full pages forever.
            */
-          maxPages: 6,
+          maxPages: 200,
         }
       : {};
     /*

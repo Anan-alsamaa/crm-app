@@ -4,9 +4,13 @@ import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   LATE_DELIVERY_MINUTES_KEY,
   lateDeliveryMinutes,
+  lateOrderState,
   type LateOrderKind,
+  type LateOrderRow,
+  type LateOrderState,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { commerce } from '../../lib/commerce-client.js';
 
 /**
  * The late-order register: every decision an agent recorded from the queue.
@@ -39,6 +43,86 @@ export interface LateOrderDecisionRow {
 }
 
 /**
+ * A late order as the register shows it: decided or not.
+ *
+ * A PENDING late order has NO DATABASE ROW — it exists only in Yiji's queue
+ * until somebody comments on it or gives a coupon (owner, 2026-09-29). So the
+ * register is a MERGE of two sources, and a row can come from either.
+ */
+export interface LateOrderRegisterRow extends Omit<LateOrderDecisionRow, 'id'> {
+  /** The decision's id, or a synthetic one for a queue-only row. */
+  id: string;
+  /** pending | commented | handled — never the ORDER's own status. */
+  state: LateOrderState;
+  /** The order's own status from Yiji — a different thing entirely. */
+  order_status?: string | null;
+  customer_phone?: string | null;
+  /** True when nothing has been recorded: the row is queue-only. */
+  pendingOnly: boolean;
+}
+
+/**
+ * Merge the live queue with what has been decided.
+ *
+ * DECISIONS WIN. An order that has been commented on or compensated is
+ * described by its decision; the queue only supplies the orders nobody has
+ * touched. Merged on `orderId`, the one identifier both sides share.
+ *
+ * The queue is the source for a pending row's branch, brand, phone and ORDER
+ * STATUS — which is not the handling state and must never be confused with it.
+ *
+ * Exported so the tests exercise the real rule.
+ */
+export function mergeLateOrders(
+  decisions: readonly LateOrderDecisionRow[],
+  queue: readonly LateOrderRow[],
+): LateOrderRegisterRow[] {
+  const decided = new Set<string>();
+  const out: LateOrderRegisterRow[] = [];
+
+  for (const d of decisions) {
+    const key = d.order_id?.trim();
+    if (key) decided.add(key);
+    out.push({ ...d, state: lateOrderState(d), pendingOnly: false });
+  }
+
+  for (const q of queue) {
+    const key = q.orderId?.trim();
+    /* Already answered for. The decision describes it, not the queue. */
+    if (!key || decided.has(key)) continue;
+    out.push({
+      /* Synthetic and PREFIXED, so it can never collide with a decision's uuid
+         and so anything keying off it is obviously not a decision. */
+      id: `pending:${key}`,
+      order_id: key,
+      /* Unclassified until somebody says otherwise — the cause is a judgement
+         an agent makes, not something the queue knows. */
+      kind: null,
+      action: null,
+      reason: null,
+      action_taken: null,
+      minutes_elapsed: q.minutesElapsed ?? null,
+      brand_name: q.brandName ?? null,
+      restaurant_name: q.restaurantName ?? null,
+      /* The ORDER's creation time. A pending row has no decision, so there is
+         no decision time to show — and dating it "now" would put every pending
+         order at the top of a report sorted by when things happened. */
+      date_created: q.placedAt ?? null,
+      decided_by: null,
+      ticket: null,
+      state: 'pending',
+      order_status: q.status ?? null,
+      customer_phone: q.customerPhone ?? null,
+      pendingOnly: true,
+    });
+  }
+
+  /* Newest first, like the decisions query — one ordering for the whole
+     register rather than decisions first and pending appended. */
+  return out.sort((a, b) => (b.date_created ?? '').localeCompare(a.date_created ?? ''));
+}
+
+/**
  * One row per order: the LATEST decision, newest first.
  *
  * A re-decision writes a NEW row — an agent who ignores an order and then
@@ -57,6 +141,30 @@ export interface LateOrderDecisionRow {
  * of it that would pass whatever the hook does. Expects rows already sorted
  * `-date_created`, which is how they are queried.
  */
+/**
+ * The live queue for the same window the register covers.
+ *
+ * Its own query, deliberately: it can fail on its own — Yiji is an external
+ * dependency — and a register that showed nothing because the queue timed out
+ * would be worse than one showing every decision and saying the pending rows
+ * are missing. `retry: false` for the same reason: three silent retries leave a
+ * spinner where an answer should be.
+ */
+export function useLateOrderQueue(fromIso: string, toIso: string) {
+  return useQuery({
+    queryKey: ['late-order-queue', fromIso, toIso],
+    staleTime: 60_000,
+    retry: false,
+    queryFn: async (): Promise<LateOrderRow[]> => {
+      const q = await commerce.getLateOrders({
+        from: fromIso.slice(0, 10),
+        to: toIso.slice(0, 10),
+      });
+      return q?.rows ?? [];
+    },
+  });
+}
+
 export function latestPerOrder(rows: LateOrderDecisionRow[]): LateOrderDecisionRow[] {
   const seen = new Set<string>();
   const out: LateOrderDecisionRow[] = [];

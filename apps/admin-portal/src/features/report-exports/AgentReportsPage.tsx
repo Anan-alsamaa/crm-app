@@ -345,7 +345,11 @@ function usePagerLabels() {
  * Starts at 10 because a report opened to read wants a screenful, not a scroll;
  * runs to 500 because scanning for a pattern before exporting wants the lot.
  */
-const REPORT_PAGE_SIZES = [10, 25, 50, 100, 250, 500] as const;
+/* 1000 added (owner, 2026-09-29): a report covering a real date range runs to
+   thousands of rows, and 500 meant paging through a report somebody wanted to
+   read in one go. The pager is client-side, so the cost is render time on a
+   page nobody has to choose. */
+const REPORT_PAGE_SIZES = [10, 25, 50, 100, 250, 500, 1000] as const;
 
 function StatusPill({ value }: { value: string }) {
   const { t } = useTranslation();

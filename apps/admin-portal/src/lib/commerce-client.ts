@@ -1,4 +1,5 @@
 import type {
+  LateOrderQueue,
   YijiOrder,
   YijiPaymentStatus,
   YijiPurchaseActivity,
@@ -33,6 +34,17 @@ async function get<T>(path: string, params: Record<string, string>): Promise<T> 
 }
 
 export const commerce = {
+  /**
+   * The late-orders queue for a window — the same endpoint the agent portal
+   * reads (owner, 2026-09-29).
+   *
+   * The admin report needs it because a PENDING late order has no database row
+   * at all: it exists only upstream until somebody comments on it or gives a
+   * coupon. Without this the report can only ever show orders that were
+   * already acted on, which is the opposite of what "pending" means.
+   */
+  getLateOrders: (range: { from: string; to: string }) =>
+    get<LateOrderQueue>('/commerce/late-orders', { from: range.from, to: range.to }),
   getPurchaseActivity: (vendorId: string, customerId: string) =>
     get<YijiPurchaseActivity | null>('/commerce/activity', { vendorId, customerId }),
   getOrders: (vendorId: string, customerId: string, opts: { limit?: number } = {}) =>

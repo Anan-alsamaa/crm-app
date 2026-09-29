@@ -1168,6 +1168,11 @@ describe('AgentReportsPage — ticket breakdown', () => {
       '100',
       '250',
       '500',
+      // 1000 (owner, 2026-09-29): a report over a real date range runs to
+      // thousands of rows, and 500 meant paging through something somebody
+      // wanted to read in one go. The comment above this test already assumed
+      // it; the list had not caught up.
+      '1000',
     ]);
   });
 
