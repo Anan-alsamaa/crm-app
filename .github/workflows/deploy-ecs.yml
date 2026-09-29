@@ -303,6 +303,19 @@ jobs:
               # `git cat-file -t` is `tag` only for a real annotation, so this is EMPTY
               # rather than WRONG when there is none. Empty is handled (the strip names
               # the surfaces); wrong is not, because it looks like it worked.
+              # RE-FETCH THE TAG OBJECT FIRST.
+              #
+              # `actions/checkout` fetches the real tags, then OVERWRITES the one it
+              # is building with a lightweight ref pointing at the commit:
+              #   git fetch --no-tags ... +<sha>:refs/tags/<tag>
+              # so the annotation is gone by the time this runs, however the
+              # checkout is configured. v1.22.0 published an EMPTY summary that way
+              # (the guard below did its job and refused to print a commit subject).
+              #
+              # The remote still has the annotated object, so ask for it again.
+              # `|| true`: a missing tag is not a reason to fail a deploy - the
+              # guard below then leaves the summary empty, which is handled.
+              git fetch --force origin "refs/tags/$RELEASE_VERSION:refs/tags/$RELEASE_VERSION" 2>/dev/null || true
               if [ "$(git cat-file -t "$RELEASE_VERSION" 2>/dev/null)" = "tag" ]; then
                 SUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
                   | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
@@ -421,6 +434,19 @@ jobs:
             # with the build it describes.
             # Same one-line summary as the portals -- see the note there.
             # Annotated tags only -- see the note in the portals job.
+            # RE-FETCH THE TAG OBJECT FIRST.
+            #
+            # `actions/checkout` fetches the real tags, then OVERWRITES the one it
+            # is building with a lightweight ref pointing at the commit:
+            #   git fetch --no-tags ... +<sha>:refs/tags/<tag>
+            # so the annotation is gone by the time this runs, however the
+            # checkout is configured. v1.22.0 published an EMPTY summary that way
+            # (the guard below did its job and refused to print a commit subject).
+            #
+            # The remote still has the annotated object, so ask for it again.
+            # `|| true`: a missing tag is not a reason to fail a deploy - the
+            # guard below then leaves the summary empty, which is handled.
+            git fetch --force origin "refs/tags/$RELEASE_VERSION:refs/tags/$RELEASE_VERSION" 2>/dev/null || true
             if [ "$(git cat-file -t "$RELEASE_VERSION" 2>/dev/null)" = "tag" ]; then
               WSUMMARY=$(git tag -l --format='%(contents:subject)' "$RELEASE_VERSION" 2>/dev/null \
                 | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+//' | sed -E 's/^[^[:alnum:]]+//' | cut -c1-90)
