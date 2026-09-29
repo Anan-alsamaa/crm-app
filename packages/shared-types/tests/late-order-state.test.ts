@@ -18,7 +18,7 @@ describe('lateOrderState', () => {
   });
 
   it('is commented when a reason was written but no coupon given', () => {
-    expect(lateOrderState({ action: 'ignored', reason: 'kitchen was backed up' })).toBe(
+    expect(lateOrderState({ action: 'commented', reason: 'kitchen was backed up' })).toBe(
       'commented',
     );
   });
@@ -32,17 +32,24 @@ describe('lateOrderState', () => {
    * merely written down what they found. Only a coupon closes it.
    */
   it('a comment does not make it handled', () => {
-    expect(lateOrderState({ action: 'ignored', reason: 'chased the branch' })).not.toBe('handled');
+    expect(lateOrderState({ action: 'commented', reason: 'chased the branch' })).not.toBe(
+      'handled',
+    );
   });
 
   /*
-   * LEGACY `ignored` ROWS READ AS COMMENTED. "Ignore" used to file a decision
-   * saying nothing had been done; those rows carry a real reason somebody
-   * typed, so they are comments. Nothing is rewritten and nothing vanishes
-   * from a report.
+   * `ignored` IS GONE FROM THE DATA, not just from the vocabulary. The one
+   * historical row on production was MIGRATED to `commented` (owner,
+   * 2026-09-29) rather than left as a legacy spelling to interpret forever.
+   *
+   * Still mapped defensively: an unrecognised action with a reason is somebody
+   * having looked and written something down, which is what `commented` means.
+   * A row arriving from an older client must not read as `pending` and invite
+   * a second look at work already done.
    */
-  it('reads a legacy ignored row as commented', () => {
+  it('treats any unrecognised action with a reason as commented', () => {
     expect(lateOrderState({ action: 'ignored', reason: 'duplicate order' })).toBe('commented');
+    expect(lateOrderState({ action: 'whatever', reason: 'looked at it' })).toBe('commented');
   });
 
   /* A decision with no reason at all is not a comment — there is nothing to
@@ -52,7 +59,7 @@ describe('lateOrderState', () => {
     ['empty', ''],
     ['whitespace', '   '],
   ])('is pending for a decision with a %s reason', (_label, reason) => {
-    expect(lateOrderState({ action: 'ignored', reason })).toBe('pending');
+    expect(lateOrderState({ action: 'commented', reason })).toBe('pending');
   });
 
   /* Compensated wins even with no reason: the coupon is the fact. */

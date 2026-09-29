@@ -243,7 +243,7 @@ export function LateOrdersReportPage() {
     return {
       handled: rows.length,
       compensated,
-      ignored: rows.filter((r) => r.action === 'ignored').length,
+      ignored: rows.filter((r) => r.action === 'commented').length,
       preparation: rows.filter((r) => r.kind === 'late_preparation').length,
       avgMinutes: mins.length ? Math.round(mins.reduce((a, b) => a + b, 0) / mins.length) : null,
     };
@@ -339,7 +339,7 @@ export function LateOrdersReportPage() {
                 label: t('lateOrdersReport.action.compensated', { defaultValue: 'Compensated' }),
               },
               {
-                value: 'ignored',
+                value: 'commented',
                 label: t('lateOrdersReport.action.ignored', { defaultValue: 'Ignored' }),
               },
             ],

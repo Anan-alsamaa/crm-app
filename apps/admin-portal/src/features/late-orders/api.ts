@@ -20,7 +20,7 @@ export interface LateOrderDecisionRow {
   id: string;
   order_id: string | null;
   kind: LateOrderKind | null;
-  action: 'ignored' | 'compensated' | null;
+  action: 'commented' | 'compensated' | null;
   reason: string | null;
   /**
    * What the agent DID about it — the Comments box's second field.
@@ -226,7 +226,7 @@ export function agentLateStats(
     }
     s.handled += 1;
     if (r.action === 'compensated') s.compensated += 1;
-    if (r.action === 'ignored') s.ignored += 1;
+    if (r.action === 'commented') s.ignored += 1;
     if (r.kind === 'late_preparation') s.latePreparation += 1;
     if (r.kind === 'late_delivery') s.lateDelivery += 1;
     if (typeof r.minutes_elapsed === 'number') {

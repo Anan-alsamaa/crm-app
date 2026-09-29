@@ -202,7 +202,19 @@ export function lateOrderComplaintType(cause: string): string {
 }
 
 /** What the agent did with a late order. */
-export const LateOrderAction = z.enum(['ignored', 'compensated']);
+/**
+ * What was recorded against a late order.
+ *
+ * `ignored` IS GONE (owner, 2026-09-29). It was an action that filed a decision
+ * saying nothing had been done, which is not a decision at all — the customer
+ * had received nothing. It is replaced by `commented`: somebody looked, wrote
+ * down what they found, and left the order open for a coupon.
+ *
+ * The one historical `ignored` row on production carried a real reason ("bank
+ * issue") and was MIGRATED to `commented`, so the value is not kept as a legacy
+ * spelling. Nothing reads it any more.
+ */
+export const LateOrderAction = z.enum(['commented', 'compensated']);
 export type LateOrderAction = z.infer<typeof LateOrderAction>;
 
 /**
@@ -253,8 +265,8 @@ export function lateOrderState(
 ): LateOrderState {
   if (!decision) return 'pending';
   if (decision.action === 'compensated') return 'handled';
-  /* A recorded decision that is not a compensation means somebody looked and
-     wrote something down — including every legacy `ignored` row. */
+  /* Anything else recorded means somebody looked and wrote something down. A
+     row with no reason has nothing to show anybody, so it is still pending. */
   return decision.reason?.trim() ? 'commented' : 'pending';
 }
 

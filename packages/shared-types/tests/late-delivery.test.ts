@@ -82,7 +82,7 @@ describe('LATE_ORDER_COMPLAINT_TYPE', () => {
 });
 
 describe('LateOrderDecision', () => {
-  const base = { orderId: '1313926', kind: 'late_delivery', action: 'ignored' } as const;
+  const base = { orderId: '1313926', kind: 'late_delivery', action: 'commented' } as const;
 
   it('requires a reason for BOTH actions', () => {
     expect(LateOrderDecision.safeParse({ ...base, reason: '' }).success).toBe(false);

@@ -92,7 +92,7 @@ function isoDaysAgo(n: number): string {
 
 interface DecisionDraft {
   row: LateOrderRow;
-  action: 'ignored' | 'compensated';
+  action: 'commented' | 'compensated';
   /**
    * Opened by VIEW rather than by a decision button.
    *
@@ -123,7 +123,7 @@ interface DecisionDraft {
 export type DecisionOutcome = 'coupon' | 'update' | 'noop' | 'record-ignore';
 
 export function decisionOutcome(
-  draft: { action: 'ignored' | 'compensated'; viewing?: boolean },
+  draft: { action: 'commented' | 'compensated'; viewing?: boolean },
   editingDecisionId: string | null,
 ): DecisionOutcome {
   if (draft.action === 'compensated') return 'coupon';
@@ -558,7 +558,11 @@ export function LateOrdersPage() {
     return causeOptions[0]?.value ?? 'late_delivery';
   };
 
-  const openDecision = (row: LateOrderRow, action: 'ignored' | 'compensated', viewing = false) => {
+  const openDecision = (
+    row: LateOrderRow,
+    action: 'commented' | 'compensated',
+    viewing = false,
+  ) => {
     /*
      * Seeded from the decision already recorded, when there is one.
      *
@@ -783,7 +787,7 @@ export function LateOrdersPage() {
         await record.mutateAsync({
           row: draft.row,
           kind,
-          action: 'ignored',
+          action: 'commented',
           reason: text,
           actionTaken,
           agentId: user?.id ?? null,
@@ -1228,7 +1232,7 @@ export function LateOrdersPage() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            onClick={() => openDecision(row, 'ignored')}
+                            onClick={() => openDecision(row, 'commented')}
                           >
                             {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
                           </Button>
@@ -1246,7 +1250,7 @@ export function LateOrdersPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        onClick={() => openDecision(row, 'ignored', true)}
+                        onClick={() => openDecision(row, 'commented', true)}
                       >
                         {t('lateOrders.comments', { defaultValue: 'View' })}
                       </Button>
@@ -1302,7 +1306,7 @@ export function LateOrdersPage() {
                "Ignore this order?" — a question the agent never asked. */
             isNotesView(draft, editingDecisionId)
               ? t('lateOrders.commentsTitle', { defaultValue: 'Notes' })
-              : draft.action === 'ignored'
+              : draft.action === 'commented'
                 ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
                 : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
           }
@@ -1381,7 +1385,7 @@ export function LateOrdersPage() {
                they never chose. */
             isNotesView(draft, editingDecisionId)
               ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
-              : draft.action === 'ignored'
+              : draft.action === 'commented'
                 ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
                 : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
           }

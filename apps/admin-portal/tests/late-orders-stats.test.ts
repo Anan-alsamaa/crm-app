@@ -51,7 +51,7 @@ describe('agentLateStats', () => {
     const [ayman] = agentLateStats(
       [
         row({ action: 'compensated', kind: 'late_delivery', minutes_elapsed: 60 }),
-        row({ action: 'ignored', kind: 'late_preparation', minutes_elapsed: 80 }),
+        row({ action: 'commented', kind: 'late_preparation', minutes_elapsed: 80 }),
         row({ action: 'compensated', kind: 'late_preparation', minutes_elapsed: 100 }),
       ],
       UNKNOWN,
@@ -167,7 +167,7 @@ describe('avgMinutes is time spent waiting on the queue', () => {
 describe('latestPerOrder', () => {
   it('keeps the newest decision and drops the superseded one', () => {
     const newest = row({ order_id: '1323103', kind: 'late_preparation', action: 'compensated' });
-    const older = row({ order_id: '1323103', kind: 'late_delivery', action: 'ignored' });
+    const older = row({ order_id: '1323103', kind: 'late_delivery', action: 'commented' });
     // Rows arrive sorted -date_created, so the newest is first.
     const out = latestPerOrder([newest, older]);
     expect(out).toHaveLength(1);
@@ -184,8 +184,8 @@ describe('latestPerOrder', () => {
     const out = latestPerOrder([
       row({ order_id: 'a', action: 'compensated' }),
       row({ order_id: 'b', action: 'compensated' }),
-      row({ order_id: 'a', action: 'ignored' }),
-      row({ order_id: 'b', action: 'ignored' }),
+      row({ order_id: 'a', action: 'commented' }),
+      row({ order_id: 'b', action: 'commented' }),
     ]);
     expect(out).toHaveLength(2);
     expect(out.every((r) => r.action === 'compensated')).toBe(true);

@@ -309,7 +309,7 @@ export interface RecordLateDecisionInput {
    * whatever they typed.
    */
   kind: string;
-  action: 'ignored' | 'compensated';
+  action: 'commented' | 'compensated';
   reason: string;
   /** What the agent DID about it, free text. Optional. */
   actionTaken?: string;
