@@ -50,6 +50,11 @@ export function LateOrdersReportPage() {
   /** One business day, as `YYYY-MM-DD`. Empty means every day in the window. */
   const [bizDay, setBizDay] = useState('');
   /*
+   * WHICH AGENT (owner, 2026-09-29). Empty means every agent, which is how the
+   * report opens — a supervisor reads the whole team first and narrows after.
+   */
+  const [agent, setAgent] = useState('');
+  /*
    * TWO SUB-PAGES, decisions first (owner, 2026-09-28).
    *
    * They answer different questions — what was decided, and how each agent is
@@ -98,12 +103,16 @@ export function LateOrdersReportPage() {
       // 01:00 belongs to the night before, and filtering by date would put it
       // on the wrong day.
       if (bizDay && businessDay(r.date_created) !== bizDay) return false;
+      /* Matched on the RESOLVED name, which is what the column shows and what
+         the picker offers — comparing raw ids would mean the filter and the
+         table disagreed about who "Unassigned" is. */
+      if (agent && agentName(r, unknown) !== agent) return false;
       if (!term) return true;
       return `${r.order_id ?? ''} ${r.brand_name ?? ''} ${r.restaurant_name ?? ''}`
         .toLowerCase()
         .includes(term);
     });
-  }, [all, search, kind, action, bizDay]);
+  }, [all, search, kind, action, bizDay, agent, unknown]);
   /*
    * The business days actually PRESENT in the fetched window, newest first.
    *
@@ -112,6 +121,20 @@ export function LateOrdersReportPage() {
    * return nothing. A picker whose entries mostly lead to an empty table is a
    * picker that has stopped helping.
    */
+  /*
+   * The agents actually PRESENT in the window, alphabetically.
+   *
+   * Derived from the rows rather than read from the user list, for the same
+   * reason the business days are: a picker listing every agent who has ever
+   * worked here, on a report covering last week, is mostly entries that lead to
+   * an empty table.
+   */
+  const agents = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of all) seen.add(agentName(r, unknown));
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [all, unknown]);
+
   const businessDays = useMemo(() => {
     const seen = new Set<string>();
     for (const r of all) {
@@ -277,6 +300,13 @@ export function LateOrdersReportPage() {
             options: businessDays.map((d) => ({ value: d, label: formatDate(d) })),
           },
           {
+            key: 'agent',
+            label: t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
+            value: agent,
+            onChange: setAgent,
+            options: agents.map((a) => ({ value: a, label: a })),
+          },
+          {
             key: 'kind',
             label: t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
             value: kind,
@@ -309,12 +339,16 @@ export function LateOrdersReportPage() {
             ],
           },
         ]}
-        filtering={!!search || !!kind || !!action || !!bizDay}
+        /* The agent belongs in BOTH: omitted from `filtering` the Clear button
+           would not appear for an agent-only filter, and omitted from
+           `onClear` it would survive a clear that claims to remove everything. */
+        filtering={!!search || !!kind || !!action || !!bizDay || !!agent}
         onClear={() => {
           setSearch('');
           setKind('');
           setAction('');
           setBizDay('');
+          setAgent('');
           reset();
         }}
       />
