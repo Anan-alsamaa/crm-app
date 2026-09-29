@@ -717,7 +717,7 @@ export function LateOrdersPage() {
             setRange({ from: draftFrom, to: draftTo });
           }}
         >
-          {t('lateOrders.filter.apply', { defaultValue: 'Load range' })}
+          {t('lateOrders.filter.apply', { defaultValue: 'Search' })}
         </Button>
         {/*
           TODAY — the whole business day, finished orders included.
