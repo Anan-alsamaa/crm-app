@@ -124,7 +124,7 @@ export function useLateOrderDecisions() {
             filter: {
               date_created: { _gte: new Date(Date.now() - 30 * 86_400_000).toISOString() },
             },
-            fields: ['id', 'order_id', 'action', 'kind', 'reason', 'action_taken'],
+            fields: ['id', 'order_id', 'action', 'kind', 'reason', 'action_taken', 'ticket'],
             sort: ['-date_created'],
             limit: -1,
           } as never,
@@ -148,6 +148,14 @@ export interface LateOrderDecisionRow {
   kind: string | null;
   reason: string | null;
   action_taken: string | null;
+  /**
+   * The ticket this decision raised, when it raised one.
+   *
+   * Read so a SECOND decision on the same order can reuse it rather than
+   * raising another — four tickets appeared for order 1323291 because an agent
+   * submitted four decisions minutes apart (owner, 2026-09-28).
+   */
+  ticket: string | null;
 }
 
 /**

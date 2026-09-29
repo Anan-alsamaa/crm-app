@@ -136,6 +136,32 @@ export function isNotesView(
   return !!editingDecisionId || !!draft.viewing;
 }
 
+/**
+ * Whether this decision must RAISE a ticket, REUSE one, or raise none.
+ *
+ * EXPORTED and used by the component, so the tests exercise the real rule
+ * rather than a restatement of it that passes whatever the page does.
+ *
+ * - `none`    a late DELIVERY. The owner's call (2026-09-28): delivery
+ *             lateness is not a complaint in its own right, so no ticket is
+ *             filed and the coupon stands on its own.
+ * - `reuse`   a late PREPARATION on an order whose earlier decision already
+ *             raised one. Order 1323291 grew FOUR tickets from four decisions
+ *             minutes apart, and the breakdown counted one complaint four
+ *             times.
+ * - `raise`   the first late-preparation decision on this order.
+ */
+export type TicketPlan = { mode: 'none' } | { mode: 'reuse'; id: string } | { mode: 'raise' };
+
+export function planTicket(
+  kind: LateOrderKind,
+  priorTicketId: string | null | undefined,
+): TicketPlan {
+  if (kind !== 'late_preparation') return { mode: 'none' };
+  const prior = priorTicketId?.trim();
+  return prior ? { mode: 'reuse', id: prior } : { mode: 'raise' };
+}
+
 export function LateOrdersPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -443,7 +469,25 @@ export function LateOrdersPage() {
          searching the number that raised it, and the coupon request names
          nobody. Resolved ONCE here and reused by both paths. */
       const contactId = await resolveLateOrderContact(draft.row, soleVendorId);
-      if (kind === 'late_preparation') {
+      /*
+       * ONE ORDER, ONE TICKET (owner, 2026-09-28).
+       *
+       * Order 1323291 grew FOUR tickets: an agent submitted four decisions
+       * minutes apart and each raised its own. They are the same complaint
+       * about the same order, so the breakdown report counted one late
+       * preparation four times.
+       *
+       * A repeat decision now reuses the ticket the first one raised. Read from
+       * the DECISION rather than searched for by order id: the decision is
+       * where the link was recorded, so this cannot pick up a ticket somebody
+       * raised by hand for the same order from the tickets page.
+       */
+      const priorTicketId = decisions.data?.get(draft.row.orderId)?.ticket ?? null;
+      const plan = planTicket(kind, priorTicketId);
+      if (plan.mode === 'reuse') {
+        // Already filed. The decision below records against the same ticket.
+        ticketId = plan.id;
+      } else if (plan.mode === 'raise') {
         /* The branch, resolved from the store master. Without it the ticket has
            no `restaurantName` and the operations report — which shows COMPLETE
            rows only — hides it silently. */
