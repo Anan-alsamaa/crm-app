@@ -206,6 +206,59 @@ export const LateOrderAction = z.enum(['ignored', 'compensated']);
 export type LateOrderAction = z.infer<typeof LateOrderAction>;
 
 /**
+ * HOW FAR ALONG A LATE ORDER IS — NOT the order's own status (owner,
+ * 2026-09-29).
+ *
+ * These are two different things and must never be mixed: an order can be
+ * `delivered` or `force_closed` upstream and still be `pending` here, because
+ * nobody at WeCare has touched it yet.
+ *
+ *   pending    nothing done: no comment, no coupon.
+ *   commented  somebody wrote down what they found, and left it there. A
+ *              comment is NOT a resolution — the customer has had nothing.
+ *   handled    a coupon was assigned. Only this closes it.
+ *
+ * `ignored` is retired from the vocabulary: "Ignore" was an action that filed a
+ * decision saying nothing had been done, which is what `pending` and
+ * `commented` now express honestly. Existing `ignored` rows are READ as
+ * `commented` — somebody did look at them and wrote a reason — so no history is
+ * rewritten and no row disappears from a report.
+ *
+ * Deliberately NOT called "open": that word already means an open TICKET in
+ * this codebase, and one of these sitting beside the other would be read as the
+ * same thing.
+ */
+export const LateOrderState = z.enum(['pending', 'commented', 'handled']);
+export type LateOrderState = z.infer<typeof LateOrderState>;
+
+/**
+ * What state a late order is in, from whatever is recorded against it.
+ *
+ * ONE function, so the queue, the register and the summary can never disagree
+ * about what "handled" means.
+ *
+ * The COUPON decides `handled` — not the decision's `action` column. A decision
+ * is written the moment the coupon request is created, and a request that was
+ * later rejected is not a compensation; asking about the coupon keeps the two
+ * honest.
+ */
+export function lateOrderState(
+  decision:
+    | {
+        action?: string | null;
+        reason?: string | null;
+      }
+    | null
+    | undefined,
+): LateOrderState {
+  if (!decision) return 'pending';
+  if (decision.action === 'compensated') return 'handled';
+  /* A recorded decision that is not a compensation means somebody looked and
+     wrote something down — including every legacy `ignored` row. */
+  return decision.reason?.trim() ? 'commented' : 'pending';
+}
+
+/**
  * One row in the late-orders queue: a live delivery order past the threshold.
  *
  * `minutesElapsed` is computed server-side against the gateway's clock, NOT in
@@ -268,6 +321,75 @@ export function serviceMinutes(
   const ended = closedAt ? parseYijiTimestamp(closedAt) : now;
   const end = Number.isFinite(ended) ? ended : now;
   return Math.max(0, Math.floor((end - started) / 60_000));
+}
+
+/**
+ * THE FOUR ORDER TIMES, from the status history (owner, 2026-09-29).
+ *
+ * All four are computed from `OrderStatusHistories` — the real transitions with
+ * their timestamps — rather than from the order row's `orderStatusDate`, which
+ * is only ever the CURRENT status's moment.
+ *
+ * That distinction is the bug this replaces. Order 1323407 was `closed` at
+ * 17:30:39 and then `force_closed` at 22:31:24, five hours later; reading
+ * `orderStatusDate` gave a service time of 365 minutes where the truth is 64.
+ *
+ * CLOSED ALWAYS WINS over force-closed when both exist — a force-close after a
+ * close is bookkeeping, not delivery.
+ *
+ * Each returns null rather than 0 when its events are missing: a blank cell
+ * says "not known", and a zero would read as "instant".
+ */
+export interface OrderEventTimes {
+  /** Driver accepted → closed (force-closed only if there is no close). */
+  serviceMinutes: number | null;
+  /** Driver accepted → arrived (in-delivery when there is no arrival). */
+  driverArrivalMinutes: number | null;
+  /** In-delivery → closed. */
+  deliveryMinutes: number | null;
+  /** POS accepted → ready-to-pickup (in-delivery when there is no ready). */
+  preparationMinutes: number | null;
+}
+
+/** A status history flattened to `status -> first timestamp`. */
+export type OrderEventAt = Readonly<Record<string, string | null | undefined>>;
+
+function minutesBetween(from: string | null | undefined, to: string | null | undefined) {
+  if (!from || !to) return null;
+  const a = parseYijiTimestamp(from);
+  const b = parseYijiTimestamp(to);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  /* Never negative: events can arrive out of order, and a negative duration is
+     worse than an absent one — it reads as a real measurement. */
+  return Math.max(0, Math.floor((b - a) / 60_000));
+}
+
+export function orderEventTimes(at: OrderEventAt, now?: number): OrderEventTimes {
+  /* CLOSED FIRST. `force_closed` is the fallback, never the preference. */
+  const finished = at.closed ?? at.force_closed ?? null;
+
+  /* A live order has not finished, so its service time runs to NOW — that is
+     what makes the column tick on the queue. A finished one is fixed. */
+  const serviceEnd = finished
+    ? parseYijiTimestamp(finished)
+    : typeof now === 'number'
+      ? now
+      : Number.NaN;
+  const accepted = at.driver_accepted ? parseYijiTimestamp(at.driver_accepted) : Number.NaN;
+  const serviceMinutes =
+    Number.isFinite(accepted) && Number.isFinite(serviceEnd)
+      ? Math.max(0, Math.floor((serviceEnd - accepted) / 60_000))
+      : null;
+
+  return {
+    serviceMinutes,
+    // Arrived when there is one; otherwise the moment it went out for delivery.
+    driverArrivalMinutes: minutesBetween(at.driver_accepted, at.arrived ?? at.in_delivery),
+    deliveryMinutes: minutesBetween(at.in_delivery, finished),
+    // Ready-to-pickup when there is one; otherwise it left the kitchen when it
+    // went out for delivery.
+    preparationMinutes: minutesBetween(at.pos_accepted, at.ready_to_pickup ?? at.in_delivery),
+  };
 }
 
 /** The Yiji status whose timestamp is the driver-accept moment. */
