@@ -82,7 +82,13 @@ export interface CouponRequestDialogProps {
    */
   /* `sku` rides along so a PICKED item records Yiji's id, not just its name —
      see `item_sku` in the draft for why a name cannot be the key. */
-  orderItems?: Array<{ name: string; price?: number | null; sku?: string | null }>;
+  orderItems?: Array<{
+    name: string;
+    price?: number | null;
+    /** How many of this line. Absent means one. */
+    qty?: number | null;
+    sku?: string | null;
+  }>;
   requestedBy: string | null;
   onCreated?: () => void;
   /**
@@ -119,6 +125,56 @@ export interface CouponRequestDialogProps {
 /** How a list of item names/ids is stored in the single text column. */
 const ITEM_SEP = ', ';
 
+/** One order line as the picker needs it: what it cost, and what one costs. */
+export interface PickableLine {
+  name: string;
+  price?: number | null;
+  qty?: number | null;
+  sku?: string | null;
+  qtyN: number;
+  unit: number;
+  lineTotal: number;
+}
+
+/**
+ * The order's lines, de-duplicated, each with WHAT IT COST.
+ *
+ * EXPORTED and used by the component, so the tests exercise the real arithmetic
+ * rather than a restatement of it that would pass whatever the dialog does. This
+ * is a money path — the sum of the picked lines is what lands in the coupon's
+ * value — so it gets the same treatment as `decisionOutcome`.
+ *
+ * `qty × price`, because Yiji's `itemPrice` is the price of ONE. A line of 3
+ * waters at 1 SAR used to read "1" beside the item while the inbox's order panel
+ * read 3 (owner, 2026-09-29): the same order showing two numbers, and this side
+ * was the one that under-filled the coupon.
+ *
+ * A missing or non-positive quantity counts as one, and a missing price as zero:
+ * both appear on real Yiji lines, and neither is a reason to drop a line the
+ * agent may still want to name.
+ */
+export function pickableLines(
+  items: ReadonlyArray<{
+    name: string;
+    price?: number | null;
+    qty?: number | null;
+    sku?: string | null;
+  }>,
+): PickableLine[] {
+  // De-duplicated by NAME: an order listing the same line twice offers it once,
+  // and the name is the key the coupon row stores.
+  return Array.from(new Map(items.map((it) => [it.name, it])).values()).map((it) => {
+    const qtyN = typeof it.qty === 'number' && it.qty > 0 ? it.qty : 1;
+    const unit = typeof it.price === 'number' && it.price > 0 ? it.price : 0;
+    return { ...it, qtyN, unit, lineTotal: unit * qtyN };
+  });
+}
+
+/** What the picked lines add up to — the coupon's suggested value. */
+export function pickedTotal(lines: readonly PickableLine[], selected: ReadonlySet<string>): number {
+  return lines.filter((l) => selected.has(l.name)).reduce((sum, l) => sum + l.lineTotal, 0);
+}
+
 /**
  * Pick the order lines a coupon compensates — one, several, or none.
  *
@@ -139,16 +195,24 @@ function ItemPicker({
   onChange,
   t,
 }: {
-  items: Array<{ name: string; price?: number | null; sku?: string | null }>;
+  items: Array<{ name: string; price?: number | null; qty?: number | null; sku?: string | null }>;
   names: string;
   onChange: (names: string, skus: string, sum: number) => void;
   t: (key: string, opts?: Record<string, unknown>) => string;
 }): JSX.Element {
-  // De-duplicated: an order with 2× the same line offers it once.
-  const unique = useMemo(
-    () => Array.from(new Map(items.map((it) => [it.name, it])).values()),
-    [items],
-  );
+  /*
+   * WHAT A LINE COST: quantity × unit price (owner, 2026-09-29).
+   *
+   * Yiji's `itemPrice` is the price of ONE, so a line of 3 waters at 1 SAR read
+   * as "1" here while the inbox's order panel — which multiplies — read 3. Same
+   * order, two numbers, and this is the side that MATTERS: the sum below is what
+   * lands in the coupon's value field, so under-compensating by a factor of the
+   * quantity was one click away and looked correct.
+   *
+   * Computed once, into `lineTotal`, so the checkbox label, the running sum and
+   * the value handed to `onChange` cannot drift apart again.
+   */
+  const unique = useMemo(() => pickableLines(items), [items]);
   const selected = useMemo(
     () =>
       new Set(
@@ -176,16 +240,13 @@ function ItemPicker({
         .map((it) => it.sku)
         .filter(Boolean)
         .join(ITEM_SEP),
-      picked.reduce(
-        (sum, it) => sum + (typeof it.price === 'number' && it.price > 0 ? it.price : 0),
-        0,
-      ),
+      /* The SAME function the running total below uses, so what the agent read
+         and what the value field receives cannot differ. */
+      pickedTotal(unique, next),
     );
   };
 
-  const total = unique
-    .filter((it) => selected.has(it.name))
-    .reduce((s, it) => s + (typeof it.price === 'number' && it.price > 0 ? it.price : 0), 0);
+  const total = pickedTotal(unique, selected);
 
   return (
     <div className="grid gap-1.5">
@@ -205,10 +266,22 @@ function ItemPicker({
               checked={selected.has(it.name)}
               onChange={() => toggle(it.name)}
             />
-            <span className="min-w-0 flex-1 truncate">{it.name}</span>
-            {typeof it.price === 'number' && it.price > 0 && (
+            <span className="min-w-0 flex-1 truncate">
+              {it.qtyN > 1 && <span className="tabular-nums text-foreground/80">{it.qtyN}× </span>}
+              {it.name}
+            </span>
+            {it.lineTotal > 0 && (
               <span className="shrink-0 tabular-nums text-xs text-muted-foreground">
-                {it.price}
+                {/* The unit price spelled out beside the line total, exactly as
+                    the inbox's order panel does it — otherwise "3" against a
+                    1 SAR water looks like a different price rather than three
+                    of them. */}
+                {it.qtyN > 1 && (
+                  <span className="me-1 text-2xs">
+                    ({it.unit} {t('commerce.each', { defaultValue: 'each' })})
+                  </span>
+                )}
+                {it.lineTotal}
               </span>
             )}
           </label>

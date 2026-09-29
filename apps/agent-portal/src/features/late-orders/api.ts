@@ -75,12 +75,21 @@ export function useLateOrders(
 }
 
 /**
- * Late orders already decided, so the queue can hide them.
+ * Late orders that have been HANDLED — compensated, nothing less.
  *
- * Yiji has no idea we have handled anything — the order stays live and keeps
+ * Yiji has no idea we have handled anything: the order stays live and keeps
  * coming back from `GetFilteredOrders` until it completes. Without this the
  * agent would face the same rows every thirty seconds with no sign of the work
  * they just did.
+ *
+ * **`action: 'compensated'`, and that filter is the whole point.** This used to
+ * return every order carrying ANY decision row, which was right while the two
+ * decisions were "compensate" and "ignore" — both were final. Under the state
+ * model the owner specified (2026-09-29) a COMMENT is a recorded state that is
+ * explicitly *not* handling, so an unfiltered set would mark a commented order
+ * Handled, take its Assign coupon button away and collapse
+ * `Pending → Commented → Handled` into two states. See [[silent-empty-failures]]
+ * for this shape: the query still returns rows, so nothing looks broken.
  *
  * Keyed on the ORDER id rather than a row id because that is the only
  * identifier the two sides share.
@@ -95,7 +104,10 @@ export function useHandledLateOrders() {
         readItems(
           'late_order_decisions' as never,
           {
-            filter: { date_created: { _gte: since } },
+            filter: {
+              date_created: { _gte: since },
+              action: { _eq: 'compensated' },
+            },
             fields: ['order_id'],
             limit: -1,
           } as never,
@@ -169,13 +181,22 @@ export interface LateOrderDecisionRow {
 export function useUpdateLateDecision() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { id: string; reason: string; actionTaken: string }) =>
-      directus.request(
-        updateItem('late_order_decisions' as never, input.id, {
-          reason: input.reason.trim(),
-          action_taken: input.actionTaken.trim() || null,
-        } as never),
-      ),
+    /*
+     * PARTIAL by design. The comment dialog sends the two free-text fields; the
+     * Source of delay dropdown sends `kind` alone and must not blank the reason
+     * somebody already wrote. So each field is sent only when it was supplied,
+     * rather than spreading an object with `undefined` holes that Directus would
+     * happily write as nulls.
+     */
+    mutationFn: (input: { id: string; reason?: string; actionTaken?: string; kind?: string }) => {
+      const patch: Record<string, string | null> = {};
+      if (input.reason !== undefined) patch.reason = input.reason.trim();
+      if (input.actionTaken !== undefined) patch.action_taken = input.actionTaken.trim() || null;
+      if (input.kind !== undefined) patch.kind = input.kind;
+      return directus.request(
+        updateItem('late_order_decisions' as never, input.id, patch as never),
+      );
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['late-orders'] });
     },

@@ -68,9 +68,19 @@ function CartLines({ orderId }: { orderId: string }) {
               {l.qty}&times;
             </span>
             <span className="min-w-0 font-medium text-foreground">{l.name}</span>
-            {/* The price, right-aligned and full-strength: it is a figure the
-                agent reads off, not a caption. */}
-            <span className="shrink-0 tabular-nums font-medium text-foreground">{l.price}</span>
+            {/* WHAT THE LINE COST — quantity × unit (owner, 2026-09-29).
+                `l.price` is the price of ONE, so a line of 3 waters at 1 SAR
+                showed "1" here while the inbox's order panel showed 3. The unit
+                price is still named, in brackets, so the multiplication is
+                visible rather than asserted. */}
+            <span className="shrink-0 tabular-nums font-medium text-foreground">
+              {l.qty > 1 && (
+                <span className="me-1 text-2xs font-normal text-muted-foreground">
+                  ({l.price} {t('commerce.each', { defaultValue: 'each' })})
+                </span>
+              )}
+              {l.price * l.qty}
+            </span>
             {/* The choices are the point: "Without Broccoli" is what answers an
                 accuracy complaint, and the money view alone never showed it.
                 Sits under the NAME, in the name's own column. */}

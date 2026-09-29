@@ -925,6 +925,10 @@ export function CreateTicketDialog({
                     ? latestOrder.items.map((it) => ({
                         name: it.name,
                         price: it.price ?? null,
+                        // The quantity too: `price` is the price of ONE, so the
+                        // picker needs both to fill the coupon with what the
+                        // LINE cost (owner, 2026-09-29).
+                        qty: it.qty ?? null,
                         // Yiji's item id, so a picked item is recorded by a key
                         // that has no spellings — see `item_sku`.
                         sku: it.sku ?? null,

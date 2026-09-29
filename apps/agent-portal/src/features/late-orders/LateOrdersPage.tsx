@@ -1,10 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem } from '@directus/sdk';
 import {
   Button,
-  Card,
   ConfirmDialog,
   DateField,
   EmptyState,
@@ -16,12 +15,14 @@ import {
   SelectMenu,
   Skeleton,
   Table,
+  TableSurface,
   Td,
   Th,
   Textarea,
   Tr,
   formatDate,
   toast,
+  MultiSelectMenu,
 } from '@yiji/ui';
 import {
   lateOrderComplaintType,
@@ -34,6 +35,8 @@ import {
   causeRaisesTicket,
   DEFAULT_LATE_ORDER_CAUSES,
   type LateOrderGroup,
+  lateOrderState,
+  type LateOrderState,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { directus } from '../../lib/directus.js';
@@ -60,10 +63,13 @@ import {
 /**
  * Late Delivery Handling - the agent's queue.
  *
- * Delivery orders still running past the threshold, with the two decisions the
- * owner specified: Ignore, and Assign coupon. Both demand a reason; both record
- * what was decided so the queue does not offer the same order again a minute
- * later.
+ * Delivery orders past the threshold, in one of three states: PENDING until
+ * somebody touches it, COMMENTED once an agent records why, HANDLED once a
+ * coupon is assigned. Both acts demand a reason and both write to the SAME row
+ * per order, which is what keeps one late order from growing two records.
+ *
+ * Commenting is deliberately not handling — an order can be explained and still
+ * be waiting for a decision.
  *
  * See docs/LATE-DELIVERY.md for the measured behaviour of the Yiji endpoint
  * behind this - several of its properties are counter-intuitive and load-bearing.
@@ -77,13 +83,6 @@ function elapsed(minutes: number): string {
   return m === 0 ? `${h}h` : `${h}h ${m}m`;
 }
 
-/**
- * How far back the page opens. Thirty days is what operations review, and it
- * is comfortably inside the upstream page budget (two months measured 1,062
- * rows against a 500-per-page walk).
- */
-const DEFAULT_WINDOW_DAYS = 30;
-
 /** `YYYY-MM-DD`, n days ago, in the AGENT's own timezone rather than UTC. */
 function isoDaysAgo(n: number): string {
   const d = new Date(Date.now() - n * 86_400_000);
@@ -94,15 +93,12 @@ interface DecisionDraft {
   row: LateOrderRow;
   action: 'commented' | 'compensated';
   /**
-   * Opened by VIEW rather than by a decision button.
+   * Opened by COMMENT rather than by the coupon button.
    *
-   * View and Ignore both carry `action: 'ignored'` — viewing writes the same
-   * shape of record — so the action alone cannot tell them apart, and the
-   * dialog was offering "Ignore" as its confirm button to somebody who had only
-   * asked to look at the notes (owner, 2026-09-28).
-   *
-   * `editingDecisionId` is not enough either: it is null on a row that has no
-   * decision yet, which is exactly the case that showed the wrong button.
+   * Kept as a flag rather than inferred from `action`, because a comment on a
+   * row that already carries one is an EDIT and a comment on a fresh row is the
+   * first record — same button, two write paths, and `editingDecisionId` alone
+   * cannot tell the coupon dialog apart from the comment one.
    */
   viewing?: boolean;
 }
@@ -114,31 +110,30 @@ interface DecisionDraft {
  * thing. Re-stating this table in a test file would produce tests that pass
  * whatever the page does, which is worse than having none.
  *
- * VIEW IS NOT A DECISION. View and Ignore both open the same box carrying
- * `action: 'ignored'`, and this used to key on `editingDecisionId` alone —
- * which is null on a row with no decision yet. So View on an undecided row
- * offered an "Ignore" button that would have RECORDED an ignore and dropped
- * the order off the live queue (owner, 2026-09-28).
+ * A COMMENT IS NOW A RECORDED STATE (owner spec, 2026-09-29). It used to be
+ * that the non-coupon button recorded an IGNORE, and a third button called View
+ * read the notes back without deciding anything — so View on an undecided row
+ * had to be prevented from writing. Ignore is gone; Comment is the one
+ * non-coupon act, and it WRITES: first press creates the decision and moves the
+ * order to `commented`, later presses edit the text. There is no longer any
+ * path that opens this box and must refuse to save, so `noop` is gone with it.
+ *
+ * Commenting is deliberately NOT handling. Only a coupon marks an order
+ * handled, and once it is handled the Comment button disappears — the coupon's
+ * own reason is then what the register shows.
  */
-export type DecisionOutcome = 'coupon' | 'update' | 'noop' | 'record-ignore';
+export type DecisionOutcome = 'coupon' | 'update' | 'record-comment';
 
 export function decisionOutcome(
   draft: { action: 'commented' | 'compensated'; viewing?: boolean },
   editingDecisionId: string | null,
 ): DecisionOutcome {
   if (draft.action === 'compensated') return 'coupon';
+  /* A decision already exists for this order: the wording changes, the decision
+     TYPE does not. Correcting a comment must never turn a compensation back
+     into a comment. */
   if (editingDecisionId) return 'update';
-  // Nothing to update and nothing decided: saying so beats deciding for them.
-  if (draft.viewing) return 'noop';
-  return 'record-ignore';
-}
-
-/** True when the box was opened to READ or EDIT notes rather than to decide. */
-export function isNotesView(
-  draft: { viewing?: boolean },
-  editingDecisionId: string | null,
-): boolean {
-  return !!editingDecisionId || !!draft.viewing;
+  return 'record-comment';
 }
 
 /**
@@ -238,63 +233,46 @@ export function LateOrdersPage() {
    * would fire a query per character. Order id and brand/branch narrow what is
    * already loaded and so are instant.
    */
+  /*
+   * THE HANDLING FILTER — pending / commented / handled / all.
+   *
+   * Defaults to PENDING (owner, 2026-09-29): the queue exists to surface work
+   * nobody has done, and opening on everything buries it under what is already
+   * finished.
+   *
+   * Deliberately NOT called "open": that word already means an open TICKET in
+   * this codebase, and the two side by side would read as the same thing.
+   */
+  const [handlingFilter, setHandlingFilter] = useState<LateOrderState | 'all'>('pending');
+  /*
+   * THE ORDER'S OWN STATUS — a different question entirely, multi-select.
+   *
+   * An EMPTY set means every status, which is what "All" selects. Holding it
+   * as a set rather than an array keeps the membership test O(1) on a queue
+   * that can run to thousands of rows.
+   */
+  const [statusFilter, setStatusFilter] = useState<ReadonlySet<string>>(new Set());
   const [orderQuery, setOrderQuery] = useState('');
   const [brandQuery, setBrandQuery] = useState('');
   /*
-   * OPENS ON A REAL WINDOW, not on nothing.
+   * OPENS ON TODAY'S BUSINESS DAY (owner, 2026-09-29).
    *
-   * It used to open on the live queue alone, which is legitimately empty most
-   * of the time — nothing is past the threshold right this second — so the
-   * page looked broken and read as "no data loaded" (owner, 2026-09-22). It
-   * was not: the same request with dates returns 1,062 orders over two months.
+   * Both dates default to today, which is the shift an agent is working. It
+   * used to open on the last 30 days with a separate "Live only" button; that
+   * button is gone, because a date range covering today already answers "what
+   * is late right now" and two controls for one question was the confusion.
    *
-   * So it starts on the last 30 days. The live queue is still one click away
-   * via "Live only", and the rows say which is which — a finished order is
-   * toned neutral and offers no actions.
-   */
-  const [draftFrom, setDraftFrom] = useState(() => isoDaysAgo(DEFAULT_WINDOW_DAYS));
-  const [draftTo, setDraftTo] = useState(() => isoDaysAgo(0));
-  const [range, setRange] = useState<{ from: string; to: string } | null>(() => ({
-    from: isoDaysAgo(DEFAULT_WINDOW_DAYS),
-    to: isoDaysAgo(0),
-  }));
-  /**
-   * TODAY — every late order of the current business day, finished or not.
-   *
-   * IT USED TO FILTER THE LIVE QUEUE, AND THAT LOST RECORDS (owner,
-   * 2026-09-28: "today had 1 record and suddenly became empty... on searching
-   * from and to in date range the data is there").
-   *
-   * The live queue holds only orders still running, which is right for "Live
-   * only" — an order that completes has correctly left it. But an order that
-   * was an hour late at 14:00 and got delivered at 14:40 is still one of
-   * TODAY'S late orders. Filtering the live queue inherited its status
-   * restriction, so every row deleted itself the moment the order finished and
-   * the day's count drained towards zero as the day went on.
-   *
-   * So Today now LOADS the business day, which puts the gateway into register
-   * mode (`includeCompleted: true`) and keeps completed rows. It is still not
-   * the same thing as a history range: it tracks the business day as it rolls
-   * over, and it is labelled as today rather than as a window.
-   */
-  const [todayOnly, setTodayOnly] = useState(false);
-  const vendors = useVendors();
-  /*
-   * The window Today asks for — DERIVED FROM THE CLOCK, never stored.
-   *
-   * Two calendar dates, because a business day crosses midnight and Yiji's
-   * filter only understands dates. Derived rather than written into `range` on
-   * click so it ROLLS OVER: at 08:00 the business day changes, this changes
-   * with it, and a night shift that leaves the page open is not still looking
-   * at yesterday. It cannot key off the queue's own `builtAt` — that is the
-   * answer to this query, so reading it here would be circular.
+   * THE BUSINESS DAY, not the calendar date: trading runs 08:00 to 04:00, so
+   * at 01:00 "today" is still yesterday's date and an agent working a night
+   * shift must not lose the first half of it. `businessDayRange` gives the two
+   * calendar dates that day touches — Yiji's filter understands dates, not
+   * hours — and the rows are narrowed per row below.
    */
   const [dayTick, setDayTick] = useState(() => businessDay(new Date().toISOString()));
   useEffect(() => {
-    /* One cheap check a minute, so 08:00 rolls the view over on its own. A
-       minute is plenty for an hour-scale boundary and costs nothing; the state
-       only changes on the one tick a day where the answer differs, so this is
-       not a re-render every minute. */
+    /* One cheap check a minute, so 08:00 rolls the view over on its own. The
+       state only changes on the one tick a day where the answer differs, so
+       this is not a re-render every minute. */
     const id = setInterval(() => {
       const day = businessDay(new Date().toISOString());
       setDayTick((prev) => (prev === day ? prev : day));
@@ -303,13 +281,26 @@ export function LateOrdersPage() {
   }, []);
   const todayRange = useMemo(() => (dayTick ? businessDayRange(dayTick) : null), [dayTick]);
 
+  const [draftFrom, setDraftFrom] = useState(() => isoDaysAgo(0));
+  const [draftTo, setDraftTo] = useState(() => isoDaysAgo(0));
+  /*
+   * `null` means "today", and today is DERIVED so it rolls over at 08:00 while
+   * the page is open. A night shift does not reload to get the right answer.
+   * Searching a range stores it here and stops the rolling.
+   */
+  const [range, setRange] = useState<{ from: string; to: string } | null>(null);
+  /** The window actually asked for: a searched range, else today. */
+  const activeRange = range ?? todayRange ?? undefined;
+  /** True while showing today — which is the only window that still moves. */
+  const showingToday = !range;
+
+  const vendors = useVendors();
+
   /* The queue follows the range. Today is a range too — so finished orders
      stay on the list — but it is still live, so it keeps polling. */
-  const queue = useLateOrders(
-    todayOnly ? (todayRange ?? undefined) : (range ?? undefined),
-    true,
-    todayOnly,
-  );
+  /* Today keeps polling — orders cross the threshold while an agent watches.
+     A searched range is a fixed answer and does not. */
+  const queue = useLateOrders(activeRange, true, showingToday);
   const handled = useHandledLateOrders();
   const record = useRecordLateDecision();
 
@@ -468,37 +459,81 @@ export function LateOrdersPage() {
    * than trusting the upstream list - is what stops an agent facing the same
    * three rows every thirty seconds.
    */
+  /* What has already been decided — the source of the handling state, and what
+     the Comment box opens populated from. Needed BEFORE `rows`, which filters
+     on that state. */
+  const decisions = useLateOrderDecisions();
+  /*
+   * THE HANDLING STATE of one order: pending, commented or handled.
+   *
+   * `lateOrderState` is the shared rule, so this screen, the register and the
+   * summary can never disagree about what "handled" means.
+   */
+  const stateOf = useCallback(
+    (orderId: string): LateOrderState => lateOrderState(decisions.data?.get(orderId) ?? null),
+    [decisions.data],
+  );
+
+  /*
+   * The order statuses actually PRESENT in the window, for the filter.
+   *
+   * Derived from the rows rather than enumerated from Yiji's full vocabulary:
+   * a menu of twenty statuses, eighteen of which return nothing, is a menu that
+   * has stopped helping. Same rule the business-day and agent pickers follow.
+   *
+   * Computed from the UNFILTERED queue, so choosing a status never removes the
+   * other options from the menu that offered it.
+   */
+  const presentStatuses = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of queue.data?.rows ?? []) if (r.status) seen.add(r.status);
+    return [...seen].sort();
+  }, [queue.data]);
+
   const rows = useMemo(() => {
-    const done = handled.data ?? new Set<string>();
     const order = orderQuery.trim();
     const brand = brandQuery.trim().toLowerCase();
     return (queue.data?.rows ?? []).filter((r) => {
       /*
-       * A handled order is hidden from the LIVE queue only.
+       * TODAY MEANS TODAY'S BUSINESS DAY, not the calendar date.
        *
-       * In a historical window the decision is part of what you are looking
-       * at — hiding those rows would quietly under-report the month.
+       * Trading runs 08:00 to 04:00, so a calendar cut splits one night's work
+       * in two: an order at 01:00 is still tonight's trading and an order at
+       * 06:00 belongs to the night that just ended. Only applied while showing
+       * today — a searched range is whatever the agent asked for.
        */
-      if (!range && !todayOnly && done.has(r.orderId)) return false;
+      if (showingToday && businessDay(r.placedAt) !== currentBusinessDay) return false;
+
       /*
-       * TODAY means TODAY'S BUSINESS DAY, not the calendar date.
+       * THE HANDLING STATE — pending / commented / handled.
        *
-       * Trading runs 08:00 to 04:00 the next morning, so a calendar cut splits
-       * one night's work in two: an order at 01:00 is still tonight's trading
-       * and was being EXCLUDED, while one at 06:00 belongs to the night that
-       * just ended and was being INCLUDED. Both wrong, and both invisible
-       * unless you were working at those hours (owner, 2026-09-28).
-       *
-       * `businessDay` applies Riyadh's offset itself — the boundary is a
-       * wall-clock hour in the branch's own day, never the browser's.
+       * NOT the order's own status, which is filtered separately below. An
+       * order can be `force_closed` upstream and still `pending` here, because
+       * nobody has touched it (owner, 2026-09-29: do not mix these).
        */
-      if (todayOnly && businessDay(r.placedAt) !== currentBusinessDay) return false;
+      if (handlingFilter !== 'all' && stateOf(r.orderId) !== handlingFilter) return false;
+
+      /*
+       * THE ORDER'S OWN STATUS — multi-select, so several can be watched at
+       * once. An empty set means every status, which is what "All" selects.
+       */
+      if (statusFilter.size > 0 && !statusFilter.has(r.status)) return false;
+
       if (order && !r.orderId.includes(order)) return false;
       if (brand && !`${r.brandName ?? ''} ${r.restaurantName ?? ''}`.toLowerCase().includes(brand))
         return false;
       return true;
     });
-  }, [queue.data, handled.data, orderQuery, brandQuery, range, todayOnly, currentBusinessDay]);
+  }, [
+    queue.data,
+    orderQuery,
+    brandQuery,
+    showingToday,
+    currentBusinessDay,
+    handlingFilter,
+    statusFilter,
+    stateOf,
+  ]);
 
   /*
    * SERVICE TIME for the rows actually on screen.
@@ -510,8 +545,6 @@ export function LateOrdersPage() {
    * service time advances with everything else rather than freezing at mount.
    */
   const serviceTimes = useServiceTimes(rows.map((r) => r.orderId));
-  /* What has already been decided, so Comments opens populated. */
-  const decisions = useLateOrderDecisions();
   /*
    * THE CAUSES, from the editable list (owner, 2026-09-29).
    *
@@ -541,21 +574,57 @@ export function LateOrdersPage() {
   /*
    * What this order is classified as, in order of authority:
    *
-   *   1. the DECISION already recorded — the cause is settled, and a dropdown
-   *      that disagreed with the register would be lying;
-   *   2. what the agent picked and has not yet submitted, restored from storage;
+   *   1. WHAT THE AGENT PICKED. Held in `kinds`, written through to storage and,
+   *      when a decision row exists, to that row as well.
+   *   2. the decision already recorded, for a row this browser has never touched;
    *   3. the first cause on the list.
+   *
+   * THE PICK WINS, and that ordering is the §5 fix (owner spec, 2026-09-29:
+   * "the source of delay selected ... should persist ... fix the underlying
+   * state, not visually"). It used to be the other way round — the recorded
+   * decision beat the agent's pick — which was harmless while every decision was
+   * final: a decided order left the queue, so the two could not disagree for
+   * long. Under the new state model a COMMENTED order stays on the queue and
+   * stays workable, so a recorded `kind` sat permanently on top of the dropdown:
+   * the agent changed it, the select moved, and the next refetch of the decisions
+   * query (a 30s poll, or any search that revalidates) put the old value straight
+   * back. Nothing was broken about the control; the precedence was wrong.
    *
    * (3) was hardcoded `'late_delivery'`, which is wrong twice over: it ignores
    * the order operations put the list in, and it would keep naming a cause that
    * had been retired.
    */
   const kindOf = (row: LateOrderRow): string => {
+    const picked = kinds[row.orderId];
+    if (picked) return picked;
     const decided = decisions.data?.get(row.orderId)?.kind;
     if (decided) return decided;
-    const pending = kinds[row.orderId];
-    if (pending) return pending;
     return causeOptions[0]?.value ?? 'late_delivery';
+  };
+
+  /**
+   * The agent reclassified this order.
+   *
+   * Two places to keep in step, and both matter. `kinds` is what the dropdown
+   * reads and what survives a reload; the DECISION ROW is what the register and
+   * the reports read. Writing only the first left the register naming the old
+   * cause for ever, with nothing on screen to suggest a disagreement.
+   *
+   * The decision write is best-effort: the pick is already held locally, so a
+   * failed PATCH must not throw away the agent's choice or interrupt them
+   * mid-queue. `invalidateQueries` in the mutation brings the row back in step
+   * on success.
+   */
+  const pickKind = (orderId: string, value: string) => {
+    setKinds((cur) => {
+      const next = { ...cur, [orderId]: value };
+      writeStoredKinds(next);
+      return next;
+    });
+    const existing = decisions.data?.get(orderId);
+    if (existing?.id && existing.kind !== value) {
+      updateDecision.mutate({ id: existing.id, kind: value });
+    }
   };
 
   const openDecision = (
@@ -754,35 +823,19 @@ export function LateOrdersPage() {
           reason: text,
           actionTaken,
         });
-        toast.success(t('lateOrders.commentsSaved', { defaultValue: 'Saved.' }));
-      } else if (outcome === 'noop') {
-        /*
-         * VIEW MUST NOT DECIDE ANYTHING.
-         *
-         * Opened by View on a row with no decision yet, there is nothing to
-         * update — and falling through to the branch below would have RECORDED
-         * AN IGNORE: the button said Save, and the order would have dropped off
-         * the live queue as ignored. A note is not a decision, and the two must
-         * never be the same click.
-         *
-         * So it says so and changes nothing. Writing a note against an
-         * undecided order would need its own column; the decision row is the
-         * only place these fields live today, and it does not exist yet.
-         */
-        // `warning`, not `info` — this toast API has success/error/warning only.
-        toast.warning(
-          t('lateOrders.nothingToSave', {
-            defaultValue: 'Nothing to save yet — assign a coupon or ignore the order first.',
-          }),
-        );
+        toast.success(t('lateOrders.commentSaved', { defaultValue: 'Comment saved.' }));
       } else {
-        /* IGNORE IS THE WHOLE ACT, so the ticket is raised now — there is no
-           second step to abandon. Raised BEFORE the decision is recorded, so a
-           failure here leaves nothing half-done: no ticket, no decision, and
-           the order still in the queue for somebody to work. */
-        const ignoredTicketId = await raiseTicketIfNeeded();
-        /* The order as it stood — captured for IGNORE too, which recorded
-           nothing about the order until now (owner, 2026-09-29). */
+        /* THE FIRST COMMENT ON THIS ORDER, so it creates the decision row that
+           carries the `commented` state. Any ticket the cause demands is raised
+           FIRST, so a failure here leaves nothing half-done: no ticket, no
+           decision, and the order still pending for somebody to work.
+
+           ONE ROW PER ORDER — this branch is reached only when no decision
+           exists (`editingDecisionId` is null), which is what keeps a second
+           comment from filing a duplicate late-order record. */
+        const commentTicketId = await raiseTicketIfNeeded();
+        /* The order as it stood, captured for a comment too — a comment is a
+           recorded state now, and the register shows the order beside it. */
         const orderSnapshot = await captureOrder();
         await record.mutateAsync({
           row: draft.row,
@@ -791,12 +844,10 @@ export function LateOrdersPage() {
           reason: text,
           actionTaken,
           agentId: user?.id ?? null,
-          ticketId: ignoredTicketId,
+          ticketId: commentTicketId,
           orderSnapshot,
         });
-        toast.success(
-          t('lateOrders.ignored', { defaultValue: 'Ignored, and the reason recorded.' }),
-        );
+        toast.success(t('lateOrders.commentSaved', { defaultValue: 'Comment saved.' }));
       }
       setDraft(null);
       setReason('');
@@ -818,11 +869,27 @@ export function LateOrdersPage() {
   };
 
   return (
-    /* Every page in this portal supplies its OWN padding — the shell gives
-       none — and this one had none, so its text sat flush against the left
-       edge of the window (owner, 2026-09-22). `p-4` matches the inbox and
-       contacts; `min-h-0` keeps the table's own scroll working. */
-    <div className="flex h-full min-h-0 flex-col gap-4 p-4">
+    /*
+      THE PAGE SCROLLS, THE TABLE DOES NOT (owner spec §8, 2026-09-29).
+
+      `p-4` because every page in this portal supplies its OWN padding — the
+      shell gives none — and without it the text sat flush against the edge of
+      the window (owner, 2026-09-22). It matches the inbox and contacts.
+
+      This was `flex h-full min-h-0 flex-col`, which pinned the page to the
+      viewport and handed the remainder to the table as its own scroll box. The
+      result is the thing the spec rejects: an inner scrollbar, a header and
+      toolbar frozen above it, and rows readable only a handful at a time.
+
+      `h-full overflow-y-auto` moves the scroll to THIS element, so the whole
+      page — header, filters and every row — moves together and the table renders
+      at its natural height. `h-full` and the scroll must live on the same
+      element: the shell's `<main>` is `overflow-hidden`, so a page that simply
+      grew past it would have its tail clipped with no way to reach it. Not a
+      guess — see [[layout-height-budget]], where exactly that produced "I cannot
+      scroll".
+    */
+    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
       <PageHeader
         title={t('lateOrders.title', { defaultValue: 'Late orders' })}
         subtitle={t('lateOrders.subtitle', {
@@ -883,78 +950,95 @@ export function LateOrdersPage() {
             className="w-52"
           />
         </label>
-        {/* Applied on click, not per keystroke: a range walks up to three
-            upstream pages, so typing a date would fire a query per character. */}
+        {/* Applied on click, not per keystroke: a range walks upstream pages,
+            so typing a date would fire a query per character. */}
         <Button
           variant="secondary"
           disabled={!draftFrom || !draftTo || draftFrom > draftTo}
-          onClick={() => {
-            setTodayOnly(false);
-            setRange({ from: draftFrom, to: draftTo });
-          }}
+          onClick={() => setRange({ from: draftFrom, to: draftTo })}
         >
           {t('lateOrders.filter.apply', { defaultValue: 'Search' })}
         </Button>
-        {/*
-          TODAY — the whole business day, finished orders included.
 
-          It LOADS the business day's calendar span rather than filtering the
-          live queue: the live queue drops an order the moment it completes, so
-          filtering it made today's rows vanish one by one (owner, 2026-09-28).
-          The span is two calendar dates because trading crosses midnight; each
-          row is then narrowed to the exact business day below.
+        {/*
+          THE HANDLING STATE — what WeCare has done, not what the order is.
+          Opens on Pending, because the queue exists to surface work nobody has
+          done yet (owner, 2026-09-29).
         */}
-        <Button
-          variant={todayOnly ? 'brand' : 'ghost'}
-          aria-pressed={todayOnly}
-          onClick={() => {
-            const next = !todayOnly;
-            setTodayOnly(next);
-            /* The range is DERIVED from the business day, not stored — see
-               `todayRange`. Clearing the stored one is all that is needed. */
-            setRange(null);
-          }}
-        >
-          {t('lateOrders.filter.today', { defaultValue: 'Today' })}
-        </Button>
-        {/* Always offered, because the page no longer STARTS live — this is how
-            an agent gets to "what is late right now". */}
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          {t('lateOrders.filter.handling', { defaultValue: 'Status' })}
+          <SelectMenu
+            value={handlingFilter}
+            size="sm"
+            onChange={(v) => setHandlingFilter(v as LateOrderState | 'all')}
+            aria-label={t('lateOrders.filter.handling', { defaultValue: 'Status' })}
+            options={[
+              {
+                value: 'pending',
+                label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
+                dot: 'oklch(var(--warning))',
+              },
+              {
+                value: 'commented',
+                label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
+                dot: 'oklch(var(--sky))',
+              },
+              {
+                value: 'handled',
+                label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
+                dot: 'oklch(var(--success))',
+              },
+              { value: 'all', label: t('lateOrders.filter.allStates', { defaultValue: 'All' }) },
+            ]}
+          />
+        </label>
+
+        {/*
+          THE ORDER'S OWN STATUS — a different question, and several can be
+          watched at once. Offered from the statuses actually PRESENT in the
+          window, so every option returns rows.
+        */}
+        <MultiSelectMenu
+          selected={statusFilter}
+          onChange={setStatusFilter}
+          label={t('lateOrders.filter.orderStatus', { defaultValue: 'Order status' })}
+          allLabel={t('lateOrders.filter.allStatuses', { defaultValue: 'All statuses' })}
+          options={presentStatuses.map((v) => ({
+            value: v,
+            label: t(`commerce.orderStatuses.${v}`, { defaultValue: v }),
+          }))}
+        />
+
+        {/* Back to the default view: today, pending, nothing typed. */}
         <Button
           variant="ghost"
           onClick={() => {
             setRange(null);
+            setDraftFrom(isoDaysAgo(0));
+            setDraftTo(isoDaysAgo(0));
             setOrderQuery('');
             setBrandQuery('');
-            setTodayOnly(false);
+            setHandlingFilter('pending');
+            setStatusFilter(new Set());
           }}
         >
-          {t('lateOrders.filter.clear', { defaultValue: 'Live only' })}
+          {t('lateOrders.filter.reset', { defaultValue: 'Reset' })}
         </Button>
-        {/* Says which view is on, so "Today" and "Live only" are never
-            ambiguous — an empty live queue is good news, not a broken page. */}
-        {todayOnly && (
-          <Pill tone="success" size="sm">
-            {/* Names the business day, because "today" is not the calendar
-                date here: trading runs 08:00 to 04:00, so at 01:00 the answer
-                is still yesterday's date and an agent has to be able to see
-                which day they are looking at.
 
-                It says EVERY, not "still running": the whole point of the fix
-                is that a delivered order stays on today's list. */}
+        {/* Names the business day, because "today" is not the calendar date
+            here: trading runs 08:00 to 04:00, so at 01:00 the answer is still
+            yesterday's date and an agent has to see which day they are on. */}
+        {showingToday && (
+          <Pill tone="success" size="sm">
             {t('lateOrders.filter.todayNote', {
               day: currentBusinessDay ? formatDate(currentBusinessDay) : '',
               defaultValue: 'Business day {{day}} — every late order, finished or running',
             })}
           </Pill>
         )}
-        {/* A historical window is NOT the live queue, and must never be mistaken
-            for it — the rows are finished orders. Today loads a range too, and
-            labels itself above, so this only speaks for a chosen window. */}
-        {range && !todayOnly && (
+        {!showingToday && range && (
           <Pill tone="blue" size="sm">
             {t('lateOrders.filter.historyNote', {
-              // dd/mm/yyyy, like every other date on screen — the pill used to
-              // print the raw ISO the query carries.
               from: formatDate(range.from),
               to: formatDate(range.to),
               defaultValue: 'History {{from}} to {{to}} — finished orders included',
@@ -993,7 +1077,18 @@ export function LateOrdersPage() {
           })}
         />
       ) : (
-        <Card className="min-h-0 flex-1 overflow-auto p-0">
+        /*
+          `TableSurface flow`, not a `Card` with its own scroll.
+
+          This is the primitive the report tables already use for exactly this
+          bargain: every row really rendered, no scroller between the header and
+          the page, so `sticky` resolves against the page's scrollport and the
+          column names stay put as you read down. A `Card` with `overflow-auto`
+          gave the table its own scrollbar — the thing §8 rejects — and using the
+          shared surface means this page cannot drift from the five reports that
+          got it right.
+        */
+        <TableSurface flow scrollLabel={t('lateOrders.title', { defaultValue: 'Late orders' })}>
           <Table>
             <thead>
               <Tr>
@@ -1034,7 +1129,10 @@ export function LateOrdersPage() {
                 */}
                 <Th>{t('lateOrders.col.detail', { defaultValue: 'Order' })}</Th>
                 <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>
-                <Th>{t('lateOrders.col.notes', { defaultValue: 'Notes' })}</Th>
+                {/* COMMENTS, not Notes (owner spec §9, 2026-09-29) — one word
+                    for one thing, so the column, the button and the state all
+                    read the same. */}
+                <Th>{t('lateOrders.col.comments', { defaultValue: 'Comments' })}</Th>
               </Tr>
             </thead>
             <tbody>
@@ -1172,13 +1270,7 @@ export function LateOrdersPage() {
                         aria-label={t('lateOrders.col.kind', {
                           defaultValue: 'Source of delay',
                         })}
-                        onChange={(v) =>
-                          setKinds((cur) => {
-                            const next = { ...cur, [row.orderId]: v };
-                            writeStoredKinds(next);
-                            return next;
-                          })
-                        }
+                        onChange={(v) => pickKind(row.orderId, v)}
                         options={causeOptions}
                       />
                     </Td>
@@ -1219,48 +1311,53 @@ export function LateOrdersPage() {
                           {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
                         </Pill>
                       ) : (
-                        /* The two outcomes, and only those. `whitespace-nowrap`
-                           so the pair never wraps into a two-line cell on a
-                           narrow screen. */
-                        <div className="flex items-center gap-2 whitespace-nowrap">
-                          <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
-                            {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
-                          </Button>
-                          {/* `secondary`, not `ghost`: Ignore is a recorded
-                              decision, not a dismissal, and a transparent
-                              control read as a link next to a filled one. */}
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => openDecision(row, 'commented')}
-                          >
-                            {t('lateOrders.ignore', { defaultValue: 'Ignore' })}
-                          </Button>
-                        </div>
+                        /*
+                          ONE DECISION, AND ONLY ONE (owner spec, 2026-09-29):
+                          assign a coupon. Ignore is gone — it was a second
+                          recorded outcome that meant "no compensation", which
+                          is what a comment already says, and having both invited
+                          two contradictory records for one order.
+                        */
+                        <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
+                          {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
+                        </Button>
                       )}
                     </Td>
                     {/*
-                      COLUMN 3 — THE NOTE. On EVERY row, handled or not (owner,
-                      2026-09-27). Opens the same box; on a row already decided
-                      it arrives populated and saves as an edit, so the reason
-                      and the action can be corrected without re-deciding
-                      anything.
+                      COLUMN 3 — THE COMMENT, and it is a WRITE (owner spec,
+                      2026-09-29).
+
+                      First press records the comment and the order becomes
+                      `Commented`; later presses arrive populated and save as an
+                      edit, so there is one row per order however often it is
+                      commented on.
+
+                      GONE ONCE HANDLED. A handled order's story is the coupon's
+                      own reason — the spec is explicit that it overrides the
+                      comment — so offering to edit a comment nobody will read
+                      again would only invite a contradiction. `handled`, not
+                      `stateOf`: it is the same set the Decision cell keys on, so
+                      the two cells can never disagree about one row.
                     */}
                     <Td>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => openDecision(row, 'commented', true)}
-                      >
-                        {t('lateOrders.comments', { defaultValue: 'View' })}
-                      </Button>
+                      {handled.data?.has(row.orderId) ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => openDecision(row, 'commented', true)}
+                        >
+                          {t('lateOrders.comment', { defaultValue: 'Comment' })}
+                        </Button>
+                      )}
                     </Td>
                   </Tr>
                 </Fragment>
               ))}
             </tbody>
           </Table>
-        </Card>
+        </TableSurface>
       )}
 
       {/*
@@ -1301,14 +1398,11 @@ export function LateOrdersPage() {
         <ConfirmDialog
           open
           title={
-            /* Same condition as the confirm button, and for the same reason:
-               pressing View on a row with no decision yet would otherwise ask
-               "Ignore this order?" — a question the agent never asked. */
-            isNotesView(draft, editingDecisionId)
-              ? t('lateOrders.commentsTitle', { defaultValue: 'Notes' })
-              : draft.action === 'commented'
-                ? t('lateOrders.ignoreTitle', { defaultValue: 'Ignore this order?' })
-                : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
+            draft.action === 'commented'
+              ? editingDecisionId
+                ? t('lateOrders.commentEditTitle', { defaultValue: 'Edit the comment' })
+                : t('lateOrders.commentTitle', { defaultValue: 'Comment on this order' })
+              : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
           }
           description={
             <div className="space-y-3">
@@ -1337,16 +1431,16 @@ export function LateOrdersPage() {
                 />
               </label>
               {/*
-                IGNORE NEEDS ONLY A REASON (owner, 2026-09-28: "on ignore, no
+                A FRESH COMMENT NEEDS ONLY THE REASON (owner, 2026-09-28: "no
                 need action. just reason is enough").
-                
-                Ignoring IS the action, so asking what was done about it invites
-                an empty box or a restatement. Still shown when COMPENSATING,
-                where something was actually done, and still shown when editing
-                via Comments — otherwise a note already written could never be
-                corrected, and `editingDecisionId` is set for an ignored row too.
+
+                Writing the comment IS the act, so asking what was done about it
+                invites an empty box or a restatement of the line above. Shown
+                when COMPENSATING, where something was actually done, and shown
+                when EDITING, so a line already written can be corrected rather
+                than stranded.
               */}
-              {(draft.action === 'compensated' || isNotesView(draft, editingDecisionId)) && (
+              {(draft.action === 'compensated' || !!editingDecisionId) && (
                 <label className="block space-y-1">
                   <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
@@ -1379,24 +1473,21 @@ export function LateOrdersPage() {
             </div>
           }
           confirmLabel={
-            /* SAVE, not Ignore, whenever this was opened to read or edit the
-               notes — whether or not a decision exists yet. Offering "Ignore"
-               to someone who pressed View invites them to record a decision
-               they never chose. */
-            isNotesView(draft, editingDecisionId)
+            /* SAVE for a comment, first one or an edit — it is the same act and
+               the same record either way (owner, 2026-09-29: "the button must
+               read save"). */
+            draft.action === 'commented'
               ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
-              : draft.action === 'commented'
-                ? t('lateOrders.confirmIgnore', { defaultValue: 'Ignore' })
-                : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
+              : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
           }
           cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
           loading={busy}
           onConfirm={() => {
-            /* The reason is required for a DECISION; the dialog's own button
-               cannot express that, so an empty one is simply refused rather
-               than committed. Viewing is exempt — there is nothing being
-               decided, and `commit` handles that case by saying so. */
-            if (reason.trim() || draft.viewing) void commit();
+            /* The reason is required in EVERY case now: a comment is a recorded
+               state, so there is no longer a read-only path that may save
+               nothing. `ConfirmDialog`'s button cannot express "required", so an
+               empty one is simply refused rather than committed. */
+            if (reason.trim()) void commit();
           }}
           onCancel={() => {
             setDraft(null);
@@ -1445,11 +1536,17 @@ export function LateOrdersPage() {
               ? couponOrder.data.items.map((it) => ({
                   name: it.name,
                   price: it.price ?? null,
+                  /* The QUANTITY travels with the price, because `price` is the
+                     price of ONE — without it the picker summed a 3× line as a
+                     single item and under-filled the coupon (owner,
+                     2026-09-29). */
+                  qty: it.qty ?? null,
                   sku: it.sku ?? null,
                 }))
               : (couponCart.data?.lines ?? []).map((l) => ({
                   name: l.name,
                   price: l.price ?? null,
+                  qty: l.qty ?? null,
                   sku: null,
                 }))
           }

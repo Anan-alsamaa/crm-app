@@ -986,12 +986,8 @@
     "title": "الطلبات المتأخرة",
     "subtitle": "طلبات التوصيل التي تجاوزت {{minutes}} دقيقة.",
     "assignCoupon": "منح قسيمة",
-    "ignore": "تجاهل",
-    "ignoreTitle": "تجاهل هذا الطلب؟",
     "couponTitle": "تعويض هذا الطلب",
-    "confirmIgnore": "تجاهل",
     "confirmCoupon": "المتابعة إلى القسيمة",
-    "ignored": "تم التجاهل، وسُجِّل السبب.",
     "decisionFailed": "تعذّر تسجيل هذا القرار.",
     "reasonPrompt": "الطلب {{order}} مستمر منذ {{minutes}}. ما السبب؟",
     "reasonPlaceholder": "السبب — يُسجَّل مع هذا الطلب.",
@@ -1014,9 +1010,9 @@
       "kind": "مصدر التأخير",
       "actions": "القرار",
       "detail": "الطلب",
-      "notes": "ملاحطات",
       "elapsedHint": "منذ إنشاء الطلب",
-      "serviceHint": "منذ قبول المندوب"
+      "serviceHint": "منذ قبول المندوب",
+      "comments": "التعليقات"
     },
     "recordFailed": "تم طلب القسيمة، لكن تعذّر تعليم هذا الطلب كمُعالَج.",
     "cartHeading": "السلة",
@@ -1043,20 +1039,30 @@
       "clear": "العودة إلى المباشر",
       "historyNote": "السجل من {{from}} إلى {{to}} — يشمل الطلبات المنتهية",
       "today": "اليوم",
-      "todayNote": "يوم العمل {{day}} — كل الطلبات المتأخرة، منتهية أو جارية"
+      "todayNote": "يوم العمل {{day}} — كل الطلبات المتأخرة، منتهية أو جارية",
+      "handling": "الحالة",
+      "allStates": "الكل",
+      "orderStatus": "حالة الطلب",
+      "allStatuses": "كل الحالات",
+      "reset": "إعادة تعيين"
     },
     "showDetail": "السلة والتتبّع",
     "hideDetail": "إخفاء التفاصيل",
     "reasonLabel": "السبب",
     "actionLabel": "الإجراء المتخذ",
     "actionPlaceholder": "ما الذي قمت به — مثل: تم الاتصال بالفرع.",
-    "comments": "عرض",
-    "commentsTitle": "الملاحظات",
-    "commentsSaved": "تم الحفظ.",
     "detailTitle": "الطلب {{order}} — السلة والتتبع",
     "serviceLive": "لا يزال العدّ جاريًا",
     "noBranchForTicket": "لا يوجد فرع في قائمة الفروع يطابق \"{{branch}}\"، لذلك لن تطهر هذه التذكرة في التقارير. أضفه أولاً.",
-    "nothingToSave": "لا يوجد ما يُحفظ بعد — عيّن قسيمة أو تجاهل الطلب أولاً.",
-    "ticketFailed": "تم طلب القسيمة، لكن تعذّر إنشاء تذكرة."
+    "ticketFailed": "تم طلب القسيمة، لكن تعذّر إنشاء تذكرة.",
+    "comment": "تعليق",
+    "commentTitle": "التعليق على هذا الطلب",
+    "commentEditTitle": "تعديل التعليق",
+    "commentSaved": "تم حفظ التعليق.",
+    "state": {
+      "pending": "قيد الانتظار",
+      "commented": "تم التعليق",
+      "handled": "تمت المعالجة"
+    }
   }
 }
