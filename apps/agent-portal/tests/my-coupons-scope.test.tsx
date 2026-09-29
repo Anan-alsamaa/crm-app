@@ -47,6 +47,16 @@ vi.mock('../src/features/coupons/api.js', () => api);
 const auth = vi.hoisted(() => ({ user: { id: 'me' } as { id: string } | null }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => auth }));
 
+/* The agent dropdown lists EVERY agent, not only the ones with rows here. */
+vi.mock('../src/features/inbox/api.js', () => ({
+  useAgents: () => ({
+    data: [
+      { id: 'me', first_name: 'Me', last_name: null, email: 'me@x' },
+      { id: 'colleague', first_name: 'Colleague', last_name: null, email: 'c@x' },
+    ],
+  }),
+}));
+
 import { MyCouponsPage } from '../src/features/coupons/MyCouponsPage.js';
 
 const row = (id: string, by: string | null, status = 'pending') => ({
@@ -98,7 +108,16 @@ describe('Compensation requests are scoped to me by default', () => {
   it('shows everyone when asked, without changing the status tab', async () => {
     renderPage();
     await screen.findByText('CODE-a');
-    await userEvent.click(screen.getByRole('button', { name: 'Everyone' }));
+    /* "All agents" on the dropdown — it replaced the mine/everyone toggle so a
+       supervisor can pick ONE colleague, which two buttons cannot express.
+       `SelectMenu` renders its list through a PORTAL, so the options exist only
+       after the trigger is opened; the trigger is labelled by its aria-label,
+       not by the option about to be chosen. */
+    await userEvent.click(screen.getByLabelText(/filter by agent/i));
+    /* The CLICKABLE element is the <button> INSIDE the option — `role="option"`
+       sits on the <li> that wraps it, so clicking the li itself does nothing. */
+    const allAgents = await screen.findByRole('option', { name: /all agents/i });
+    await userEvent.click(allAgents.querySelector('button')!);
     expect(await screen.findByText('CODE-b')).toBeTruthy();
     expect(screen.getByText('CODE-a')).toBeTruthy();
     // Still the pending tab: widening WHO must not also change WHICH.

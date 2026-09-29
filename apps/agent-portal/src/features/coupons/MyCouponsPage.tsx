@@ -11,10 +11,13 @@ import {
   TicketIcon,
   Toolbar,
   ToolbarSpacer,
+  SelectMenu,
 } from '@yiji/ui';
 import {
   COUPON_APPROVAL_STATUSES,
   couponDecision,
+  couponOrderId,
+  normalizePhone,
   type CouponApprovalStatus,
 } from '@yiji/shared-types';
 import {
@@ -24,6 +27,9 @@ import {
 } from './api.js';
 import { CouponRequestDialog } from './CouponRequestDialog.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+/* Every agent, service accounts excluded — the same list the inbox offers
+   for assignment, so the two can never disagree about who exists. */
+import { useAgents } from '../inbox/api.js';
 
 /**
  * Every compensation/coupon request from EVERY agent, and what became of each —
@@ -79,7 +85,18 @@ export function MyCouponsPage() {
    * useful, it just should not be the first thing on the screen.
    */
   const { user } = useAuth();
-  const [mineOnly, setMineOnly] = useState(true);
+  /*
+   * WHICH AGENT'S REQUESTS (owner, 2026-09-29).
+   *
+   * A dropdown of EVERY agent with an "All" option, not a mine/everyone
+   * toggle: a supervisor needs to look at one colleague, which two buttons
+   * cannot express.
+   *
+   * Defaults to the signed-in user, because the agent who just raised one
+   * should not have to find it among everybody else's. `''` is All.
+   */
+  const agents = useAgents();
+  const [agentId, setAgentId] = useState<string>(() => user?.id ?? '');
   /** The pending request being corrected, if any. */
   const [editing, setEditing] = useState<CouponRequestRow | null>(null);
   const updateRequest = useUpdatePendingCouponRequest();
@@ -91,7 +108,7 @@ export function MyCouponsPage() {
 
   const rows = useMemo(() => {
     const all = requests.data ?? [];
-    const mine = mineOnly && user?.id ? all.filter((r) => r.requested_by?.id === user.id) : all;
+    const mine = agentId ? all.filter((r) => r.requested_by?.id === agentId) : all;
     const byStatus = mine.filter((r) => inView(r.status, view));
     const q = search.trim().toLowerCase();
     if (!q) return byStatus;
@@ -110,13 +127,13 @@ export function MyCouponsPage() {
         r.requested_by?.email,
       ].some((v) => (v ?? '').toLowerCase().includes(q)),
     );
-  }, [requests.data, view, search, mineOnly, user?.id]);
+  }, [requests.data, view, search, agentId]);
 
   /* Counted over the SAME scope as the list: a "3 pending" tab above an empty
      list because the other two belong to somebody else is a bug report. */
   const count = (s: CouponApprovalStatus | 'all') =>
     (requests.data ?? [])
-      .filter((r) => !mineOnly || !user?.id || r.requested_by?.id === user.id)
+      .filter((r) => !agentId || r.requested_by?.id === agentId)
       .filter((r) => inView(r.status, s)).length;
 
   return (
@@ -149,30 +166,30 @@ export function MyCouponsPage() {
             className="h-9 w-full rounded-xl bg-secondary/60 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </div>
-        {/* WHOSE, then WHICH STATUS. Two questions, so two rows rather than one
-            long strip in which "Mine" would read as another status. */}
-        <div className="mx-auto mb-2 flex w-full max-w-3xl flex-wrap gap-1.5">
-          {(
-            [
-              [true, t('coupons.mine', { defaultValue: 'My requests' })],
-              [false, t('coupons.everyone', { defaultValue: 'Everyone' })],
-            ] as const
-          ).map(([v, label]) => (
-            <button
-              key={String(v)}
-              type="button"
-              onClick={() => setMineOnly(v)}
-              aria-pressed={mineOnly === v}
-              className={cn(
-                'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
-                mineOnly === v
-                  ? 'bg-foreground text-background'
-                  : 'bg-secondary text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          ))}
+        {/* WHOSE, then WHICH STATUS. Two questions, so two rows rather than
+            one long strip in which an agent's name would read as a status.
+
+            A SELECT, not a row of pills: this lists every agent, and a pill per
+            person becomes a wall as the team grows. `SelectMenu` is what the
+            rest of the portal uses, so it carries the keyboard and ARIA
+            behaviour a bare <select> does not. */}
+        <div className="mx-auto mb-2 flex w-full max-w-3xl flex-wrap items-center gap-2">
+          <SelectMenu
+            value={agentId}
+            size="sm"
+            onChange={setAgentId}
+            aria-label={t('coupons.filterByAgent', { defaultValue: 'Filter by agent' })}
+            options={[
+              { value: '', label: t('coupons.allAgents', { defaultValue: 'All agents' }) },
+              ...(agents.data ?? []).map((a) => ({
+                value: a.id,
+                /* The name people know, falling back to the sign-in address —
+                   a staff account has no display name until it is filled in. */
+                label:
+                  [a.first_name, a.last_name].filter(Boolean).join(' ').trim() || (a.email ?? a.id),
+              })),
+            ]}
+          />
         </div>
         <div className="mx-auto flex w-full max-w-3xl flex-wrap gap-1.5">
           {(
@@ -237,18 +254,54 @@ export function MyCouponsPage() {
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-foreground">
+                        {/*
+                          SELECTABLE, so the code can be copied with the mouse
+                          (owner, 2026-09-29). The card is a <button>, and a
+                          button swallows a click-drag as a press gesture rather
+                          than a selection — `select-text` plus stopping the
+                          MOUSEDOWN is what lets the drag become a selection.
+                          No Copy button: the browser's own copy is what was
+                          asked for.
+
+                          The CLICK still reaches the card, so opening the
+                          ticket keeps working; only a real selection is
+                          swallowed, which is what `getSelection` tests for.
+                        */}
+                        <span
+                          className="select-text font-mono text-sm font-semibold text-foreground"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            // A drag that selected something is not a click on
+                            // the card; a bare click still opens the ticket.
+                            if (window.getSelection()?.toString()) e.stopPropagation();
+                          }}
+                        >
                           {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
                         </span>
                         <Pill tone={TONE[r.status]} size="sm">
                           {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
                         </Pill>
                       </div>
-                      <div className="mt-1 truncate text-xs text-muted-foreground">
+                      {/* `truncate` removed: it hid the order id and the agent
+                          on a narrow rail, which are two of the four things
+                          this line exists to show. It wraps instead. */}
+                      <div
+                        className="mt-1 select-text text-xs leading-relaxed text-muted-foreground"
+                        onMouseDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          if (window.getSelection()?.toString()) e.stopPropagation();
+                        }}
+                      >
                         {[
-                          r.contact?.name ?? r.contact?.phone,
+                          /* The PHONE always, not only when the name is absent:
+                             it is what an agent reads back to a customer. */
+                          r.contact?.name,
+                          normalizePhone(r.contact?.phone ?? r.customer_phone ?? '') || null,
                           r.ticket?.subject,
-                          r.ticket?.order_id ? `#${r.ticket.order_id}` : null,
+                          /* The ticket's order FIRST, then the request's own —
+                             a late-order coupon has no ticket, so reading only
+                             `ticket.order_id` showed nothing for any of them. */
+                          couponOrderId(r) ? `#${couponOrderId(r)}` : null,
                           // Whose ask this is — the queue shows every agent's.
                           r.requested_by?.first_name?.trim() || r.requested_by?.email || null,
                         ]

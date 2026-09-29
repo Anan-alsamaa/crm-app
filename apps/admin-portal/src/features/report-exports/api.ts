@@ -16,7 +16,11 @@ import {
   splitLocalDateTime,
   type ComplaintReportRow,
 } from '@yiji/reports';
-import { normaliseConversationStatus, normaliseTicketStatus } from '@yiji/shared-types';
+import {
+  normaliseConversationStatus,
+  normaliseTicketStatus,
+  compensationFlag,
+} from '@yiji/shared-types';
 
 export type { ComplaintReportRow };
 
@@ -53,6 +57,8 @@ interface RawTicket {
   date_updated?: string | null;
   id: string;
   subject: string | null;
+  /** The Yiji order, used to match a coupon raised before the link existed. */
+  order_id?: string | null;
   status: string;
   priority: string;
   assigned_agent: string | null;
@@ -387,6 +393,9 @@ const COMPLAINT_FIELDS = [
   'coupon_value',
   'coupon_percent',
   'order_snapshot',
+  // Read so a coupon with no ticket link can still be matched to its ticket by
+  // the order both name — every coupon raised before 2026-09-29 has no link.
+  'order_id',
   'store_snapshot',
 ] as const;
 
@@ -493,7 +502,7 @@ async function loadAgentReport(
         }
       };
 
-      const [tickets, conversations, csat, users] = await Promise.all([
+      const [tickets, conversations, csat, users, coupons] = await Promise.all([
         readTickets(),
         directus.request(
           readItems('conversations', {
@@ -526,6 +535,37 @@ async function loadAgentReport(
         directus.request(
           readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 }),
         ) as Promise<RawUser[]>,
+        /*
+         * THE COUPONS, because compensation does not live on the ticket.
+         *
+         * `tickets.compensation` is written by the ticket FORM — the path where
+         * an agent raises a complaint and attaches a coupon in one go. A late
+         * order does not go through that form: the decision writes the ticket
+         * and the coupon form writes `coupon_approvals.compensation`, so the
+         * ticket's own column stayed null and the breakdown reported three
+         * compensated late orders as "Not Compensated" (owner, 2026-09-29).
+         *
+         * Read UNFILTERED by date: a coupon approved today can answer a ticket
+         * raised yesterday, and a window on the coupon would drop exactly the
+         * rows this is here to find. It is a small collection.
+         */
+        directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              fields: ['id', 'ticket', 'order_id', 'status', 'compensation'],
+              limit: -1,
+            } as never,
+          ),
+        ) as Promise<
+          Array<{
+            id: string;
+            ticket: string | null;
+            order_id: string | null;
+            status: string | null;
+            compensation: string | null;
+          }>
+        >,
       ]);
 
       // Service accounts (…@svc.…) aren't people — exclude them so they never
@@ -620,6 +660,48 @@ async function loadAgentReport(
        * tickets in range and best-effort: no audit read must ever empty the
        * report.
        */
+      /*
+       * COMPENSATION, RESOLVED FROM THE COUPON.
+       *
+       * Two lookups because the link is only now being written:
+       *
+       *   by TICKET  the coupon says which ticket it answers. Authoritative:
+       *              two tickets can be about one order, and only this says
+       *              which of them the money was for.
+       *   by ORDER   the fallback. Every coupon raised before 2026-09-29 has
+       *              `ticket: null` (the late-order path hardcoded it), so
+       *              without this the fix would not reach a single existing
+       *              row.
+       *
+       * A REJECTED coupon is NOT compensation — it was asked for and refused,
+       * and reporting it as compensated would overstate what the customer
+       * received. Anything else that reached the queue counts: pending is
+       * money already committed by an agent, and `assigned` / `edited` are
+       * both approvals.
+       */
+      const compensatedTickets = new Set<string>();
+      const compensatedOrders = new Set<string>();
+      for (const c of coupons) {
+        if ((c.status ?? '').toLowerCase() === 'rejected') continue;
+        if (c.ticket) compensatedTickets.add(String(c.ticket));
+        const order = c.order_id?.trim();
+        if (order) compensatedOrders.add(order);
+      }
+      /* The ticket's OWN column still wins when it is set: the ticket form
+         writes it directly, and that is a statement by the agent about this
+         ticket rather than an inference from a related row. */
+      const compensationOf = (t: RawTicket): string => {
+        const own = t.compensation?.trim();
+        if (own) return own;
+        const order = t.order_id?.trim();
+        if (compensatedTickets.has(t.id) || (order && compensatedOrders.has(order))) {
+          /* The SHARED helper, not a literal: this exact spelling is what the
+             ticket form writes and what the report's filters match on. */
+          return compensationFlag(true);
+        }
+        return '';
+      };
+
       const lastEditBy = new Map<string, { name: string; at: string }>();
       if (tickets.length > 0) {
         try {
@@ -718,7 +800,7 @@ async function loadAgentReport(
            */
           complaintStatus: normaliseTicketStatus(t.status),
           agent: agentOf(t.assigned_agent),
-          compensation: t.compensation ?? '',
+          compensation: compensationOf(t),
           // Blank until the first edit — a creation is not a modification, and
           // a column of creation timestamps would drown the real signal.
           lastModifiedBy: lastEditBy.get(t.id)?.name ?? '',

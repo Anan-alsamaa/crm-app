@@ -42,6 +42,10 @@ export interface CouponRequestRow {
   decision_note: string | null;
   date_created: string | null;
   ticket: { id: string; subject: string | null; order_id: string | null } | null;
+  /** The order, for a coupon raised WITHOUT a ticket — every late-order one. */
+  order_id: string | null;
+  /** The number when no contact row carries it — every late-order one. */
+  customer_phone: string | null;
   contact: { id: string; name: string | null; phone: string | null } | null;
   requested_by: { id: string; first_name: string | null; email: string | null } | null;
   decided_by: { id: string; first_name: string | null; email: string | null } | null;
@@ -71,6 +75,10 @@ export const COUPON_REQUEST_FIELDS = [
   'item_sku',
   'no_other_discounts',
   'edited_by_admin',
+  // Both read so a late-order coupon — which has neither ticket nor contact —
+  // can still show its order and the customer's number.
+  'order_id',
+  'customer_phone',
   { ticket: ['id', 'subject', 'order_id'] },
   { contact: ['id', 'name', 'phone'] },
   { requested_by: ['id', 'first_name', 'email'] },
