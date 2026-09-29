@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Avatar, Button, cn, FormField, Input, Spinner, Ltr } from '@yiji/ui';
 import { formatPhone, isDialablePhone, normalizePhone } from '@yiji/shared-types';
 import { useContactSearch, useCreateContact, type ContactRow } from '../contacts/api.js';
+import { isForbidden } from '../../lib/directus.js';
 
 /**
  * WHO IS THIS TICKET ABOUT? One field, one answer.
@@ -69,11 +70,17 @@ export function ContactPicker({
 
   const create = async () => {
     if (!canCreate || !vendorId || createContact.isPending) return;
-    const created = await createContact.mutateAsync({ phone: typed, vendor: vendorId });
-    // Select them straight away: the agent asked for this customer, so making
-    // them search again for the row they just created would be theatre.
-    onChange(created);
-    setSearch('');
+    try {
+      const created = await createContact.mutateAsync({ phone: typed, vendor: vendorId });
+      // Select them straight away: the agent asked for this customer, so making
+      // them search again for the row they just created would be theatre.
+      onChange(created);
+      setSearch('');
+    } catch {
+      /* Swallowed DELIBERATELY, and only here: the mutation's own `isError`
+         renders the message below, so rethrowing would add an unhandled
+         rejection to a failure the agent has already been told about. */
+    }
   };
 
   return (
@@ -199,9 +206,27 @@ export function ContactPicker({
                   </Button>
                   {createContact.isError && (
                     <p className="text-xs text-destructive">
-                      {t('tickets.addCustomerFailed', {
-                        defaultValue: 'Could not add the customer. Please try again.',
-                      })}
+                      {/*
+                        SAY WHICH FAILURE IT WAS (owner-reported, 2026-09-29).
+
+                        This read "Please try again" for every cause, including a
+                        403 — advice that could never work, given to agents who
+                        then retried for weeks. A WeCare Agent lacked
+                        `contacts.create`, so the one error they actually hit was
+                        the one the message was worst at describing.
+
+                        The permission is fixed, but the message stays honest:
+                        "try again" is right for a network blip and wrong for a
+                        refusal, and only the second needs somebody told.
+                      */}
+                      {isForbidden(createContact.error)
+                        ? t('tickets.addCustomerForbidden', {
+                            defaultValue:
+                              'Your account is not allowed to add customers. Ask an administrator.',
+                          })
+                        : t('tickets.addCustomerFailed', {
+                            defaultValue: 'Could not add the customer. Please try again.',
+                          })}
                     </p>
                   )}
                 </div>

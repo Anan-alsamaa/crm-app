@@ -69,3 +69,34 @@ export const auth = createAuthClient({
 
 /** Authenticated Directus client for reads (conversations, messages, ...). */
 export const directus = auth.client;
+
+/**
+ * Was this failure a REFUSAL, rather than something a retry could fix?
+ *
+ * The Directus SDK (17.x) rejects with a plain object — `{ errors, response }`,
+ * NOT an `Error` — so `err.message` is undefined and `instanceof Error` is
+ * false. Both facts matter: code that assumed either one silently classified
+ * every refusal as an unknown failure.
+ *
+ * Checks the STATUS first and the error code second. The status is the thing
+ * Directus cannot vary; the code is there because a 403 from behind CloudFront
+ * may arrive without a parsed body, and a body without a response may arrive
+ * from a test double.
+ *
+ * Why it exists: "Could not add the customer. Please try again." was shown for a
+ * 403 — advice that can never work, given to WeCare agents who then retried for
+ * weeks (owner, 2026-09-29). A refusal needs an administrator, not another
+ * click, and the two must not share a message.
+ */
+export function isForbidden(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const e = err as {
+    response?: { status?: number };
+    status?: number;
+    errors?: Array<{ extensions?: { code?: string } }>;
+  };
+  const status = e.response?.status ?? e.status;
+  if (status === 401 || status === 403) return true;
+  const code = e.errors?.[0]?.extensions?.code;
+  return code === 'FORBIDDEN';
+}

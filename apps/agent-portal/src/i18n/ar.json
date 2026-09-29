@@ -550,7 +550,8 @@
     "noContactsForNumber": "لا يوجد عميل بهذا الرقم في النظام.",
     "addCustomerWithNumber": "إضافة {{phone}} كعميل جديد",
     "addCustomerFailed": "تعذّرت إضافة العميل. حاول مرة أخرى.",
-    "pickStore": "اختر الفرع — التقارير مجمّعة حسبه"
+    "pickStore": "اختر الفرع — التقارير مجمّعة حسبه",
+    "addCustomerForbidden": "حسابك غير مصرّح له بإضافة عملاء. يُرجى مراجعة المسؤول."
   },
   "notifications": {
     "title": "التنبيهات",

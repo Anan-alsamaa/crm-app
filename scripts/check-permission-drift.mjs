@@ -146,6 +146,21 @@ const EXPECTED = [
     actions: ['create', 'read', 'update'],
   },
   /*
+   * CONTACTS, for the roles that actually raise tickets (owner, 2026-09-29).
+   *
+   * A WeCare Agent had read + update but NOT create, so the Add-ticket page's
+   * "Add <number> as a new customer" — the button that exists for the customer
+   * we have not met — answered 403 for the one role that uses it most. Every
+   * other ticket-raising role already had create, which is why it read as
+   * intermittent rather than as a permission.
+   *
+   * Asserted for all three, not just the Agent: this guard exists because a
+   * check that only covers the roles nobody is on cannot fail.
+   */
+  { role: 'WeCare Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },
+  { role: 'WeCare Supervisor', collection: 'contacts', actions: ['create', 'read', 'update'] },
+  { role: 'WeCare Admin', collection: 'contacts', actions: ['create', 'read', 'update'] },
+  /*
    * The dropdown lists the ops team edits (complaint types, service types,
    * sources...). Both roles are told they may manage these — the admin portal
    * offers Add/Edit/Delete to each — and until 2026-09-22 WeCare Supervisor

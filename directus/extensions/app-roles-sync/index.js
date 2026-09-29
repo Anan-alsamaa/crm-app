@@ -180,6 +180,27 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('conversations', 'update', ASSIGNED_OR_UNASSIGNED),
       g('messages', 'create'),
       g('messages', 'read', MESSAGE_OF_VISIBLE_CONVERSATION),
+      /*
+       * CREATE, and it was the missing one (owner-approved, 2026-09-29).
+       *
+       * A WeCare Agent could read and edit a contact but not make one, so the
+       * Add-ticket page's "Add <number> as a new customer" button — the whole
+       * point of which is the customer we have NOT met, reaching us from another
+       * channel — failed with a 403 for exactly the role that uses it most.
+       *
+       * It read as intermittent because every OTHER role that raises tickets
+       * (WeCare Supervisor, WeCare Admin, Department Manager) already had
+       * create, so the same button worked for whoever tested it. And the UI
+       * catches any failure as "Could not add the customer. Please try again",
+       * so an agent retrying failed forever with no hint it was a permission.
+       *
+       * It belongs to `use_chat` rather than a privilege of its own: creating
+       * the contact is not a separate act, it is how a conversation or a ticket
+       * with a stranger begins, and every holder of `use_chat` already has
+       * `contacts.update` — which is the more dangerous of the two, since it can
+       * rewrite somebody who exists.
+       */
+      g('contacts', 'create'),
       g('contacts', 'read'),
       g('contacts', 'update'),
       g('tags', 'create'),
