@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, DateField, Input, SelectMenu } from '@yiji/ui';
+import { lastMonth } from '../lib/date-range.js';
 
 /**
  * The filter bar every report wears.
@@ -54,9 +55,34 @@ export interface ReportFilterBarProps {
   onFrom: (v: string) => void;
   onTo: (v: string) => void;
   selects?: FilterSelect[];
-  /** True when anything is narrowing the set — shows Clear. */
+  /**
+   * True when anything is narrowing the set — shows Clear.
+   *
+   * The DATE RANGE is added to this by the bar itself (see `narrowing` below),
+   * so a caller never has to remember it. Every report had the same hole: a
+   * reader who changed only the dates got no Clear button, because each page's
+   * `filtering` listed its own selects and forgot the range that sits in this
+   * very component (owner, 2026-09-30).
+   */
   filtering: boolean;
+  /**
+   * Clear EVERYTHING, the date range included.
+   *
+   * Callers reset their own filters here and call their range's `reset()`. The
+   * bar clears its own drafts before this runs, so a typed-but-unapplied value
+   * cannot survive a Clear either.
+   */
   onClear: () => void;
+  /**
+   * The range's own defaults, so the bar can tell "changed" from "untouched".
+   *
+   * OPTIONAL, and normally omitted: every report in this portal opens on
+   * `lastMonth()`, so the bar computes that itself. Pass these only for a report
+   * whose range starts elsewhere, or Clear would offer to reset a range already
+   * at its default.
+   */
+  defaultFrom?: string;
+  defaultTo?: string;
   /**
    * Export (and anything else that acts on the filtered set), rendered on the
    * bar's own line.
@@ -93,6 +119,8 @@ export function ReportFilterBar({
   selects = [],
   filtering,
   onClear,
+  defaultFrom,
+  defaultTo,
   actions,
   rangePreset,
 }: ReportFilterBarProps): JSX.Element {
@@ -110,6 +138,10 @@ export function ReportFilterBar({
   const [draftFrom, setDraftFrom] = useState(from);
   const [draftTo, setDraftTo] = useState(to);
   const [draftSelects, setDraftSelects] = useState<Record<string, string>>({});
+  /* The range every report in this portal opens on. In state so it is computed
+     ONCE per mount: re-deriving "the last 30 days up to today" every render would
+     make Clear appear and vanish as the day rolled over. */
+  const [fallbackRange] = useState(() => lastMonth());
 
   useEffect(() => setDraftSearch(search), [search]);
   useEffect(() => setDraftFrom(from), [from]);
@@ -160,6 +192,22 @@ export function ReportFilterBar({
     onClear();
   };
 
+  /*
+   * IS ANYTHING NARROWING THE SET? The caller's own answer, OR a date range that
+   * differs from its default.
+   *
+   * Done here rather than in each page: the range lives in this component, so
+   * every caller that had to remember it forgot it, and Clear stayed hidden for
+   * the one filter that is always on screen.
+   *
+   * With no defaults supplied there is nothing to compare against, so a range
+   * that is set at all counts as narrowing — Clear then appears slightly more
+   * often, which is the safe direction for a button that only ever resets.
+   */
+  const rangeNarrowing =
+    from !== (defaultFrom ?? fallbackRange.from) || to !== (defaultTo ?? fallbackRange.to);
+  const narrowing = filtering || rangeNarrowing;
+
   const hasSecondRow = selects.length > 0;
 
   return (
@@ -204,7 +252,9 @@ export function ReportFilterBar({
           <DateField className="w-[9.5rem]" value={draftTo} onChange={setDraftTo} />
         </label>
         {rangePreset && <div className="flex w-36 items-end">{rangePreset}</div>}
-        {!hasSecondRow && <FilterActions {...{ dirty, filtering, apply, clear, actions, t }} />}
+        {!hasSecondRow && (
+          <FilterActions {...{ dirty, filtering: narrowing, apply, clear, actions, t }} />
+        )}
       </div>
 
       {hasSecondRow && (
@@ -243,7 +293,7 @@ export function ReportFilterBar({
               />
             </label>
           ))}
-          <FilterActions {...{ dirty, filtering, apply, clear, actions, t }} />
+          <FilterActions {...{ dirty, filtering: narrowing, apply, clear, actions, t }} />
         </div>
       )}
     </form>

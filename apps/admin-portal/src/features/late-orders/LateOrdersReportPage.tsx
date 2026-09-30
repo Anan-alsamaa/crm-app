@@ -11,6 +11,7 @@ import {
   TablePager,
   pageCountOf,
   Table,
+  TableSurface,
   Td,
   Th,
   Tr,
@@ -115,6 +116,8 @@ export function LateOrdersReportPage() {
    * own column.
    */
   const [state, setState] = useState<LateOrderState | ''>('');
+  /** The ORDER's own status from Yiji. Empty means every status. */
+  const [orderStatus, setOrderStatus] = useState('');
   /** One business day, as `YYYY-MM-DD`. Empty means every day in the window. */
   const [bizDay, setBizDay] = useState('');
   /*
@@ -178,12 +181,28 @@ export function LateOrdersReportPage() {
   const rows = useMemo(() => {
     const term = search.trim().toLowerCase();
     return all.filter((r) => {
+      /*
+       * THE RANGE MEANS BUSINESS DAYS (owner, 2026-09-30): from=to=30/09 means
+       * 30/09 08:00 through 01/10 04:00, not the calendar date.
+       *
+       * The fetch already widens its window to cover whole nights at both edges,
+       * which is what gets the rows out of the database. This is the other half:
+       * without it the widened window LEAKS — an order at 05:00 on 01/10 belongs
+       * to 30/09's night and was fetched, but so was one at 06:00 that belongs to
+       * 01/10 and should not be in a report claiming to cover 30/09. Comparing
+       * business days makes the edges exact in both directions.
+       */
+      const rowDay = businessDay(r.date_created);
+      if (rowDay) {
+        if (rowDay < from || rowDay > to) return false;
+      }
       if (kind && r.kind !== kind) return false;
       if (state && r.state !== state) return false;
-      // The BUSINESS day (08:00-04:00), not the calendar date — a decision at
-      // 01:00 belongs to the night before, and filtering by date would put it
-      // on the wrong day.
-      if (bizDay && businessDay(r.date_created) !== bizDay) return false;
+      /* THE ORDER'S OWN STATUS (owner, 2026-09-30) — a different thing from the
+         handling state above, and deliberately its own filter. */
+      if (orderStatus && (r.order_status ?? '') !== orderStatus) return false;
+      // One specific business day inside the range.
+      if (bizDay && rowDay !== bizDay) return false;
       /* Matched on the RESOLVED name, which is what the column shows and what
          the picker offers — comparing raw ids would mean the filter and the
          table disagreed about who "Unassigned" is. */
@@ -193,7 +212,7 @@ export function LateOrdersReportPage() {
         .toLowerCase()
         .includes(term);
     });
-  }, [all, search, kind, state, bizDay, agent, unknown]);
+  }, [all, search, kind, state, orderStatus, bizDay, agent, unknown, from, to]);
   /*
    * The business days actually PRESENT in the fetched window, newest first.
    *
@@ -215,6 +234,22 @@ export function LateOrdersReportPage() {
     for (const r of all) seen.add(agentName(r, unknown));
     return [...seen].sort((a, b) => a.localeCompare(b));
   }, [all, unknown]);
+
+  /*
+   * The ORDER statuses actually present in the window, alphabetically.
+   *
+   * Derived from the rows for the same reason the agents and business days are:
+   * a fixed list of every Yiji status would mostly offer entries that lead to an
+   * empty table, and would go stale the day Yiji adds one.
+   */
+  const orderStatuses = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of all) {
+      const v = r.order_status?.trim();
+      if (v) seen.add(v);
+    }
+    return [...seen].sort((a, b) => a.localeCompare(b));
+  }, [all]);
 
   const businessDays = useMemo(() => {
     const seen = new Set<string>();
@@ -495,140 +530,187 @@ export function LateOrdersReportPage() {
   }
 
   return (
-    /* The tab strip's Outlet supplies NO padding, so this page owns it — and
-       owns its own scroll, which is why `h-full overflow-auto` rather than a
-       plain block: without it a long register scrolls the page and takes the
-       tab strip off screen. */
-    /* `space-y-6` and `p-5`: the two tables sat almost touching, so on a long
-       register it read as one continuous grid with a stray heading in the
-       middle (owner, 2026-09-28). */
-    <div className="h-full space-y-6 overflow-auto p-5">
-      <ReportFilterBar
-        searchLabel={t('lateOrdersReport.filter.search', { defaultValue: 'Order or branch' })}
-        searchPlaceholder={t('lateOrdersReport.filter.searchPlaceholder', {
-          defaultValue: 'e.g. 1314302, Okashi, Narjis',
-        })}
-        search={search}
-        onSearch={setSearch}
-        from={from}
-        to={to}
-        onFrom={setFrom}
-        onTo={setTo}
-        selects={[
-          {
-            /*
-             * BUSINESS DAY, 08:00 to 04:00 — the day operations actually work
-             * to. Offered only for the days present in the fetched window, so
-             * every option returns rows.
-             */
-            key: 'businessDay',
-            label: t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' }),
-            value: bizDay,
-            onChange: setBizDay,
-            options: businessDays.map((d) => ({ value: d, label: formatDate(d) })),
-          },
-          {
-            key: 'agent',
-            label: t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
-            value: agent,
-            onChange: setAgent,
-            options: agents.map((a) => ({ value: a, label: a })),
-          },
-          {
-            key: 'kind',
-            label: t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
-            value: kind,
-            onChange: setKind,
-            options: [
+    /*
+      THE SAME SHELL AS THE TICKET BREAKDOWN REPORT (owner, 2026-09-30: "the
+      table scroll is still at the table level and not at the page level... the
+      column names should be fixed and visible even on scroll").
+
+      This was ONE element doing three jobs — owning the height, owning the
+      scroll, and carrying `p-5` — and each of those broke the other two:
+
+        - `p-5` on the scrollport put a 20px band above every `sticky top-0`
+          header, so the column names pinned BELOW the padding with rows sliding
+          through the gap;
+        - the inner `overflow-x-auto` wrapper made a SECOND scrollport for the
+          horizontal axis, which is why reaching the far columns meant scrolling
+          to the foot of the table first;
+        - and a `<Table>` with no surface had nothing establishing its width.
+
+      Now the three-part split `AgentReportsPage` uses: this root owns the height
+      and clips; the scrollport below owns BOTH axes with no vertical padding; and
+      `w-max min-w-full` inside lets a wide table stretch the scrollport rather
+      than escape its card. `TableSurface flow` then has the page's own
+      scrollport directly above it, which is the one thing that makes its sticky
+      header work. See [[layout-height-budget]].
+    */
+    <div className="flex h-full flex-col overflow-hidden">
+      {/* NO VERTICAL PADDING HERE — see above. The spacing lives on the child,
+          where it is spacing rather than a hole in the sticky ceiling. The
+          scrollbars are styled visibly because the app's global thumb is
+          deliberately faint, which is right for a page and wrong for the one
+          control that reaches half a report's columns. */}
+      <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5">
+        <div className="w-max min-w-full space-y-6 py-5">
+          <ReportFilterBar
+            searchLabel={t('lateOrdersReport.filter.search', { defaultValue: 'Order or branch' })}
+            searchPlaceholder={t('lateOrdersReport.filter.searchPlaceholder', {
+              defaultValue: 'e.g. 1314302, Okashi, Narjis',
+            })}
+            search={search}
+            onSearch={setSearch}
+            from={from}
+            to={to}
+            onFrom={setFrom}
+            onTo={setTo}
+            selects={[
               {
-                value: 'late_delivery',
-                label: t('lateOrders.kind.late_delivery', { defaultValue: 'Late delivery' }),
+                /*
+                 * BUSINESS DAY, 08:00 to 04:00 — the day operations actually work
+                 * to. Offered only for the days present in the fetched window, so
+                 * every option returns rows.
+                 */
+                key: 'businessDay',
+                label: t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' }),
+                value: bizDay,
+                onChange: setBizDay,
+                options: businessDays.map((d) => ({ value: d, label: formatDate(d) })),
               },
               {
-                value: 'late_preparation',
-                label: t('lateOrders.kind.late_preparation', { defaultValue: 'Late preparation' }),
+                key: 'agent',
+                label: t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
+                value: agent,
+                onChange: setAgent,
+                options: agents.map((a) => ({ value: a, label: a })),
               },
-            ],
-          },
-          {
-            /* STATUS, not Decision (owner spec §10). The three handling states,
+              {
+                key: 'kind',
+                label: t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
+                value: kind,
+                onChange: setKind,
+                options: [
+                  {
+                    value: 'late_delivery',
+                    label: t('lateOrders.kind.late_delivery', { defaultValue: 'Late delivery' }),
+                  },
+                  {
+                    value: 'late_preparation',
+                    label: t('lateOrders.kind.late_preparation', {
+                      defaultValue: 'Late preparation',
+                    }),
+                  },
+                ],
+              },
+              {
+                /* STATUS, not Decision (owner spec §10). The three handling states,
                in the order an order passes through them. */
-            key: 'state',
-            label: t('lateOrdersReport.col.status', { defaultValue: 'Status' }),
-            value: state,
-            onChange: (v: string) => setState(v as LateOrderState | ''),
-            options: [
-              {
-                value: 'pending',
-                label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
+                key: 'state',
+                label: t('lateOrdersReport.col.status', { defaultValue: 'Status' }),
+                value: state,
+                onChange: (v: string) => setState(v as LateOrderState | ''),
+                options: [
+                  {
+                    value: 'pending',
+                    label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
+                  },
+                  {
+                    value: 'commented',
+                    label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
+                  },
+                  {
+                    value: 'handled',
+                    label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
+                  },
+                ],
               },
               {
-                value: 'commented',
-                label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
+                /* THE ORDER'S OWN STATUS (owner, 2026-09-30) — separate from the
+               handling Status above, which is ours. Options come from the data
+               actually present, like the agent and business-day pickers: a fixed
+               list of Yiji statuses would mostly offer entries leading to an
+               empty table, and would go stale the day Yiji adds one. */
+                key: 'orderStatus',
+                label: t('lateOrdersReport.col.orderStatus', { defaultValue: 'Order status' }),
+                value: orderStatus,
+                onChange: setOrderStatus,
+                options: orderStatuses.map((v) => ({
+                  value: v,
+                  label: t(`commerce.orderStatuses.${v}`, { defaultValue: causeLabel(v) }),
+                })),
               },
-              {
-                value: 'handled',
-                label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
-              },
-            ],
-          },
-        ]}
-        /* The agent belongs in BOTH: omitted from `filtering` the Clear button
-           would not appear for an agent-only filter, and omitted from
-           `onClear` it would survive a clear that claims to remove everything. */
-        filtering={!!search || !!kind || !!state || !!bizDay || !!agent}
-        onClear={() => {
-          setSearch('');
-          setKind('');
-          setState('');
-          setBizDay('');
-          setAgent('');
-          reset();
-        }}
-      />
+            ]}
+            /*
+          EVERY filter is listed here, and every one is reset below.
+          Omitted from `filtering` its Clear button never appears; omitted from
+          `onClear` it survives a clear that claims to remove everything. The
+          DATE RANGE is handled by the bar itself now — it owns those fields, and
+          every page that had to remember it forgot it.
+        */
+            filtering={!!search || !!kind || !!state || !!orderStatus || !!bizDay || !!agent}
+            onClear={() => {
+              setSearch('');
+              setKind('');
+              setState('');
+              setOrderStatus('');
+              setBizDay('');
+              setAgent('');
+              /* The range too — `reset()` forgets the stored value and returns to the
+             default month, so Clear means what it says. */
+              reset();
+            }}
+          />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <ReportKpi
-          label={t('lateOrdersReport.total', { defaultValue: 'Late orders' })}
-          value={String(totals.total)}
-          tone="blue"
-        />
-        {/* PENDING FIRST among the states: it is the one that needs somebody to
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <ReportKpi
+              label={t('lateOrdersReport.total', { defaultValue: 'Late orders' })}
+              value={String(totals.total)}
+              tone="blue"
+            />
+            {/* PENDING FIRST among the states: it is the one that needs somebody to
             do something, and the only one that was invisible before. */}
-        <ReportKpi
-          label={t('lateOrders.state.pending', { defaultValue: 'Pending' })}
-          value={String(totals.pending)}
-          tone="amber"
-        />
-        <ReportKpi
-          label={t('lateOrders.state.handled', { defaultValue: 'Handled' })}
-          value={String(totals.handled)}
-          tone="green"
-          hint={t('lateOrdersReport.commentedCount', {
-            count: totals.commented,
-            defaultValue: '{{count}} commented',
-          })}
-        />
-        <ReportKpi
-          label={t('lateOrdersReport.avgMinutes', { defaultValue: 'Average when decided' })}
-          value={
-            totals.avgMinutes == null
-              ? '-'
-              : t('lateOrdersReport.minutes', {
-                  count: totals.avgMinutes,
-                  defaultValue: '{{count}} min',
-                })
-          }
-          tone="violet"
-          hint={t('lateOrdersReport.preparationShare', {
-            count: totals.preparation,
-            defaultValue: '{{count}} late in preparation',
-          })}
-        />
-      </div>
+            <ReportKpi
+              label={t('lateOrders.state.pending', { defaultValue: 'Pending' })}
+              value={String(totals.pending)}
+              tone="amber"
+            />
+            <ReportKpi
+              label={t('lateOrders.state.handled', { defaultValue: 'Handled' })}
+              value={String(totals.handled)}
+              tone="green"
+              hint={t('lateOrdersReport.commentedCount', {
+                count: totals.commented,
+                defaultValue: '{{count}} commented',
+              })}
+            />
+            <ReportKpi
+              label={t('lateOrdersReport.avgMinutes', { defaultValue: 'Average when decided' })}
+              value={
+                totals.avgMinutes == null
+                  ? '-'
+                  : t('lateOrdersReport.minutes', {
+                      count: totals.avgMinutes,
+                      defaultValue: '{{count}} min',
+                    })
+              }
+              tone="violet"
+              hint={t('lateOrdersReport.preparationShare', {
+                count: totals.preparation,
+                defaultValue: '{{count}} late in preparation',
+              })}
+            />
+          </div>
 
-      {rows.length === 0 ? (
-        /*
+          {rows.length === 0 ? (
+            /*
           SAYS WHAT THIS REPORT COUNTS, which is not what the agent's queue
           shows.
 
@@ -639,132 +721,137 @@ export function LateOrdersReportPage() {
           decisions is the honest answer until somebody uses the queue, and the
           empty state now says so rather than implying the orders are missing.
         */
-        <EmptyState
-          title={t('lateOrdersReport.noneTitle', {
-            defaultValue: 'No late orders in this window',
-          })}
-          description={t('lateOrdersReport.noneBody', {
-            defaultValue:
-              'No delivery order passed the late threshold in this window, and none was commented on or compensated.',
-          })}
-        />
-      ) : (
-        <>
-          {/*
+            <EmptyState
+              title={t('lateOrdersReport.noneTitle', {
+                defaultValue: 'No late orders in this window',
+              })}
+              description={t('lateOrdersReport.noneBody', {
+                defaultValue:
+                  'No delivery order passed the late threshold in this window, and none was commented on or compensated.',
+              })}
+            />
+          ) : (
+            <>
+              {/*
             THE TWO SUB-PAGES. Pills, matching the report tab strip one level
             up, so the second level of navigation looks like the first rather
             than introducing a third idea of what a tab is.
           */}
-          <nav
-            aria-label={t('lateOrdersReport.views', { defaultValue: 'View' })}
-            className="flex items-center gap-1"
-          >
-            {(
-              [
-                ['decisions', t('lateOrdersReport.register', { defaultValue: 'Order decisions' })],
-                ['summary', t('lateOrdersReport.summary', { defaultValue: 'Summary' })],
-                ['agents', t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                aria-current={tab === key ? 'page' : undefined}
-                onClick={() => setTab(key)}
-                className={
-                  tab === key
-                    ? 'shrink-0 rounded-full bg-primary/15 px-3.5 py-1.5 text-sm font-semibold text-primary ring-1 ring-inset ring-primary/25'
-                    : 'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground'
-                }
+              <nav
+                aria-label={t('lateOrdersReport.views', { defaultValue: 'View' })}
+                className="flex items-center gap-1"
               >
-                {label}
-              </button>
-            ))}
-          </nav>
+                {(
+                  [
+                    [
+                      'decisions',
+                      t('lateOrdersReport.register', { defaultValue: 'Order decisions' }),
+                    ],
+                    ['summary', t('lateOrdersReport.summary', { defaultValue: 'Summary' })],
+                    ['agents', t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-current={tab === key ? 'page' : undefined}
+                    onClick={() => setTab(key)}
+                    className={
+                      tab === key
+                        ? 'shrink-0 rounded-full bg-primary/15 px-3.5 py-1.5 text-sm font-semibold text-primary ring-1 ring-inset ring-primary/25'
+                        : 'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground'
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </nav>
 
-          {/*
+              {/*
             A HEADER ROW, not a bare heading (owner, 2026-09-28: "positioned
             properly with enough space and padding"). The title and its own
             export sit on one line with real padding, and the table starts
             below it rather than immediately under the words.
           */}
-          {/*
+              {/*
             THE SUMMARY (owner spec §15-§17): Late Category against Count, with
             a Grand Total, over the date range the filter bar already sets.
 
             No pager: this table has one row per cause, and there are a handful
             of causes. A pager on three rows is furniture.
           */}
-          {tab === 'summary' && (
-            <Card className="p-0">
-              <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-                <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {t('lateOrdersReport.summary', { defaultValue: 'Summary' })}
-                </h3>
-                {canExport && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="ms-auto"
-                    onClick={exportSummary}
-                    disabled={summary.length === 0}
-                  >
-                    {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                  </Button>
-                )}
-              </div>
-              <Table>
-                <thead>
-                  <Tr>
-                    <Th>{t('lateOrdersReport.lateCategory', { defaultValue: 'Late category' })}</Th>
-                    <Th>{t('lateOrdersReport.count', { defaultValue: 'Count' })}</Th>
-                  </Tr>
-                </thead>
-                <tbody>
-                  {summary.map((r) => (
-                    <Tr key={r.kind || 'uncategorised'}>
-                      <Td>{r.label}</Td>
-                      <Td className="tabular-nums">{r.count}</Td>
-                    </Tr>
-                  ))}
-                  {/* THE GRAND TOTAL is `rows.length`, not a sum of the rows
+              {tab === 'summary' && (
+                <Card className="p-0">
+                  <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+                    <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {t('lateOrdersReport.summary', { defaultValue: 'Summary' })}
+                    </h3>
+                    {canExport && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="ms-auto"
+                        onClick={exportSummary}
+                        disabled={summary.length === 0}
+                      >
+                        {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                      </Button>
+                    )}
+                  </div>
+                  <Table>
+                    <thead>
+                      <Tr>
+                        <Th>
+                          {t('lateOrdersReport.lateCategory', { defaultValue: 'Late category' })}
+                        </Th>
+                        <Th>{t('lateOrdersReport.count', { defaultValue: 'Count' })}</Th>
+                      </Tr>
+                    </thead>
+                    <tbody>
+                      {summary.map((r) => (
+                        <Tr key={r.kind || 'uncategorised'}>
+                          <Td>{r.label}</Td>
+                          <Td className="tabular-nums">{r.count}</Td>
+                        </Tr>
+                      ))}
+                      {/* THE GRAND TOTAL is `rows.length`, not a sum of the rows
                       above — the two are equal by construction, and taking it
                       from the source means they cannot silently diverge if a
                       row ever fails to land in a category. */}
-                  <Tr>
-                    <Td className="font-semibold">
-                      {t('lateOrdersReport.grandTotal', { defaultValue: 'Grand total' })}
-                    </Td>
-                    <Td className="font-semibold tabular-nums">{rows.length}</Td>
-                  </Tr>
-                </tbody>
-              </Table>
-            </Card>
-          )}
+                      <Tr>
+                        <Td className="font-semibold">
+                          {t('lateOrdersReport.grandTotal', { defaultValue: 'Grand total' })}
+                        </Td>
+                        <Td className="font-semibold tabular-nums">{rows.length}</Td>
+                      </Tr>
+                    </tbody>
+                  </Table>
+                </Card>
+              )}
 
-          {/* RENDERED, not hidden: a `hidden` card still builds every row, and
+              {/* RENDERED, not hidden: a `hidden` card still builds every row, and
               the register runs to hundreds. Only the open sub-page pays. */}
-          {tab === 'agents' && (
-            <Card className="p-0">
-              <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-                <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })}
-                </h3>
-                {canExport && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="ms-auto"
-                    onClick={exportByAgent}
-                    disabled={stats.length === 0}
-                  >
-                    {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                  </Button>
-                )}
-              </div>
-              {/*
+              {tab === 'agents' && (
+                <Card className="p-0">
+                  <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+                    <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })}
+                    </h3>
+                    {canExport && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="ms-auto"
+                        onClick={exportByAgent}
+                        disabled={stats.length === 0}
+                      >
+                        {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                      </Button>
+                    )}
+                  </div>
+                  {/*
               THE TABLE SCROLLS, NOT THE PAGE (owner, 2026-09-29).
               
               On a laptop these columns run past the viewport, and the page
@@ -778,96 +865,102 @@ export function LateOrdersReportPage() {
               scrollbar is deliberately faint, which is right for a page and
               wrong for the one control that reaches half a report's columns.
             */}
-              <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] overflow-x-auto">
-                <Table>
-                  <thead>
-                    <Tr>
-                      <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                      <Th>{t('lateOrdersReport.col.touched', { defaultValue: 'Acted on' })}</Th>
-                      <Th>
-                        {t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}
-                      </Th>
-                      <Th>{t('lateOrdersReport.col.commented', { defaultValue: 'Commented' })}</Th>
-                      <Th>
-                        {t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}
-                      </Th>
-                      <Th>{t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}</Th>
-                      {/* NAMED for what it measures. "Avg. minutes" said
+                  <TableSurface flow>
+                    <Table>
+                      <thead>
+                        <Tr>
+                          <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                          <Th>{t('lateOrdersReport.col.touched', { defaultValue: 'Acted on' })}</Th>
+                          <Th>
+                            {t('lateOrdersReport.col.compensated', { defaultValue: 'Compensated' })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.commented', { defaultValue: 'Commented' })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.preparation', { defaultValue: 'Preparation' })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.delivery', { defaultValue: 'Delivery' })}
+                          </Th>
+                          {/* NAMED for what it measures. "Avg. minutes" said
                           nothing about from when, and the old reading — time
                           since the customer ordered — described the kitchen
                           rather than the agent. */}
-                      <Th>
-                        {t('lateOrdersReport.col.avg', { defaultValue: 'Avg. minutes waiting' })}
-                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                          {t('lateOrdersReport.col.avgHint', {
-                            defaultValue: 'on the queue before deciding',
-                          })}
-                        </span>
-                      </Th>
-                    </Tr>
-                  </thead>
-                  <tbody>
-                    {stats.map((s) => (
-                      <Tr key={s.agent}>
-                        <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
-                        <Td className="tabular-nums">{s.touched}</Td>
-                        <Td className="tabular-nums">{s.compensated}</Td>
-                        <Td className="tabular-nums">{s.commented}</Td>
-                        <Td className="tabular-nums">{s.latePreparation}</Td>
-                        <Td className="tabular-nums">{s.lateDelivery}</Td>
-                        <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
-                      </Tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-              <TablePager
-                page={current}
-                onPage={setPage}
-                pageSize={pageSize}
-                onPageSize={setPageSize}
-                total={rows.length}
-                pageSizes={REGISTER_PAGE_SIZES}
-                labels={{
-                  rowsPerPage: String(
-                    t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
-                  ),
-                  previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
-                  next: String(t('agentReports.next', { defaultValue: 'Next' })),
-                  showing: ({ from: f, to: to2, total }) =>
-                    String(
-                      t('complaintReport.showingRange', {
-                        defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
-                        from: f,
-                        to: to2,
-                        total,
-                      }),
-                    ),
-                }}
-              />
-            </Card>
-          )}
+                          <Th>
+                            {t('lateOrdersReport.col.avg', {
+                              defaultValue: 'Avg. minutes waiting',
+                            })}
+                            <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                              {t('lateOrdersReport.col.avgHint', {
+                                defaultValue: 'on the queue before deciding',
+                              })}
+                            </span>
+                          </Th>
+                        </Tr>
+                      </thead>
+                      <tbody>
+                        {stats.map((s) => (
+                          <Tr key={s.agent}>
+                            <Td className="whitespace-nowrap font-medium">{s.agent}</Td>
+                            <Td className="tabular-nums">{s.touched}</Td>
+                            <Td className="tabular-nums">{s.compensated}</Td>
+                            <Td className="tabular-nums">{s.commented}</Td>
+                            <Td className="tabular-nums">{s.latePreparation}</Td>
+                            <Td className="tabular-nums">{s.lateDelivery}</Td>
+                            <Td className="tabular-nums">{s.avgMinutes ?? '-'}</Td>
+                          </Tr>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </TableSurface>
+                  <TablePager
+                    page={current}
+                    onPage={setPage}
+                    pageSize={pageSize}
+                    onPageSize={setPageSize}
+                    total={rows.length}
+                    pageSizes={REGISTER_PAGE_SIZES}
+                    labels={{
+                      rowsPerPage: String(
+                        t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                      ),
+                      previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+                      next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                      showing: ({ from: f, to: to2, total }) =>
+                        String(
+                          t('complaintReport.showingRange', {
+                            defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+                            from: f,
+                            to: to2,
+                            total,
+                          }),
+                        ),
+                    }}
+                  />
+                </Card>
+              )}
 
-          {tab === 'decisions' && (
-            <Card className="p-0">
-              <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-                <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  {t('lateOrdersReport.register', { defaultValue: 'Order decisions' })}
-                </h3>
-                {canExport && (
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="ms-auto"
-                    onClick={exportDecisions}
-                    disabled={rows.length === 0}
-                  >
-                    {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                  </Button>
-                )}
-              </div>
-              {/*
+              {tab === 'decisions' && (
+                <Card className="p-0">
+                  <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
+                    <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {t('lateOrdersReport.register', { defaultValue: 'Order decisions' })}
+                    </h3>
+                    {canExport && (
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="sm"
+                        className="ms-auto"
+                        onClick={exportDecisions}
+                        disabled={rows.length === 0}
+                      >
+                        {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
+                      </Button>
+                    )}
+                  </div>
+                  {/*
               THE TABLE SCROLLS, NOT THE PAGE (owner, 2026-09-29).
               
               On a laptop these columns run past the viewport, and the page
@@ -881,84 +974,96 @@ export function LateOrdersReportPage() {
               scrollbar is deliberately faint, which is right for a page and
               wrong for the one control that reaches half a report's columns.
             */}
-              <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] overflow-x-auto">
-                <Table>
-                  <thead>
-                    <Tr>
-                      {/* CREATION TIME, not "When" (owner spec §12) — when the
+                  <TableSurface flow>
+                    <Table>
+                      <thead>
+                        <Tr>
+                          {/* CREATION TIME, not "When" (owner spec §12) — when the
                           ORDER was created, which is what the column has always
                           shown and what an admin reading a register needs. */}
-                      <Th>
-                        {t('lateOrdersReport.col.creationTime', { defaultValue: 'Creation time' })}
-                      </Th>
-                      <Th>
-                        {t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' })}
-                      </Th>
-                      <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
-                      {/* §14 — BRAND AND RESTAURANT AS SEPARATE NAMED COLUMNS,
+                          <Th>
+                            {t('lateOrdersReport.col.creationTime', {
+                              defaultValue: 'Creation time',
+                            })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.businessDay', {
+                              defaultValue: 'Business day',
+                            })}
+                          </Th>
+                          <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
+                          {/* §14 — BRAND AND RESTAURANT AS SEPARATE NAMED COLUMNS,
                           plus the customer's mobile. They were one joined cell,
                           which cannot be sorted, filtered or read into a
                           spreadsheet as two facts. */}
-                      <Th>{t('lateOrdersReport.col.brandOnly', { defaultValue: 'Brand' })}</Th>
-                      <Th>
-                        {t('lateOrdersReport.col.restaurant', { defaultValue: 'Restaurant' })}
-                      </Th>
-                      <Th>
-                        {t('lateOrdersReport.col.customerMobile', {
-                          defaultValue: 'Customer mobile',
-                        })}
-                      </Th>
-                      {/* §12 — SERVICE TIME here too, on the same rule as the
+                          <Th>{t('lateOrdersReport.col.brandOnly', { defaultValue: 'Brand' })}</Th>
+                          <Th>
+                            {t('lateOrdersReport.col.restaurant', { defaultValue: 'Restaurant' })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.customerMobile', {
+                              defaultValue: 'Customer mobile',
+                            })}
+                          </Th>
+                          {/* §12 — SERVICE TIME here too, on the same rule as the
                           agent's queue: driver-accept to CLOSE. */}
-                      <Th>{t('lateOrdersReport.col.service', { defaultValue: 'Service time' })}</Th>
-                      {/* §13 — the three legs. */}
-                      <Th>
-                        {t('lateOrdersReport.col.driverArrival', {
-                          defaultValue: 'Driver arrival',
-                        })}
-                      </Th>
-                      <Th>
-                        {t('lateOrdersReport.col.deliveryTime', { defaultValue: 'Delivery time' })}
-                      </Th>
-                      <Th>
-                        {t('lateOrdersReport.col.preparationTime', {
-                          defaultValue: 'Preparation time',
-                        })}
-                      </Th>
-                      <Th>
-                        {t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}
-                      </Th>
-                      {/* §10 — STATUS, and it is the HANDLING state. The order's
+                          <Th>
+                            {t('lateOrdersReport.col.service', { defaultValue: 'Service time' })}
+                          </Th>
+                          {/* §13 — the three legs. */}
+                          <Th>
+                            {t('lateOrdersReport.col.driverArrival', {
+                              defaultValue: 'Driver arrival',
+                            })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.deliveryTime', {
+                              defaultValue: 'Delivery time',
+                            })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.preparationTime', {
+                              defaultValue: 'Preparation time',
+                            })}
+                          </Th>
+                          <Th>
+                            {t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}
+                          </Th>
+                          {/* §10 — STATUS, and it is the HANDLING state. The order's
                           own status is the column beside it, deliberately
                           separate: an order can be force-closed upstream and
                           still be pending for WeCare. */}
-                      <Th>{t('lateOrdersReport.col.status', { defaultValue: 'Status' })}</Th>
-                      <Th>
-                        {t('lateOrdersReport.col.orderStatus', { defaultValue: 'Order status' })}
-                      </Th>
-                      <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                      <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
-                      <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
-                      {/* The toggle's own column, titled for screen readers only
+                          <Th>{t('lateOrdersReport.col.status', { defaultValue: 'Status' })}</Th>
+                          <Th>
+                            {t('lateOrdersReport.col.orderStatus', {
+                              defaultValue: 'Order status',
+                            })}
+                          </Th>
+                          <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
+                          <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
+                          <Th>
+                            {t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}
+                          </Th>
+                          {/* The toggle's own column, titled for screen readers only
                           — a visible heading over a chevron reads as a column of
                           data rather than a control. */}
-                      {canSeeOrder && (
-                        <Th className="w-24">
-                          <span className="sr-only">
-                            {t('lateOrdersReport.snapshot.items', { defaultValue: 'Items' })}
-                          </span>
-                        </Th>
-                      )}
-                    </Tr>
-                  </thead>
-                  <tbody>
-                    {paged.map((r) => (
-                      <Fragment key={r.id}>
-                        <Tr>
-                          <Td className="whitespace-nowrap text-muted-foreground">
-                            {r.date_created ? formatDateTime(r.date_created) : '-'}
-                          </Td>
-                          {/*
+                          {canSeeOrder && (
+                            <Th className="w-24">
+                              <span className="sr-only">
+                                {t('lateOrdersReport.snapshot.items', { defaultValue: 'Items' })}
+                              </span>
+                            </Th>
+                          )}
+                        </Tr>
+                      </thead>
+                      <tbody>
+                        {paged.map((r) => (
+                          <Fragment key={r.id}>
+                            <Tr>
+                              <Td className="whitespace-nowrap text-muted-foreground">
+                                {r.date_created ? formatDateTime(r.date_created) : '-'}
+                              </Td>
+                              {/*
                       THE BUSINESS DAY, 10:00 to 04:00, named after the day it
                       started. Trading runs past midnight, so the calendar date
                       splits one night's work across two rows: 23:50 and 00:10
@@ -966,154 +1071,166 @@ export function LateOrdersReportPage() {
                       Derived, never stored — the rule is one function and the
                       report must not hold a second, older copy of it.
                     */}
-                          <Td className="whitespace-nowrap tabular-nums">
-                            {(() => {
-                              const day = businessDay(r.date_created);
-                              return day ? formatDate(day) : '-';
-                            })()}
-                          </Td>
-                          <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
-                          {/* §14 — the NAMES, each in its own column. */}
-                          <Td className="max-w-[12rem] truncate">{r.brand_name || '-'}</Td>
-                          <Td className="max-w-[12rem] truncate">{r.restaurant_name || '-'}</Td>
-                          <Td className="whitespace-nowrap tabular-nums">
-                            {r.customer_phone || '-'}
-                          </Td>
-                          {/* §12/§13 — the four durations, all from the order's
+                              <Td className="whitespace-nowrap tabular-nums">
+                                {(() => {
+                                  const day = businessDay(r.date_created);
+                                  return day ? formatDate(day) : '-';
+                                })()}
+                              </Td>
+                              <Td className="whitespace-nowrap tabular-nums">
+                                {r.order_id ?? '-'}
+                              </Td>
+                              {/* §14 — the NAMES, each in its own column. */}
+                              <Td className="max-w-[12rem] truncate">{r.brand_name || '-'}</Td>
+                              <Td className="max-w-[12rem] truncate">{r.restaurant_name || '-'}</Td>
+                              <Td className="whitespace-nowrap tabular-nums">
+                                {r.customer_phone || '-'}
+                              </Td>
+                              {/* §12/§13 — the four durations, all from the order's
                             status history via `orderEventTimes`. Only the rows
                             on the open PAGE are fetched, so these are blank
                             until that batch lands. */}
-                          <Td className="whitespace-nowrap tabular-nums">
-                            <Leg
-                              loading={eventTimes.isLoading}
-                              minutes={timesOf(r.order_id).serviceMinutes}
-                            />
-                          </Td>
-                          <Td className="whitespace-nowrap tabular-nums">
-                            <Leg
-                              loading={eventTimes.isLoading}
-                              minutes={timesOf(r.order_id).driverArrivalMinutes}
-                            />
-                          </Td>
-                          <Td className="whitespace-nowrap tabular-nums">
-                            <Leg
-                              loading={eventTimes.isLoading}
-                              minutes={timesOf(r.order_id).deliveryMinutes}
-                            />
-                          </Td>
-                          <Td className="whitespace-nowrap tabular-nums">
-                            <Leg
-                              loading={eventTimes.isLoading}
-                              minutes={timesOf(r.order_id).preparationMinutes}
-                            />
-                          </Td>
-                          {/* §12 — the CAUSE, spelled out. `lateOrders.kind.*`
+                              <Td className="whitespace-nowrap tabular-nums">
+                                <Leg
+                                  loading={eventTimes.isLoading}
+                                  minutes={timesOf(r.order_id).serviceMinutes}
+                                />
+                              </Td>
+                              <Td className="whitespace-nowrap tabular-nums">
+                                <Leg
+                                  loading={eventTimes.isLoading}
+                                  minutes={timesOf(r.order_id).driverArrivalMinutes}
+                                />
+                              </Td>
+                              <Td className="whitespace-nowrap tabular-nums">
+                                <Leg
+                                  loading={eventTimes.isLoading}
+                                  minutes={timesOf(r.order_id).deliveryMinutes}
+                                />
+                              </Td>
+                              <Td className="whitespace-nowrap tabular-nums">
+                                <Leg
+                                  loading={eventTimes.isLoading}
+                                  minutes={timesOf(r.order_id).preparationMinutes}
+                                />
+                              </Td>
+                              {/* §12 — the CAUSE, spelled out. `lateOrders.kind.*`
                             translates the seeded two; anything operations added
                             falls back to `causeLabel`, which turns
                             `late_preparation` into "Late preparation" rather
                             than printing the raw enum with its underscore. */}
-                          <Td className="whitespace-nowrap">
-                            {r.kind
-                              ? t(`lateOrders.kind.${r.kind}`, { defaultValue: causeLabel(r.kind) })
-                              : '-'}
-                          </Td>
-                          {/* §10 — the HANDLING state. */}
-                          <Td>
-                            <Pill tone={STATE_TONE[r.state]} size="sm">
-                              {t(`lateOrders.state.${r.state}`, { defaultValue: r.state })}
-                            </Pill>
-                          </Td>
-                          {/* The ORDER's own status — a different fact, and the
+                              <Td className="whitespace-nowrap">
+                                {r.kind
+                                  ? t(`lateOrders.kind.${r.kind}`, {
+                                      defaultValue: causeLabel(r.kind),
+                                    })
+                                  : '-'}
+                              </Td>
+                              {/* §10 — the HANDLING state. */}
+                              <Td>
+                                <Pill tone={STATE_TONE[r.state]} size="sm">
+                                  {t(`lateOrders.state.${r.state}`, { defaultValue: r.state })}
+                                </Pill>
+                              </Td>
+                              {/* The ORDER's own status — a different fact, and the
                             spec is explicit that the two must not be confused. */}
-                          <Td className="whitespace-nowrap text-muted-foreground">
-                            {r.order_status
-                              ? t(`commerce.orderStatuses.${r.order_status}`, {
-                                  defaultValue: causeLabel(r.order_status),
-                                })
-                              : '-'}
-                          </Td>
-                          <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
-                          <Td className="max-w-[22rem]">
-                            <span
-                              className="line-clamp-2 block leading-snug"
-                              title={r.reason ?? ''}
-                            >
-                              {r.reason ?? '-'}
-                            </span>
-                          </Td>
-                          {/* What the agent DID about it, beside why it happened.
+                              <Td className="whitespace-nowrap text-muted-foreground">
+                                {r.order_status
+                                  ? t(`commerce.orderStatuses.${r.order_status}`, {
+                                      defaultValue: causeLabel(r.order_status),
+                                    })
+                                  : '-'}
+                              </Td>
+                              <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
+                              <Td className="max-w-[22rem]">
+                                <span
+                                  className="line-clamp-2 block leading-snug"
+                                  title={r.reason ?? ''}
+                                >
+                                  {r.reason ?? '-'}
+                                </span>
+                              </Td>
+                              {/* What the agent DID about it, beside why it happened.
                         `title` carries the full text, since the cell clamps. */}
-                          <Td className="max-w-[22rem]">
-                            <span
-                              className="line-clamp-2 block leading-snug"
-                              title={r.action_taken ?? ''}
-                            >
-                              {r.action_taken ?? '-'}
-                            </span>
-                          </Td>
-                          {/* THE ORDER, from the stored snapshot. No network call:
+                              <Td className="max-w-[22rem]">
+                                <span
+                                  className="line-clamp-2 block leading-snug"
+                                  title={r.action_taken ?? ''}
+                                >
+                                  {r.action_taken ?? '-'}
+                                </span>
+                              </Td>
+                              {/* THE ORDER, from the stored snapshot. No network call:
                             it is already on the row. */}
-                          {canSeeOrder && (
-                            <Td className="whitespace-nowrap">
-                              <Button
-                                type="button"
-                                size="sm"
-                                variant="secondary"
-                                aria-expanded={openOrder === r.id}
-                                onClick={() => setOpenOrder((cur) => (cur === r.id ? null : r.id))}
-                              >
-                                {openOrder === r.id
-                                  ? t('lateOrdersReport.snapshot.hide', { defaultValue: 'Hide' })
-                                  : t('lateOrdersReport.snapshot.view', { defaultValue: 'Order' })}
-                              </Button>
-                            </Td>
-                          )}
-                        </Tr>
-                        {/* A SECOND ROW rather than an overlay: the register is
+                              {canSeeOrder && (
+                                <Td className="whitespace-nowrap">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="secondary"
+                                    aria-expanded={openOrder === r.id}
+                                    onClick={() =>
+                                      setOpenOrder((cur) => (cur === r.id ? null : r.id))
+                                    }
+                                  >
+                                    {openOrder === r.id
+                                      ? t('lateOrdersReport.snapshot.hide', {
+                                          defaultValue: 'Hide',
+                                        })
+                                      : t('lateOrdersReport.snapshot.view', {
+                                          defaultValue: 'Order',
+                                        })}
+                                  </Button>
+                                </Td>
+                              )}
+                            </Tr>
+                            {/* A SECOND ROW rather than an overlay: the register is
                           read by scrolling, and a dialog would take the reader
                           out of the list they are working down. `colSpan` is
                           deliberately generous — a short span would leave the
                           panel boxed inside one column's width. */}
-                        {canSeeOrder && openOrder === r.id && (
-                          <Tr>
-                            <Td colSpan={16} className="bg-secondary/20 p-0">
-                              <OrderSnapshotPanel snapshot={r.order_snapshot} />
-                            </Td>
-                          </Tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </Table>
-              </div>
-              <TablePager
-                page={current}
-                onPage={setPage}
-                pageSize={pageSize}
-                onPageSize={setPageSize}
-                total={rows.length}
-                pageSizes={REGISTER_PAGE_SIZES}
-                labels={{
-                  rowsPerPage: String(
-                    t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
-                  ),
-                  previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
-                  next: String(t('agentReports.next', { defaultValue: 'Next' })),
-                  showing: ({ from: f, to: to2, total }) =>
-                    String(
-                      t('complaintReport.showingRange', {
-                        defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
-                        from: f,
-                        to: to2,
-                        total,
-                      }),
-                    ),
-                }}
-              />
-            </Card>
+                            {canSeeOrder && openOrder === r.id && (
+                              <Tr>
+                                <Td colSpan={16} className="bg-secondary/20 p-0">
+                                  <OrderSnapshotPanel snapshot={r.order_snapshot} />
+                                </Td>
+                              </Tr>
+                            )}
+                          </Fragment>
+                        ))}
+                      </tbody>
+                    </Table>
+                  </TableSurface>
+                  <TablePager
+                    page={current}
+                    onPage={setPage}
+                    pageSize={pageSize}
+                    onPageSize={setPageSize}
+                    total={rows.length}
+                    pageSizes={REGISTER_PAGE_SIZES}
+                    labels={{
+                      rowsPerPage: String(
+                        t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                      ),
+                      previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+                      next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                      showing: ({ from: f, to: to2, total }) =>
+                        String(
+                          t('complaintReport.showingRange', {
+                            defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+                            from: f,
+                            to: to2,
+                            total,
+                          }),
+                        ),
+                    }}
+                  />
+                </Card>
+              )}
+            </>
           )}
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
 }
