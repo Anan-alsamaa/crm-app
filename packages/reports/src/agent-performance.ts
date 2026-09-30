@@ -36,11 +36,26 @@ export interface ChatTiming {
   solvedAt: string | null;
   /**
    * True when the auto-assignment ladder passed this chat on before anybody
-   * answered it. Such a chat leaves the personal first-response population —
-   * see the note on `ownChats`. Absent is treated as false, so a caller that
-   * does not read routing events gets exactly the old behaviour.
+   * answered it. Absent is treated as false.
+   *
+   * NO LONGER REMOVES THE CHAT FROM THE TIMINGS. It used to, and on production
+   * that emptied the metric entirely — every chat is broadcast or escalated, so
+   * `passedOn` was true for ALL 46 of 46 conversations and the first-response
+   * average was always `null` (owner-reported, 2026-09-30, as two blank
+   * columns). The fairness it protected is now delivered by `firstAgentBy`
+   * instead: the response is credited to the agent who actually SENT it, so
+   * nobody carries a wait they did not cause AND nothing is dropped. Still
+   * reported, because "how much of the queue gets chased" is worth seeing.
    */
   passedOn?: boolean;
+  /**
+   * The agent who sent the first reply, when known.
+   *
+   * The chat may no longer belong to them — the ladder moves chats, so
+   * `agentId` is who holds it now. The timings are grouped by THIS field when it
+   * is present, and fall back to `agentId` when it is not.
+   */
+  firstAgentBy?: string | null;
   /** The agent who picked it up AFTER it had been passed on, if any. */
   takenBy?: string | null;
 }
@@ -147,6 +162,27 @@ export function metFirstResponse(c: ChatTiming, targetSec: number): boolean {
   return sec <= targetSec;
 }
 
+/**
+ * WHO A CHAT'S FIRST RESPONSE BELONGS TO, best evidence first.
+ *
+ * 1. `firstAgentBy` — the agent who actually sent the message. Read from
+ *    `messages.sender_user`, so it is a fact rather than an inference.
+ * 2. `takenBy` — who picked the chat up after it had been passed on, from the
+ *    routing history. Right when the caller reads routing events but not
+ *    `sender_user`.
+ * 3. `agentId` — the assignee. The old behaviour, kept so a caller that supplies
+ *    neither of the above is unchanged.
+ *
+ * The order matters: crediting a passed-on chat to its assignee charges them for
+ * the seconds earlier agents spent not answering, which is the unfairness the
+ * previous `passedOn` exclusion existed to prevent. This keeps that protection
+ * without discarding the measurement — and discarding it is what emptied the
+ * metric on production, where every chat is passed on.
+ */
+function responder(c: ChatTiming): string {
+  return c.firstAgentBy ?? c.takenBy ?? c.agentId ?? '';
+}
+
 /** Group chats by agent and reduce each group to one row. */
 export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformanceRow[] {
   const groups = new Map<string, ChatTiming[]>();
@@ -157,21 +193,65 @@ export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformance
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(c);
   }
+  /*
+   * AN AGENT WHO ANSWERED BUT HOLDS NOTHING STILL GETS A ROW.
+   *
+   * The ladder can hand a chat on after somebody replied to it, so an agent may
+   * have real response times and no chat assigned to them in range. Grouping by
+   * assignee alone would compute their average and then have nowhere to put it —
+   * the work would simply not appear.
+   */
+  for (const c of chats) {
+    const by = responder(c);
+    if (by && !groups.has(by) && firstResponseSec(c) !== null) groups.set(by, []);
+  }
+
+  /*
+   * THE RESPONSES EACH AGENT ACTUALLY MADE, indexed by the agent who SENT them.
+   *
+   * Built across ALL chats rather than inside each group, because the replier is
+   * often not the assignee — the ladder moves chats — and a reply looked up only
+   * within its own assignee's group would be filtered out of that group and
+   * counted in nobody's. That is the "renders as a plausible zero" shape this
+   * very report already suffered from once.
+   *
+   * WHY NOT THE OLD RULE. Timings used to be measured over chats the ladder had
+   * NOT passed on. On production every chat is broadcast or escalated, so that
+   * population was always empty and both first-response columns rendered blank
+   * (owner-reported, 2026-09-30). Crediting the actual sender keeps the fairness
+   * that rule was protecting — nobody carries a wait they did not cause — while
+   * throwing no measurement away.
+   */
+  const responsesBy = new Map<string, number[]>();
+  for (const c of chats) {
+    const sec = firstResponseSec(c);
+    if (sec === null) continue;
+    const list = responsesBy.get(responder(c));
+    if (list) list.push(sec);
+    else responsesBy.set(responder(c), [sec]);
+  }
 
   const rows: AgentPerformanceRow[] = [];
   for (const [key, group] of groups) {
     const agentId = key === '' ? null : key;
-    // The response-time figures describe chats this agent got cleanly. See
-    // `ownChats` for why a passed-on chat cannot fairly sit in this population.
-    const own = group.filter((c) => !c.passedOn);
-    const responses = own.map(firstResponseSec).filter((n): n is number => n !== null);
+    const own = group.filter((c) => responder(c) === key);
+    const responses = responsesBy.get(key) ?? [];
     const solves = group.map(timeToSolveSec).filter((n): n is number => n !== null);
     rows.push({
       agentId,
-      // Never blank: a row whose agent has no name is unreadable, and the
-      // caller cannot always resolve one (an account with no name set, a
-      // /users read that failed, a chat assigned to a filtered-out account).
-      agentName: group[0]!.agentName?.trim() || group[0]!.agentId || 'Unassigned',
+      /* Never blank: a row whose agent has no name is unreadable, and the
+         caller cannot always resolve one (an account with no name set, a
+         /users read that failed, a chat assigned to a filtered-out account).
+
+         `group` CAN BE EMPTY — an agent who answered a chat that was then handed
+         on holds nothing in range — so the name is taken from whichever chat
+         they replied to, and `group[0]` is never indexed blind. */
+      agentName:
+        group[0]?.agentName?.trim() ||
+        chats.find((c) => responder(c) === key)?.agentName?.trim() ||
+        group[0]?.agentId ||
+        key ||
+        'Unassigned',
       chats: group.length,
       answered: responses.length,
       // Every chat with no reply, passed on or not — see the note in

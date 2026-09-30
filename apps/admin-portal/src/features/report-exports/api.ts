@@ -908,6 +908,7 @@ async function loadAgentReport(
         conversation: string;
         sender_type: string;
         date_created: string | null;
+        sender_user: string | null;
       }>(
         'messages',
         conversations.map((c) => c.id),
@@ -917,7 +918,10 @@ async function loadAgentReport(
             conversation: { _in: ids },
             is_internal_note: { _eq: false },
           },
-          fields: ['conversation', 'sender_type', 'date_created'],
+          /* `sender_user` so a reply is credited to the agent who SENT it. The
+             ladder moves chats, so `assigned_agent` is who holds it now, which is
+             frequently not who answered. */
+          fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
           sort: ['date_created'],
         }),
       );
@@ -930,6 +934,7 @@ async function loadAgentReport(
           agentName: agentOf(agentId),
           firstCustomerAt: chatTimes.get(c.id)?.firstCustomerAt ?? null,
           firstAgentAt: chatTimes.get(c.id)?.firstAgentAt ?? null,
+          firstAgentBy: realAgentId(chatTimes.get(c.id)?.firstAgentBy ?? null),
           solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
           passedOn: handoffs.get(c.id)?.passedOn ?? false,
           takenBy: handoffs.get(c.id)?.takenBy ?? null,
@@ -937,13 +942,23 @@ async function loadAgentReport(
       });
       const perfRows = new Map(agentPerformance(timings).map((r) => [r.agentId ?? '', r]));
 
-      // Answered-in-time over an agent's own answered chats, against the same
-      // 5-minute default target the performance pages open with.
+      /*
+       * Answered-in-time, against the same 5-minute default target the
+       * performance pages open with.
+       *
+       * CREDITED TO THE AGENT WHO REPLIED, and no longer skipping chats the
+       * ladder passed on. That skip is why this column was BLANK on production:
+       * every chat there is broadcast or escalated, so `passedOn` was true for
+       * all 46 of 46 conversations and the map came out empty (owner-reported,
+       * 2026-09-30). Keyed the same way as `agentPerformance` above, so the two
+       * columns describe the same population — a percentage beside an average of
+       * a different set of chats is worse than no percentage.
+       */
       const TARGET_SEC = 5 * 60;
       const inTime = new Map<string, { answered: number; inTime: number }>();
       for (const c of timings) {
-        if (c.passedOn || !c.firstCustomerAt || !c.firstAgentAt) continue;
-        const key = c.agentId ?? '';
+        if (!c.firstCustomerAt || !c.firstAgentAt) continue;
+        const key = c.firstAgentBy ?? c.agentId ?? '';
         const t = inTime.get(key) ?? { answered: 0, inTime: 0 };
         t.answered += 1;
         const sec =

@@ -199,12 +199,20 @@ function useChatTimings(filters: Filters) {
                   conversation: { _in: ids },
                   is_internal_note: { _eq: false },
                 },
-                fields: ['conversation', 'sender_type', 'date_created'],
+                /* `sender_user` so a reply is credited to the agent who SENT
+                   it — the ladder moves chats, so the assignee is often not the
+                   replier. */
+                fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
                 sort: ['date_created'],
               } as never,
             ),
           ) as unknown as Promise<
-            Array<{ conversation: string; sender_type: string; date_created: string | null }>
+            Array<{
+              conversation: string;
+              sender_type: string;
+              date_created: string | null;
+              sender_user: string | null;
+            }>
           >,
       );
 
@@ -264,6 +272,7 @@ function useChatTimings(filters: Filters) {
         agentName: c.assigned_agent ?? 'Unassigned',
         firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
         firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,
+        firstAgentBy: times.get(c.id)?.firstAgentBy ?? null,
         solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
         // Carried so a chat nobody ever wrote in still lands on a day in the
         // trend instead of vanishing from it.

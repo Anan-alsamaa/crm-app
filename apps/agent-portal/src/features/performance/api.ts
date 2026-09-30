@@ -58,6 +58,9 @@ interface MessageRow {
   conversation: string;
   sender_type: 'customer' | 'agent' | 'system';
   date_created: string | null;
+  /* Who sent it, so a reply is credited to the agent who made it rather than to
+     whoever holds the chat now — the ladder moves chats. */
+  sender_user: string | null;
 }
 
 /** End of the chosen day, so a `to` of today includes everything today. */
@@ -154,7 +157,7 @@ export function useChatTimings(filters: PerformanceFilters) {
                 conversation: { _in: ids },
                 is_internal_note: { _eq: false },
               },
-              fields: ['conversation', 'sender_type', 'date_created'],
+              fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
               sort: ['date_created'],
             }),
           ) as unknown as Promise<MessageRow[]>,
@@ -216,6 +219,7 @@ export function useChatTimings(filters: PerformanceFilters) {
         // Placeholder; the page replaces it with the resolved name. See above.
         agentName: c.assigned_agent ?? 'Unassigned',
         firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
+        firstAgentBy: times.get(c.id)?.firstAgentBy ?? null,
         firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,
         // A chat can hold a solve time from before it was reopened only if
         // something failed to clear it; trust the status over the stamp.

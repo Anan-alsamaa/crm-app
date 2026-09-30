@@ -22,11 +22,31 @@ export interface TimingMessage {
   /** 'customer' | 'agent' | 'system' — anything else is ignored. */
   sender_type: string;
   date_created: string | null;
+  /**
+   * The agent who sent this message, when it was an agent.
+   *
+   * Optional so every existing caller keeps working: a caller that does not ask
+   * for the field simply gets `firstAgentBy: null` and the old behaviour.
+   */
+  sender_user?: string | null;
 }
 
 export interface ConversationTimestamps {
   firstCustomerAt: string | null;
   firstAgentAt: string | null;
+  /**
+   * WHO actually sent that first reply.
+   *
+   * Needed because the chat may not still belong to them: the routing ladder
+   * broadcasts and escalates, so `conversations.assigned_agent` is who holds it
+   * NOW, which is often not who answered it. Crediting the response to the
+   * assignee measured the wrong person — and excluding every re-offered chat
+   * instead (the previous behaviour) emptied the metric completely, because on
+   * production every chat is broadcast or escalated.
+   *
+   * Null when nobody replied, or when the caller did not request `sender_user`.
+   */
+  firstAgentBy: string | null;
 }
 
 /**
@@ -42,7 +62,9 @@ export function conversationTimestamps(
   messages: readonly TimingMessage[],
 ): Map<string, ConversationTimestamps> {
   const firstCustomer = new Map<string, string>();
-  const agentTimes = new Map<string, string[]>();
+  /* The agent messages, each keeping WHO sent it so the reply can be credited
+     to the agent who actually made it. */
+  const agentMsgs = new Map<string, Array<{ at: string; by: string | null }>>();
 
   for (const m of messages) {
     if (!m.date_created) continue;
@@ -50,25 +72,31 @@ export function conversationTimestamps(
       const seen = firstCustomer.get(m.conversation);
       if (!seen || m.date_created < seen) firstCustomer.set(m.conversation, m.date_created);
     } else if (m.sender_type === 'agent') {
-      const list = agentTimes.get(m.conversation);
-      if (list) list.push(m.date_created);
-      else agentTimes.set(m.conversation, [m.date_created]);
+      const entry = { at: m.date_created, by: m.sender_user ?? null };
+      const list = agentMsgs.get(m.conversation);
+      if (list) list.push(entry);
+      else agentMsgs.set(m.conversation, [entry]);
     }
   }
 
   const out = new Map<string, ConversationTimestamps>();
-  for (const id of new Set([...firstCustomer.keys(), ...agentTimes.keys()])) {
+  for (const id of new Set([...firstCustomer.keys(), ...agentMsgs.keys()])) {
     const customerAt = firstCustomer.get(id) ?? null;
-    const agents = agentTimes.get(id) ?? [];
+    const agents = agentMsgs.get(id) ?? [];
     // ISO-8601 UTC strings compare correctly as strings, and every timestamp
     // here comes from Directus in that form.
-    const eligible = customerAt ? agents.filter((t) => t >= customerAt) : agents;
+    const eligible = customerAt ? agents.filter((m) => m.at >= customerAt) : agents;
+    // The earliest eligible reply, kept whole so its sender travels with its
+    // time — picking the time and then re-searching for the sender is how the
+    // two drift apart on a tie.
+    const first = eligible.length ? eligible.reduce((a, b) => (a.at <= b.at ? a : b)) : null;
     out.set(id, {
       firstCustomerAt: customerAt,
       // With no customer message at all there is nothing to respond to, so the
       // earliest agent message stands in — the chat is still "answered", it
       // just has no measurable interval, which is what a null says.
-      firstAgentAt: eligible.length ? eligible.reduce((a, b) => (a < b ? a : b)) : null,
+      firstAgentAt: first?.at ?? null,
+      firstAgentBy: first?.by ?? null,
     });
   }
   return out;
