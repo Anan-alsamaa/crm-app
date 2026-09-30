@@ -1192,10 +1192,18 @@ export function CouponApprovalsPage() {
         if (to && at > w.toIso) return false;
       }
       if (!q) return true;
+      /* BOTH HOMES OF THE ORDER AND THE PHONE. A late-order coupon has neither
+         a ticket nor a contact, so its order and number live on the row itself —
+         reading only `ticket.order_id`/`contact.phone` compared every term
+         against undefined and found nothing. Measured on live production, 12 of
+         32 requests were unfindable by their own order number. `AllCompensation`
+         already did this correctly; this queue did not. */
       return [
         r.coupon_code,
         r.ticket?.order_id,
+        r.order_id,
         r.contact?.phone,
+        r.customer_phone,
         r.contact?.name,
         r.title,
         r.ticket?.store?.name,

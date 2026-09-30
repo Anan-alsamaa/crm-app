@@ -112,16 +112,37 @@ export function MyCouponsPage() {
     const byStatus = mine.filter((r) => inView(r.status, view));
     const q = search.trim().toLowerCase();
     if (!q) return byStatus;
-    // One box over the facts an agent actually holds when a customer calls:
-    // the coupon type/code, the order number, the phone. Name and requester
-    // ride along because excluding them would only surprise.
+    /*
+     * One box over the facts an agent actually holds when a customer calls:
+     * the coupon type/code, the order number, the phone. Name and requester
+     * ride along because excluding them would only surprise.
+     *
+     * BOTH HOMES OF THE ORDER AND THE PHONE, not just the ticket's and the
+     * contact's (owner-reported, 2026-09-30: "the phone number/orderid/code
+     * based search is not working properly").
+     *
+     * A LATE-ORDER COUPON HAS NEITHER A TICKET NOR A CONTACT — that is why
+     * `order_id` and `customer_phone` are read onto the row at all, as the
+     * comment on COUPON_REQUEST_FIELDS says. The search looked only at
+     * `ticket.order_id` and `contact.phone`, so for those rows every term was
+     * compared against `undefined` and matched nothing: measured against live
+     * production, 12 of 32 requests were unfindable by their own order number,
+     * and 9 of them by the customer's phone. Searching an order that is plainly
+     * on screen and getting an empty list is what was reported.
+     *
+     * `title` is included because a late-order request carries the customer's
+     * number there too, which is what an agent reads off the row.
+     */
     return byStatus.filter((r) =>
       [
         r.coupon_type,
         r.coupon_code,
         r.discount_category,
         r.ticket?.order_id,
+        r.order_id,
         r.contact?.phone,
+        r.customer_phone,
+        r.title,
         r.contact?.name,
         r.requested_by?.first_name,
         r.requested_by?.email,
