@@ -171,6 +171,34 @@ export const CouponRequestDraft = z.object({
    * worse apology, and the permissive reading is the one to fall into.
    */
   no_other_discounts: z.boolean().default(false),
+  /**
+   * Whether this coupon should actually REACH the customer in the Yiji app.
+   *
+   * The owner's case (2026-10-01): some customers insist on a refund and will
+   * not accept an app coupon at all — commonly the ones who complained over
+   * WhatsApp. The compensation still has to be RECORDED and approved, because
+   * it was agreed with the customer and is honoured another way; it simply must
+   * not be pushed to Yiji.
+   *
+   * DEFAULTS TO DELIVERING, and that default is the safe one: the ordinary case
+   * is a coupon the customer wants in the app, and an agent who forgets this
+   * field gets exactly today's behaviour.
+   *
+   * Everything else is unchanged when this is set — the request is created, it
+   * goes to a supervisor, it can be approved, amended or rejected, and the code
+   * and value are recorded. `coupon-push` checks `delivery_excluded` BEFORE the
+   * approved check, so an excluded row is inert however the job was queued,
+   * including a Retry click, and counts as "not owed" rather than failed.
+   */
+  delivery_excluded: z.boolean().default(false),
+  /**
+   * Why it is not being sent, shown to the supervisor on the approval card.
+   *
+   * OPTIONAL on purpose (owner's call): an agent on a call should not be blocked
+   * from recording the compensation, and the admin card already falls back to
+   * "marked never-send" when this is blank.
+   */
+  delivery_excluded_reason: z.string().max(500).nullish(),
 });
 export type CouponRequestDraft = z.infer<typeof CouponRequestDraft>;
 

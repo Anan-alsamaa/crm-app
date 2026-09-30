@@ -347,6 +347,10 @@ export function CouponRequestDialog({
     max_discount: 0,
     usage_limit: 1,
     compensation_reason: description ?? '',
+    /* Deliver, unless the agent says otherwise — the ordinary case, and the safe
+       default for anyone who does not touch the field. */
+    delivery_excluded: false,
+    delivery_excluded_reason: '',
     brand_id: brandId,
     restaurant_id: restaurantId,
     item_name: null,
@@ -516,6 +520,13 @@ export function CouponRequestDialog({
         item_name: d.item_name ?? null,
         item_sku: d.item_sku ?? null,
         no_other_discounts: d.no_other_discounts,
+        /* Whether it ever reaches the Yiji app. The reason rides along only when
+           it is actually being withheld — storing one on a coupon that IS being
+           delivered would read as a contradiction on the approval card. */
+        delivery_excluded: d.delivery_excluded,
+        delivery_excluded_reason: d.delivery_excluded
+          ? d.delivery_excluded_reason?.trim() || null
+          : null,
       })
       .then(() => {
         toast.success(
@@ -953,6 +964,79 @@ export function CouponRequestDialog({
             </span>
           </span>
         </label>
+        {/*
+          DOES THIS COUPON ACTUALLY REACH THE CUSTOMER IN THE APP?
+
+          The owner's case (2026-10-01): some customers insist on a refund and
+          will not accept an app coupon — commonly the ones who complained over
+          WhatsApp. The compensation still has to be recorded and approved,
+          because it was agreed with the customer and honoured another way; it
+          just must not be pushed to Yiji.
+
+          A SELECT RATHER THAN A CHECKBOX, deliberately. A tickbox spelled "do
+          not deliver" is a negative the agent has to read twice, and this
+          decides whether a customer receives something — the two outcomes
+          deserve to be written out and read back. It sits apart from
+          `delivery_type` above (which channels the coupon is VALID for) and is
+          worded so the two cannot be confused.
+
+          Defaults to delivering: that is the ordinary case, and an agent who
+          never touches this gets exactly the previous behaviour.
+        */}
+        <div className="mt-4">
+          <FormField
+            label={t('coupons.yijiDelivery', {
+              defaultValue: 'Send to the customer on the Yiji app',
+            })}
+            hint={t('coupons.yijiDeliveryHint', {
+              defaultValue:
+                'Choose “Do not send” for a customer who wants a refund instead. The coupon is still recorded and still needs approval — it simply never reaches the app.',
+            })}
+          >
+            <SelectMenu
+              /* Its own accessible name: `SelectMenu` renders a combobox BUTTON,
+                 which a surrounding <label> does not name. */
+              aria-label={t('coupons.yijiDelivery', {
+                defaultValue: 'Send to the customer on the Yiji app',
+              })}
+              value={draft.delivery_excluded ? 'no' : 'yes'}
+              onChange={(v) => set('delivery_excluded', v === 'no')}
+              options={[
+                {
+                  value: 'yes',
+                  label: t('coupons.yijiDeliverYes', { defaultValue: 'Yes — send it on Yiji' }),
+                },
+                {
+                  value: 'no',
+                  label: t('coupons.yijiDeliverNo', {
+                    defaultValue: 'No — do not send it on Yiji',
+                  }),
+                },
+              ]}
+            />
+          </FormField>
+          {/* Only when it is actually being withheld, and OPTIONAL: an agent on a
+              call must not be blocked from recording the compensation. The
+              supervisor's card falls back to "marked never-send" when blank. */}
+          {draft.delivery_excluded && (
+            <div className="mt-3">
+              <FormField
+                label={t('coupons.yijiDeliveryReason', {
+                  defaultValue: 'Why is it not being sent? (optional)',
+                })}
+              >
+                <Input
+                  value={draft.delivery_excluded_reason ?? ''}
+                  maxLength={500}
+                  placeholder={t('coupons.yijiDeliveryReasonPlaceholder', {
+                    defaultValue: 'e.g. the customer asked for a refund instead',
+                  })}
+                  onChange={(e) => set('delivery_excluded_reason', e.target.value)}
+                />
+              </FormField>
+            </div>
+          )}
+        </div>
         {/* Said BEFORE sending, not discovered afterwards.
             The alert fires server-side either way (a Directus hook — the agent
             portal cannot be the enforcement point when the row is written

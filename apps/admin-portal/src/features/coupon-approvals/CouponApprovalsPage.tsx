@@ -718,6 +718,64 @@ function Row({
           )}
 
           {/*
+            THE SUPERVISOR'S OVERRIDE on whether it reaches the Yiji app.
+
+            The agent chooses this when they raise the request — a customer who
+            wants a refund will not accept an app coupon (owner, 2026-10-01) —
+            and the supervisor deciding the coupon may know better by the time
+            they see it. So it is editable here rather than only displayed.
+
+            DISABLED ONCE IT HAS BEEN PUSHED. A grant is irreversible from our
+            side: deleting the CRM row does not revoke it on Yiji, so a control
+            that appeared to un-send a delivered coupon would be a lie. After
+            delivery this reads as a plain statement of fact instead.
+          */}
+          {!row.yiji_coupon_user_id && (
+            <div className="mt-2.5 rounded-lg bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.04]">
+              <label className="flex cursor-pointer items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                  checked={row.delivery_excluded === true}
+                  onChange={(e) =>
+                    saveTerms.mutate({
+                      id: row.id,
+                      edits: {
+                        delivery_excluded: e.target.checked,
+                        /* Clearing the flag clears its reason too: a "why it was
+                           withheld" left on a coupon that IS being sent reads as
+                           a contradiction on this very card. */
+                        ...(e.target.checked ? {} : { delivery_excluded_reason: null }),
+                      },
+                    })
+                  }
+                />
+                <span className="min-w-0">
+                  <span className="block text-xs font-medium text-foreground">
+                    {t('couponApprovals.withhold', {
+                      defaultValue: 'Do not send this to the customer on the Yiji app',
+                    })}
+                  </span>
+                  <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
+                    {t('couponApprovals.withholdHint', {
+                      defaultValue:
+                        'For a customer who wants a refund instead. The coupon is still approved and recorded — it simply never reaches the app.',
+                    })}
+                  </span>
+                </span>
+              </label>
+              {row.delivery_excluded && row.delivery_excluded_reason?.trim() && (
+                <p className="mt-1.5 ps-7 text-2xs leading-relaxed text-muted-foreground">
+                  {t('couponApprovals.withholdReason', {
+                    defaultValue: 'Reason: {{why}}',
+                    why: row.delivery_excluded_reason.trim(),
+                  })}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/*
             DID IT ACTUALLY REACH THE CUSTOMER?
             The decision and the delivery are different facts, and only one of
             them puts a coupon in someone's app. An approved row that Yiji
@@ -730,7 +788,12 @@ function Row({
             Shown while it is still PENDING as well as after, because it changes
             what the decision means rather than merely reporting on it.
           */}
-          {!canBeDelivered && (
+          {/* NOT WHEN IT IS BEING WITHHELD ON PURPOSE. A missing order matters
+              because Yiji cannot attach a coupon without one — but nothing is
+              being sent to Yiji here, so the warning would be describing an
+              obstacle to something nobody is attempting, and it tells the
+              supervisor this "cannot be approved" when it can. */}
+          {!canBeDelivered && !row.delivery_excluded && (
             <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
               {t('couponApprovals.noOrder', {
                 defaultValue:

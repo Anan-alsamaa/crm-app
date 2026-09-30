@@ -143,6 +143,18 @@ export interface CreateCouponRequestInput extends CouponFields {
   item_name?: string | null;
   item_sku?: string | null;
   no_other_discounts?: boolean;
+  /**
+   * Whether this coupon should ever be pushed to the Yiji app.
+   *
+   * True for a customer who wants a refund and will not accept an app coupon
+   * (owner, 2026-10-01). The request is still created, still approved and still
+   * recorded; `coupon-push` checks this BEFORE the approved check, so the row is
+   * inert however the job was queued — including a Retry — and counts as "not
+   * owed" rather than failed.
+   */
+  delivery_excluded?: boolean;
+  /** Why it is withheld, shown on the supervisor's approval card. Optional. */
+  delivery_excluded_reason?: string | null;
   /* Resolved from the ticket's order, never chosen in the form. */
   brand_id?: string | null;
   restaurant_id?: string | null;
@@ -208,6 +220,11 @@ export interface PendingCouponPatch {
   item_name?: string | null;
   item_sku?: string | null;
   no_other_discounts?: boolean | null;
+  /* A correction may change its mind about delivering — the customer can ask
+     for a refund after the request was raised, which is the whole reason this
+     choice exists. */
+  delivery_excluded?: boolean | null;
+  delivery_excluded_reason?: string | null;
 }
 
 export function useUpdatePendingCouponRequest() {
