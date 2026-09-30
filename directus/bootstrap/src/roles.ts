@@ -397,7 +397,22 @@ export const roles: RoleSpec[] = [
        */
       { collection: 'conversations', action: 'read', permissions: ASSIGNED_OR_UNASSIGNED },
       { collection: 'conversations', action: 'create' },
-      { collection: 'conversations', action: 'update', permissions: ASSIGNED_OR_UNASSIGNED },
+      /*
+       * UPDATE IS UNSCOPED FROM 2026-09-30 (owner), while the READ above stays
+       * scoped — the 09-14 decision in the note is untouched.
+       *
+       * An agent could open a colleague's chat and then not close it. A chat is
+       * auto-claimed by whoever replies FIRST, so two agents working at once
+       * routinely leaves one holding a thread the other must finish, and the
+       * refusal named no reason so it read as a broken button.
+       *
+       * The scoped READ is what keeps this narrow: an agent still sees only
+       * their own and unassigned chats, so in practice this means "any chat
+       * they could already open". Widening ASSIGNED_OR_UNASSIGNED itself would
+       * hand them every colleague's history, which is the change the 09-14 note
+       * explicitly refused.
+       */
+      { collection: 'conversations', action: 'update' },
       { collection: 'messages', action: 'create' },
       /* Messages follow their conversation — in BOTH directions.
        *

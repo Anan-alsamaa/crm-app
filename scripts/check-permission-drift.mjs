@@ -169,6 +169,10 @@ const EXPECTED = [
    * Asserted for the two roles that hold `edit_all_tickets`. NOT for Viewer,
    * which holds `view_all_chats` and must stay read-only.
    */
+  /* An AGENT too (owner, 2026-09-30): they could open a colleague's chat and not
+     close it, because a chat is auto-claimed by whoever replies first. Their
+     READ stays scoped, so this only covers chats they can already open. */
+  { role: 'WeCare Agent', collection: 'conversations', actions: ['read', 'update'] },
   { role: 'WeCare Supervisor', collection: 'conversations', actions: ['read', 'update'] },
   { role: 'WeCare Admin', collection: 'conversations', actions: ['read', 'update'] },
   { role: 'WeCare Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },

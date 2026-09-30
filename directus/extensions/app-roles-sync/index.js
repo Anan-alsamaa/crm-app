@@ -177,7 +177,22 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     use_chat: [
       g('conversations', 'create'),
       g('conversations', 'read', ASSIGNED_OR_UNASSIGNED),
-      g('conversations', 'update', ASSIGNED_OR_UNASSIGNED),
+      /*
+       * UPDATE IS UNSCOPED; READ IS NOT (owner, 2026-09-30).
+       *
+       * An agent could OPEN a colleague's chat and then not close it. The chat
+       * is auto-claimed by whoever replies FIRST, so two agents working at once
+       * routinely leaves one holding a thread the other has to finish — and the
+       * refusal carried no reason, so it read as a broken button. This is the
+       * same fault that blocked supervisors, one tier down.
+       *
+       * THE READ STAYS SCOPED, and that is what keeps this narrow: an agent
+       * still only sees their own chats and unassigned ones, so "any chat" in
+       * practice means "any chat they could already open". Widening
+       * ASSIGNED_OR_UNASSIGNED itself would have handed them everyone's history,
+       * which is a different and much larger change.
+       */
+      g('conversations', 'update'),
       g('messages', 'create'),
       g('messages', 'read', MESSAGE_OF_VISIBLE_CONVERSATION),
       /*
