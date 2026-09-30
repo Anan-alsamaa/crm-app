@@ -276,6 +276,27 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     edit_all_tickets: [
       g('tickets', 'update', {}, TICKET_FIELDS_AGENT_WRITABLE),
       g('ticket_events', 'create'),
+      /*
+       * AND ANY CHAT, NOT ONLY ANY TICKET (owner, 2026-09-30).
+       *
+       * A supervisor could OPEN every conversation (`view_all_chats` grants a
+       * wide read) and then not close one: `use_chat`'s update is scoped to
+       * mine-or-unassigned, and a chat is auto-claimed by whoever replies
+       * first. So Mohamed - a WeCare Supervisor - solved the ticket, pressed
+       * Close this chat and was refused, while the owner could do it because
+       * `Admin policy` is unscoped. Read everything, change nothing is not a
+       * supervisor.
+       *
+       * It rides with `edit_all_tickets` rather than `view_all_chats` because
+       * that privilege already means "act on work that is not yours", and
+       * `view_all_chats` is held by VIEWER - who must keep reading without
+       * gaining the ability to close other people's chats.
+       *
+       * Unscoped `{}` deliberately: the whole point is a chat somebody else
+       * owns. The narrower grant from `use_chat` stays; Directus ORs them, so
+       * an agent is unaffected.
+       */
+      g('conversations', 'update', {}),
     ],
     delete_tickets: [g('tickets', 'delete')],
     approve_coupons: [

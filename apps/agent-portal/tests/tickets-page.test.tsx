@@ -316,9 +316,9 @@ describe('TicketsPage — how long it took, and who touched it', () => {
 });
 
 describe('TicketsPage — marking a ticket solved', () => {
-  it('offers "Mark as solved" rather than only logging a first response', async () => {
+  it('offers "Close this ticket" rather than only logging a first response', async () => {
     renderPage('/tickets?id=t1');
-    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText('Close this ticket')).toBeInTheDocument());
     expect(screen.queryByText('Mark first response')).toBeNull();
   });
 
@@ -329,8 +329,8 @@ describe('TicketsPage — marking a ticket solved', () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     hooks.useUpdateTicket.mockReturnValue({ mutateAsync });
     renderPage('/tickets?id=t1');
-    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
-    await userEvent.click(screen.getByText('Mark as solved'));
+    await waitFor(() => expect(screen.getByText('Close this ticket')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Close this ticket'));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     const patch = mutateAsync.mock.calls[0]![0].patch;
@@ -345,8 +345,8 @@ describe('TicketsPage — marking a ticket solved', () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     hooks.useUpdateTicket.mockReturnValue({ mutateAsync });
     renderPage('/tickets?id=t1');
-    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
-    await userEvent.click(screen.getByText('Mark as solved'));
+    await waitFor(() => expect(screen.getByText('Close this ticket')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Close this ticket'));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(mutateAsync.mock.calls[0]![0].patch.first_responded_at).toEqual(expect.any(String));
@@ -361,8 +361,8 @@ describe('TicketsPage — marking a ticket solved', () => {
       isLoading: false,
     });
     renderPage('/tickets?id=t1');
-    await waitFor(() => expect(screen.getByText('Mark as solved')).toBeInTheDocument());
-    await userEvent.click(screen.getByText('Mark as solved'));
+    await waitFor(() => expect(screen.getByText('Close this ticket')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Close this ticket'));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(mutateAsync.mock.calls[0]![0].patch).not.toHaveProperty('first_responded_at');
@@ -375,7 +375,7 @@ describe('TicketsPage — marking a ticket solved', () => {
     });
     renderPage('/tickets?id=t1');
     await waitFor(() => expect(screen.getByText(/Solved/)).toBeInTheDocument());
-    expect(screen.queryByText('Mark as solved')).toBeNull();
+    expect(screen.queryByText('Close this ticket')).toBeNull();
   });
 });
 

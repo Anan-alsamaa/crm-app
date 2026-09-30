@@ -157,6 +157,20 @@ const EXPECTED = [
    * Asserted for all three, not just the Agent: this guard exists because a
    * check that only covers the roles nobody is on cannot fail.
    */
+  /*
+   * A SUPERVISOR MUST BE ABLE TO CLOSE ANY CHAT (owner, 2026-09-30).
+   *
+   * They could open every conversation and then not close one: the read is wide
+   * but the update was scoped to mine-or-unassigned, and a chat is auto-claimed
+   * by whoever replies first. Read everything, change nothing is not a
+   * supervisor — and the symptom was "could not close the chat" with no reason
+   * given, which reads as a broken button.
+   *
+   * Asserted for the two roles that hold `edit_all_tickets`. NOT for Viewer,
+   * which holds `view_all_chats` and must stay read-only.
+   */
+  { role: 'WeCare Supervisor', collection: 'conversations', actions: ['read', 'update'] },
+  { role: 'WeCare Admin', collection: 'conversations', actions: ['read', 'update'] },
   { role: 'WeCare Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },
   { role: 'WeCare Supervisor', collection: 'contacts', actions: ['create', 'read', 'update'] },
   { role: 'WeCare Admin', collection: 'contacts', actions: ['create', 'read', 'update'] },

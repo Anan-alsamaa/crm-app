@@ -1045,6 +1045,12 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   <Button
                     type="button"
                     size="sm"
+                    /* CLOSING IS NOT A POSITIVE ACT (owner, 2026-09-30), the
+                       same rule as the chat toolbar's button. It carried the
+                       default CTA weight, so finishing a ticket looked like the
+                       thing to do; reopening keeps the green, because that IS
+                       the positive act. The WRITE is unchanged. */
+                    variant="destructive-soft"
                     title={t('tickets.markSolvedHint', {
                       defaultValue:
                         'Closes the work: sets the ticket to resolved and stops both SLA timers.',
@@ -1063,16 +1069,16 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                       });
                     }}
                   >
-                    {t('tickets.markSolved', { defaultValue: 'Mark as solved' })}
+                    {t('tickets.closeTicket', { defaultValue: 'Close this ticket' })}
                   </Button>
                 ) : (
                   <Button
                     type="button"
                     size="sm"
-                    variant="ghost"
+                    variant="success"
                     onClick={() => patch({ status: 'open', resolved_at: undefined })}
                   >
-                    {t('tickets.reopen', { defaultValue: 'Reopen' })}
+                    {t('tickets.reopenTicket', { defaultValue: 'Reopen ticket' })}
                   </Button>
                 )}
               </div>
