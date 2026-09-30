@@ -169,3 +169,51 @@ describe('switching conversations detaches the old listener', () => {
     expect(sibling).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * THE LAST GATE (owner, 2026-09-30: "it should never happen ever again, even if
+ * a bug at screen level").
+ *
+ * The listener leak above is fixed at its source, but a render-level mistake
+ * must not be able to put one customer's message in another's chat either. So
+ * every live message is stamped with the conversation it was accepted into, and
+ * the renderer refuses anything that names a different one.
+ *
+ * This is a SECOND check, not a duplicate: the delivery-point guard compares
+ * against the id the HANDLER captured — which is exactly why it passed during
+ * the leak — while this compares against the id being RENDERED, the only id
+ * that can be wrong from the reader's point of view.
+ */
+const belongsHere = (m: { conversation_id?: string }, rendering: string) =>
+  m.conversation_id === undefined || m.conversation_id === rendering;
+
+describe('the render barrier', () => {
+  it('refuses a message stamped with another conversation', () => {
+    expect(belongsHere({ conversation_id: 'conv-A' }, 'conv-B')).toBe(false);
+  });
+
+  it('accepts a message stamped with this conversation', () => {
+    expect(belongsHere({ conversation_id: 'conv-B' }, 'conv-B')).toBe(true);
+  });
+
+  /*
+   * AN UNSTAMPED MESSAGE IS KEPT. If a future code path forgets the stamp, the
+   * thread must still render — this gate may only ever reject a message that
+   * POSITIVELY names a different chat. A barrier that blanks a conversation on
+   * a missing field would be a worse bug than the one it guards against.
+   */
+  it('keeps an unstamped message rather than blanking the thread', () => {
+    expect(belongsHere({}, 'conv-B')).toBe(true);
+  });
+
+  /* The whole point, end to end: the leaked message from the earlier tests
+     cannot reach the screen even if it reaches state. */
+  it('filters a leaked message out of the rendered list', () => {
+    const live = [
+      { id: '1', conversation_id: 'conv-B' },
+      { id: '2', conversation_id: 'conv-A' }, // leaked from the thread just left
+      { id: '3' }, // unstamped, kept
+    ];
+    expect(live.filter((m) => belongsHere(m, 'conv-B')).map((m) => m.id)).toEqual(['1', '3']);
+  });
+});

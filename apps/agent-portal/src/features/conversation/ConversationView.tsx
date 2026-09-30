@@ -228,6 +228,7 @@ export function ConversationView({
           content: msg.content,
           is_internal_note: false,
           date_created: msg.createdAt,
+          conversation_id: msg.conversationId,
           // message:new only carries attachment ids (no type/size). For our own
           // optimistic echo we keep the richer local metadata below; for inbound
           // messages we refetch to resolve filename/type/size into thumbnails.
@@ -266,6 +267,7 @@ export function ConversationView({
           content: n.content,
           is_internal_note: true,
           date_created: n.createdAt,
+          conversation_id: n.conversationId,
         };
         setLive((prev) => {
           // Reconcile our own optimistic note, exactly as replies do. The
@@ -365,11 +367,44 @@ export function ConversationView({
     };
   }, [conversationId, qc, t]);
 
+  /**
+   * THE LAST GATE: a message that is not this conversation's never renders.
+   *
+   * The owner's requirement after 2026-09-30, and it is the right one: a reply
+   * must not appear in another customer's chat even if something upstream goes
+   * wrong. Everything the thread, the sidebar and the shared-media grid show
+   * flows through `all`, so this is the single place where that can be made
+   * true rather than hoped for.
+   *
+   * WHY A SECOND CHECK. The delivery-point guard
+   * (`msg.conversationId !== conversationId`) could not catch the bug that
+   * caused this: a leaked listener compared against the id IT had captured, so
+   * the guard passed and a dead component's `setLive` ran. This one compares
+   * against the id being RENDERED, which is the only id that can be wrong from
+   * the reader's point of view.
+   *
+   * Rows from `messagesQuery` are trusted: the query is keyed by conversation,
+   * so a row arriving there is already scoped. Only `live` — socket-delivered
+   * and optimistic — is stamped and checked. An UNSTAMPED live message is kept,
+   * so this can never blank a thread if a future code path forgets the stamp;
+   * it only ever rejects a message that positively names a different chat.
+   */
   const all = useMemo(() => {
     const base = messagesQuery.data ?? [];
     const seen = new Set(base.map((m) => m.id));
-    return [...base, ...live.filter((m) => !seen.has(m.id))];
-  }, [messagesQuery.data, live]);
+    const belongsHere = (m: (typeof live)[number]) =>
+      m.conversation_id === undefined || m.conversation_id === conversationId;
+    const mine = live.filter(belongsHere);
+    if (mine.length !== live.length) {
+      // Never silent. If this ever fires, something upstream is misrouting and
+      // the console is where that gets noticed before a customer does.
+      console.error(
+        '[conversation] dropped %d message(s) belonging to another conversation',
+        live.length - mine.length,
+      );
+    }
+    return [...base, ...mine.filter((m) => !seen.has(m.id))];
+  }, [messagesQuery.data, live, conversationId]);
 
   // Internal notes live in the sidebar, not the conversation thread.
   const threadMessages = useMemo(() => all.filter((m) => !m.is_internal_note), [all]);
@@ -488,6 +523,7 @@ export function ConversationView({
           content,
           is_internal_note: true,
           date_created: new Date().toISOString(),
+          conversation_id: conversationId,
           pending: true,
         },
       ]);
@@ -509,6 +545,7 @@ export function ConversationView({
           content,
           is_internal_note: false,
           date_created: new Date().toISOString(),
+          conversation_id: conversationId,
           attachments: pending.map((p) => ({
             id: p.id,
             filename: p.name,

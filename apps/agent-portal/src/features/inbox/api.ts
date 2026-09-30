@@ -69,6 +69,18 @@ export interface ConversationMessage {
   attachments?: MessageAttachment[];
   /** Client-only: an optimistic message awaiting the server echo. */
   pending?: boolean;
+  /**
+   * Client-only: WHICH CONVERSATION this was accepted into.
+   *
+   * Stamped on every socket-delivered and optimistic message so the renderer can
+   * refuse anything that does not belong to the thread on screen. Absent on
+   * rows fetched from the database, which are already scoped by their query.
+   *
+   * This exists because a render-level mistake once put one customer's reply in
+   * another customer's chat for two seconds, and no guard at the delivery point
+   * could catch it — see the note on `belongsHere` in ConversationView.
+   */
+  conversation_id?: string;
 }
 
 export interface InboxFilters {
