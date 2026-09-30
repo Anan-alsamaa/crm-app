@@ -570,6 +570,85 @@ export class GatewayDirectus {
     return { phone: row.phone, vendorId: row.vendor.yiji_vendor_id };
   }
 
+  /**
+   * Conversations quiet long enough to POSSIBLY be closed for idleness.
+   *
+   * The cutoff is the threshold itself, so a chat that fell quiet a second ago
+   * is simply not in the answer yet — the sweep never has to reason about it.
+   *
+   * `status` is filtered here rather than in the caller so a finished chat is
+   * never even a candidate: re-closing one would send the customer a SECOND
+   * goodbye. The last-sender check stays in code, where `shouldCloseForIdle`
+   * can be tested.
+   */
+  async findIdleCandidates(
+    sinceIso: string,
+  ): Promise<Array<{ id: string; status: string | null; last_message_at: string | null }>> {
+    return (await this.client.request(
+      readItems(
+        'conversations' as never,
+        {
+          filter: {
+            status: { _in: ['open', 'pending'] },
+            last_message_at: { _lte: sinceIso, _nnull: true },
+          },
+          fields: ['id', 'status', 'last_message_at'],
+          sort: ['last_message_at'],
+          // A bound, not a page: if hundreds are somehow idle at once, close the
+          // oldest and let the next sweep take the rest rather than holding one
+          // long transaction open.
+          limit: 100,
+        } as never,
+      ),
+    )) as Array<{ id: string; status: string | null; last_message_at: string | null }>;
+  }
+
+  /** Who sent the most recent message, or null when nobody has spoken. */
+  async lastSenderType(conversationId: string): Promise<SenderType | null> {
+    const rows = (await this.client.request(
+      readItems(
+        'messages' as never,
+        {
+          filter: { conversation: { _eq: conversationId }, is_internal_note: { _eq: false } },
+          fields: ['sender_type'],
+          sort: ['-date_created'],
+          limit: 1,
+        } as never,
+      ),
+    )) as Array<{ sender_type: SenderType | null }>;
+    return rows[0]?.sender_type ?? null;
+  }
+
+  /**
+   * The customer's own messages, newest first — what their LANGUAGE is read
+   * from. Neither conversations nor contacts stores a locale, and their words
+   * are better evidence than a preference nobody sets.
+   */
+  async recentCustomerTexts(conversationId: string, limit = 5): Promise<string[]> {
+    const rows = (await this.client.request(
+      readItems(
+        'messages' as never,
+        {
+          filter: { conversation: { _eq: conversationId }, sender_type: { _eq: 'customer' } },
+          fields: ['content'],
+          sort: ['-date_created'],
+          limit,
+        } as never,
+      ),
+    )) as Array<{ content: string | null }>;
+    return rows.map((r) => r.content ?? '').filter((t) => t.trim() !== '');
+  }
+
+  /** Close a chat for idleness, stamping when it happened. */
+  async closeConversation(conversationId: string, atIso: string): Promise<void> {
+    await this.client.request(
+      updateItem('conversations' as never, conversationId, {
+        status: 'solved',
+        solved_at: atIso,
+      } as never),
+    );
+  }
+
   /** Persist a message and bump conversation activity. Returns the new message. */
   async persistMessage(input: {
     conversationId: string;
@@ -1085,6 +1164,24 @@ export class GatewayDirectus {
    * collection would need its own permissions on two live environments to
    * hold what amounts to one list.
    */
+
+  /**
+   * One `app_settings` VALUE, for callers outside this class.
+   *
+   * `setting()` below is private and returns the row; the idle-close sweep only
+   * wants the value and must not depend on the row shape. A missing row answers
+   * null, which every reader turns into its documented default rather than
+   * throwing — see `chatIdleMinutes`.
+   */
+  async readSetting(key: string): Promise<string | null> {
+    try {
+      return (await this.setting(key))?.value ?? null;
+    } catch {
+      /* A settings read must never take a sweep down: the caller falls back to
+         the default, which is the same answer as a blank row. */
+      return null;
+    }
+  }
 
   /** Read one `app_settings` row, or null. */
   private async setting(key: string): Promise<{ id: string; value: string | null } | null> {

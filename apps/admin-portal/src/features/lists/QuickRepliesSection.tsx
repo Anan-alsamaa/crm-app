@@ -175,16 +175,35 @@ export function QuickRepliesSection() {
             placeholder={t('replies.labelPlaceholder', { defaultValue: 'Button, e.g. Opening' })}
             aria-label={t('replies.label', { defaultValue: 'Button' })}
           />
-          <Input
+          {/*
+            A TEXTAREA, matching the edit row (owner, 2026-09-30).
+
+            This was an `<Input>`, which cannot hold a newline at all: an agent
+            pasting a three-line reply got one line, and the breaks were gone
+            before anything was saved. Editing the same reply preserved them,
+            because that row has always been a textarea — so the two halves of
+            one feature disagreed about what a quick reply is.
+
+            `Enter` no longer submits, for the same reason: in a multi-line box
+            it must make a line. Ctrl/Cmd+Enter submits instead, which is the
+            convention the reply composer already uses.
+          */}
+          <textarea
+            dir="auto"
+            rows={3}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') submit();
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                submit();
+              }
             }}
             placeholder={t('replies.textPlaceholder', {
               defaultValue: 'What gets inserted into the reply box...',
             })}
             aria-label={t('replies.text', { defaultValue: 'Reply text' })}
+            className="w-full resize-y rounded-xl bg-secondary/40 px-3 py-2 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
           <select
             value={lang}

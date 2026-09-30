@@ -53,6 +53,7 @@ import {
 } from './releases.js';
 import { createProducer } from './queue.js';
 import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
+import { runIdleCloseSweep, withSweepLock } from './idle-close.js';
 import {
   registerConnection,
   getAgentPresenceSnapshot,
@@ -313,6 +314,45 @@ async function main(): Promise<void> {
       )
     : undefined;
   presenceHeartbeat?.unref();
+
+  /*
+   * CLOSE CHATS THE CUSTOMER HAS GONE QUIET ON (owner, 2026-09-30).
+   *
+   * Five configurable minutes of idleness where the last message was the
+   * AGENT'S. A chat whose last message is the customer's is never closed here —
+   * that one is waiting on us.
+   *
+   * IN THE GATEWAY, not the workers: only this process can write the goodbye AND
+   * push it to a widget that is still open. A worker could write the row and
+   * leave the customer looking at a chat that had silently ended.
+   *
+   * Unref'd, like the heartbeat above: a timer must not hold the process open
+   * during shutdown. Guarded by a short Redis lock because this runs 2 tasks in
+   * production and a double sweep means a double goodbye.
+   */
+  const IDLE_SWEEP_MS = Number(process.env.IDLE_CLOSE_SWEEP_MS ?? 60_000);
+  const idleSweep = setInterval(() => {
+    void withSweepLock(pubClient, IDLE_SWEEP_MS + 5_000, async () => {
+      await runIdleCloseSweep({
+        directus,
+        broadcast: (conversationId, message) => {
+          io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.messageNew, {
+            id: message.id,
+            conversationId,
+            senderType: 'system',
+            content: message.content,
+            attachments: [],
+            createdAt: message.createdAt,
+          });
+          /* The inbox too, or an agent's list still shows it open. */
+          io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId });
+        },
+        logger,
+      });
+    }).catch((err: unknown) => logger.warn({ err }, 'idle-close sweep failed'));
+  }, IDLE_SWEEP_MS);
+  idleSweep.unref();
+  logger.info({ sweepMs: IDLE_SWEEP_MS }, 'idle-close sweep scheduled');
 
   /*
    * ONE Yiji user reader, shared by both ways into a chat.

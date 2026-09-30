@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { Socket } from 'socket.io-client';
 import {
+  EmojiPicker,
+  Linkify,
   Avatar,
   ChevronDownIcon,
   CloseIcon,
@@ -709,6 +711,31 @@ export function ConversationView({
    * than by refusing to replace: Ctrl/Cmd+Z in the composer restores exactly
    * what was there, and the row says so the first time it takes something.
    */
+  /**
+   * Put the emoji where the caret is, not at the end.
+   *
+   * An agent mid-sentence expects it inline; appending would make them cut and
+   * paste. The caret is then placed AFTER the emoji so typing continues
+   * naturally, and focus returns to the textarea because the click took it to
+   * the picker.
+   *
+   * `setSelectionRange` is deferred to the next frame: React has not yet
+   * re-rendered with the new value, so setting it now would be overwritten.
+   */
+  const insertEmoji = (emoji: string) => {
+    const el = draftRef.current;
+    const at = el?.selectionStart ?? draft.length;
+    const next = draft.slice(0, at) + emoji + draft.slice(el?.selectionEnd ?? at);
+    setDraft(next);
+    requestAnimationFrame(() => {
+      const box = draftRef.current;
+      if (!box) return;
+      box.focus();
+      const caret = at + emoji.length;
+      box.setSelectionRange(caret, caret);
+    });
+  };
+
   const insertQuickReply = (text: string) => {
     setDraft((prev) => {
       const base = prev.trimEnd();
@@ -988,7 +1015,14 @@ export function ConversationView({
                                       m.pending && 'opacity-60',
                                     )}
                                   >
-                                    <p className="whitespace-pre-wrap">{m.content}</p>
+                                    <p className="whitespace-pre-wrap">
+                                      {/* Links clickable (owner, 2026-09-30). A
+                                          customer pasting a tracking URL, or an
+                                          agent sending one, had to be copied by
+                                          hand. Rendered as NODES, never as HTML:
+                                          this text is whatever a customer typed. */}
+                                      <Linkify text={m.content} />
+                                    </p>
                                   </div>
                                   {/* Signature touch: copy a message on hover. */}
                                   <button
@@ -1262,6 +1296,16 @@ export function ConversationView({
                       </svg>
                     )}
                   </button>
+                )}
+
+                {/* EMOJI, to the right of Attach (owner, 2026-09-30). Reply mode
+                    only, for the same reason Attach is: an internal note is a
+                    line to a colleague, not a message to a customer. */}
+                {!internalNote && (
+                  <EmojiPicker
+                    label={t('conversation.emoji', { defaultValue: 'Insert emoji' })}
+                    onPick={insertEmoji}
+                  />
                 )}
 
                 <textarea
