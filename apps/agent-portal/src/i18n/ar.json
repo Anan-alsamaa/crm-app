@@ -1070,6 +1070,8 @@
       "pending": "قيد الانتظار",
       "commented": "تم التعليق",
       "handled": "تمت المعالجة"
-    }
+    },
+    "rowsPerPage": "عدد الصفوف في الصفحة",
+    "showingRange": "عرض {{from}}-{{to}} من {{total}}"
   }
 }

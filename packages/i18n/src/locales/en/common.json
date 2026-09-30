@@ -23,7 +23,9 @@
     "search": "Search",
     "searchPlaceholder": "Search…",
     "send": "Send",
-    "toggleLanguage": "Toggle language"
+    "toggleLanguage": "Toggle language",
+    "previous": "Previous",
+    "next": "Next"
   },
   "auth": {
     "signIn": "Sign in",

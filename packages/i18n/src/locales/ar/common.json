@@ -23,7 +23,9 @@
     "search": "بحث",
     "searchPlaceholder": "بحث…",
     "send": "إرسال",
-    "toggleLanguage": "تبديل اللغة"
+    "toggleLanguage": "تبديل اللغة",
+    "previous": "السابق",
+    "next": "التالي"
   },
   "auth": {
     "signIn": "تسجيل الدخول",

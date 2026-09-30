@@ -15,12 +15,14 @@ import {
   SelectMenu,
   Skeleton,
   Table,
+  TablePager,
   TableSurface,
   Td,
   Th,
   Textarea,
   Tr,
   formatDate,
+  pageCountOf,
   toast,
   MultiSelectMenu,
 } from '@yiji/ui';
@@ -59,6 +61,14 @@ import {
   lateOrderTicket,
   FALLBACK_THRESHOLD,
 } from './api.js';
+
+/**
+ * Rows per page. Starts at 25 — a queue is worked from the top, and a screenful
+ * is what an agent reads; the larger sizes are for scanning a history range.
+ * Capped at 50 because the duration batch is: the gateway takes 50 ids, so a
+ * bigger page would blank the columns it cannot ask about.
+ */
+const LATE_ORDER_PAGE_SIZES = [10, 25, 50] as const;
 
 /**
  * One of the three leg times: loading, not known, or a duration.
@@ -561,7 +571,30 @@ export function LateOrdersPage() {
    * rendered. `nowMs` ticks with the queue's own refresh so a live order's
    * service time advances with everything else rather than freezing at mount.
    */
-  const eventTimes = useOrderEventTimes(rows.map((r) => r.orderId));
+  /*
+   * PAGED, like the report tables (owner, 2026-09-30).
+   *
+   * Two reasons, and the second is a real fault rather than a preference:
+   *
+   *   1. a history range returns hundreds of rows, and rendering them all is
+   *      what made the scroll feel wrong;
+   *   2. the batch below was handed EVERY row's id while its own comment
+   *      claimed "the rows actually on screen". The gateway caps a batch at 50,
+   *      so on a long queue every row past the fiftieth silently showed blank
+   *      duration columns — a plausible gap that reads as "not known" rather
+   *      than as truncation. See [[silent-empty-failures]].
+   */
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const pageCount = pageCountOf(rows.length, pageSize);
+  /* Clamped rather than stored: narrowing the filters while sitting on page 9
+     must not strand the agent on a page that no longer exists. */
+  const current = Math.min(Math.max(1, page), pageCount);
+  const paged = useMemo(
+    () => rows.slice((current - 1) * pageSize, current * pageSize),
+    [rows, current, pageSize],
+  );
+  const eventTimes = useOrderEventTimes(paged.map((r) => r.orderId));
   /*
    * THE CAUSES, from the editable list (owner, 2026-09-29).
    *
@@ -900,214 +933,250 @@ export function LateOrdersPage() {
 
   return (
     /*
-      THE PAGE SCROLLS, THE TABLE DOES NOT (owner spec §8, 2026-09-29).
+      THE SAME THREE-PART SHELL THE REPORT TABLES USE (owner, 2026-09-30: "make
+      this table like how we have the other tables", reference: Operational KPI
+      -> Ticket breakdown).
 
-      `p-4` because every page in this portal supplies its OWN padding — the
-      shell gives none — and without it the text sat flush against the edge of
-      the window (owner, 2026-09-22). It matches the inbox and contacts.
+      My first pass at §8 put `h-full overflow-y-auto` on this one element. That
+      moved the scroll to the page as the spec asked, but it also made this the
+      scrollport for a `TableSurface flow` — whose whole bargain is that NOTHING
+      sits between its sticky header and the scrollport. With the gap-4 flex
+      column as that scrollport, a table wider than the viewport had nothing
+      establishing its width, so rows ran outside the card and the scroll fought
+      itself.
 
-      This was `flex h-full min-h-0 flex-col`, which pinned the page to the
-      viewport and handed the remainder to the table as its own scroll box. The
-      result is the thing the spec rejects: an inner scrollbar, a header and
-      toolbar frozen above it, and rows readable only a handful at a time.
+      The working pattern, copied from `AgentReportsPage`, is three nested parts
+      and every one of them matters:
 
-      `h-full overflow-y-auto` moves the scroll to THIS element, so the whole
-      page — header, filters and every row — moves together and the table renders
-      at its natural height. `h-full` and the scroll must live on the same
-      element: the shell's `<main>` is `overflow-hidden`, so a page that simply
-      grew past it would have its tail clipped with no way to reach it. Not a
-      guess — see [[layout-height-budget]], where exactly that produced "I cannot
-      scroll".
+        1. this root — `h-full flex-col overflow-hidden`: owns the height, scrolls
+           nothing, and clips so the shell's `<main>` (also `overflow-hidden`)
+           never has to;
+        2. the scrollport below — `flex-1 overflow-auto` with NO vertical padding,
+           because `sticky top-0` pins to the scrollport's CONTENT box and padding
+           there leaves a band above the header with rows sliding through it;
+        3. an inner `w-max min-w-full` — which is what makes a wide table stretch
+           the scrollport instead of overflowing the card.
+
+      See [[layout-height-budget]]: the law is measure the remainder, and here the
+      remainder is measured by flex rather than guessed.
     */
-    <div className="flex h-full flex-col gap-4 overflow-y-auto p-4">
-      <PageHeader
-        title={t('lateOrders.title', { defaultValue: 'Late orders' })}
-        subtitle={t('lateOrders.subtitle', {
-          minutes: threshold,
-          defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
-        })}
-      />
-
+    <div className="flex h-full flex-col overflow-hidden">
       {/*
+        THE SCROLLPORT. `flex-1 overflow-auto`, and NO vertical padding: `sticky
+        top-0` pins to this element's CONTENT box, so padding here would leave a
+        band above the table's pinned header with rows sliding through it. The
+        vertical spacing lives on the child instead, where it is spacing rather
+        than a hole in the sticky ceiling.
+
+        The scrollbar is styled visibly on purpose: the app's global thumb is
+        deliberately faint, which is right for a page and wrong for the one
+        control that reaches the far columns of a wide table.
+      */}
+      <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4">
+        {/* `w-max min-w-full` is the part that fixes "records outside the
+            table": it lets the content be as wide as the table needs while
+            never narrower than the viewport, so a wide table stretches this box
+            and scrolls it, instead of spilling past the card's edge. */}
+        <div className="w-max min-w-full space-y-4 py-4">
+          <PageHeader
+            title={t('lateOrders.title', { defaultValue: 'Late orders' })}
+            subtitle={t('lateOrders.subtitle', {
+              minutes: threshold,
+              defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
+            })}
+          />
+
+          {/*
         Order id, then dates, then brand/branch — the owner's order (2026-09-21),
         which is also the order an agent narrows in: they usually have a number.
       */}
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t('lateOrders.filter.order', { defaultValue: 'Order number' })}
-          </span>
-          <Input
-            value={orderQuery}
-            onChange={(e) => setOrderQuery(e.target.value)}
-            placeholder={t('lateOrders.filter.orderPlaceholder', { defaultValue: 'e.g. 1314302' })}
-            inputMode="numeric"
-            className="w-40"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t('lateOrders.filter.from', { defaultValue: 'From' })}
-          </span>
-          {/* `DateField`, not `<Input type="date">`: a native date input renders
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t('lateOrders.filter.order', { defaultValue: 'Order number' })}
+              </span>
+              <Input
+                value={orderQuery}
+                onChange={(e) => setOrderQuery(e.target.value)}
+                placeholder={t('lateOrders.filter.orderPlaceholder', {
+                  defaultValue: 'e.g. 1314302',
+                })}
+                inputMode="numeric"
+                className="w-40"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t('lateOrders.filter.from', { defaultValue: 'From' })}
+              </span>
+              {/* `DateField`, not `<Input type="date">`: a native date input renders
               in the BROWSER's locale, so an en-US machine showed mm/dd/yyyy on a
               page every other date in this app writes as dd/mm/yyyy. DateField
               takes and emits the same ISO `yyyy-mm-dd` string, so the state, the
               `max` bound and the query are unchanged. */}
-          <DateField
-            value={draftFrom}
-            max={today}
-            onChange={(v) => setDraftFrom(v)}
-            className="w-40"
-          />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t('lateOrders.filter.to', { defaultValue: 'To' })}
-          </span>
-          <DateField value={draftTo} max={today} onChange={(v) => setDraftTo(v)} className="w-40" />
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-            {t('lateOrders.filter.brand', { defaultValue: 'Brand or branch' })}
-          </span>
-          <Input
-            value={brandQuery}
-            onChange={(e) => setBrandQuery(e.target.value)}
-            placeholder={t('lateOrders.filter.brandPlaceholder', {
-              defaultValue: 'e.g. Okashi, Narjis',
-            })}
-            className="w-52"
-          />
-        </label>
-        {/* Applied on click, not per keystroke: a range walks upstream pages,
+              <DateField
+                value={draftFrom}
+                max={today}
+                onChange={(v) => setDraftFrom(v)}
+                className="w-40"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t('lateOrders.filter.to', { defaultValue: 'To' })}
+              </span>
+              <DateField
+                value={draftTo}
+                max={today}
+                onChange={(v) => setDraftTo(v)}
+                className="w-40"
+              />
+            </label>
+            <label className="flex flex-col gap-1">
+              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                {t('lateOrders.filter.brand', { defaultValue: 'Brand or branch' })}
+              </span>
+              <Input
+                value={brandQuery}
+                onChange={(e) => setBrandQuery(e.target.value)}
+                placeholder={t('lateOrders.filter.brandPlaceholder', {
+                  defaultValue: 'e.g. Okashi, Narjis',
+                })}
+                className="w-52"
+              />
+            </label>
+            {/* Applied on click, not per keystroke: a range walks upstream pages,
             so typing a date would fire a query per character. */}
-        <Button
-          variant="secondary"
-          disabled={!draftFrom || !draftTo || draftFrom > draftTo}
-          onClick={() => setRange({ from: draftFrom, to: draftTo })}
-        >
-          {t('lateOrders.filter.apply', { defaultValue: 'Search' })}
-        </Button>
+            <Button
+              variant="secondary"
+              disabled={!draftFrom || !draftTo || draftFrom > draftTo}
+              onClick={() => setRange({ from: draftFrom, to: draftTo })}
+            >
+              {t('lateOrders.filter.apply', { defaultValue: 'Search' })}
+            </Button>
 
-        {/*
+            {/*
           THE HANDLING STATE — what WeCare has done, not what the order is.
           Opens on Pending, because the queue exists to surface work nobody has
           done yet (owner, 2026-09-29).
         */}
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          {t('lateOrders.filter.handling', { defaultValue: 'Status' })}
-          <SelectMenu
-            value={handlingFilter}
-            size="sm"
-            onChange={(v) => setHandlingFilter(v as LateOrderState | 'all')}
-            aria-label={t('lateOrders.filter.handling', { defaultValue: 'Status' })}
-            options={[
-              {
-                value: 'pending',
-                label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
-                dot: 'oklch(var(--warning))',
-              },
-              {
-                value: 'commented',
-                label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
-                dot: 'oklch(var(--sky))',
-              },
-              {
-                value: 'handled',
-                label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
-                dot: 'oklch(var(--success))',
-              },
-              { value: 'all', label: t('lateOrders.filter.allStates', { defaultValue: 'All' }) },
-            ]}
-          />
-        </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+              {t('lateOrders.filter.handling', { defaultValue: 'Status' })}
+              <SelectMenu
+                value={handlingFilter}
+                size="sm"
+                onChange={(v) => setHandlingFilter(v as LateOrderState | 'all')}
+                aria-label={t('lateOrders.filter.handling', { defaultValue: 'Status' })}
+                options={[
+                  {
+                    value: 'pending',
+                    label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
+                    dot: 'oklch(var(--warning))',
+                  },
+                  {
+                    value: 'commented',
+                    label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
+                    dot: 'oklch(var(--sky))',
+                  },
+                  {
+                    value: 'handled',
+                    label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
+                    dot: 'oklch(var(--success))',
+                  },
+                  {
+                    value: 'all',
+                    label: t('lateOrders.filter.allStates', { defaultValue: 'All' }),
+                  },
+                ]}
+              />
+            </label>
 
-        {/*
+            {/*
           THE ORDER'S OWN STATUS — a different question, and several can be
           watched at once. Offered from the statuses actually PRESENT in the
           window, so every option returns rows.
         */}
-        <MultiSelectMenu
-          selected={statusFilter}
-          onChange={setStatusFilter}
-          label={t('lateOrders.filter.orderStatus', { defaultValue: 'Order status' })}
-          allLabel={t('lateOrders.filter.allStatuses', { defaultValue: 'All statuses' })}
-          options={presentStatuses.map((v) => ({
-            value: v,
-            label: t(`commerce.orderStatuses.${v}`, { defaultValue: v }),
-          }))}
-        />
+            <MultiSelectMenu
+              selected={statusFilter}
+              onChange={setStatusFilter}
+              label={t('lateOrders.filter.orderStatus', { defaultValue: 'Order status' })}
+              allLabel={t('lateOrders.filter.allStatuses', { defaultValue: 'All statuses' })}
+              options={presentStatuses.map((v) => ({
+                value: v,
+                label: t(`commerce.orderStatuses.${v}`, { defaultValue: v }),
+              }))}
+            />
 
-        {/* Back to the default view: today, pending, nothing typed. */}
-        <Button
-          variant="ghost"
-          onClick={() => {
-            setRange(null);
-            setDraftFrom(isoDaysAgo(0));
-            setDraftTo(isoDaysAgo(0));
-            setOrderQuery('');
-            setBrandQuery('');
-            setHandlingFilter('pending');
-            setStatusFilter(new Set());
-          }}
-        >
-          {t('lateOrders.filter.reset', { defaultValue: 'Reset' })}
-        </Button>
+            {/* Back to the default view: today, pending, nothing typed. */}
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setRange(null);
+                setDraftFrom(isoDaysAgo(0));
+                setDraftTo(isoDaysAgo(0));
+                setOrderQuery('');
+                setBrandQuery('');
+                setHandlingFilter('pending');
+                setStatusFilter(new Set());
+              }}
+            >
+              {t('lateOrders.filter.reset', { defaultValue: 'Reset' })}
+            </Button>
 
-        {/* Names the business day, because "today" is not the calendar date
+            {/* Names the business day, because "today" is not the calendar date
             here: trading runs 08:00 to 04:00, so at 01:00 the answer is still
             yesterday's date and an agent has to see which day they are on. */}
-        {showingToday && (
-          <Pill tone="success" size="sm">
-            {t('lateOrders.filter.todayNote', {
-              day: currentBusinessDay ? formatDate(currentBusinessDay) : '',
-              defaultValue: 'Business day {{day}} — every late order, finished or running',
-            })}
-          </Pill>
-        )}
-        {!showingToday && range && (
-          <Pill tone="blue" size="sm">
-            {t('lateOrders.filter.historyNote', {
-              from: formatDate(range.from),
-              to: formatDate(range.to),
-              defaultValue: 'History {{from}} to {{to}} — finished orders included',
-            })}
-          </Pill>
-        )}
-      </div>
+            {showingToday && (
+              <Pill tone="success" size="sm">
+                {t('lateOrders.filter.todayNote', {
+                  day: currentBusinessDay ? formatDate(currentBusinessDay) : '',
+                  defaultValue: 'Business day {{day}} — every late order, finished or running',
+                })}
+              </Pill>
+            )}
+            {!showingToday && range && (
+              <Pill tone="blue" size="sm">
+                {t('lateOrders.filter.historyNote', {
+                  from: formatDate(range.from),
+                  to: formatDate(range.to),
+                  defaultValue: 'History {{from}} to {{to}} — finished orders included',
+                })}
+              </Pill>
+            )}
+          </div>
 
-      {queue.isError ? (
-        /*
-         * A failed fetch must NOT look like an empty queue.
-         *
-         * "Nothing is late" and "we cannot see what is late" are opposite
-         * facts, and the second is the one an agent has to act on.
-         */
-        <ErrorState
-          title={t('lateOrders.errorTitle', { defaultValue: 'Could not load late orders' })}
-          message={t('lateOrders.errorBody', {
-            defaultValue:
-              'The order system did not answer. That is not the same as there being none - try again in a moment.',
-          })}
-          onRetry={() => void queue.refetch()}
-        />
-      ) : queue.isLoading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-12 w-full" />
-        </div>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title={t('lateOrders.noneTitle', { defaultValue: 'Nothing is running late' })}
-          description={t('lateOrders.noneBody', {
-            minutes: threshold,
-            defaultValue: 'No delivery order has passed {{minutes}} minutes. This updates itself.',
-          })}
-        />
-      ) : (
-        /*
+          {queue.isError ? (
+            /*
+             * A failed fetch must NOT look like an empty queue.
+             *
+             * "Nothing is late" and "we cannot see what is late" are opposite
+             * facts, and the second is the one an agent has to act on.
+             */
+            <ErrorState
+              title={t('lateOrders.errorTitle', { defaultValue: 'Could not load late orders' })}
+              message={t('lateOrders.errorBody', {
+                defaultValue:
+                  'The order system did not answer. That is not the same as there being none - try again in a moment.',
+              })}
+              onRetry={() => void queue.refetch()}
+            />
+          ) : queue.isLoading ? (
+            <div className="space-y-2">
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+              <Skeleton className="h-12 w-full" />
+            </div>
+          ) : rows.length === 0 ? (
+            <EmptyState
+              title={t('lateOrders.noneTitle', { defaultValue: 'Nothing is running late' })}
+              description={t('lateOrders.noneBody', {
+                minutes: threshold,
+                defaultValue:
+                  'No delivery order has passed {{minutes}} minutes. This updates itself.',
+              })}
+            />
+          ) : (
+            /*
           `TableSurface flow`, not a `Card` with its own scroll.
 
           This is the primitive the report tables already use for exactly this
@@ -1118,12 +1187,18 @@ export function LateOrdersPage() {
           shared surface means this page cannot drift from the five reports that
           got it right.
         */
-        <TableSurface flow scrollLabel={t('lateOrders.title', { defaultValue: 'Late orders' })}>
-          <Table>
-            <thead>
-              <Tr>
-                <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>
-                {/*
+            /* A FRAGMENT: this ternary branch now holds the table AND its pager,
+           and a branch may only produce one node. */
+            <>
+              <TableSurface
+                flow
+                scrollLabel={t('lateOrders.title', { defaultValue: 'Late orders' })}
+              >
+                <Table>
+                  <thead>
+                    <Tr>
+                      <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>
+                      {/*
                   "Running" said nothing (owner, 2026-09-28) — running for how
                   long, measured from what? This is the WHOLE age of the order,
                   from the moment it was placed, and it is the number the
@@ -1131,49 +1206,55 @@ export function LateOrdersPage() {
                   sub-label says from when, so it cannot be confused with the
                   driver leg beside it.
                 */}
-                <Th>
-                  {t('lateOrders.col.elapsed', { defaultValue: 'Total time' })}
-                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                    {t('lateOrders.col.elapsedHint', { defaultValue: 'since order placed' })}
-                  </span>
-                </Th>
-                <Th>
-                  {t('lateOrders.col.service', { defaultValue: 'Service time' })}
-                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                    {t('lateOrders.col.serviceHint', { defaultValue: 'since driver accepted' })}
-                  </span>
-                </Th>
-                {/*
+                      <Th>
+                        {t('lateOrders.col.elapsed', { defaultValue: 'Total time' })}
+                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                          {t('lateOrders.col.elapsedHint', { defaultValue: 'since order placed' })}
+                        </span>
+                      </Th>
+                      <Th>
+                        {t('lateOrders.col.service', { defaultValue: 'Service time' })}
+                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                          {t('lateOrders.col.serviceHint', {
+                            defaultValue: 'since driver accepted',
+                          })}
+                        </span>
+                      </Th>
+                      {/*
                   THE THREE LEGS (owner spec §7, 2026-09-29), beside the service
                   time they break down. Each names what it measures underneath,
                   because "Delivery" and "Service" are otherwise indistinguishable
                   at a glance and they start from different moments.
                 */}
-                <Th>
-                  {t('lateOrders.col.driverArrival', { defaultValue: 'Driver arrival' })}
-                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                    {t('lateOrders.col.driverArrivalHint', { defaultValue: 'accept to arrival' })}
-                  </span>
-                </Th>
-                <Th>
-                  {t('lateOrders.col.delivery', { defaultValue: 'Delivery time' })}
-                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                    {t('lateOrders.col.deliveryHint', {
-                      defaultValue: 'out for delivery to close',
-                    })}
-                  </span>
-                </Th>
-                <Th>
-                  {t('lateOrders.col.preparation', { defaultValue: 'Preparation time' })}
-                  <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                    {t('lateOrders.col.preparationHint', { defaultValue: 'accepted to ready' })}
-                  </span>
-                </Th>
-                <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
-                <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
-                <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
-                <Th>{t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}</Th>
-                {/*
+                      <Th>
+                        {t('lateOrders.col.driverArrival', { defaultValue: 'Driver arrival' })}
+                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                          {t('lateOrders.col.driverArrivalHint', {
+                            defaultValue: 'accept to arrival',
+                          })}
+                        </span>
+                      </Th>
+                      <Th>
+                        {t('lateOrders.col.delivery', { defaultValue: 'Delivery time' })}
+                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                          {t('lateOrders.col.deliveryHint', {
+                            defaultValue: 'out for delivery to close',
+                          })}
+                        </span>
+                      </Th>
+                      <Th>
+                        {t('lateOrders.col.preparation', { defaultValue: 'Preparation time' })}
+                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+                          {t('lateOrders.col.preparationHint', {
+                            defaultValue: 'accepted to ready',
+                          })}
+                        </span>
+                      </Th>
+                      <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
+                      <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
+                      <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
+                      <Th>{t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}</Th>
+                      {/*
                   THE ACTIONS, SPLIT INTO THREE (owner, 2026-09-28).
 
                   Four controls sat in one "Decision" cell and read as a wall of
@@ -1183,20 +1264,22 @@ export function LateOrdersPage() {
                   so the buttons no longer have to carry the grouping on their
                   own.
                 */}
-                <Th>{t('lateOrders.col.detail', { defaultValue: 'Order' })}</Th>
-                <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>
-                {/* COMMENTS, not Notes (owner spec §9, 2026-09-29) — one word
+                      <Th>{t('lateOrders.col.detail', { defaultValue: 'Order' })}</Th>
+                      <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>
+                      {/* COMMENTS, not Notes (owner spec §9, 2026-09-29) — one word
                     for one thing, so the column, the button and the state all
                     read the same. */}
-                <Th>{t('lateOrders.col.comments', { defaultValue: 'Comments' })}</Th>
-              </Tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <Fragment key={row.orderId}>
-                  <Tr>
-                    <Td className="whitespace-nowrap font-medium tabular-nums">{row.orderId}</Td>
-                    {/*
+                      <Th>{t('lateOrders.col.comments', { defaultValue: 'Comments' })}</Th>
+                    </Tr>
+                  </thead>
+                  <tbody>
+                    {paged.map((row) => (
+                      <Fragment key={row.orderId}>
+                        <Tr>
+                          <Td className="whitespace-nowrap font-medium tabular-nums">
+                            {row.orderId}
+                          </Td>
+                          {/*
                       A NUMBER, NOT A FILLED PILL (owner, 2026-09-28: "has some
                       orange color which hides the number").
 
@@ -1211,128 +1294,132 @@ export function LateOrdersPage() {
                       for, and it made half the column the washed-out amber the
                       change set out to remove.
                     */}
-                    <Td className="whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-destructive">
-                        <span
-                          aria-hidden="true"
-                          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
-                        />
-                        {elapsed(row.minutesElapsed)}
-                      </span>
-                    </Td>
-                    {/*
+                          <Td className="whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-destructive">
+                              <span
+                                aria-hidden="true"
+                                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
+                              />
+                              {elapsed(row.minutesElapsed)}
+                            </span>
+                          </Td>
+                          {/*
                       SERVICE TIME — the DRIVER leg, not the whole order.
                       Closed: close − driver-accept. Live: now − driver-accept.
                       Blank while the batch is still loading, and "-" once we
                       know the driver has not accepted: an empty cell and a
                       confirmed "no driver yet" are different facts.
                     */}
-                    <Td className="whitespace-nowrap tabular-nums">
-                      {(() => {
-                        if (eventTimes.isLoading)
-                          return (
-                            /* A skeleton, not a spinner: one spinner per row
+                          <Td className="whitespace-nowrap tabular-nums">
+                            {(() => {
+                              if (eventTimes.isLoading)
+                                return (
+                                  /* A skeleton, not a spinner: one spinner per row
                                reads as a page that is broken, and the width is
                                known so nothing reflows when the value lands. */
-                            <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
-                          );
-                        /* `orderEventTimes`, not the old `serviceMinutes`:
+                                  <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
+                                );
+                              /* `orderEventTimes`, not the old `serviceMinutes`:
                            that one took the queue's `closedAt`, which is the
                            CURRENT status's moment and so reads a force-close as
                            the end. Order 1323407 was closed at 17:30 and
                            force-closed at 22:31, giving 365 minutes where the
                            truth is 64 (owner spec §6). */
-                        const mins = timesOf(row.orderId).serviceMinutes;
-                        if (mins === null)
-                          return <span className="text-muted-foreground/60">&mdash;</span>;
-                        /*
-                         * A LIVE COUNT LOOKS LIVE; A FINISHED ONE LOOKS FINAL
-                         * (owner, 2026-09-28).
-                         *
-                         * The same "1h 12m" meant two different things — still
-                         * climbing, or settled — and nothing on screen said
-                         * which. A closed order carries `closedAt`, so the
-                         * difference is known per row, not guessed.
-                         *
-                         * The live one gets a soft pulsing dot and the brand
-                         * colour; the closed one is plain and muted. CSS only —
-                         * no timer, no per-row state. The number itself
-                         * advances with the queue's own 30s refresh, which is
-                         * the resolution the data actually has: a per-second
-                         * ticker would re-render every row for a figure that
-                         * cannot change more often than its source.
-                         */
-                        const live = !row.closedAt;
-                        return live ? (
-                          /* Same weight and size as Total time beside it, so
+                              const mins = timesOf(row.orderId).serviceMinutes;
+                              if (mins === null)
+                                return <span className="text-muted-foreground/60">&mdash;</span>;
+                              /*
+                               * A LIVE COUNT LOOKS LIVE; A FINISHED ONE LOOKS FINAL
+                               * (owner, 2026-09-28).
+                               *
+                               * The same "1h 12m" meant two different things — still
+                               * climbing, or settled — and nothing on screen said
+                               * which. A closed order carries `closedAt`, so the
+                               * difference is known per row, not guessed.
+                               *
+                               * The live one gets a soft pulsing dot and the brand
+                               * colour; the closed one is plain and muted. CSS only —
+                               * no timer, no per-row state. The number itself
+                               * advances with the queue's own 30s refresh, which is
+                               * the resolution the data actually has: a per-second
+                               * ticker would re-render every row for a figure that
+                               * cannot change more often than its source.
+                               */
+                              const live = !row.closedAt;
+                              return live ? (
+                                /* Same weight and size as Total time beside it, so
                              the two read as a pair to compare rather than a
                              headline and a footnote. */
-                          /* AMBER, and deliberately NOT the red beside it
+                                /* AMBER, and deliberately NOT the red beside it
                              (owner, 2026-09-28: "service time should be in a
                              color"). Two different measures in the same row
                              must not wear the same colour, or the eye reads
                              them as one number split in two. Amber also carries
                              "still running" on its own. */
-                          <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-warning-foreground">
-                            <span
-                              className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning"
-                              aria-hidden="true"
-                            />
-                            {elapsed(mins)}
-                            <span className="sr-only">
-                              {t('lateOrders.serviceLive', { defaultValue: 'still counting' })}
-                            </span>
-                          </span>
-                        ) : (
-                          /* Settled: a filled dot rather than a pulsing one, and
+                                <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-warning-foreground">
+                                  <span
+                                    className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning"
+                                    aria-hidden="true"
+                                  />
+                                  {elapsed(mins)}
+                                  <span className="sr-only">
+                                    {t('lateOrders.serviceLive', {
+                                      defaultValue: 'still counting',
+                                    })}
+                                  </span>
+                                </span>
+                              ) : (
+                                /* Settled: a filled dot rather than a pulsing one, and
                              muted — the figure is final, not climbing. */
-                          <span className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-muted-foreground">
-                            <span
-                              aria-hidden="true"
-                              className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
-                            />
-                            {elapsed(mins)}
-                          </span>
-                        );
-                      })()}
-                    </Td>
-                    {/* The three legs. Same loading/blank treatment as the
+                                <span className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-muted-foreground">
+                                  <span
+                                    aria-hidden="true"
+                                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
+                                  />
+                                  {elapsed(mins)}
+                                </span>
+                              );
+                            })()}
+                          </Td>
+                          {/* The three legs. Same loading/blank treatment as the
                         service time beside them, via one helper — three copies
                         of "skeleton, else dash, else minutes" is three chances
                         for one of them to say something different. */}
-                    <Td className="whitespace-nowrap tabular-nums">
-                      <LegTime
-                        loading={eventTimes.isLoading}
-                        minutes={timesOf(row.orderId).driverArrivalMinutes}
-                      />
-                    </Td>
-                    <Td className="whitespace-nowrap tabular-nums">
-                      <LegTime
-                        loading={eventTimes.isLoading}
-                        minutes={timesOf(row.orderId).deliveryMinutes}
-                      />
-                    </Td>
-                    <Td className="whitespace-nowrap tabular-nums">
-                      <LegTime
-                        loading={eventTimes.isLoading}
-                        minutes={timesOf(row.orderId).preparationMinutes}
-                      />
-                    </Td>
-                    <Td className="max-w-[16rem] truncate">
-                      {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
-                    </Td>
-                    <Td className="whitespace-nowrap">
-                      {/* NORMALISED FOR DISPLAY, not just for storage. Yiji
+                          <Td className="whitespace-nowrap tabular-nums">
+                            <LegTime
+                              loading={eventTimes.isLoading}
+                              minutes={timesOf(row.orderId).driverArrivalMinutes}
+                            />
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums">
+                            <LegTime
+                              loading={eventTimes.isLoading}
+                              minutes={timesOf(row.orderId).deliveryMinutes}
+                            />
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums">
+                            <LegTime
+                              loading={eventTimes.isLoading}
+                              minutes={timesOf(row.orderId).preparationMinutes}
+                            />
+                          </Td>
+                          <Td className="max-w-[16rem] truncate">
+                            {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
+                          </Td>
+                          <Td className="whitespace-nowrap">
+                            {/* NORMALISED FOR DISPLAY, not just for storage. Yiji
                           sends `+9665XXXXXXXX`; every number in this CRM reads
                           `05XXXXXXXX`, and this cell was the one place showing
                           Yiji's shape to an agent (owner, 2026-09-28). */}
-                      {row.customerName || normalizePhone(row.customerPhone) || '-'}
-                    </Td>
-                    <Td className="whitespace-nowrap text-muted-foreground">
-                      {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
-                    </Td>
-                    <Td>
-                      {/*
+                            {row.customerName || normalizePhone(row.customerPhone) || '-'}
+                          </Td>
+                          <Td className="whitespace-nowrap text-muted-foreground">
+                            {t(`commerce.orderStatuses.${row.status}`, {
+                              defaultValue: row.status,
+                            })}
+                          </Td>
+                          <Td>
+                            {/*
                         `SelectMenu`, not a native `<select>`: the OS styles the
                         native menu itself, so it arrived as a boxed grey
                         control that matched nothing else on the page (owner,
@@ -1344,39 +1431,39 @@ export function LateOrdersPage() {
                         The dots carry the meaning at a glance: amber for a
                         kitchen that ran long, blue for a delivery that did.
                       */}
-                      <SelectMenu
-                        value={kindOf(row)}
-                        size="sm"
-                        aria-label={t('lateOrders.col.kind', {
-                          defaultValue: 'Source of delay',
-                        })}
-                        onChange={(v) => pickKind(row.orderId, v)}
-                        options={causeOptions}
-                      />
-                    </Td>
-                    {/*
+                            <SelectMenu
+                              value={kindOf(row)}
+                              size="sm"
+                              aria-label={t('lateOrders.col.kind', {
+                                defaultValue: 'Source of delay',
+                              })}
+                              onChange={(v) => pickKind(row.orderId, v)}
+                              options={causeOptions}
+                            />
+                          </Td>
+                          {/*
                       COLUMN 1 — WHAT YOU LOOK AT. Always offered, decided or
                       not: reviewing what was ordered is exactly why somebody
                       opens a handled row.
                     */}
-                    <Td>
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        aria-haspopup="dialog"
-                        onClick={() => setExpanded(row.orderId)}
-                      >
-                        {t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
-                      </Button>
-                    </Td>
-                    {/* COLUMN 2 — WHAT YOU DECIDE. */}
-                    <Td>
-                      {/*
+                          <Td>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              aria-haspopup="dialog"
+                              onClick={() => setExpanded(row.orderId)}
+                            >
+                              {t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
+                            </Button>
+                          </Td>
+                          {/* COLUMN 2 — WHAT YOU DECIDE. */}
+                          <Td>
+                            {/*
                         A HANDLED historical order shows its decision instead of
                         the buttons: offering "Ignore" on something already
                         ignored invites a second, contradictory record.
                       */}
-                      {/*
+                            {/*
                         A DECIDED ORDER SHOWS ITS DECISION, IN EVERY VIEW
                         (owner, 2026-09-28).
 
@@ -1386,24 +1473,24 @@ export function LateOrdersPage() {
                         the same order. What decides this is whether a decision
                         EXISTS, not which view happens to be open.
                       */}
-                      {handled.data?.has(row.orderId) ? (
-                        <Pill tone="success" size="sm">
-                          {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
-                        </Pill>
-                      ) : (
-                        /*
+                            {handled.data?.has(row.orderId) ? (
+                              <Pill tone="success" size="sm">
+                                {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
+                              </Pill>
+                            ) : (
+                              /*
                           ONE DECISION, AND ONLY ONE (owner spec, 2026-09-29):
                           assign a coupon. Ignore is gone — it was a second
                           recorded outcome that meant "no compensation", which
                           is what a comment already says, and having both invited
                           two contradictory records for one order.
                         */
-                        <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
-                          {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
-                        </Button>
-                      )}
-                    </Td>
-                    {/*
+                              <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
+                                {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
+                              </Button>
+                            )}
+                          </Td>
+                          {/*
                       COLUMN 3 — THE COMMENT, and it is a WRITE (owner spec,
                       2026-09-29).
 
@@ -1419,28 +1506,57 @@ export function LateOrdersPage() {
                       `stateOf`: it is the same set the Decision cell keys on, so
                       the two cells can never disagree about one row.
                     */}
-                    <Td>
-                      {handled.data?.has(row.orderId) ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => openDecision(row, 'commented', true)}
-                        >
-                          {t('lateOrders.comment', { defaultValue: 'Comment' })}
-                        </Button>
-                      )}
-                    </Td>
-                  </Tr>
-                </Fragment>
-              ))}
-            </tbody>
-          </Table>
-        </TableSurface>
-      )}
+                          <Td>
+                            {handled.data?.has(row.orderId) ? (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => openDecision(row, 'commented', true)}
+                              >
+                                {t('lateOrders.comment', { defaultValue: 'Comment' })}
+                              </Button>
+                            )}
+                          </Td>
+                        </Tr>
+                      </Fragment>
+                    ))}
+                  </tbody>
+                </Table>
+              </TableSurface>
+              {/* Outside the surface, like the report tables: it belongs to the table
+            rather than scrolling away inside it. */}
+              <TablePager
+                page={current}
+                onPage={setPage}
+                pageSize={pageSize}
+                onPageSize={setPageSize}
+                total={rows.length}
+                pageSizes={LATE_ORDER_PAGE_SIZES}
+                labels={{
+                  rowsPerPage: String(
+                    t('lateOrders.rowsPerPage', { defaultValue: 'Rows per page' }),
+                  ),
+                  previous: String(
+                    t('actions.previous', { ns: 'common', defaultValue: 'Previous' }),
+                  ),
+                  next: String(t('actions.next', { ns: 'common', defaultValue: 'Next' })),
+                  showing: ({ from: f, to: tTo, total }) =>
+                    String(
+                      t('lateOrders.showingRange', {
+                        defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
+                        from: f,
+                        to: tTo,
+                        total,
+                      }),
+                    ),
+                }}
+              />
+            </>
+          )}
 
-      {/*
+          {/*
         CART & TRACKING IN A CENTRED DIALOG.
 
         First it was a full-width row inside the table, which pushed every other
@@ -1454,19 +1570,19 @@ export function LateOrdersPage() {
         Mounted only while open, so the queue never pays for carts nobody asked
         to see — the same reason the inline version was conditional.
       */}
-      <Modal
-        open={!!expanded}
-        onClose={() => setExpanded(null)}
-        size="lg"
-        title={t('lateOrders.detailTitle', {
-          order: expanded ?? '',
-          defaultValue: 'Order {{order}} — cart & tracking',
-        })}
-      >
-        {expanded && <LateOrderDetail orderId={expanded} vendorId={soleVendorId} />}
-      </Modal>
+          <Modal
+            open={!!expanded}
+            onClose={() => setExpanded(null)}
+            size="lg"
+            title={t('lateOrders.detailTitle', {
+              order: expanded ?? '',
+              defaultValue: 'Order {{order}} — cart & tracking',
+            })}
+          >
+            {expanded && <LateOrderDetail orderId={expanded} vendorId={soleVendorId} />}
+          </Modal>
 
-      {/*
+          {/*
         The reason, demanded for BOTH actions.
 
         `ConfirmDialog` rather than a hand-rolled overlay: it brings the focus
@@ -1474,43 +1590,43 @@ export function LateOrdersPage() {
         not, and every other confirm in these portals already looks like this.
         The textarea rides in `description`, which takes a ReactNode.
       */}
-      {draft && (
-        <ConfirmDialog
-          open
-          title={
-            draft.action === 'commented'
-              ? editingDecisionId
-                ? t('lateOrders.commentEditTitle', { defaultValue: 'Edit the comment' })
-                : t('lateOrders.commentTitle', { defaultValue: 'Comment on this order' })
-              : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
-          }
-          description={
-            <div className="space-y-3">
-              <p>
-                {t('lateOrders.reasonPrompt', {
-                  order: draft.row.orderId,
-                  minutes: elapsed(draft.row.minutesElapsed),
-                  defaultValue: 'Order {{order}} has been running {{minutes}}. Why?',
-                })}
-              </p>
-              {/* TWO fields, labelled: why it happened, and what was done
+          {draft && (
+            <ConfirmDialog
+              open
+              title={
+                draft.action === 'commented'
+                  ? editingDecisionId
+                    ? t('lateOrders.commentEditTitle', { defaultValue: 'Edit the comment' })
+                    : t('lateOrders.commentTitle', { defaultValue: 'Comment on this order' })
+                  : t('lateOrders.couponTitle', { defaultValue: 'Compensate this order' })
+              }
+              description={
+                <div className="space-y-3">
+                  <p>
+                    {t('lateOrders.reasonPrompt', {
+                      order: draft.row.orderId,
+                      minutes: elapsed(draft.row.minutesElapsed),
+                      defaultValue: 'Order {{order}} has been running {{minutes}}. Why?',
+                    })}
+                  </p>
+                  {/* TWO fields, labelled: why it happened, and what was done
                   about it. They answer different questions and were one box
                   (owner, 2026-09-27). */}
-              <label className="block space-y-1">
-                <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  {t('lateOrders.reasonLabel', { defaultValue: 'Reason' })}
-                </span>
-                <Textarea
-                  autoFocus
-                  rows={3}
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  placeholder={t('lateOrders.reasonPlaceholder', {
-                    defaultValue: 'The reason - recorded against this order.',
-                  })}
-                />
-              </label>
-              {/*
+                  <label className="block space-y-1">
+                    <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('lateOrders.reasonLabel', { defaultValue: 'Reason' })}
+                    </span>
+                    <Textarea
+                      autoFocus
+                      rows={3}
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder={t('lateOrders.reasonPlaceholder', {
+                        defaultValue: 'The reason - recorded against this order.',
+                      })}
+                    />
+                  </label>
+                  {/*
                 A FRESH COMMENT NEEDS ONLY THE REASON (owner, 2026-09-28: "no
                 need action. just reason is enough").
 
@@ -1520,64 +1636,64 @@ export function LateOrdersPage() {
                 when EDITING, so a line already written can be corrected rather
                 than stranded.
               */}
-              {(draft.action === 'compensated' || !!editingDecisionId) && (
-                <label className="block space-y-1">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
-                  </span>
-                  <Textarea
-                    rows={2}
-                    value={actionTaken}
-                    onChange={(e) => setActionTaken(e.target.value)}
-                    placeholder={t('lateOrders.actionPlaceholder', {
-                      defaultValue: 'What you did about it - e.g. called the branch.',
-                    })}
-                  />
-                </label>
-              )}
-              {/* Said BEFORE deciding, because filing a complaint against a
+                  {(draft.action === 'compensated' || !!editingDecisionId) && (
+                    <label className="block space-y-1">
+                      <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
+                      </span>
+                      <Textarea
+                        rows={2}
+                        value={actionTaken}
+                        onChange={(e) => setActionTaken(e.target.value)}
+                        placeholder={t('lateOrders.actionPlaceholder', {
+                          defaultValue: 'What you did about it - e.g. called the branch.',
+                        })}
+                      />
+                    </label>
+                  )}
+                  {/* Said BEFORE deciding, because filing a complaint against a
                   branch is not something to discover afterwards. Driven by the
                   cause's GROUP, so a cause operations add tomorrow announces
                   itself without anyone editing this. */}
-              {causeRaisesTicket(
-                causes.data?.find((c) => c.value === kindOf(draft.row))?.group ??
-                  DEFAULT_LATE_ORDER_CAUSES.find((c) => c.value === kindOf(draft.row))?.group,
-              ) && (
-                <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed">
-                  {t('lateOrders.willRaiseTicket', {
-                    type: lateOrderComplaintType(kindOf(draft.row)),
-                    defaultValue: 'A "{{type}}" ticket will be raised for this order.',
-                  })}
-                </p>
-              )}
-            </div>
-          }
-          confirmLabel={
-            /* SAVE for a comment, first one or an edit — it is the same act and
+                  {causeRaisesTicket(
+                    causes.data?.find((c) => c.value === kindOf(draft.row))?.group ??
+                      DEFAULT_LATE_ORDER_CAUSES.find((c) => c.value === kindOf(draft.row))?.group,
+                  ) && (
+                    <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed">
+                      {t('lateOrders.willRaiseTicket', {
+                        type: lateOrderComplaintType(kindOf(draft.row)),
+                        defaultValue: 'A "{{type}}" ticket will be raised for this order.',
+                      })}
+                    </p>
+                  )}
+                </div>
+              }
+              confirmLabel={
+                /* SAVE for a comment, first one or an edit — it is the same act and
                the same record either way (owner, 2026-09-29: "the button must
                read save"). */
-            draft.action === 'commented'
-              ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
-              : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
-          }
-          cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
-          loading={busy}
-          onConfirm={() => {
-            /* The reason is required in EVERY case now: a comment is a recorded
+                draft.action === 'commented'
+                  ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
+                  : t('lateOrders.confirmCoupon', { defaultValue: 'Continue to coupon' })
+              }
+              cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
+              loading={busy}
+              onConfirm={() => {
+                /* The reason is required in EVERY case now: a comment is a recorded
                state, so there is no longer a read-only path that may save
                nothing. `ConfirmDialog`'s button cannot express "required", so an
                empty one is simply refused rather than committed. */
-            if (reason.trim()) void commit();
-          }}
-          onCancel={() => {
-            setDraft(null);
-            setEditingDecisionId(null);
-            setActionTaken('');
-          }}
-        />
-      )}
+                if (reason.trim()) void commit();
+              }}
+              onCancel={() => {
+                setDraft(null);
+                setEditingDecisionId(null);
+                setActionTaken('');
+              }}
+            />
+          )}
 
-      {/*
+          {/*
         The same coupon form the Add-ticket page uses, and the same approval
         flow behind it.
 
@@ -1593,118 +1709,121 @@ export function LateOrdersPage() {
         note where the ticket is raised. `couponOrderId` prefers the ticket's
         order anyway, so the two can never name different orders.
       */}
-      {coupon && (
-        <CouponRequestDialog
-          open
-          onClose={() => setCoupon(null)}
-          ticketId={coupon.ticketId}
-          orderId={coupon.row.orderId}
-          contactId={coupon.contactId}
-          /* NORMALISED, not Yiji's wire format. Yiji sends `+9665XXXXXXXX`;
+          {coupon && (
+            <CouponRequestDialog
+              open
+              onClose={() => setCoupon(null)}
+              ticketId={coupon.ticketId}
+              orderId={coupon.row.orderId}
+              contactId={coupon.contactId}
+              /* NORMALISED, not Yiji's wire format. Yiji sends `+9665XXXXXXXX`;
              every phone this CRM stores and displays is `05XXXXXXXX` (owner's
              call, 2026-08-24). The ticket path already passes a normalised
              contact phone — this one passed the raw value straight through, so
              a late-order coupon reached the approvals queue titled
              `+966545808075` (owner, 2026-09-28). */
-          customerPhone={normalizePhone(coupon.row.customerPhone) || null}
-          /* THE ORDER'S OWN LINES, sku included — the same shape the tickets
+              customerPhone={normalizePhone(coupon.row.customerPhone) || null}
+              /* THE ORDER'S OWN LINES, sku included — the same shape the tickets
              page passes. Falls back to the cart (no sku, `item_sku` then stays
              null rather than being invented from a name) when the order cannot
              be read, so the dropdown never ends up emptier than before. */
-          orderItems={
-            couponOrder.data?.items?.length
-              ? couponOrder.data.items.map((it) => ({
-                  name: it.name,
-                  price: it.price ?? null,
-                  /* The QUANTITY travels with the price, because `price` is the
+              orderItems={
+                couponOrder.data?.items?.length
+                  ? couponOrder.data.items.map((it) => ({
+                      name: it.name,
+                      price: it.price ?? null,
+                      /* The QUANTITY travels with the price, because `price` is the
                      price of ONE — without it the picker summed a 3× line as a
                      single item and under-filled the coupon (owner,
                      2026-09-29). */
-                  qty: it.qty ?? null,
-                  sku: it.sku ?? null,
-                }))
-              : (couponCart.data?.lines ?? []).map((l) => ({
-                  name: l.name,
-                  price: l.price ?? null,
-                  qty: l.qty ?? null,
-                  sku: null,
-                }))
-          }
-          description={coupon.reason}
-          /*
-           * THE BRAND, in YIJI'S OWN NAME — the same thing the tickets page
-           * passes (owner, 2026-09-28: a late order must carry every piece of
-           * information a chat does).
-           *
-           * This was hardcoded `null`, so a late-order coupon reached the
-           * approvals queue with no brand at all while one raised from a ticket
-           * carried it. Yiji cannot resolve our internal ids, and for one brand
-           * the names differ — we say "Casa Pasta" where they say "La Casa
-           * Pasta" — so the store master's `brandYijiName` is what travels,
-           * falling back to our display name, which is at least something a
-           * human can act on.
-           */
-          brandId={couponStore?.store?.brandYijiName?.trim() || coupon.row.brandName || null}
-          /* Yiji's restaurant id from the STORE MASTER when the branch is
-             matched, else the one the order carried. */
-          restaurantId={couponStore?.store?.yijiRestaurantId || coupon.row.restaurantId || null}
-          brandName={couponStore?.brandName ?? coupon.row.brandName ?? null}
-          branchName={couponStore?.restaurantName ?? coupon.row.restaurantName ?? null}
-          requestedBy={user?.id ?? null}
-          onCreated={() => {
-            /*
-             * The coupon EXISTS now, so the decision is true and can be
-             * written — and only now is the ticket raised. If this fails the
-             * order stays in the queue with a coupon already requested —
-             * visible and fixable, unlike a register that claims a
-             * compensation nobody sent.
-             *
-             * The TICKET FIRST, then the decision that points at it: a decision
-             * naming a ticket that was never created would be worse than one
-             * naming none. A ticket that cannot be raised (no branch in the
-             * store master) is reported and the decision is still recorded —
-             * the coupon is real either way, and losing the record of it to a
-             * store-master gap would be the wrong trade.
-             */
-            void (async () => {
-              let ticketId: string | null = null;
-              try {
-                ticketId = (await coupon.raiseTicket?.()) ?? null;
-              } catch (err) {
-                toast.warning(
-                  err instanceof Error
-                    ? err.message
-                    : t('lateOrders.ticketFailed', {
-                        defaultValue: 'The coupon was requested, but no ticket could be raised.',
-                      }),
-                );
+                      qty: it.qty ?? null,
+                      sku: it.sku ?? null,
+                    }))
+                  : (couponCart.data?.lines ?? []).map((l) => ({
+                      name: l.name,
+                      price: l.price ?? null,
+                      qty: l.qty ?? null,
+                      sku: null,
+                    }))
               }
-              /* The order as it stood when the coupon was given. Best-effort,
+              description={coupon.reason}
+              /*
+               * THE BRAND, in YIJI'S OWN NAME — the same thing the tickets page
+               * passes (owner, 2026-09-28: a late order must carry every piece of
+               * information a chat does).
+               *
+               * This was hardcoded `null`, so a late-order coupon reached the
+               * approvals queue with no brand at all while one raised from a ticket
+               * carried it. Yiji cannot resolve our internal ids, and for one brand
+               * the names differ — we say "Casa Pasta" where they say "La Casa
+               * Pasta" — so the store master's `brandYijiName` is what travels,
+               * falling back to our display name, which is at least something a
+               * human can act on.
+               */
+              brandId={couponStore?.store?.brandYijiName?.trim() || coupon.row.brandName || null}
+              /* Yiji's restaurant id from the STORE MASTER when the branch is
+             matched, else the one the order carried. */
+              restaurantId={couponStore?.store?.yijiRestaurantId || coupon.row.restaurantId || null}
+              brandName={couponStore?.brandName ?? coupon.row.brandName ?? null}
+              branchName={couponStore?.restaurantName ?? coupon.row.restaurantName ?? null}
+              requestedBy={user?.id ?? null}
+              onCreated={() => {
+                /*
+                 * The coupon EXISTS now, so the decision is true and can be
+                 * written — and only now is the ticket raised. If this fails the
+                 * order stays in the queue with a coupon already requested —
+                 * visible and fixable, unlike a register that claims a
+                 * compensation nobody sent.
+                 *
+                 * The TICKET FIRST, then the decision that points at it: a decision
+                 * naming a ticket that was never created would be worse than one
+                 * naming none. A ticket that cannot be raised (no branch in the
+                 * store master) is reported and the decision is still recorded —
+                 * the coupon is real either way, and losing the record of it to a
+                 * store-master gap would be the wrong trade.
+                 */
+                void (async () => {
+                  let ticketId: string | null = null;
+                  try {
+                    ticketId = (await coupon.raiseTicket?.()) ?? null;
+                  } catch (err) {
+                    toast.warning(
+                      err instanceof Error
+                        ? err.message
+                        : t('lateOrders.ticketFailed', {
+                            defaultValue:
+                              'The coupon was requested, but no ticket could be raised.',
+                          }),
+                    );
+                  }
+                  /* The order as it stood when the coupon was given. Best-effort,
                  like the ticket above: the decision is the record, and losing
                  it because Yiji was slow would be the wrong trade. */
-              const orderSnapshot = (await coupon.captureOrder?.()) ?? null;
-              return record.mutateAsync({
-                row: coupon.row,
-                kind: coupon.kind,
-                action: 'compensated',
-                reason: coupon.reason,
-                actionTaken: coupon.actionTaken,
-                agentId: user?.id ?? null,
-                ticketId,
-                orderSnapshot,
-              });
-            })().catch(() =>
-              toast.error(
-                t('lateOrders.recordFailed', {
-                  defaultValue:
-                    'The coupon was requested, but this order could not be marked handled.',
-                }),
-              ),
-            );
-            setCoupon(null);
-          }}
-        />
-      )}
+                  const orderSnapshot = (await coupon.captureOrder?.()) ?? null;
+                  return record.mutateAsync({
+                    row: coupon.row,
+                    kind: coupon.kind,
+                    action: 'compensated',
+                    reason: coupon.reason,
+                    actionTaken: coupon.actionTaken,
+                    agentId: user?.id ?? null,
+                    ticketId,
+                    orderSnapshot,
+                  });
+                })().catch(() =>
+                  toast.error(
+                    t('lateOrders.recordFailed', {
+                      defaultValue:
+                        'The coupon was requested, but this order could not be marked handled.',
+                    }),
+                  ),
+                );
+                setCoupon(null);
+              }}
+            />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
