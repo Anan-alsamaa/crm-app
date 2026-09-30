@@ -171,6 +171,28 @@ export function ConversationView({
 
   useEffect(() => {
     let cancelled = false;
+    /*
+     * The detach, reachable by REACT rather than by a Promise.
+     *
+     * This is the whole fix. The listeners are attached inside an async IIFE,
+     * so the cleanup that IIFE returns goes to a Promise and React never calls
+     * it — every conversation switch left `messageNew` attached, bound to a
+     * closure holding the PREVIOUS conversation's id and the previous
+     * component's `setLive`.
+     *
+     * What that looked like (owner, 2026-09-30): two agents answering two
+     * customers at the same moment. Shatha's reply flashed for two seconds
+     * inside Mohamed's open chat with 0566461807, then jumped to where it
+     * belonged when he switched threads. THE DATABASE WAS ALWAYS CORRECT —
+     * every message is stored against the right conversation; only the screen
+     * lied, which is the most alarming possible version of this bug because it
+     * looks like a customer's message reaching the wrong person.
+     *
+     * The previous attempt detached `connect` alone in the outer cleanup and
+     * left the rest, which is why the reconnect symptom went away and this one
+     * did not.
+     */
+    let detach: (() => void) | null = null;
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
@@ -312,7 +334,16 @@ export function ConversationView({
       socket.on(SOCKET_EVENTS.customerPresence, onCustomerPresence);
       socket.on(SOCKET_EVENTS.conversationChanged, onChanged);
       socket.on(SOCKET_EVENTS.error, onSocketError);
-      return () => {
+      /*
+       * ASSIGNED, not returned. Returning this hands it to the Promise the IIFE
+       * produces — which nothing ever calls.
+       *
+       * Each listener is removed BY REFERENCE, so a sibling component's
+       * handlers for the same event are untouched. `socket.off('connect')` with
+       * no second argument, which is what stood here before, removes EVERY
+       * connect listener on the shared socket including other features'.
+       */
+      detach = () => {
         socket.off(SOCKET_EVENTS.messageNew, onNew);
         socket.off(SOCKET_EVENTS.noteNew, onNoteNew);
         socket.off(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
@@ -322,17 +353,15 @@ export function ConversationView({
         socket.off(SOCKET_EVENTS.error, onSocketError);
         socket.off('connect', onReconnect);
       };
+      /* The effect was torn down while `getSocket()` was still in flight, so the
+         cleanup below already ran and cannot run again. Detach immediately or
+         these listeners outlive the component that made them. */
+      if (cancelled) detach();
     })();
     return () => {
       cancelled = true;
-      /*
-       * Detach here too. The cleanup returned from the async IIFE above is
-       * handed to a Promise, not to React, so React never calls it — every
-       * conversation switch left its listeners attached, and `onReconnect`
-       * would then re-subscribe to threads the agent has long since left.
-       */
-      const socket = socketRef.current;
-      if (socket) socket.off('connect');
+      detach?.();
+      detach = null;
     };
   }, [conversationId, qc, t]);
 
