@@ -53,6 +53,7 @@ import {
   type TicketRow,
 } from './api.js';
 import { useAgents, useTeamOptions } from '../inbox/api.js';
+import type { ComplaintScope } from '../complaints/api.js';
 import { WhatsAppReply } from './WhatsAppReply.js';
 import { ChangeHistory } from './ChangeHistory.js';
 import { canSeeFieldHistory } from './history-visibility.js';
@@ -148,7 +149,21 @@ export function TicketsPage() {
     t('complaints.you', { defaultValue: 'You' });
   // No date window: a range here would quietly hide older tickets an agent
   // still has to work. The export names itself accordingly.
-  const complaints = useMyComplaints(null, agentName);
+  /*
+   * WHOSE TICKETS (owner, 2026-09-30).
+   *
+   * Defaults to the signed-in agent, which is what this page has always shown —
+   * but the scope was invisible and absolute. A ticket raised from the
+   * late-orders queue belongs to the agent who decided it, so an Administrator
+   * looking for somebody else's saw an empty page and reasonably read it as
+   * missing data rather than as a filter.
+   *
+   * Modelled on the Coupon approvals page: default to me, with All and each
+   * agent available from the dropdown.
+   */
+  const [scope, setScope] = useState<ComplaintScope>('me');
+  const complaints = useMyComplaints(null, agentName, scope);
+  const agentOptions = useAgents();
   const { index: storeIndex } = useStoreIndex();
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<TicketFilter>('all');
@@ -300,6 +315,27 @@ export function TicketsPage() {
                   onClick={() => setFilter((cur) => (cur === f ? 'all' : f))}
                 />
               ))}
+            </div>
+
+            {/* WHOSE TICKETS. First, because it changes what every count below
+                it means — a status tally over "mine" and over "all" are
+                different numbers, and reading them without knowing which is
+                how an empty page gets mistaken for missing data. */}
+            <div className="mt-3 px-4">
+              <SelectMenu
+                value={scope}
+                size="sm"
+                aria-label={t('tickets.scopeLabel', { defaultValue: 'Agent' })}
+                onChange={(v) => setScope(v as ComplaintScope)}
+                options={[
+                  { value: 'me', label: t('tickets.scopeMine', { defaultValue: 'My tickets' }) },
+                  { value: 'all', label: t('tickets.scopeAll', { defaultValue: 'All agents' }) },
+                  ...(agentOptions.data ?? []).map((a) => ({
+                    value: a.id,
+                    label: a.first_name?.trim() || a.email || a.id,
+                  })),
+                ]}
+              />
             </div>
 
             {/* The statuses the tiles leave out, as quiet text. Everything the

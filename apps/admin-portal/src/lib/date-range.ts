@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { businessDay } from '@yiji/shared-types';
 
 /**
  * A from/to range that remembers what you last looked at.
@@ -35,6 +36,47 @@ export interface DateRange {
 export function lastMonth(): DateRange {
   const now = new Date();
   return { from: isoDay(new Date(now.getTime() - 30 * DAY)), to: isoDay(now) };
+}
+
+/**
+ * TODAY'S BUSINESS DAY — the default every dated report opens on
+ * (owner, 2026-09-30).
+ *
+ * A business day runs 08:00 to 04:00 the next morning and is NAMED after the
+ * day it opened, so between midnight and 08:00 the answer is still YESTERDAY's
+ * date. A report defaulting to the calendar date would, at 01:00, open on a day
+ * that has barely started while the night's work sat under yesterday — and the
+ * reader would see an almost empty table with nothing saying why.
+ *
+ * `businessDay` is the shared rule (`@yiji/shared-types`), evaluated in Riyadh's
+ * zone because the boundary is a wall-clock hour in the branch's own day, never
+ * the container's. Both ends are the same day: one business day, which is what
+ * "today" means here.
+ */
+/**
+ * The BUSINESS-DAY window a From/To pair really means, as ISO stamps.
+ *
+ * `from=to=2026-09-30` is `2026-09-30T08:00:00` through `2026-10-01T04:00:00`
+ * (owner, 2026-09-30). One rule, one helper: every report that hand-rolled
+ * `${from}T00:00:00` / `${to}T23:59:59` was answering a different question at
+ * both edges — losing the night's work after midnight, and counting the early
+ * hours of the opening day that belong to the day before.
+ *
+ * Local stamps without a zone, matching how the rest of this app filters and
+ * how Yiji writes its own timestamps.
+ */
+export function businessDayWindow(from: string, to: string): { fromIso: string; toIso: string } {
+  const close = new Date(`${to}T00:00:00Z`);
+  close.setUTCDate(close.getUTCDate() + 1);
+  return {
+    fromIso: `${from}T08:00:00`,
+    toIso: `${close.toISOString().slice(0, 10)}T04:00:00`,
+  };
+}
+
+export function todayBusinessDay(): DateRange {
+  const day = businessDay(new Date().toISOString()) ?? isoDay(new Date());
+  return { from: day, to: day };
 }
 
 /**
@@ -88,18 +130,32 @@ function read(key: string): DateRange | null {
   }
 }
 
-export function useRememberedRange(key: string): {
+export function useRememberedRange(
+  key: string,
+  /**
+   * What the range opens on when nothing is stored.
+   *
+   * A PARAMETER rather than one global default, because the two honest answers
+   * differ by report (owner, 2026-09-30): an operational queue opens on TODAY's
+   * business day, while a manager's KPI report opens on the last 30 days — one
+   * day of KPIs is not a measure of anything. Both interpret their From/To as
+   * business days; only the opening window differs.
+   */
+  fallback: () => DateRange = todayBusinessDay,
+): {
   from: string;
   to: string;
   setFrom: (v: string) => void;
   setTo: (v: string) => void;
   setRange: (r: DateRange) => void;
-  /** Back to the last month, and forget what was stored. */
+  /** Back to the caller's default, and forget what was stored. */
   reset: () => void;
 } {
   const [range, setRangeState] = useState<DateRange>(() => {
     const stored = read(key);
-    return stored ? rollForward(stored) : lastMonth();
+    /* The caller's default. A stored range still wins — a reader who chose a
+       window keeps it. */
+    return stored ? rollForward(stored) : fallback();
   });
 
   useEffect(() => {
@@ -114,13 +170,19 @@ export function useRememberedRange(key: string): {
   const setTo = useCallback((to: string) => setRangeState((r) => ({ ...r, to })), []);
   const setRange = useCallback((r: DateRange) => setRangeState(r), []);
   const reset = useCallback(() => {
-    setRangeState(lastMonth());
+    /* The CALLER'S default, not a hardcoded month. Clear promises to put the
+       page back the way it opened, and returning a queue that opens on today to
+       a 30-day window would be a different page than the one the reader
+       started on. */
+    setRangeState(fallback());
     try {
       window.localStorage.removeItem(key);
     } catch {
       /* nothing to undo */
     }
-  }, [key]);
+    // `fallback` is a stable module function at every call site; listing it
+    // keeps the hook honest if that ever stops being true.
+  }, [key, fallback]);
 
   return { from: range.from, to: range.to, setFrom, setTo, setRange, reset };
 }

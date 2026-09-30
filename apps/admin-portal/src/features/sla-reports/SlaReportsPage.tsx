@@ -28,8 +28,13 @@ import {
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 import { exportCsv, reportFilename, type CsvColumn } from '@yiji/reports';
-import { useRememberedRange, isoDay } from '../../lib/date-range.js';
+import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+
+/* These reports open on the LAST 30 DAYS, not today's business day: one day of
+   KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
+   bar's Clear button and the range hook agree about what "untouched" means. */
+const MANAGER_DEFAULT = lastMonth();
 
 const RANGE_DAYS = [7, 30, 90] as const;
 
@@ -242,7 +247,7 @@ export function SlaReportsPage() {
     setTo,
     setRange,
     reset: resetRange,
-  } = useRememberedRange('sara.reports.range');
+  } = useRememberedRange('sara.reports.range', lastMonth);
   /** Days the range covers — the export file name says the period. */
   const days = useMemo(() => {
     const a = Date.parse(from);
@@ -697,6 +702,8 @@ function TicketTable({
           },
         ]}
         filtering={bar.filtering}
+        defaultFrom={MANAGER_DEFAULT.from}
+        defaultTo={MANAGER_DEFAULT.to}
         onClear={() => {
           bar.onClear();
           setPage(1);

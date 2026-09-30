@@ -22,7 +22,7 @@ import { businessDay, orderEventTimes, type LateOrderState } from '@yiji/shared-
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
-import { useRememberedRange } from '../../lib/date-range.js';
+import { businessDayWindow, useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { OrderSnapshotPanel } from './OrderSnapshotPanel.js';
 import {
@@ -153,10 +153,9 @@ export function LateOrdersReportPage() {
    * business day below when one is picked) through `to +1 day T04:00`, which
    * is exactly where the closing night ends.
    */
-  const toNight = new Date(`${to}T00:00:00Z`);
-  toNight.setUTCDate(toNight.getUTCDate() + 1);
-  const fromIso = `${from}T00:00:00`;
-  const toIso = `${toNight.toISOString().slice(0, 10)}T04:00:00`;
+  /* ONE rule for what a From/To pair means — see `businessDayWindow`. This page
+     hand-rolled it; every other dated report hand-rolled something different. */
+  const { fromIso, toIso } = businessDayWindow(from, to);
   const q = useLateOrderDecisions(fromIso, toIso);
   /*
    * THE PENDING ONES TOO (owner spec §11, 2026-09-29).

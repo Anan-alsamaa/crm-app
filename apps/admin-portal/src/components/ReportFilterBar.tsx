@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, DateField, Input, SelectMenu } from '@yiji/ui';
-import { lastMonth } from '../lib/date-range.js';
+import { todayBusinessDay } from '../lib/date-range.js';
 
 /**
  * The filter bar every report wears.
@@ -138,10 +138,17 @@ export function ReportFilterBar({
   const [draftFrom, setDraftFrom] = useState(from);
   const [draftTo, setDraftTo] = useState(to);
   const [draftSelects, setDraftSelects] = useState<Record<string, string>>({});
-  /* The range every report in this portal opens on. In state so it is computed
-     ONCE per mount: re-deriving "the last 30 days up to today" every render would
-     make Clear appear and vanish as the day rolled over. */
-  const [fallbackRange] = useState(() => lastMonth());
+  /*
+   * What "untouched" means for THIS report, so Clear can tell a changed range
+   * from the one it opened on.
+   *
+   * Defaults to today's business day — the operational queues — and a report
+   * that opens elsewhere passes `defaultFrom`/`defaultTo` (the manager's KPI
+   * reports open on the last 30 days). In state so it is computed ONCE per
+   * mount: re-deriving it every render would make Clear appear and vanish as
+   * the business day rolled over at 08:00.
+   */
+  const [fallbackRange] = useState(() => todayBusinessDay());
 
   useEffect(() => setDraftSearch(search), [search]);
   useEffect(() => setDraftFrom(from), [from]);

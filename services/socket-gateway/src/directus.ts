@@ -44,6 +44,29 @@ export function acquisitionChannel(claims: {
   return claims.walk_in ? 'walk_in' : 'walk_in_app';
 }
 
+/*
+ * THE STATUSES A RETURNING CUSTOMER MAY RESUME.
+ *
+ * SOLVED IS INCLUDED, and that is the fix (owner, 2026-09-30). These lookups
+ * searched `['open','pending']`, so a customer whose chat had been closed —
+ * and who had just rated it — was matched to NOTHING and handed a brand-new
+ * conversation. The inbox then showed two threads for one person, their history
+ * stranded in the old one.
+ *
+ * The reopen in `persistMessage` was already correct and never ran: it fires on
+ * the conversation the widget resumed, and there was nothing to resume. Fixing
+ * the write without the READ would have changed nothing.
+ *
+ * 'pending' is retired (see ConversationStatus) but stays on purpose: on a
+ * database that has not run scripts/migrate-conversation-status.mjs, dropping it
+ * would not error — it would open a second conversation for a returning
+ * customer, which is this very bug.
+ *
+ * 'resolved' and 'closed' are retired spellings of solved, matched for the same
+ * reason: an un-migrated row must resume, not fork.
+ */
+export const RESUMABLE_STATUSES = ['open', 'pending', 'solved', 'resolved', 'closed'];
+
 export class GatewayDirectus {
   private readonly client: YijiDirectusClient;
   private readonly url: string;
@@ -255,11 +278,26 @@ export class GatewayDirectus {
    * customer's next message into a second conversation, which is how the same
    * case ended up spread over two threads.
    *
-   * A solved thread (resolved/closed) is deliberately NOT reused: a customer
-   * coming back days later is a new case, usually about a different order, and
-   * it should arrive as its own conversation rather than reviving a finished
-   * one. See the reopen in persistMessage for the other half of this — a reply
-   * that lands on a thread solved mid-session.
+   * A SOLVED THREAD IS NOW REUSED — this reverses an earlier decision, on the
+   * owner's instruction (2026-09-30).
+   *
+   * It used to read: "a customer coming back days later is a new case, usually
+   * about a different order, so it should arrive as its own conversation." That
+   * is defensible in the abstract and wrong in practice. What it produced was
+   * TWO threads for one person in the inbox — the customer rated their chat, it
+   * closed, they wrote again minutes later about another order, and an agent
+   * faced a stranger with no history while the history sat in a thread nobody
+   * would open again.
+   *
+   * The owner's model: one conversation per contact, reopened as a NEW SESSION.
+   * Continuity of person beats separation of case, because the agent needs the
+   * history and the customer only ever sees one chat.
+   *
+   * `persistMessage` does the other half: a customer message landing on a solved
+   * thread flips it back to `open` and clears `solved_at`. That reopen was
+   * always correct and never ran, because this lookup never returned a solved
+   * thread for it to run on — fixing the write without this read would have
+   * changed nothing.
    */
   /**
    * The contact's live thread, or null — READ ONLY, creates nothing.
@@ -271,8 +309,9 @@ export class GatewayDirectus {
   async findLiveConversation(_vendorUuid: string, contactId: string): Promise<string | null> {
     const live = (await this.client.request(
       readItems('conversations', {
-        // See the note in findOrCreateConversation on why 'pending' stays here.
-        filter: { contact: { _eq: contactId }, status: { _in: ['open', 'pending'] } },
+        // Solved included — see RESUMABLE_STATUSES. A closed chat is resumed
+        // and reopened by the first new message, never forked.
+        filter: { contact: { _eq: contactId }, status: { _in: RESUMABLE_STATUSES } },
         fields: ['id'],
         sort: ['-last_message_at'],
         limit: 1,
@@ -306,7 +345,7 @@ export class GatewayDirectus {
             id: { _eq: conversationId },
             vendor: { _eq: vendorUuid },
             contact: { _eq: contactId },
-            status: { _in: ['open', 'pending'] },
+            status: { _in: RESUMABLE_STATUSES },
           },
           fields: ['id'],
           limit: 1,
@@ -324,11 +363,9 @@ export class GatewayDirectus {
   ): Promise<{ id: string; created: boolean }> {
     const live = (await this.client.request(
       readItems('conversations', {
-        // 'pending' is retired (see ConversationStatus) but stays in this
-        // filter on purpose: on a database that has not run
-        // scripts/migrate-conversation-status.mjs yet, dropping it would not
-        // error, it would open a second conversation for a returning customer.
-        filter: { contact: { _eq: contactId }, status: { _in: ['open', 'pending'] } },
+        // See RESUMABLE_STATUSES — solved is resumable, which is what stops a
+        // returning customer getting a second thread.
+        filter: { contact: { _eq: contactId }, status: { _in: RESUMABLE_STATUSES } },
         fields: ['id'],
         sort: ['-last_message_at'],
         limit: 1,

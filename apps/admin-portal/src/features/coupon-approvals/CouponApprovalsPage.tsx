@@ -27,6 +27,7 @@ import {
   type StoreIndex,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { businessDayWindow } from '../../lib/date-range.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import {
   useCouponApprovals,
@@ -1181,8 +1182,15 @@ export function CouponApprovalsPage() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return all.filter((r) => {
-      if (from && (r.date_created ?? '') < `${from}T00:00:00`) return false;
-      if (to && (r.date_created ?? '') > `${to}T23:59:59`) return false;
+      /* BUSINESS days, not calendar days (owner, 2026-09-30): a coupon raised at
+         01:00 belongs to the night before, and `T00:00:00`/`T23:59:59` put it on
+         the wrong day at both edges. */
+      if (from || to) {
+        const w = businessDayWindow(from || '0000-01-01', to || '9999-12-31');
+        const at = r.date_created ?? '';
+        if (from && at < w.fromIso) return false;
+        if (to && at > w.toIso) return false;
+      }
       if (!q) return true;
       return [
         r.coupon_code,

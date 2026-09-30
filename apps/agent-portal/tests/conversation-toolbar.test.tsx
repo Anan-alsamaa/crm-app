@@ -86,12 +86,16 @@ describe('ConversationToolbar', () => {
     expect(screen.queryByLabelText('conversation.status')).not.toBeInTheDocument();
   });
 
-  it('marks a live conversation solved', async () => {
+  /* Renamed from "Mark as solved" (owner, 2026-09-30): closing a chat is not a
+     positive act, and the green success button made ending a conversation look
+     like the thing to do. The WRITE is unchanged — still `solved` with its
+     stamp — so only the label and the colour moved. */
+  it('closes a live conversation, stamping the solve time', async () => {
     const mutateAsync = vi.fn().mockResolvedValue({});
     inbox.useUpdateConversation.mockReturnValue({ mutateAsync });
     renderToolbar();
 
-    await userEvent.click(screen.getByRole('button', { name: /Mark as solved/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Close this chat/ }));
 
     // The stamp goes on WITH the status: `solved_at` is what makes time-to-solve
     // measurable at all, and a solve recorded without it is invisible to the

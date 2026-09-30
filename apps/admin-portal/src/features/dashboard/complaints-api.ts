@@ -7,6 +7,7 @@ import {
   type StoreSnapshot,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { businessDayWindow } from '../../lib/date-range.js';
 
 /**
  * The operations manager's complaint dashboard, computed over our tickets.
@@ -437,9 +438,12 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       // Date bounds go to the server; everything else needs the store join or a
       // substring compare, so it is applied below once each ticket is resolved.
       const dateFilter: Record<string, unknown> = {};
-      if (filters.from) dateFilter._gte = `${filters.from}T00:00:00`;
-      // Inclusive `to`: a range ending on the 31st must contain the 31st.
-      if (filters.to) dateFilter._lte = `${filters.to}T23:59:59`;
+      /* BUSINESS days (owner, 2026-09-30): 30/09 means 08:00 on the 30th through
+         04:00 on the 1st, so a complaint at 01:00 counts under the night it
+         belongs to rather than the calendar date it happens to carry. */
+      const w = businessDayWindow(filters.from || '0000-01-01', filters.to || '9999-12-31');
+      if (filters.from) dateFilter._gte = w.fromIso;
+      if (filters.to) dateFilter._lte = w.toIso;
 
       const [tickets, storeRows, users, csat, conversations, routing, messageCounts] =
         await Promise.all([

@@ -277,12 +277,40 @@ describe('GatewayDirectus.findOrCreateConversation', () => {
     request.mockResolvedValueOnce([{ id: 'conv-pending' }]);
     await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
     const { params } = await sentAt(0);
-    expect(params.filter).toMatchObject({ status: { _in: ['open', 'pending'] } });
+    expect((params.filter as { status: { _in: string[] } }).status._in).toContain('pending');
   });
 
-  it('does not resume a solved thread — a later message is a new case', async () => {
-    // Only open/pending are matched, so a resolved/closed thread falls through
-    // to the create branch and the customer gets a fresh conversation.
+  /*
+   * REVERSED ON THE OWNER'S INSTRUCTION (2026-09-30). This test used to assert
+   * the opposite — "does not resume a solved thread, a later message is a new
+   * case" — which is what produced TWO conversations for one person in the
+   * inbox: a customer rated their chat, it closed, they wrote again minutes
+   * later, and the agent who picked it up saw a stranger while the history sat
+   * in a thread nobody would reopen.
+   *
+   * Reproduced on production: conversation 9a58a48b solved at 07:13, new
+   * conversation 8e499421 created at 07:15 for the same contact.
+   */
+  it('RESUMES a solved thread rather than opening a second one', async () => {
+    request.mockResolvedValueOnce([{ id: 'conv-solved' }]);
+    const res = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
+    // Found, not created — the customer keeps one conversation.
+    expect(res).toEqual({ id: 'conv-solved', created: false });
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('looks for solved threads, which is what makes the resume possible', async () => {
+    request.mockResolvedValueOnce([{ id: 'conv-solved' }]);
+    await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
+    const { params } = await sentAt(0);
+    const statuses = (params.filter as { status: { _in: string[] } }).status._in;
+    expect(statuses).toContain('solved');
+    // Retired spellings too: an un-migrated row must resume, not fork.
+    expect(statuses).toContain('resolved');
+    expect(statuses).toContain('closed');
+  });
+
+  it('still creates one when the contact has no conversation at all', async () => {
     request.mockResolvedValueOnce([]).mockResolvedValueOnce({ id: 'conv-fresh' });
     const res = await makeGateway().findOrCreateConversation('vendor-uuid', 'contact-1');
     expect(res).toEqual({ id: 'conv-fresh', created: true });

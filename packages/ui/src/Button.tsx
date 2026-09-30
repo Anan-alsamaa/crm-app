@@ -11,6 +11,7 @@ type Variant =
   | 'ghost'
   | 'success'
   | 'destructive'
+  | 'destructive-soft'
   | 'link';
 type Size = 'sm' | 'md' | 'lg' | 'icon';
 
@@ -62,6 +63,17 @@ const variants: Record<Variant, string> = {
   destructive:
     'bg-destructive text-destructive-foreground border border-transparent ' +
     'shadow-sm shadow-destructive/30 hover:bg-destructive/90',
+  /*
+   * A TINTED red, for an action that ENDS something without destroying it.
+   *
+   * "Close this chat" is reversible — the same button reopens it — so the solid
+   * `destructive` fill would overstate it, reading like Delete beside controls
+   * that really are irreversible. This keeps the warning hue and drops the
+   * weight (owner, 2026-09-30).
+   */
+  'destructive-soft':
+    'bg-destructive/10 text-destructive border border-transparent ' +
+    'ring-1 ring-inset ring-destructive/20 hover:bg-destructive/15 hover:ring-destructive/30',
   link: 'bg-transparent text-foreground underline-offset-4 hover:underline px-0 border border-transparent rounded-none',
 };
 

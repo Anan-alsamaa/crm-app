@@ -56,7 +56,7 @@ import { directus } from '../../lib/directus.js';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { ColumnScroller } from '../../components/ColumnScroller.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-import { useRememberedRange, isoDay } from '../../lib/date-range.js';
+import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
 import { formatDuration } from '@yiji/reports';
@@ -102,6 +102,11 @@ export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
  * barely half of what the report holds, and seeing the rest meant typing two
  * dates by hand every time.
  */
+/* These reports open on the LAST 30 DAYS, not today's business day: one day of
+   KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
+   bar's Clear button and the range hook agree about what "untouched" means. */
+const MANAGER_DEFAULT = lastMonth();
+
 const RANGE_DAYS = [7, 30, 90, 365] as const;
 
 /** The remembered range, handed down so each report's filter bar can drive it. */
@@ -2013,6 +2018,8 @@ function AgentKpiReport({
         onFrom={range.setFrom}
         onTo={range.setTo}
         filtering={query.trim() !== ''}
+        defaultFrom={MANAGER_DEFAULT.from}
+        defaultTo={MANAGER_DEFAULT.to}
         onClear={() => {
           setQuery('');
           range.reset();
@@ -2519,6 +2526,8 @@ function ConversationReport({
             },
           ]}
           filtering={Boolean(query.trim() || status || agent || priority)}
+          defaultFrom={MANAGER_DEFAULT.from}
+          defaultTo={MANAGER_DEFAULT.to}
           onClear={() => {
             setQuery('');
             setStatus('');
@@ -2753,7 +2762,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
     setTo,
     setRange,
     reset: resetRange,
-  } = useRememberedRange('sara.reports.range');
+  } = useRememberedRange('sara.reports.range', lastMonth);
   const report = useAgentReportData(
     0,
     {

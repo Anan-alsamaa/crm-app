@@ -155,16 +155,49 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
  * what the Tickets page needs, since a window there would quietly hide older
  * tickets an agent still has to work.
  */
-export function useMyComplaints(days: number | null, agentName: string) {
+/**
+ * WHOSE TICKETS TO SHOW.
+ *
+ * `'me'` is the page's default and what it has always done. `'all'` and a
+ * specific agent id were added because the scope was invisible and absolute:
+ * an Administrator opening Tickets saw nothing but their own, and a ticket
+ * raised from the late-orders queue belongs to the agent who decided it — so
+ * the owner, looking for Shatha's late-preparation ticket, correctly saw an
+ * empty page and reasonably read it as missing data (owner, 2026-09-30).
+ */
+export type ComplaintScope = 'me' | 'all' | (string & {});
+
+export function useMyComplaints(
+  days: number | null,
+  agentName: string,
+  scope: ComplaintScope = 'me',
+) {
   return useQuery({
-    queryKey: ['my-complaints', days, agentName],
+    queryKey: ['my-complaints', days, agentName, scope],
     staleTime: 60_000,
     queryFn: async (): Promise<AgentComplaintRow[]> => {
       const since = days == null ? null : new Date(Date.now() - days * DAY_MS).toISOString();
+      /*
+       * `'all'` sends NO agent clause and lets Directus decide.
+       *
+       * That is the honest scope rather than a wider promise: a WeCare Agent's
+       * role still restricts their reads to their own tickets, so picking "All"
+       * shows them exactly what they were always allowed to see. A supervisor,
+       * admin or the owner has an unscoped read rule and sees the operation.
+       * The page cannot grant access it does not have, and does not pretend to.
+       */
+      const who =
+        scope === 'all' ? null : scope === 'me' ? MINE : { assigned_agent: { _eq: scope } };
+      const clauses = [
+        ...(who ? [who] : []),
+        ...(since ? [{ date_created: { _gte: since } }] : []),
+      ];
+      const filter =
+        clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : { _and: clauses };
       const rows = (await directus.request(
         readItems('tickets', {
           limit: -1,
-          filter: since ? { _and: [MINE, { date_created: { _gte: since } }] } : MINE,
+          ...(filter ? { filter } : {}),
           sort: ['-date_created'],
           fields: FIELDS as never,
         }),

@@ -302,7 +302,16 @@ describe('ticket dashboard — filters', () => {
     expect(d.agentOptions.map((a) => a.id)).toContain('u2');
   });
 
-  it('sends an inclusive end date so a range ending today contains today', async () => {
+  /*
+   * THE WINDOW IS A BUSINESS DAY, not a calendar day (owner, 2026-09-30).
+   *
+   * This used to assert `T00:00:00` -> `T23:59:59`, which was wrong at BOTH
+   * edges: it counted the early hours of the opening day, which belong to the
+   * night before, and cut off the tail after midnight, which is the busiest
+   * part of a restaurant's evening. The symptom was never an error — just a
+   * total that was quietly short.
+   */
+  it('sends a BUSINESS-day window: 08:00 on the first day to 04:00 after the last', async () => {
     mockData({ tickets: [], stores: STORES, users: USERS });
     await run({ ...emptyComplaintFilters, from: '2026-01-01', to: '2026-07-31' });
 
@@ -311,10 +320,10 @@ describe('ticket dashboard — filters', () => {
       .find((q) => q.collection === 'tickets');
     expect(ticketsQuery?.opts.filter).toEqual({
       date_created: {
-        _gte: '2026-01-01T00:00:00',
-        // 23:59:59, not the bare date — `_lte: '2026-07-31'` would compare
-        // against midnight and drop everything logged ON the last day.
-        _lte: '2026-07-31T23:59:59',
+        _gte: '2026-01-01T08:00:00',
+        // 04:00 the NEXT morning — a ticket raised at 01:00 on 01/08 belongs to
+        // 31/07's night and must still be inside the range.
+        _lte: '2026-08-01T04:00:00',
       },
     });
   });

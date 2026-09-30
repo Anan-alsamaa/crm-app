@@ -820,11 +820,15 @@
     transform 120ms var(--yiji-ease);
 }
 .yiji-csat-star:hover {
-  color: var(--yiji-primary);
+  /* A STAR IS YELLOW (owner, 2026-09-30).
+     These followed `--yiji-primary`, so a rating inherited whatever the brand
+     colour happened to be — green on this theme. A filled star is a convention
+     older than the brand, and a green one reads as a tick rather than a score. */
+  color: var(--yiji-star, #f5b301);
   transform: scale(1.08);
 }
 .yiji-csat-star.filled {
-  color: var(--yiji-primary);
+  color: var(--yiji-star, #f5b301);
 }
 .yiji-csat-comment {
   width: 100%;

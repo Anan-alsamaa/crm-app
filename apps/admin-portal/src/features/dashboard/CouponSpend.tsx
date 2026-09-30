@@ -5,6 +5,7 @@ import { readItems } from '@directus/sdk';
 import { couponWorth, type CouponValueFact } from '@yiji/reports';
 import { cn, formatDate, HBarChart, ProgressRing, SplitBar, TrendChart } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { businessDayWindow } from '../../lib/date-range.js';
 import { canSeeCouponMoney, useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
@@ -75,13 +76,15 @@ export function useCouponSpend(from: string, to: string, enabled: boolean) {
     enabled,
     queryFn: async (): Promise<CouponValueFact[]> => {
       const filter: Record<string, unknown> = {};
-      if (from) filter['date_created'] = { _gte: `${from}T00:00:00` };
+      /* BUSINESS days (owner, 2026-09-30): the window runs 08:00 to 04:00 the
+         next morning, so a coupon raised at 01:00 counts under the night it
+         belongs to rather than the calendar date it carries. */
+      const w = businessDayWindow(from || '0000-01-01', to || '9999-12-31');
+      if (from) filter['date_created'] = { _gte: w.fromIso };
       if (to) {
         filter['date_created'] = {
           ...(filter['date_created'] as object | undefined),
-          // Inclusive of the whole end day — a coupon raised at 16:40 on the
-          // last day of the range belongs to the range.
-          _lte: `${to}T23:59:59`,
+          _lte: w.toIso,
         };
       }
       const rows = (await directus.request(

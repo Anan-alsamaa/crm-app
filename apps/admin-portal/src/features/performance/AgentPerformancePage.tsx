@@ -43,6 +43,7 @@ import {
   type ChatTiming,
 } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
+import { businessDayWindow } from '../../lib/date-range.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
 
@@ -73,7 +74,10 @@ interface Filters {
   agentId?: string;
 }
 
-const endOfDay = (isoDate: string) => `${isoDate}T23:59:59.999Z`;
+/* The END of a BUSINESS day (owner, 2026-09-30): 04:00 the NEXT morning, not
+   23:59 the same night. A chat solved at 01:00 belongs to the shift that opened
+   the evening before, and `T23:59:59` cut every night's tail off the measure. */
+const endOfDay = (isoDate: string) => businessDayWindow(isoDate, isoDate).toIso;
 
 function useAgentList() {
   return useQuery({

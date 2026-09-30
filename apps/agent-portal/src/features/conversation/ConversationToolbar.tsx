@@ -343,7 +343,16 @@ export function ConversationToolbar({
               A new customer message flips it back automatically (gateway). */}
           <Button
             type="button"
-            variant={isSolved ? 'outline' : 'success'}
+            /*
+              CLOSING IS NOT A POSITIVE ACTION (owner, 2026-09-30).
+              
+              It read "Mark as solved" in `success` green, which is the same
+              weight and hue as a primary CTA — so ending a conversation looked
+              like the thing to do. It is now a tinted red: still one click,
+              still reversible, but no longer inviting. Reopening keeps the
+              green it already had, because THAT is the positive act.
+            */
+            variant={isSolved ? 'success' : 'destructive-soft'}
             size="sm"
             iconStart={isSolved ? undefined : <CheckIcon />}
             onClick={() =>
@@ -368,7 +377,7 @@ export function ConversationToolbar({
           >
             {isSolved
               ? t('conversation.markOpen', { defaultValue: 'Reopen' })
-              : t('conversation.markSolved', { defaultValue: 'Mark as solved' })}
+              : t('conversation.closeChat', { defaultValue: 'Close this chat' })}
           </Button>
 
           {existingTicket && (
