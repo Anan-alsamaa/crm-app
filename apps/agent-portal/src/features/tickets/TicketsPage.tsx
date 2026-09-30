@@ -5,7 +5,6 @@ import {
   ArrowLeftIcon,
   Avatar,
   Button,
-  ChevronDownIcon,
   CloseIcon,
   cn,
   DateField,
@@ -191,13 +190,6 @@ export function TicketsPage() {
     max: 520,
   });
   const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
-  /* The rail's job is showing tickets. Filters are set once and then left, so
-     they fold away and report how many are on rather than occupying four rows
-     of the queue permanently. */
-  const [filtersOpen, setFiltersOpen] = useState(false);
-  const activeFilters = [criteria.complaintType, criteria.from, criteria.to].filter(
-    (v) => v != null && v !== '',
-  ).length;
 
   // Deep-link support: open a specific ticket from /tickets?id=<id> (command
   // palette, AI search) or /tickets/<id> (notification "View" links).
@@ -322,27 +314,6 @@ export function TicketsPage() {
               ))}
             </div>
 
-            {/* WHOSE TICKETS. First, because it changes what every count below
-                it means — a status tally over "mine" and over "all" are
-                different numbers, and reading them without knowing which is
-                how an empty page gets mistaken for missing data. */}
-            <div className="mt-3 px-4">
-              <SelectMenu
-                value={scope}
-                size="sm"
-                aria-label={t('tickets.scopeLabel', { defaultValue: 'Agent' })}
-                onChange={(v) => setScope(v as ComplaintScope)}
-                options={[
-                  { value: 'me', label: t('tickets.scopeMine', { defaultValue: 'My tickets' }) },
-                  { value: 'all', label: t('tickets.scopeAll', { defaultValue: 'All agents' }) },
-                  ...(agentOptions.data ?? []).map((a) => ({
-                    value: a.id,
-                    label: a.first_name?.trim() || a.email || a.id,
-                  })),
-                ]}
-              />
-            </div>
-
             {/* The statuses the tiles leave out, as quiet text. Everything the
                 toolbar used to offer is still reachable — All to clear, and the
                 two piles an agent visits rather than scans. */}
@@ -391,75 +362,79 @@ export function TicketsPage() {
                 aria-label={t('tickets.searchLabel', { defaultValue: 'Search tickets' })}
                 className="h-9"
               />
-              <button
-                type="button"
-                onClick={() => setFiltersOpen((v) => !v)}
-                aria-expanded={filtersOpen}
-                className="flex w-full items-center justify-between gap-2 rounded-lg px-1 py-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground transition-colors duration-fast hover:text-foreground"
-              >
-                <span className="flex items-center gap-1.5">
-                  {t('tickets.filters', { defaultValue: 'Filters' })}
-                  {activeFilters > 0 && (
-                    <span className="grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[10px] font-bold text-primary-foreground">
-                      {activeFilters}
-                    </span>
-                  )}
-                </span>
-                <ChevronDownIcon
-                  size={12}
-                  className={cn('transition-transform duration-fast', filtersOpen && 'rotate-180')}
+              {/*
+                ALWAYS VISIBLE (owner, 2026-09-30). These sat behind a "Filters"
+                toggle that was closed by default, so the agent filter — the one
+                that decides whether the page shows anything at all — was two
+                clicks away and invisible until found. A filter nobody can see is
+                a filter that gets reported as missing data, which is exactly what
+                happened here twice.
+              */}
+              <>
+                {/* WHOSE TICKETS, first: it changes what every other filter and
+                      count below it means. */}
+                <SelectMenu
+                  size="sm"
+                  className="w-full"
+                  value={scope}
+                  aria-label={t('tickets.scopeLabel', { defaultValue: 'Agent' })}
+                  onChange={(v) => setScope(v as ComplaintScope)}
+                  options={[
+                    { value: 'me', label: t('tickets.scopeMine', { defaultValue: 'My tickets' }) },
+                    { value: 'all', label: t('tickets.scopeAll', { defaultValue: 'All agents' }) },
+                    ...(agentOptions.data ?? []).map((a) => ({
+                      value: a.id,
+                      label: a.first_name?.trim() || a.email || a.id,
+                    })),
+                  ]}
                 />
-              </button>
-              {filtersOpen && (
-                <>
-                  <SelectMenu
-                    size="sm"
-                    className="w-full"
-                    value={criteria.complaintType ?? ''}
-                    onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
-                    aria-label={t('complaint.type', { defaultValue: 'Ticket type' })}
-                    options={[
-                      {
-                        value: '',
-                        label: t('tickets.anyType', { defaultValue: 'Any ticket type' }),
-                      },
-                      // From the data in range, not the full vocabulary: a menu of
-                      // types this agent has never handled is a list to read past.
-                      ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
-                    ]}
-                  />
-                  {/* The dates carry visible micro-labels: two bare date boxes side
+                <SelectMenu
+                  size="sm"
+                  className="w-full"
+                  value={criteria.complaintType ?? ''}
+                  onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
+                  aria-label={t('complaint.type', { defaultValue: 'Ticket type' })}
+                  options={[
+                    {
+                      value: '',
+                      label: t('tickets.anyType', { defaultValue: 'Any ticket type' }),
+                    },
+                    // From the data in range, not the full vocabulary: a menu of
+                    // types this agent has never handled is a list to read past.
+                    ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
+                  ]}
+                />
+                {/* The dates carry visible micro-labels: two bare date boxes side
                   by side read as one range control with no way to tell which
                   end is which. Full-width halves, so the pair squares up with
                   the search box above instead of ending ragged mid-rail. */}
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <label className="block space-y-1">
-                      <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        {t('performance.from', { defaultValue: 'From' })}
-                      </span>
-                      <DateField
-                        size="sm"
-                        value={criteria.from ?? ''}
-                        onChange={(v) => setCriteria((c) => ({ ...c, from: v }))}
-                        aria-label={t('performance.from', { defaultValue: 'From' })}
-                        className="w-full"
-                      />
-                    </label>
-                    <label className="block space-y-1">
-                      <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                        {t('performance.to', { defaultValue: 'To' })}
-                      </span>
-                      <DateField
-                        size="sm"
-                        value={criteria.to ?? ''}
-                        onChange={(v) => setCriteria((c) => ({ ...c, to: v }))}
-                        aria-label={t('performance.to', { defaultValue: 'To' })}
-                        className="w-full"
-                      />
-                    </label>
-                  </div>
-                </>
-              )}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <label className="block space-y-1">
+                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('performance.from', { defaultValue: 'From' })}
+                    </span>
+                    <DateField
+                      size="sm"
+                      value={criteria.from ?? ''}
+                      onChange={(v) => setCriteria((c) => ({ ...c, from: v }))}
+                      aria-label={t('performance.from', { defaultValue: 'From' })}
+                      className="w-full"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                      {t('performance.to', { defaultValue: 'To' })}
+                    </span>
+                    <DateField
+                      size="sm"
+                      value={criteria.to ?? ''}
+                      onChange={(v) => setCriteria((c) => ({ ...c, to: v }))}
+                      aria-label={t('performance.to', { defaultValue: 'To' })}
+                      className="w-full"
+                    />
+                  </label>
+                </div>
+              </>
               {!isEmptyFilter(criteria) && (
                 // Undo lives with the controls it undoes. The "what is the
                 // queue showing" count moved to the rail's foot, which shows
