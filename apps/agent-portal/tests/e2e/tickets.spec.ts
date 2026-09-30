@@ -88,11 +88,11 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
   expect(ticketName.length).toBeGreaterThan(0);
   await agent.waitForURL(/\/tickets\/[0-9a-f-]{6,}/i, { timeout: 20_000 });
 
-  // 5. Close the work. One control now does it: "Close this chat" sets the
+  // 5. Close the work. One control now does it: "Mark as solved" sets the
   // ticket to resolved, stops both SLA timers, and backfills first_responded_at
   // when nothing else stamped it — which replaced the separate first-response
   // button and status dropdown this test used to drive.
-  await agent.getByRole('button', { name: /close this chat/i }).click();
+  await agent.getByRole('button', { name: /mark as solved/i }).click();
   await expect(agent.getByText(/^solved ·/i)).toBeVisible({ timeout: 10_000 });
 
   // And it survives a reload, so the state was persisted rather than only set
@@ -109,11 +109,11 @@ test('agent creates a ticket from a conversation, advances workflow, sees histor
    * never solved.
    *
    * So wait for the refetch to have LANDED first: a resolved ticket no longer
-   * offers "Close this chat", so the button's disappearance proves the page
+   * offers "Mark as solved", so the button's disappearance proves the page
    * reloaded the ticket under a restored session. Only then is asking about
    * the status meaningful.
    */
-  await expect(agent.getByRole('button', { name: /close this chat/i })).toHaveCount(0, {
+  await expect(agent.getByRole('button', { name: /mark as solved/i })).toHaveCount(0, {
     timeout: 25_000,
   });
   /*
