@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -23,6 +23,7 @@ import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
 import { useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { OrderSnapshotPanel } from './OrderSnapshotPanel.js';
 import {
   agentLateStats,
   agentName,
@@ -346,6 +347,23 @@ export function LateOrdersReportPage() {
   const { user, isOwner } = useAuth();
   const EXPORT_ROLES = ['WeCare Admin', 'WeCare Supervisor'];
   const canExport = isOwner || EXPORT_ROLES.includes(user?.role?.name ?? '');
+
+  /*
+   * WHO MAY OPEN THE ORDER PANEL (owner, 2026-09-30).
+   *
+   * The same gate as the export, and for the same reason: the stored snapshot
+   * carries the customer's DELIVERY ADDRESS, which this report does not otherwise
+   * show anywhere. Operations and the five Area Managers can read the register
+   * but not open an order — matching how the export already treats the same data
+   * rather than inventing a second rule for it.
+   *
+   * Hiding is not securing and does not pretend to be: the snapshot rides on the
+   * row this page already reads. This decides who is OFFERED it, which is what
+   * was asked for — the same honest limit as `canExport` above.
+   */
+  const canSeeOrder = canExport;
+  /** Which row is open. One at a time: two order panels is a page, not a table. */
+  const [openOrder, setOpenOrder] = useState<string | null>(null);
 
   const exportByAgent = () => {
     const header = [
@@ -921,15 +939,26 @@ export function LateOrdersReportPage() {
                       <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
                       <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
                       <Th>{t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}</Th>
+                      {/* The toggle's own column, titled for screen readers only
+                          — a visible heading over a chevron reads as a column of
+                          data rather than a control. */}
+                      {canSeeOrder && (
+                        <Th className="w-24">
+                          <span className="sr-only">
+                            {t('lateOrdersReport.snapshot.items', { defaultValue: 'Items' })}
+                          </span>
+                        </Th>
+                      )}
                     </Tr>
                   </thead>
                   <tbody>
                     {paged.map((r) => (
-                      <Tr key={r.id}>
-                        <Td className="whitespace-nowrap text-muted-foreground">
-                          {r.date_created ? formatDateTime(r.date_created) : '-'}
-                        </Td>
-                        {/*
+                      <Fragment key={r.id}>
+                        <Tr>
+                          <Td className="whitespace-nowrap text-muted-foreground">
+                            {r.date_created ? formatDateTime(r.date_created) : '-'}
+                          </Td>
+                          {/*
                       THE BUSINESS DAY, 10:00 to 04:00, named after the day it
                       started. Trading runs past midnight, so the calendar date
                       splits one night's work across two rows: 23:50 and 00:10
@@ -937,89 +966,122 @@ export function LateOrdersReportPage() {
                       Derived, never stored — the rule is one function and the
                       report must not hold a second, older copy of it.
                     */}
-                        <Td className="whitespace-nowrap tabular-nums">
-                          {(() => {
-                            const day = businessDay(r.date_created);
-                            return day ? formatDate(day) : '-';
-                          })()}
-                        </Td>
-                        <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
-                        {/* §14 — the NAMES, each in its own column. */}
-                        <Td className="max-w-[12rem] truncate">{r.brand_name || '-'}</Td>
-                        <Td className="max-w-[12rem] truncate">{r.restaurant_name || '-'}</Td>
-                        <Td className="whitespace-nowrap tabular-nums">
-                          {r.customer_phone || '-'}
-                        </Td>
-                        {/* §12/§13 — the four durations, all from the order's
+                          <Td className="whitespace-nowrap tabular-nums">
+                            {(() => {
+                              const day = businessDay(r.date_created);
+                              return day ? formatDate(day) : '-';
+                            })()}
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums">{r.order_id ?? '-'}</Td>
+                          {/* §14 — the NAMES, each in its own column. */}
+                          <Td className="max-w-[12rem] truncate">{r.brand_name || '-'}</Td>
+                          <Td className="max-w-[12rem] truncate">{r.restaurant_name || '-'}</Td>
+                          <Td className="whitespace-nowrap tabular-nums">
+                            {r.customer_phone || '-'}
+                          </Td>
+                          {/* §12/§13 — the four durations, all from the order's
                             status history via `orderEventTimes`. Only the rows
                             on the open PAGE are fetched, so these are blank
                             until that batch lands. */}
-                        <Td className="whitespace-nowrap tabular-nums">
-                          <Leg
-                            loading={eventTimes.isLoading}
-                            minutes={timesOf(r.order_id).serviceMinutes}
-                          />
-                        </Td>
-                        <Td className="whitespace-nowrap tabular-nums">
-                          <Leg
-                            loading={eventTimes.isLoading}
-                            minutes={timesOf(r.order_id).driverArrivalMinutes}
-                          />
-                        </Td>
-                        <Td className="whitespace-nowrap tabular-nums">
-                          <Leg
-                            loading={eventTimes.isLoading}
-                            minutes={timesOf(r.order_id).deliveryMinutes}
-                          />
-                        </Td>
-                        <Td className="whitespace-nowrap tabular-nums">
-                          <Leg
-                            loading={eventTimes.isLoading}
-                            minutes={timesOf(r.order_id).preparationMinutes}
-                          />
-                        </Td>
-                        {/* §12 — the CAUSE, spelled out. `lateOrders.kind.*`
+                          <Td className="whitespace-nowrap tabular-nums">
+                            <Leg
+                              loading={eventTimes.isLoading}
+                              minutes={timesOf(r.order_id).serviceMinutes}
+                            />
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums">
+                            <Leg
+                              loading={eventTimes.isLoading}
+                              minutes={timesOf(r.order_id).driverArrivalMinutes}
+                            />
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums">
+                            <Leg
+                              loading={eventTimes.isLoading}
+                              minutes={timesOf(r.order_id).deliveryMinutes}
+                            />
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums">
+                            <Leg
+                              loading={eventTimes.isLoading}
+                              minutes={timesOf(r.order_id).preparationMinutes}
+                            />
+                          </Td>
+                          {/* §12 — the CAUSE, spelled out. `lateOrders.kind.*`
                             translates the seeded two; anything operations added
                             falls back to `causeLabel`, which turns
                             `late_preparation` into "Late preparation" rather
                             than printing the raw enum with its underscore. */}
-                        <Td className="whitespace-nowrap">
-                          {r.kind
-                            ? t(`lateOrders.kind.${r.kind}`, { defaultValue: causeLabel(r.kind) })
-                            : '-'}
-                        </Td>
-                        {/* §10 — the HANDLING state. */}
-                        <Td>
-                          <Pill tone={STATE_TONE[r.state]} size="sm">
-                            {t(`lateOrders.state.${r.state}`, { defaultValue: r.state })}
-                          </Pill>
-                        </Td>
-                        {/* The ORDER's own status — a different fact, and the
+                          <Td className="whitespace-nowrap">
+                            {r.kind
+                              ? t(`lateOrders.kind.${r.kind}`, { defaultValue: causeLabel(r.kind) })
+                              : '-'}
+                          </Td>
+                          {/* §10 — the HANDLING state. */}
+                          <Td>
+                            <Pill tone={STATE_TONE[r.state]} size="sm">
+                              {t(`lateOrders.state.${r.state}`, { defaultValue: r.state })}
+                            </Pill>
+                          </Td>
+                          {/* The ORDER's own status — a different fact, and the
                             spec is explicit that the two must not be confused. */}
-                        <Td className="whitespace-nowrap text-muted-foreground">
-                          {r.order_status
-                            ? t(`commerce.orderStatuses.${r.order_status}`, {
-                                defaultValue: causeLabel(r.order_status),
-                              })
-                            : '-'}
-                        </Td>
-                        <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
-                        <Td className="max-w-[22rem]">
-                          <span className="line-clamp-2 block leading-snug" title={r.reason ?? ''}>
-                            {r.reason ?? '-'}
-                          </span>
-                        </Td>
-                        {/* What the agent DID about it, beside why it happened.
+                          <Td className="whitespace-nowrap text-muted-foreground">
+                            {r.order_status
+                              ? t(`commerce.orderStatuses.${r.order_status}`, {
+                                  defaultValue: causeLabel(r.order_status),
+                                })
+                              : '-'}
+                          </Td>
+                          <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
+                          <Td className="max-w-[22rem]">
+                            <span
+                              className="line-clamp-2 block leading-snug"
+                              title={r.reason ?? ''}
+                            >
+                              {r.reason ?? '-'}
+                            </span>
+                          </Td>
+                          {/* What the agent DID about it, beside why it happened.
                         `title` carries the full text, since the cell clamps. */}
-                        <Td className="max-w-[22rem]">
-                          <span
-                            className="line-clamp-2 block leading-snug"
-                            title={r.action_taken ?? ''}
-                          >
-                            {r.action_taken ?? '-'}
-                          </span>
-                        </Td>
-                      </Tr>
+                          <Td className="max-w-[22rem]">
+                            <span
+                              className="line-clamp-2 block leading-snug"
+                              title={r.action_taken ?? ''}
+                            >
+                              {r.action_taken ?? '-'}
+                            </span>
+                          </Td>
+                          {/* THE ORDER, from the stored snapshot. No network call:
+                            it is already on the row. */}
+                          {canSeeOrder && (
+                            <Td className="whitespace-nowrap">
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="secondary"
+                                aria-expanded={openOrder === r.id}
+                                onClick={() => setOpenOrder((cur) => (cur === r.id ? null : r.id))}
+                              >
+                                {openOrder === r.id
+                                  ? t('lateOrdersReport.snapshot.hide', { defaultValue: 'Hide' })
+                                  : t('lateOrdersReport.snapshot.view', { defaultValue: 'Order' })}
+                              </Button>
+                            </Td>
+                          )}
+                        </Tr>
+                        {/* A SECOND ROW rather than an overlay: the register is
+                          read by scrolling, and a dialog would take the reader
+                          out of the list they are working down. `colSpan` is
+                          deliberately generous — a short span would leave the
+                          panel boxed inside one column's width. */}
+                        {canSeeOrder && openOrder === r.id && (
+                          <Tr>
+                            <Td colSpan={16} className="bg-secondary/20 p-0">
+                              <OrderSnapshotPanel snapshot={r.order_snapshot} />
+                            </Td>
+                          </Tr>
+                        )}
+                      </Fragment>
                     ))}
                   </tbody>
                 </Table>

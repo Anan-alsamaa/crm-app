@@ -260,7 +260,8 @@
       "pickup": "استلام",
       "carhop": "الاستلام من السيارة",
       "in_restaurant": "داخل المطعم"
-    }
+    },
+    "each": "للواحدة"
   },
   "compensationAll": {
     "title": "التعويضات",
@@ -1661,7 +1662,21 @@
     "lateCategory": "فئة التأخير",
     "count": "العدد",
     "grandTotal": "الإجمالي الكلي",
-    "uncategorised": "لم تُصنَّف بعد"
+    "uncategorised": "لم تُصنَّف بعد",
+    "snapshot": {
+      "view": "الطلب",
+      "hide": "إخفاء",
+      "items": "الأصناف",
+      "noItems": "لم تُسجَّل أي أصناف.",
+      "none": "لم تُسجَّل تفاصيل الطلب لهذا السجل — فهو إما قيد الانتظار، أو تمّت معالجته قبل تسجيل الطلب.",
+      "linesTotal": "إجمالي الأصناف",
+      "orderTotal": "إجمالي الطلب",
+      "orderStatus": "حالة الطلب",
+      "payment": "الدفع",
+      "deliveryType": "التوصيل",
+      "branch": "العلامة / الفرع",
+      "capturedAt": "سُجِّل في {{when}}"
+    }
   },
   "lateOrders": {
     "kind": {

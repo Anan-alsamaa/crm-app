@@ -20,6 +20,45 @@ import { commerce } from '../../lib/commerce-client.js';
  * pruned by the feature that writes it.
  */
 
+/**
+ * The stored order copy, as much of it as this report reads.
+ *
+ * Declared HERE rather than imported: the full `TicketOrderSnapshot` lives in
+ * the agent portal, and reaching across portals for a type would drag that
+ * app's commerce client in with it. The admin portal already declares its own
+ * narrow view of this shape for the ticket reports — see `RawOrderSnapshot` in
+ * `report-exports/api.ts`.
+ *
+ * Every field optional, because a snapshot is a point-in-time copy of whatever
+ * Yiji answered: an order with no address, no payment mode or no items is a
+ * real order, not a malformed row.
+ */
+export interface LateOrderSnapshot {
+  orderId?: string | null;
+  status?: string | null;
+  total?: number | null;
+  currency?: string | null;
+  placedAt?: string | null;
+  items?: Array<{
+    sku?: string | null;
+    name?: string | null;
+    /** How many. Absent means one — see `snapshotLines`. */
+    qty?: number | null;
+    /** The price of ONE. The LINE is `qty * price`. */
+    price?: number | null;
+    category?: string | null;
+  }> | null;
+  brandName?: string | null;
+  restaurantName?: string | null;
+  restaurantId?: string | null;
+  deliveryType?: string | null;
+  deliveryAddress?: string | null;
+  paymentStatus?: string | null;
+  paymentMode?: string | null;
+  /** When the copy was taken — what makes it a snapshot rather than a claim. */
+  capturedAt?: string | null;
+}
+
 export interface LateOrderDecisionRow {
   id: string;
   order_id: string | null;
@@ -34,6 +73,24 @@ export interface LateOrderDecisionRow {
    * claim the data does not support.
    */
   action_taken?: string | null;
+  /**
+   * The ORDER AS IT STOOD when the agent decided.
+   *
+   * Written by the agent portal on every decision — comment and compensation
+   * alike — from the same `orderToSnapshot` the tickets path uses, so there is
+   * one idea of what an order snapshot is rather than two that drift.
+   *
+   * Read here rather than re-fetched, deliberately. A coupon is judged against
+   * what the customer actually received on the day, and Yiji keeps mutating an
+   * order afterwards — order 1323407 gained a `force_closed` five hours after
+   * its `closed`. Asking Yiji again months later would answer a different
+   * question, and would cost one call per row on a report that can hold
+   * thousands.
+   *
+   * NULL is normal and must render as such: a pending order has no decision, so
+   * nothing was ever captured, and a handful of rows predate the column.
+   */
+  order_snapshot?: LateOrderSnapshot | null;
   minutes_elapsed: number | null;
   brand_name: string | null;
   restaurant_name: string | null;
@@ -110,6 +167,9 @@ export function mergeLateOrders(
       date_created: q.placedAt ?? null,
       decided_by: null,
       ticket: null,
+      /* NULL, and that is the truth rather than a gap: nobody has acted on this
+         order, so no snapshot was ever captured. The panel says so. */
+      order_snapshot: null,
       state: 'pending',
       order_status: q.status ?? null,
       customer_phone: q.customerPhone ?? null,
@@ -192,6 +252,49 @@ export function useLateOrderEventTimes(orderIds: string[]) {
   });
 }
 
+/** One order line as the panel shows it: what one costs, and what the line cost. */
+export interface SnapshotLine {
+  name: string;
+  qty: number;
+  unit: number;
+  lineTotal: number;
+  sku: string | null;
+  category: string | null;
+}
+
+/**
+ * The snapshot's items, priced per LINE.
+ *
+ * `price` in a snapshot is Yiji's `itemPrice` — the price of ONE. Rendering it
+ * raw is the money bug the owner caught on the coupon form (2026-09-29): three
+ * waters at 1 SAR read as "1" while the inbox, which multiplies, read 3. The
+ * same field is stored here, so the same rule applies, and it lives in one
+ * exported function so the report and its tests cannot disagree.
+ *
+ * A missing or non-positive quantity counts as ONE and a missing price as zero:
+ * both appear on real Yiji lines, and a line silently worth nothing is how a
+ * plausible wrong total gets read as fact.
+ */
+export function snapshotLines(snap: LateOrderSnapshot | null | undefined): SnapshotLine[] {
+  return (snap?.items ?? []).map((it) => {
+    const qty = typeof it.qty === 'number' && it.qty > 0 ? it.qty : 1;
+    const unit = typeof it.price === 'number' && it.price > 0 ? it.price : 0;
+    return {
+      name: it.name?.trim() || '—',
+      qty,
+      unit,
+      lineTotal: unit * qty,
+      sku: it.sku?.trim() || null,
+      category: it.category?.trim() || null,
+    };
+  });
+}
+
+/** What the lines add up to — shown beside the order's own stored total. */
+export function snapshotLinesTotal(lines: readonly SnapshotLine[]): number {
+  return lines.reduce((sum, l) => sum + l.lineTotal, 0);
+}
+
 export function latestPerOrder(rows: LateOrderDecisionRow[]): LateOrderDecisionRow[] {
   const seen = new Set<string>();
   const out: LateOrderDecisionRow[] = [];
@@ -226,6 +329,10 @@ export function useLateOrderDecisions(fromIso: string, toIso: string) {
               'action',
               'reason',
               'action_taken',
+              /* The stored order. One more JSON column on a query already being
+                 made — and it is what makes the register's order panel cost no
+                 Yiji calls at all. */
+              'order_snapshot',
               'minutes_elapsed',
               'brand_name',
               'restaurant_name',
