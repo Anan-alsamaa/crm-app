@@ -138,7 +138,7 @@ const STATUS_DOT: Record<string, string> = {
 
 export function TicketsPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, isOwner } = useAuth();
   const navigate = useNavigate();
   // Single-column below the desktop breakpoint: the list and the detail swap
   // places rather than shrinking the rail to something unreadable.
@@ -152,16 +152,21 @@ export function TicketsPage() {
   /*
    * WHOSE TICKETS (owner, 2026-09-30).
    *
-   * Defaults to the signed-in agent, which is what this page has always shown —
-   * but the scope was invisible and absolute. A ticket raised from the
-   * late-orders queue belongs to the agent who decided it, so an Administrator
-   * looking for somebody else's saw an empty page and reasonably read it as
-   * missing data rather than as a filter.
+   * The scope used to be invisible and absolute: `assigned_agent = $CURRENT_USER`,
+   * always. A ticket raised from the late-orders queue belongs to the agent who
+   * decided it, so anyone looking for somebody else's saw an empty page and
+   * reasonably read it as missing data rather than as a filter.
    *
-   * Modelled on the Coupon approvals page: default to me, with All and each
-   * agent available from the dropdown.
+   * THE DEFAULT DEPENDS ON WHETHER YOU WORK TICKETS. An agent opens on their own
+   * queue, which is the page they came for. An OWNER opens on All, because they
+   * are assigned none: defaulting them to "mine" shows a confirmed-empty list to
+   * the one person who needs to see everything — which is exactly what was
+   * reported, twice. Verified on production: the owner is assigned 0 of 16.
+   *
+   * `isOwner` is Directus `admin_access`, which is how Administrator is
+   * identified everywhere in these portals — never a role name.
    */
-  const [scope, setScope] = useState<ComplaintScope>('me');
+  const [scope, setScope] = useState<ComplaintScope>(isOwner ? 'all' : 'me');
   const complaints = useMyComplaints(null, agentName, scope);
   const agentOptions = useAgents();
   const { index: storeIndex } = useStoreIndex();
@@ -584,10 +589,33 @@ export function TicketsPage() {
                   <TicketEmptyArt size={160} />
                   <div className="space-y-1">
                     <h3 className="text-md font-semibold text-foreground">{t('tickets.empty')}</h3>
+                    {/*
+                      SAY WHICH EMPTY THIS IS.
+                      
+                      "Tickets are created from chats that need follow-up" is a
+                      statement about the whole system, and it was shown even when
+                      the real reason was a filter — so somebody looking at a
+                      scope holding none of their tickets was told the feature
+                      works differently than it does. That is how this page got
+                      reported as broken twice (owner, 2026-09-30).
+                      
+                      A scope that hides everything says so, and names the way
+                      out; only a genuinely empty system gets the original line.
+                    */}
                     <p className="text-xs text-muted-foreground">
-                      {t('tickets.emptyHint', {
-                        defaultValue: 'Tickets are created from chats that need follow-up.',
-                      })}
+                      {scope === 'me'
+                        ? t('tickets.emptyMine', {
+                            defaultValue:
+                              'No tickets are assigned to you. Switch the agent filter to All to see everyone else’s.',
+                          })
+                        : scope !== 'all'
+                          ? t('tickets.emptyAgent', {
+                              defaultValue:
+                                'That agent has no tickets in view. Switch the filter to All to see every ticket.',
+                            })
+                          : t('tickets.emptyHint', {
+                              defaultValue: 'Tickets are created from chats that need follow-up.',
+                            })}
                     </p>
                   </div>
                 </div>
