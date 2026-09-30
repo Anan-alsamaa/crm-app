@@ -60,7 +60,7 @@ import {
   resolveCustomerClaims,
 } from './connection.js';
 import { Registry } from './metrics.js';
-import { parseAttachmentPolicy } from './attachments.js';
+import { parseAttachmentPolicy, sanitizeFilename } from './attachments.js';
 import { verifyWebhookSignature } from './webhook.js';
 import { notifyAssignment } from './assignment-notify.js';
 
@@ -374,6 +374,20 @@ async function main(): Promise<void> {
     adminPassword: config.YIJI_ADMIN_PASSWORD,
   });
 
+  /*
+   * ONE POLICY OBJECT, shared by both upload paths.
+   *
+   * The socket handler (`attachment:upload`) and the HTTP endpoint
+   * (`POST /chat/attachment`) must enforce the SAME limits — a customer whose
+   * webview falls back to one path must not get a different answer about the
+   * same photo. Built once here rather than inline, so there is only one list
+   * and it cannot drift.
+   */
+  const attachmentPolicy = parseAttachmentPolicy(
+    config.ATTACHMENT_MAX_BYTES,
+    config.ATTACHMENT_ALLOWED_MIME,
+  );
+
   registerConnection({
     io,
     directus,
@@ -382,10 +396,7 @@ async function main(): Promise<void> {
     presenceStore,
     producer,
     logger,
-    attachmentPolicy: parseAttachmentPolicy(
-      config.ATTACHMENT_MAX_BYTES,
-      config.ATTACHMENT_ALLOWED_MIME,
-    ),
+    attachmentPolicy,
     /* Null unless the Yiji service credential is configured, in which case a
        token issued by the Yiji app resolves to a real customer instead of
        being refused. */
@@ -490,6 +501,24 @@ async function main(): Promise<void> {
       done(err as Error, undefined);
     }
   });
+
+  /*
+   * RAW BYTES, for the customer attachment upload below.
+   *
+   * Fastify has no parser for these types, so without this the endpoint would
+   * answer 415 before its handler ran. `parseAs: 'buffer'` hands the handler the
+   * exact bytes the phone sent — no base64, no multipart envelope, nothing to
+   * decode wrongly.
+   *
+   * `bodyLimit` is the attachment cap plus a little headroom, so an oversized
+   * file is refused by Fastify with a 413 instead of being read into memory
+   * first.
+   */
+  app.addContentTypeParser(
+    ['application/octet-stream', ...attachmentPolicy.allowedMime],
+    { parseAs: 'buffer', bodyLimit: config.ATTACHMENT_MAX_BYTES + 65536 },
+    (_req, body: Buffer, done) => done(null, body),
+  );
 
   app.get('/health', async () => ({ status: 'ok' }));
   app.get('/ready', async (_req, reply) => {
@@ -971,6 +1000,128 @@ async function main(): Promise<void> {
       logger.info({ vendorId, walkIn: !yijiCustomerId }, 'walk-in session issued');
       return reply.send({ ok: true, token });
     });
+
+  /**
+   * UPLOAD ONE ATTACHMENT OVER PLAIN HTTP. The customer's photo path.
+   *
+   * WHY THIS EXISTS, and why it is not just a nicer spelling of the socket
+   * handler (owner-reported, 2026-09-30: "customer is not able to attach an
+   * image while sending photo in the chat" — taken from inside the Yiji app).
+   *
+   * Inside the Yiji app's webview `window.WebSocket` is ABSENT, so socket.io
+   * falls back to POLLING (see `apps/chat-widget/src/socket.ts` — the order is
+   * decided at runtime for exactly this reason). A polling session is spread
+   * across many HTTP requests and depends on the ALB's stickiness cookie to
+   * stay on the task that owns it. That cookie CANNOT be stored by a browser
+   * here, and this was measured against production, not assumed:
+   *
+   *     Set-Cookie: AWSALB=...;     Path=/                 <- no SameSite
+   *     Set-Cookie: AWSALBCORS=...; Path=/; SameSite=None  <- and NO Secure
+   *
+   * `SameSite=None` without `Secure` is rejected outright by every current
+   * browser, and bare `AWSALB` with no `SameSite` is treated as Lax and never
+   * sent cross-site. The widget is cross-origin to this gateway, so there is no
+   * cookie to send and `withCredentials: true` has nothing to work with.
+   *
+   * With TWO gateway tasks the result is a coin toss per request. Measured over
+   * 10 fresh sessions, cookieless, with a valid protocol sequence:
+   *
+   *     POST: 400 200 200 400 400 200 400 400 200 200   ->  5/10
+   *
+   * A text message survives that — it is a tiny frame and socket.io's retry
+   * gets it through. A photo is ONE LARGE POST: when it lands on the task that
+   * does not hold the session it is answered 400, and the widget waits out its
+   * full 20-second timeout and shows a failure, or the customer gives up first
+   * and sees nothing at all. That is the reported bug exactly.
+   *
+   * SO THIS PATH HAS NO SESSION TO BE STUCK TO. One request, carrying its own
+   * bearer token and its own bytes; any task can serve it completely. The fix
+   * is the ABSENCE of affinity rather than a repair of it, which is why it
+   * cannot regress when a task restarts, scales, or is replaced.
+   *
+   * The socket handler stays, unchanged, and remains the path for every client
+   * that has a real WebSocket. This is not a migration.
+   */
+  const attachmentBuckets = new Map<string, ReturnType<typeof createTokenBucket>>();
+  app.post('/chat/attachment', async (req, reply) => {
+    /* Per IP, mirroring the socket handler's own upload budget: generous enough
+       that picking a few photos never trips it, bounded because an unauthenticated
+       upload path is a denial-of-service vector. Checked BEFORE the token is
+       verified so a flood costs no crypto. */
+    const ip = req.ip || 'unknown';
+    let bucket = attachmentBuckets.get(ip);
+    if (!bucket) {
+      bucket = createTokenBucket(10, 1);
+      attachmentBuckets.set(ip, bucket);
+    }
+    if (!bucket.tryRemove()) {
+      return reply.code(429).send({ ok: false, error: 'too many uploads, wait a moment' });
+    }
+
+    /*
+     * THE SAME IDENTITY THE SOCKET REQUIRES, via the same resolver — including
+     * the Yiji-issued-token path. An upload is a write, so it is not anonymous:
+     * without this, anybody could push files into Directus through this host.
+     */
+    const authHeader = req.headers.authorization;
+    const raw = Array.isArray(authHeader) ? authHeader[0] : authHeader;
+    const token = raw?.startsWith('Bearer ') ? raw.slice(7).trim() : '';
+    if (!token) return reply.code(401).send({ ok: false, error: 'a session token is required' });
+    try {
+      await resolveCustomerClaims(token, verifier, yijiUsers, logger);
+    } catch {
+      /* Deliberately vague to the caller, specific in the log: a probe must not
+         learn WHY a token was refused. */
+      logger.warn({ ip }, 'attachment upload refused: bad token');
+      return reply.code(401).send({ ok: false, error: 'session expired, reopen the chat' });
+    }
+
+    /*
+     * The bytes, and the two things we cannot learn from them. A phone knows
+     * its own filename and MIME type; both are validated here and neither is
+     * trusted — `sanitizeFilename` strips path traversal and bidi overrides,
+     * and the MIME must be on the shared allow-list.
+     */
+    const body = req.body;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return reply.code(400).send({ ok: false, error: 'no file content' });
+    }
+    const q = req.query as { filename?: unknown } | undefined;
+    const filename = sanitizeFilename(q?.filename ?? 'upload');
+    /*
+     * The declared type comes from the header, with the query as a fallback.
+     * A webview that cannot set `Content-Type` on a binary POST still has to be
+     * able to say what it is sending, or the very clients this endpoint exists
+     * for would be refused by the check below.
+     */
+    const headerType = ((req.headers['content-type'] ?? '').split(';')[0] ?? '')
+      .trim()
+      .toLowerCase();
+    const queryType =
+      typeof (req.query as { type?: unknown } | undefined)?.type === 'string'
+        ? ((req.query as { type?: string }).type ?? '').trim().toLowerCase()
+        : '';
+    const mimetype =
+      headerType && headerType !== 'application/octet-stream' ? headerType : queryType;
+    if (!attachmentPolicy.allowedMime.includes(mimetype)) {
+      return reply
+        .code(415)
+        .send({ ok: false, error: `type "${mimetype || 'unknown'}" not allowed` });
+    }
+    if (body.length > attachmentPolicy.maxBytes) {
+      return reply.code(413).send({ ok: false, error: 'file too large' });
+    }
+
+    try {
+      const file = await directus.uploadFile(body, filename, mimetype);
+      /* The same shape the socket ack returns, so the widget has ONE way to read
+         the answer regardless of which path carried it. */
+      return reply.send({ ok: true, id: file.id, type: file.type, filesize: file.filesize });
+    } catch (err) {
+      logger.error({ err }, 'attachment upload failed (http)');
+      return reply.code(502).send({ ok: false, error: 'upload failed' });
+    }
+  });
 
   /**
    * Mint a personal walk-in link for one customer. ADMIN ONLY.

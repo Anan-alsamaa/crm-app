@@ -106,8 +106,23 @@ export function fileLabel(filename?: string | null, type?: string | null): strin
 export const ALLOWED_ATTACHMENT_MIME = [
   'image/png',
   'image/jpeg',
+  /*
+   * NOT A REAL MIME TYPE, and sent anyway. Some Android camera intents report
+   * `image/jpg`, and the gateway accepts it — so rejecting it here would refuse
+   * a photo the server would have taken.
+   */
+  'image/jpg',
   'image/gif',
   'image/webp',
+  /*
+   * WHAT AN IPHONE ACTUALLY PRODUCES. The iOS camera writes HEIC, so without
+   * these two an agent could not attach a photo from their own phone: this list
+   * claimed to mirror the gateway while being three types behind it, and the
+   * check below runs BEFORE the upload, so the server's wider list never got a
+   * say. Found while tracing the customer-side attachment bug, 2026-09-30.
+   */
+  'image/heic',
+  'image/heif',
   'application/pdf',
   'text/plain',
 ] as const;
@@ -117,7 +132,7 @@ export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // 10 MB
 /** `accept` attribute for the file picker, so the OS dialog only offers
  *  uploadable types (extensions + MIME for broad browser support). */
 export const ATTACHMENT_ACCEPT =
-  '.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,' + ALLOWED_ATTACHMENT_MIME.join(',');
+  '.png,.jpg,.jpeg,.gif,.webp,.heic,.heif,.pdf,.txt,' + ALLOWED_ATTACHMENT_MIME.join(',');
 
 export type AttachmentRejection = 'type' | 'size';
 
@@ -135,7 +150,7 @@ export function validateAttachment(file: File): AttachmentRejection | null {
   }
   // No MIME from the browser — fall back to extension for the allowed set.
   const ext = file.name.split('.').pop()?.toLowerCase();
-  const okByExt = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'pdf', 'txt'];
+  const okByExt = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'heic', 'heif', 'pdf', 'txt'];
   return ext && okByExt.includes(ext) ? null : 'type';
 }
 

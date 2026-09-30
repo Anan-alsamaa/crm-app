@@ -15,7 +15,28 @@ const KEY = 'test.range';
 const DAY = 86_400_000;
 const day = (offset: number) => isoDay(new Date(Date.now() + offset * DAY));
 
-beforeEach(() => localStorage.clear());
+/*
+ * THE CLOCK IS PINNED, because this suite was RED EVERY NIGHT.
+ *
+ * `day(0)` above is the CALENDAR day, while the hook's own fallback is
+ * `todayBusinessDay()` — and a business day runs 08:00 to 04:00 the next
+ * morning, named after the day it STARTED. Between midnight and 04:00 Riyadh
+ * those two are different dates, so "falls back to the last month when nothing
+ * is stored" failed with `expected '2026-09-30' to be '2026-10-01'` for four
+ * hours out of every twenty-four — on a clean tree, with nothing changed.
+ *
+ * Found on 2026-10-01 at ~00:50 Riyadh while verifying an unrelated fix, which
+ * is the only reason anybody saw it: a nightly CI run would have blamed
+ * whatever happened to be in flight.
+ *
+ * Midday, so the calendar day and the business day are the same date whatever
+ * hour the suite actually runs at.
+ */
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-09-15T12:00:00+03:00'));
+  localStorage.clear();
+});
 afterEach(() => vi.useRealTimers());
 
 function stored(from: string, to: string) {

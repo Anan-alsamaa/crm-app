@@ -903,34 +903,111 @@ export function Widget({ config }: { config: WidgetConfig }) {
     stopTyping();
   };
 
-  // Upload through the gateway (it proxies to Directus; the customer has no
-  // Directus account). Returns the file id to reference in message:send.
-  const uploadOne = (file: File): Promise<string> =>
+  /*
+   * UPLOAD OVER PLAIN HTTP, NOT OVER THE SOCKET.
+   *
+   * This is the fix for "the customer took a photo and nothing attached",
+   * reported from inside the Yiji app (owner, 2026-09-30).
+   *
+   * The Yiji app's webview has NO `WebSocket` constructor, so socket.io falls
+   * back to POLLING there (see socket.ts, where the transport order is decided
+   * at runtime). A polling session is spread over many HTTP requests and needs
+   * the ALB's stickiness cookie to stay on the gateway task that owns it — and
+   * that cookie cannot be stored by a browser, because the ALB sends
+   * `SameSite=None` WITHOUT `Secure`. Measured against production: a cookieless
+   * polling POST succeeded 5 times out of 10, a straight coin toss across the
+   * two gateway tasks.
+   *
+   * A text message survives that (tiny frame, socket.io retries it). A photo is
+   * one large POST, so half the time it was answered "session unknown" and the
+   * customer watched the 20-second timeout expire.
+   *
+   * A single HTTP POST has NO SESSION to be stuck to: any task can serve it
+   * whole. So this is not a workaround for the affinity problem — it removes the
+   * dependency on affinity altogether, which is why it cannot come back when a
+   * task restarts or scales.
+   *
+   * THE SOCKET PATH REMAINS as a fallback below, for any deployment where the
+   * HTTP route is unreachable (an older gateway, a proxy that only forwards
+   * /socket.io). Belt and braces: the customer's photo is the thing that must
+   * not be lost.
+   */
+  const uploadOverHttp = async (file: File, bytes: ArrayBuffer): Promise<string> => {
+    /* `gatewayUrl` may be '' meaning "this page's own origin" — exactly what a
+       relative URL already means, so an empty base needs no special case. */
+    const base = config.gatewayUrl.replace(/\/+$/, '');
+    /* The type travels in the query as well as the header. Some webviews
+       overwrite `Content-Type` on a binary body, and the gateway accepts either
+       — without this the very clients this path exists for could be refused. */
+    const qs = new URLSearchParams({ filename: file.name, type: file.type });
+    const res = await fetch(`${base}/chat/attachment?${qs.toString()}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${config.token}`,
+        'Content-Type': file.type || 'application/octet-stream',
+      },
+      body: bytes,
+    });
+    const json = (await res.json().catch(() => null)) as {
+      ok?: boolean;
+      id?: string;
+      error?: string;
+    } | null;
+    if (!res.ok || !json?.ok || !json.id) {
+      throw new Error(json?.error ?? `http_${res.status}`);
+    }
+    return json.id;
+  };
+
+  /** The original socket route, kept as the fallback. */
+  const uploadOverSocket = (file: File, content: ArrayBuffer): Promise<string> =>
     new Promise((resolve, reject) => {
       const socket = socketRef.current;
       if (!socket) return reject(new Error('not_connected'));
-      file
-        .arrayBuffer()
-        .then((content) => {
-          socket
-            .timeout(20_000)
-            .emit(
-              'attachment:upload',
-              { filename: file.name, mimetype: file.type, content },
-              (err: Error | null, res?: { ok?: boolean; id?: string; error?: string }) => {
-                if (err) return reject(new Error('timeout'));
-                if (res?.ok && res.id) resolve(res.id);
-                else reject(new Error(res?.error ?? 'upload_failed'));
-              },
-            );
-        })
-        /* `arrayBuffer()` CAN REJECT, and used to reject into nothing.
-           iOS Safari fails here when a photo is still syncing from iCloud, and
-           the unhandled rejection left the promise pending for ever: the spinner
-           never stopped and the attach button stayed disabled for the rest of
-           the session. */
-        .catch(() => reject(new Error('unreadable')));
+      socket
+        .timeout(20_000)
+        .emit(
+          'attachment:upload',
+          { filename: file.name, mimetype: file.type, content },
+          (err: Error | null, res?: { ok?: boolean; id?: string; error?: string }) => {
+            if (err) return reject(new Error('timeout'));
+            if (res?.ok && res.id) resolve(res.id);
+            else reject(new Error(res?.error ?? 'upload_failed'));
+          },
+        );
     });
+
+  // Upload through the gateway (it proxies to Directus; the customer has no
+  // Directus account). Returns the file id to reference in message:send.
+  const uploadOne = async (file: File): Promise<string> => {
+    /* `arrayBuffer()` CAN REJECT, and used to reject into nothing. iOS Safari
+       fails here when a photo is still syncing from iCloud, and the unhandled
+       rejection left the promise pending for ever: the spinner never stopped and
+       the attach button stayed disabled for the rest of the session. Read ONCE
+       and shared by both routes, so a fallback never re-reads a file the OS has
+       already failed on. */
+    let bytes: ArrayBuffer;
+    try {
+      bytes = await file.arrayBuffer();
+    } catch {
+      throw new Error('unreadable');
+    }
+
+    try {
+      return await uploadOverHttp(file, bytes);
+    } catch (httpErr) {
+      /*
+       * A REFUSAL IS NOT A ROUTING FAILURE, and retrying it over the socket
+       * would only get the same answer more slowly — while replacing a precise
+       * message ("type not allowed") with a vague one. So only a transport-level
+       * failure falls through; 4xx answers are final.
+       */
+      const msg = httpErr instanceof Error ? httpErr.message : '';
+      const isRefusal = /^http_4\d\d$/.test(msg);
+      if (isRefusal) throw httpErr;
+      return uploadOverSocket(file, bytes);
+    }
+  };
 
   const onPickFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -1530,11 +1607,23 @@ export function Widget({ config }: { config: WidgetConfig }) {
                 </div>
               )}
               <div className="yiji-input">
+                {/*
+                  `accept` so the phone's picker offers what the gateway will
+                  actually take — extensions AND MIME types, because a webview
+                  honours one or the other but rarely both. HEIC is listed
+                  because that is what an iPhone camera writes.
+
+                  DELIBERATELY NO `capture` ATTRIBUTE: it forces the camera and
+                  removes the customer's ability to send a photo they already
+                  have, which is most of them (a receipt, a screenshot of the
+                  order). `image/*` keeps "Take Photo" in the sheet anyway.
+                */}
                 <input
                   ref={fileRef}
                   type="file"
                   multiple
                   hidden
+                  accept="image/*,.heic,.heif,.png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,application/pdf,text/plain"
                   onChange={(e) => void onPickFiles((e.target as HTMLInputElement).files)}
                 />
                 <div className="yiji-field">
