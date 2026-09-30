@@ -28,11 +28,11 @@ test('agent changes case state and priority then sees them persist', async ({ pa
   /*
    * Status is no longer a four-option combobox. The operations team tracks a
    * case as "dealt with or not", so the toolbar carries a two-state toggle —
-   * "Mark as solved" / "Reopen" — and the raw open/pending distinction is
+   * "Close this chat" / "Reopen" — and the raw open/pending distinction is
    * gone. This spec drove the retired control and failed on every run; it now
    * drives the one that exists.
    */
-  const solveButton = page.getByRole('button', { name: /mark as solved/i });
+  const solveButton = page.getByRole('button', { name: /close this chat/i });
   await expect(solveButton).toBeVisible({ timeout: 10_000 });
   await solveButton.click();
   // Once solved the same control offers the way back, which is how we know the
