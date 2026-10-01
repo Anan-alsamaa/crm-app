@@ -5,6 +5,7 @@ import type {
   CouponOrderContext,
   CouponPushJob,
   YijiAdminPoster,
+  YijiCustomerFinder,
   YijiOrderReader,
 } from '@yiji/shared-types';
 import {
@@ -51,6 +52,27 @@ import { describeError } from '../lib/errors.js';
  * service credential exists at all — see `postCoupon`.
  */
 export const YIJI_COUPON_PATH = '/api/CouponUserOrder/CreateCouponUserFromOrder';
+
+/**
+ * The path that grants a coupon to a USER, with no order involved.
+ *
+ * Verified against the live Swagger and admin API (2026-10-01). It takes a
+ * `CouponUserVM` — `userId`, `couponCode`, `compensationReason`, the coupon
+ * terms — and its `orderId` is explicitly NULLABLE, which is the whole
+ * difference from `CreateCouponUserFromOrder` above, whose `CouponUserOrderVM`
+ * requires one.
+ *
+ * WHY A SECOND PATH RATHER THAN A LOOSER FIRST ONE: the order-based endpoint
+ * resolves the customer FROM the order, so it genuinely cannot work without
+ * one. This endpoint resolves them from `userId` instead. Two different
+ * questions, two different bodies — the same reason the path and payload are
+ * declared together here.
+ *
+ * This corrects a comment this file used to carry, that Yiji "cannot attach a
+ * coupon without an order". It can; it just needs to be told who the customer
+ * is. See [[yiji-coupon-without-order]].
+ */
+export const YIJI_COMPENSATION_COUPON_PATH = '/api/CouponUser/AddCompensationCoupon';
 
 /**
  * WHICH PLATFORM GRANTS THE COUPON, KEYED BY VENDOR.
@@ -124,6 +146,15 @@ export interface CouponPushDeps {
    */
   readOrder?: YijiOrderReader;
   /**
+   * Finds the Yiji customer behind a phone number, for a coupon with NO order.
+   *
+   * Absent means the order-less path is simply unavailable and such a coupon
+   * stays `approved` as before — the same shape as `postCoupon` being absent.
+   * Never used when an order exists: that path resolves the customer itself and
+   * needs no lookup.
+   */
+  findCustomer?: YijiCustomerFinder;
+  /**
    * Yiji's `tenantid` header. Their API is multi-tenant and mis-routes a call
    * without it; the captured request sends `1`.
    */
@@ -165,6 +196,14 @@ export interface CouponApprovalRow {
    */
   no_other_discounts: boolean | null;
   reason: string | null;
+  /**
+   * The customer's number when no contact row stands behind the request.
+   *
+   * A late-order or WhatsApp compensation has neither a ticket nor a contact,
+   * so this is the only phone on the row — and on the order-less path it is how
+   * the customer is found on Yiji.
+   */
+  customer_phone?: string | null;
   contact: {
     /** Needed to write the Yiji id back when the order reveals it. */
     id: string;
@@ -242,8 +281,19 @@ export function yijiCouponPayload(
    * the endpoint to resolve the customer; it just carries less corroboration.
    */
   order?: CouponOrderContext | null,
-  /** Staging safety: send every coupon to one test handset. Empty in prod. */
-  opts?: { redirectCouponsTo?: string },
+  opts?: {
+    /** Staging safety: send every coupon to one test handset. Empty in prod. */
+    redirectCouponsTo?: string;
+    /**
+     * The Yiji customer id, for a coupon with NO order.
+     *
+     * Present only on the `AddCompensationCoupon` path, where nothing else can
+     * identify the customer: the order-based endpoint derives them from the
+     * order and is sent no `userId` at all. Setting this changes the RETURNED
+     * SHAPE to that endpoint's `CouponUserVM` — see the return below.
+     */
+    compensationUserId?: string;
+  },
 ): Record<string, unknown> {
   const orderId = num(couponOrderId(row));
   const window = row.valid_from && row.valid_to ? couponWindow(row.valid_from, row.valid_to) : null;
@@ -288,226 +338,257 @@ export function yijiCouponPayload(
    * default, and `assertNotProduction` below refuses the combination outright.
    */
   const redirect = opts?.redirectCouponsTo?.trim();
-  const yijiUserId = redirect ? undefined : realUserId;
+  /*
+   * ON THE ORDER-LESS PATH THE USER ID IS THE ONLY IDENTIFIER, so it survives
+   * the staging redirect that otherwise drops it.
+   *
+   * That is not a hole in the redirect, it is the redirect working: the caller
+   * looks up `redirectCouponsTo` itself on staging, so this id already belongs
+   * to the TEST handset. Dropping it would leave Yiji a body naming nobody,
+   * which `AddCompensationCoupon` cannot act on — the order-based endpoint can,
+   * because the order names the customer for it.
+   */
+  const yijiUserId = opts?.compensationUserId ?? (redirect ? undefined : realUserId);
   const phone = redirect ? (internationalPhone(redirect) ?? redirect) : realPhone;
+
+  /*
+   * ONE `CouponUserVM`, TWO ENVELOPES.
+   *
+   * This object IS the body `AddCompensationCoupon` takes, and it is also the
+   * `couponUser` the order-based endpoint nests. Building it once is what keeps
+   * the two paths honest: the terms a supervisor approved cannot differ by
+   * whether an order happened to be attached.
+   */
+  const couponUser = {
+    id: 0,
+    // Yiji creates the coupon; we are not naming one it already holds.
+    couponId: 0,
+    orderId,
+    status: 0,
+    // OUR code, so the two systems can be matched from either side later.
+    couponCode: row.coupon_code ?? '',
+    couponName: row.title ?? '',
+    compensationReason: row.reason ?? '',
+    ...(yijiUserId ? { userId: yijiUserId } : {}),
+    ...(phone ? { customerPhone: phone } : {}),
+    // Ours is often blank and theirs is a generated address; prefer whichever
+    // a human would recognise, and send nothing rather than an empty string.
+    ...(row.contact?.name?.trim() || order?.customerName
+      ? { customerName: row.contact?.name?.trim() || order?.customerName }
+      : {}),
+    // The terms the supervisor approved. Only one of amount/percentage is
+    // ever set — the discount category decides which — so the other is left
+    // off rather than sent as zero, which would read as "no discount".
+    coupon: {
+      id: 0,
+      name: row.title ?? '',
+      code: row.coupon_code ?? '',
+      compensationReason: row.reason ?? '',
+      /*
+       * The reason, AGAIN, under the name their console uses.
+       *
+       * Their request carries `compensation: "testing"` on the coupon while
+       * ALSO carrying `compensationReason` on the couponUser — the same text
+       * in two places. `compensation` is not in the published CouponVM
+       * schema, so it is an extra their own UI sends; harmless if ignored,
+       * and the alternative is a field their reporting may read sitting
+       * empty on every coupon we create.
+       */
+      compensation: row.reason ?? '',
+      /*
+       * WHAT KIND of coupon this is.
+       *
+       * Sent because it used to not be. Yiji defaults both of these to 0 —
+       * General and Percentage — so a coupon the supervisor approved as
+       * Private/Amount arrived in Yiji as General/Percentage. The MONEY was
+       * always right (`discount`/`maximumDiscount` below), which is why this
+       * went unnoticed: the customer got the correct amount off a coupon
+       * described as something else entirely.
+       *
+       * Omitted rather than defaulted when the CRM word is not in the map:
+       * 0 means something in both vocabularies, so sending it as a fallback
+       * would assert the opposite of what was approved.
+       */
+      ...(yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) != null
+        ? { type: yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) }
+        : {}),
+      ...(yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) != null
+        ? { category: yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) }
+        : {}),
+      /*
+       * BOTH discount fields, always — the unused one as 0, never omitted.
+       *
+       * Their own working AMOUNT coupon (70644) carries
+       * `discount: 5, discountPercentage: 0`. It states the irrelevant one
+       * rather than leaving it out, and we were omitting it entirely. A
+       * validator that reads `discountPercentage` unconditionally sees null
+       * where it expects a number, and null is not 0 in any arithmetic that
+       * matters — it is the difference between "no percentage discount" and
+       * "unknown", and the second can nullify a calculation.
+       *
+       * `category` already says which one is authoritative, so stating both
+       * cannot make the coupon ambiguous. This is cheap insurance against a
+       * class of failure that is invisible from our side: the coupon exists,
+       * the customer is notified, and nothing is redeemable.
+       */
+      /*
+       * THE CATEGORY DECIDES, and the other field is forced to 0.
+       *
+       * These used to be `amount ?? 0` and `percent ?? 0` independently,
+       * which is right whenever exactly one column is set — and wrong when
+       * both are. An agent who types an amount, switches the category to
+       * Percentage and types a percentage leaves BOTH columns populated, and
+       * we would then send `discount: 25, discountPercentage: 15` on a coupon
+       * approved as one or the other. Yiji would be free to apply either.
+       *
+       * `category` is already the authority on which reading is correct — it
+       * is sent immediately above — so deriving both values from it is the
+       * only way the three can never contradict each other. Confirmed against
+       * two real coupons: an Amount coupon carries `discount: N,
+       * discountPercentage: 0`, and both fields are always present.
+       */
+      discount: isPct ? 0 : (amount ?? 0),
+      discountPercentage: isPct ? (percent ?? 0) : 0,
+      ...(cap != null ? { maximumDiscount: cap } : {}),
+      /*
+       * HOW MANY TIMES IT MAY BE USED.
+       *
+       * Yiji has three separate limit fields and the CRM has one box, so all
+       * three carry the same number rather than leaving any of them at its
+       * default:
+       *   reachLimit        total redemptions
+       *   limitForUser      per-customer cap
+       *   monthlyReachLimit what their console labels "Monthly coupon use"
+       *
+       * `monthlyReachLimit` was NOT being sent, so it sat at 0 in their UI
+       * while the CRM said 1 — the owner reads that field, and a blank there
+       * reads as "no limit" on a coupon that is meant to be a single grant.
+       *
+       * A compensation coupon is one grant unless somebody said otherwise, so
+       * the same figure in all three is the honest encoding: use it once, by
+       * this customer, this month.
+       */
+      reachLimit: limit,
+      limitForUser: limit,
+      monthlyReachLimit: limit,
+      /*
+       * The order-value window this coupon may be applied to.
+       *
+       * `orderMaximum` was NOT being sent, so Yiji defaulted it to 0 — a
+       * ceiling of zero, meaning the coupon could never apply to any order.
+       * That is why a customer got the notification and then found nothing in
+       * the app: the grant existed and was unusable.
+       *
+       * `orderMinimum: 0` is sent explicitly rather than left to default, so
+       * both ends of the window are stated. 0 on a FLOOR is permissive (no
+       * minimum spend); 0 on a CEILING is not. See YIJI_ORDER_MAXIMUM.
+       */
+      orderMinimum: 0,
+      orderMaximum: YIJI_ORDER_MAXIMUM,
+      /*
+       * FIELDS YIJI'S OWN CONSOLE SENDS AND WE DID NOT.
+       *
+       * Taken from a coupon built by hand in their console against the same
+       * order and customer as ours (CouponUserId 21486). Each of these was
+       * absent from our request and therefore defaulted — and this API has
+       * already shown twice that its defaults are not the generous reading
+       * (`orderMaximum: 0` is a ceiling of zero; `deliveryTypes: []` is not
+       * "any channel").
+       *
+       * `dontApplyLoyality` / `dontApplyOffer` ALWAYS MOVE TOGETHER (owner,
+       * 2026-08-29) — one CRM answer drives both. True means the customer
+       * cannot use this coupon on an item that already carries a discount;
+       * false means it stacks on top.
+       *
+       * Both were briefly hardcoded `true` here, copied from a console
+       * coupon. That was the console's choice for one test coupon, not a rule
+       * — and hardcoding it would have quietly made every apology unusable
+       * during a promotion. It is a decision the agent raising the coupon
+       * should make, so it is now `no_other_discounts` on the request.
+       *
+       * `posDisountCode: 0` is what they send; stated rather than left to
+       * default so the payload is identical to one that works.
+       */
+      dontApplyLoyality: row.no_other_discounts === true,
+      dontApplyOffer: row.no_other_discounts === true,
+      posDisountCode: 0,
+      /*
+       * WHO PAYS FOR THIS COUPON.
+       *
+       * Sent only when the CRM issuing side has a known Yiji id — see
+       * ISSUING_SIDES, where every id is currently null and therefore
+       * nothing is sent yet. Omitting it leaves Yiji to default, which is
+       * what happens today; sending a GUESSED id would silently book real
+       * money to the wrong department in their reporting and never announce
+       * itself. Fill the ids in that one table and this starts working with
+       * no change here.
+       */
+      ...(yijiIssuingSideId(row.issuing_side) != null
+        ? { issuingSideId: yijiIssuingSideId(row.issuing_side) }
+        : {}),
+      /*
+       * Which channels it may be redeemed through.
+       *
+       * Omitted entirely for "All" and for anything unrecognised — an empty
+       * `deliveryTypes` is Yiji's own spelling of "no restriction", so the
+       * unrestricted case is correct by saying nothing, and a partial list
+       * would silently narrow a coupon to fewer channels than were approved.
+       * See `yijiDeliveryTypes`, which also carries the caveat that the
+       * NUMBERING is inferred rather than confirmed.
+       */
+      ...(deliveryTypes ? { deliveryTypes } : {}),
+      /*
+       * Every day of the week.
+       *
+       * Yiji carries a per-weekday flag and defaults them all to FALSE. A
+       * correctly-built coupon in their console (70644) has all seven true;
+       * ours (70640) had all seven false. Nobody has reported a coupon being
+       * refused on a given day, so this may be inert for compensation
+       * coupons — but "valid on no day of the week" is not a thing anyone
+       * approved, and matching a known-good coupon is the safer default.
+       *
+       * A compensation coupon is an apology; restricting it to certain days
+       * is not a decision the CRM offers, so all seven is the honest encoding
+       * of "whenever they like".
+       */
+      saturday: true,
+      sunday: true,
+      monday: true,
+      tuesday: true,
+      wednesday: true,
+      thursday: true,
+      friday: true,
+      // Only ever THEIR ids, and only when the order supplied them.
+      ...(order?.restaurantId != null ? { restaurantId: order.restaurantId } : {}),
+      ...(order?.brandId != null ? { brandId: order.brandId } : {}),
+      ...(window
+        ? {
+            activationDate: window.from,
+            expirationDate: window.to,
+            activationDateTime: window.from,
+            expirationDateTime: window.to,
+          }
+        : {}),
+    },
+  };
+
+  /*
+   * THE ORDER-LESS BODY IS THE INNER OBJECT ITSELF.
+   *
+   * `AddCompensationCoupon` takes a `CouponUserVM`; `CreateCouponUserFromOrder`
+   * takes a `CouponUserOrderVM` that WRAPS one. Sending the wrapper to the
+   * compensation endpoint would hand it a body it never agreed to, with the
+   * customer and the terms buried a level too deep — it would answer 200 and
+   * grant nothing, which is the failure shape this file exists to prevent.
+   */
+  if (opts?.compensationUserId) return couponUser;
 
   return {
     id: 0,
     orderId,
     usedAmount: 0,
     status: 0,
-    couponUser: {
-      id: 0,
-      // Yiji creates the coupon; we are not naming one it already holds.
-      couponId: 0,
-      orderId,
-      status: 0,
-      // OUR code, so the two systems can be matched from either side later.
-      couponCode: row.coupon_code ?? '',
-      couponName: row.title ?? '',
-      compensationReason: row.reason ?? '',
-      ...(yijiUserId ? { userId: yijiUserId } : {}),
-      ...(phone ? { customerPhone: phone } : {}),
-      // Ours is often blank and theirs is a generated address; prefer whichever
-      // a human would recognise, and send nothing rather than an empty string.
-      ...(row.contact?.name?.trim() || order?.customerName
-        ? { customerName: row.contact?.name?.trim() || order?.customerName }
-        : {}),
-      // The terms the supervisor approved. Only one of amount/percentage is
-      // ever set — the discount category decides which — so the other is left
-      // off rather than sent as zero, which would read as "no discount".
-      coupon: {
-        id: 0,
-        name: row.title ?? '',
-        code: row.coupon_code ?? '',
-        compensationReason: row.reason ?? '',
-        /*
-         * The reason, AGAIN, under the name their console uses.
-         *
-         * Their request carries `compensation: "testing"` on the coupon while
-         * ALSO carrying `compensationReason` on the couponUser — the same text
-         * in two places. `compensation` is not in the published CouponVM
-         * schema, so it is an extra their own UI sends; harmless if ignored,
-         * and the alternative is a field their reporting may read sitting
-         * empty on every coupon we create.
-         */
-        compensation: row.reason ?? '',
-        /*
-         * WHAT KIND of coupon this is.
-         *
-         * Sent because it used to not be. Yiji defaults both of these to 0 —
-         * General and Percentage — so a coupon the supervisor approved as
-         * Private/Amount arrived in Yiji as General/Percentage. The MONEY was
-         * always right (`discount`/`maximumDiscount` below), which is why this
-         * went unnoticed: the customer got the correct amount off a coupon
-         * described as something else entirely.
-         *
-         * Omitted rather than defaulted when the CRM word is not in the map:
-         * 0 means something in both vocabularies, so sending it as a fallback
-         * would assert the opposite of what was approved.
-         */
-        ...(yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) != null
-          ? { type: yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) }
-          : {}),
-        ...(yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) != null
-          ? { category: yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) }
-          : {}),
-        /*
-         * BOTH discount fields, always — the unused one as 0, never omitted.
-         *
-         * Their own working AMOUNT coupon (70644) carries
-         * `discount: 5, discountPercentage: 0`. It states the irrelevant one
-         * rather than leaving it out, and we were omitting it entirely. A
-         * validator that reads `discountPercentage` unconditionally sees null
-         * where it expects a number, and null is not 0 in any arithmetic that
-         * matters — it is the difference between "no percentage discount" and
-         * "unknown", and the second can nullify a calculation.
-         *
-         * `category` already says which one is authoritative, so stating both
-         * cannot make the coupon ambiguous. This is cheap insurance against a
-         * class of failure that is invisible from our side: the coupon exists,
-         * the customer is notified, and nothing is redeemable.
-         */
-        /*
-         * THE CATEGORY DECIDES, and the other field is forced to 0.
-         *
-         * These used to be `amount ?? 0` and `percent ?? 0` independently,
-         * which is right whenever exactly one column is set — and wrong when
-         * both are. An agent who types an amount, switches the category to
-         * Percentage and types a percentage leaves BOTH columns populated, and
-         * we would then send `discount: 25, discountPercentage: 15` on a coupon
-         * approved as one or the other. Yiji would be free to apply either.
-         *
-         * `category` is already the authority on which reading is correct — it
-         * is sent immediately above — so deriving both values from it is the
-         * only way the three can never contradict each other. Confirmed against
-         * two real coupons: an Amount coupon carries `discount: N,
-         * discountPercentage: 0`, and both fields are always present.
-         */
-        discount: isPct ? 0 : (amount ?? 0),
-        discountPercentage: isPct ? (percent ?? 0) : 0,
-        ...(cap != null ? { maximumDiscount: cap } : {}),
-        /*
-         * HOW MANY TIMES IT MAY BE USED.
-         *
-         * Yiji has three separate limit fields and the CRM has one box, so all
-         * three carry the same number rather than leaving any of them at its
-         * default:
-         *   reachLimit        total redemptions
-         *   limitForUser      per-customer cap
-         *   monthlyReachLimit what their console labels "Monthly coupon use"
-         *
-         * `monthlyReachLimit` was NOT being sent, so it sat at 0 in their UI
-         * while the CRM said 1 — the owner reads that field, and a blank there
-         * reads as "no limit" on a coupon that is meant to be a single grant.
-         *
-         * A compensation coupon is one grant unless somebody said otherwise, so
-         * the same figure in all three is the honest encoding: use it once, by
-         * this customer, this month.
-         */
-        reachLimit: limit,
-        limitForUser: limit,
-        monthlyReachLimit: limit,
-        /*
-         * The order-value window this coupon may be applied to.
-         *
-         * `orderMaximum` was NOT being sent, so Yiji defaulted it to 0 — a
-         * ceiling of zero, meaning the coupon could never apply to any order.
-         * That is why a customer got the notification and then found nothing in
-         * the app: the grant existed and was unusable.
-         *
-         * `orderMinimum: 0` is sent explicitly rather than left to default, so
-         * both ends of the window are stated. 0 on a FLOOR is permissive (no
-         * minimum spend); 0 on a CEILING is not. See YIJI_ORDER_MAXIMUM.
-         */
-        orderMinimum: 0,
-        orderMaximum: YIJI_ORDER_MAXIMUM,
-        /*
-         * FIELDS YIJI'S OWN CONSOLE SENDS AND WE DID NOT.
-         *
-         * Taken from a coupon built by hand in their console against the same
-         * order and customer as ours (CouponUserId 21486). Each of these was
-         * absent from our request and therefore defaulted — and this API has
-         * already shown twice that its defaults are not the generous reading
-         * (`orderMaximum: 0` is a ceiling of zero; `deliveryTypes: []` is not
-         * "any channel").
-         *
-         * `dontApplyLoyality` / `dontApplyOffer` ALWAYS MOVE TOGETHER (owner,
-         * 2026-08-29) — one CRM answer drives both. True means the customer
-         * cannot use this coupon on an item that already carries a discount;
-         * false means it stacks on top.
-         *
-         * Both were briefly hardcoded `true` here, copied from a console
-         * coupon. That was the console's choice for one test coupon, not a rule
-         * — and hardcoding it would have quietly made every apology unusable
-         * during a promotion. It is a decision the agent raising the coupon
-         * should make, so it is now `no_other_discounts` on the request.
-         *
-         * `posDisountCode: 0` is what they send; stated rather than left to
-         * default so the payload is identical to one that works.
-         */
-        dontApplyLoyality: row.no_other_discounts === true,
-        dontApplyOffer: row.no_other_discounts === true,
-        posDisountCode: 0,
-        /*
-         * WHO PAYS FOR THIS COUPON.
-         *
-         * Sent only when the CRM issuing side has a known Yiji id — see
-         * ISSUING_SIDES, where every id is currently null and therefore
-         * nothing is sent yet. Omitting it leaves Yiji to default, which is
-         * what happens today; sending a GUESSED id would silently book real
-         * money to the wrong department in their reporting and never announce
-         * itself. Fill the ids in that one table and this starts working with
-         * no change here.
-         */
-        ...(yijiIssuingSideId(row.issuing_side) != null
-          ? { issuingSideId: yijiIssuingSideId(row.issuing_side) }
-          : {}),
-        /*
-         * Which channels it may be redeemed through.
-         *
-         * Omitted entirely for "All" and for anything unrecognised — an empty
-         * `deliveryTypes` is Yiji's own spelling of "no restriction", so the
-         * unrestricted case is correct by saying nothing, and a partial list
-         * would silently narrow a coupon to fewer channels than were approved.
-         * See `yijiDeliveryTypes`, which also carries the caveat that the
-         * NUMBERING is inferred rather than confirmed.
-         */
-        ...(deliveryTypes ? { deliveryTypes } : {}),
-        /*
-         * Every day of the week.
-         *
-         * Yiji carries a per-weekday flag and defaults them all to FALSE. A
-         * correctly-built coupon in their console (70644) has all seven true;
-         * ours (70640) had all seven false. Nobody has reported a coupon being
-         * refused on a given day, so this may be inert for compensation
-         * coupons — but "valid on no day of the week" is not a thing anyone
-         * approved, and matching a known-good coupon is the safer default.
-         *
-         * A compensation coupon is an apology; restricting it to certain days
-         * is not a decision the CRM offers, so all seven is the honest encoding
-         * of "whenever they like".
-         */
-        saturday: true,
-        sunday: true,
-        monday: true,
-        tuesday: true,
-        wednesday: true,
-        thursday: true,
-        friday: true,
-        // Only ever THEIR ids, and only when the order supplied them.
-        ...(order?.restaurantId != null ? { restaurantId: order.restaurantId } : {}),
-        ...(order?.brandId != null ? { brandId: order.brandId } : {}),
-        ...(window
-          ? {
-              activationDate: window.from,
-              expirationDate: window.to,
-              activationDateTime: window.from,
-              expirationDateTime: window.to,
-            }
-          : {}),
-      },
-    },
+    couponUser,
   };
 }
 
@@ -724,7 +805,8 @@ export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
 ): Promise<PushOutcome> {
-  const { directus, logger, postCoupon, readOrder, yijiTenantId, redirectCouponsTo } = deps;
+  const { directus, logger, postCoupon, readOrder, findCustomer, yijiTenantId, redirectCouponsTo } =
+    deps;
   const id = job.data.couponApprovalId;
 
   const row = (await directus.request(
@@ -755,6 +837,9 @@ export async function processCouponPushJob(
         { ticket: ['order_id'] },
         // The standalone order, for a coupon raised with no ticket at all.
         'order_id',
+        /* The number for a coupon with NO contact row — every late-order one.
+           It is how an order-less grant finds the customer on Yiji. */
+        'customer_phone',
         'yiji_coupon_user_id',
         'yiji_push_error',
         'delivery_excluded',
@@ -807,12 +892,55 @@ export async function processCouponPushJob(
    * visibly owed to the customer and a supervisor can see why it has not gone.
    */
   const orderId = couponOrderId(row);
+  /*
+   * NO ORDER IS NO LONGER THE END OF THE ROAD.
+   *
+   * `AddCompensationCoupon` grants a coupon to a USER, and its `orderId` is
+   * nullable — so a compensation raised from a WhatsApp complaint, which has no
+   * order and no Yiji id, can still reach the customer IF their phone resolves
+   * to a Yiji account. That resolution is the only new requirement, and it is a
+   * lookup rather than a guess: see `findCustomerIdByPhone`, which discards a
+   * substring hit that is not actually this number.
+   *
+   * Still `no-order` when the phone resolves to nobody. That is an ordinary
+   * outcome — a walk-in may have no app account at all — and the coupon stays
+   * `approved` so it is visibly owed and can be honoured in the branch.
+   */
+  let compensationUserId: string | null = null;
   if (!orderId) {
-    logger.warn(
-      { id, code: row.coupon_code },
-      'coupon has no order to attach to — staying approved',
+    /*
+     * THE REDIRECTED NUMBER ON STAGING, THE REAL ONE IN PRODUCTION.
+     *
+     * This path identifies the customer by `userId`, and Yiji resolves from the
+     * id — so looking the REAL customer up on staging and sending their id
+     * beside the test handset's phone would grant a coupon to a real stranger,
+     * which is precisely what the redirect exists to prevent and which cannot be
+     * revoked from our side. The lookup itself is therefore redirected, not just
+     * the phone in the payload. `redirectCouponsTo` is empty in production.
+     */
+    const phone =
+      redirectCouponsTo?.trim() || row.customer_phone?.trim() || row.contact?.phone?.trim() || '';
+    if (findCustomer && phone) {
+      try {
+        compensationUserId = await findCustomer(phone);
+      } catch (err) {
+        /* A lookup that FAILED is not "they have no account". Throwing lets
+           BullMQ retry, because the coupon may well be deliverable and
+           recording `no-order` here would park it on a transient outage. */
+        throw new Error(`yiji customer lookup failed: ${describeError(err)}`);
+      }
+    }
+    if (!compensationUserId) {
+      logger.warn(
+        { id, code: row.coupon_code, hasPhone: Boolean(phone), lookup: Boolean(findCustomer) },
+        'coupon has no order and no Yiji customer behind its phone — staying approved',
+      );
+      return 'no-order';
+    }
+    logger.info(
+      { id, code: row.coupon_code, yijiUserId: compensationUserId },
+      'no order, but the phone resolves to a Yiji customer — granting by user',
     );
-    return 'no-order';
   }
   /*
    * Ask Yiji what it already knows about this order.
@@ -822,8 +950,10 @@ export async function processCouponPushJob(
    * payload and nothing more — refusing to deliver an approved coupon because a
    * read-only enrichment call timed out would be the wrong trade by a distance.
    */
+  /* Only when there IS an order. The order-less path has nothing to enrich from
+     and must not call an order reader with a blank id. */
   let order: CouponOrderContext | null = null;
-  if (readOrder) {
+  if (readOrder && orderId) {
     try {
       order = await readOrder(orderId);
       if (!order) {
@@ -875,7 +1005,12 @@ export async function processCouponPushJob(
     }
   }
 
-  const payload = yijiCouponPayload(row, order, { redirectCouponsTo });
+  const payload = yijiCouponPayload(row, order, {
+    redirectCouponsTo,
+    /* Only set on the order-less path, where the customer cannot be derived
+       from an order and must be named outright. */
+    ...(compensationUserId ? { compensationUserId } : {}),
+  });
   if (redirectCouponsTo) {
     logger.warn(
       { id, code: row.coupon_code, redirectedTo: redirectCouponsTo },
@@ -907,7 +1042,11 @@ export async function processCouponPushJob(
 
   let body: YijiCouponResponse;
   try {
-    body = await postCoupon<YijiCouponResponse>(endpoint.path, payload, {
+    /* The order-less grant goes to its own endpoint: same credential, same
+       tenant header, different body and different path — see
+       YIJI_COMPENSATION_COUPON_PATH. */
+    const path = compensationUserId ? YIJI_COMPENSATION_COUPON_PATH : endpoint.path;
+    body = await postCoupon<YijiCouponResponse>(path, payload, {
       // Yiji's API is multi-tenant and routes on this.
       ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
       // Stable across retries of the same job, so a timeout that in fact

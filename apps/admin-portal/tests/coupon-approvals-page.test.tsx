@@ -127,7 +127,11 @@ describe('CouponApprovalsPage', () => {
     /* CANONICAL, not raw: every number in this CRM reads `05XXXXXXXX`, and a
        supervisor reading one back on a call should not be the one place that
        shows Yiji's `+966` form. */
-    expect(screen.getByText(/0545808075/)).toBeInTheDocument();
+    /* getAll, not get: this row has no order, so the number now appears twice —
+       once on the customer line and once in the "we will try Yiji with this
+       number" notice. The assertion is that it is rendered CANONICALLY, which
+       either occurrence proves. */
+    expect(screen.getAllByText(/0545808075/).length).toBeGreaterThan(0);
     // The agent's own words. Deciding without them is guessing.
     expect(screen.getAllByText(/Two items missing/).length).toBeGreaterThan(0);
   });
@@ -328,25 +332,41 @@ describe('CouponApprovalsPage — did it actually reach the customer?', () => {
   });
 });
 
-describe('CouponApprovalsPage — a coupon with no order can never be delivered', () => {
+describe('CouponApprovalsPage — how an order-less coupon can still be delivered', () => {
   /*
-   * Yiji's endpoint is `CreateCouponUserFromOrder`: it attaches a coupon to an
-   * order and resolves the customer from it. With no order number there is
-   * nothing to attach and nobody to attach it to.
+   * THIS BLOCK USED TO SAY "can never be delivered". That was wrong, and the
+   * tests encoded the wrong belief (owner challenged it, 2026-10-01).
    *
-   * This is the NORMAL case for a walk-in visitor who scanned the QR code in a
-   * branch — they typed a phone number, may have no Yiji account, and nothing
-   * can look one up (Yiji's API is keyed by customer id and order id, with no
-   * lookup by phone). A supervisor has to know that before deciding, not after.
+   * There are TWO ways to reach the customer:
+   *   1. `CreateCouponUserFromOrder` — attaches to an ORDER, resolves the
+   *      customer from it. No order, no call.
+   *   2. `AddCompensationCoupon` — grants to a USER, `orderId` nullable. The
+   *      worker finds that user id from the phone via `GetfilteredCustomers`.
+   *
+   * So a phone is a real chance of delivery. Only a chance: a walk-in who has
+   * never used the app resolves to nobody, and the coupon stays visibly owed.
+   * The hard warning therefore belongs to the one case where NEITHER exists.
    */
   const noOrder = { ...pending, ticket: { ...pending.ticket, order_id: null } };
+  /** Nothing to reach them by at all. */
+  const noOrderNoPhone = { ...noOrder, contact: { ...pending.contact, phone: null } };
 
-  it('warns BEFORE the decision, while it is still pending', async () => {
+  it('warns BEFORE the decision when there is no order AND no phone', async () => {
+    api.useCouponApprovals.mockReturnValue({ data: [noOrderNoPhone], isLoading: false });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText(/no way to reach the customer/i)).toBeInTheDocument();
+  });
+
+  /* The correction itself: a phone means it will be tried, not refused. */
+  it('says an order-less coupon with a phone will be tried on Yiji', async () => {
     api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
     const user = userEvent.setup();
     renderPage();
     await expandFirst(user);
-    expect(screen.getByText(/yiji cannot attach a coupon/i)).toBeInTheDocument();
+    expect(screen.getByText(/found from/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
   });
 
   it('still lets the decision be made — it is a warning, not a block', async () => {
@@ -391,7 +411,9 @@ describe('CouponApprovalsPage — a coupon with no order can never be delivered'
 
   it('does not promise delivery for one it cannot deliver', async () => {
     api.useCouponApprovals.mockReturnValue({
-      data: [{ ...noOrder, status: 'approved' as const, decided_at: '2026-08-24T10:00:00Z' }],
+      data: [
+        { ...noOrderNoPhone, status: 'approved' as const, decided_at: '2026-08-24T10:00:00Z' },
+      ],
       isLoading: false,
     });
     const user = userEvent.setup();
@@ -408,6 +430,6 @@ describe('CouponApprovalsPage — a coupon with no order can never be delivered'
     const user = userEvent.setup();
     renderPage();
     await expandFirst(user);
-    expect(screen.queryByText(/yiji cannot attach a coupon/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
   });
 });

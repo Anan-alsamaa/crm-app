@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import {
   QUEUES,
   createYijiAdminPoster,
+  createYijiCustomerFinder,
   createYijiOrderReader,
   createYijiLatestBrandReader,
   type QueueName,
@@ -147,6 +148,19 @@ const yijiOrderReader = createYijiOrderReader({
 });
 
 const yijiLatestBrandReader = createYijiLatestBrandReader({
+  apiUrl: process.env.YIJI_API_URL ?? '',
+  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+});
+
+/*
+ * Finds the Yiji customer behind a phone number, for a coupon with NO order.
+ *
+ * Null when the admin credential is absent, in which case an order-less coupon
+ * simply stays `approved` exactly as it did before this path existed.
+ */
+const yijiCustomerFinder = createYijiCustomerFinder({
   apiUrl: process.env.YIJI_API_URL ?? '',
   adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
   adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
@@ -319,6 +333,10 @@ export const processors: Record<QueueName, Processor> = {
        */
       postCoupon: (couponDeliveryEnabled ? yijiAdminPoster : null) ?? undefined,
       readOrder: yijiOrderReader ?? undefined,
+      /* Only consulted for a coupon with NO order, and gated on the same
+         delivery switch as the poster: a deployment with coupon delivery off
+         must not start resolving customers either. */
+      findCustomer: (couponDeliveryEnabled ? yijiCustomerFinder : null) ?? undefined,
       // Yiji's API is multi-tenant and routes on this header. Defaulted to the
       // tenant the captured request used rather than left blank: a missing
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind

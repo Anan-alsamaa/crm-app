@@ -152,3 +152,6 @@ Ayman/
 # scratch auth token — never commit
 tk.txt
 perm-backup-*.json
+
+# Generated architecture diagrams (archify output).
+.archify/

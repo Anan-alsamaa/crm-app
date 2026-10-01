@@ -337,24 +337,35 @@ function Row({
   // push filter includes it, so the retry affordance must too.
   const approvedNotPending = couponDecision(row.status) === 'approved';
   /*
-   * NO ORDER, NO COUPON — and a supervisor has to know that BEFORE they decide.
+   * AN ORDER *OR* A PHONE — a supervisor has to know which, BEFORE they decide.
    *
-   * Yiji's endpoint is `CreateCouponUserFromOrder`: it attaches a coupon to an
-   * order, and resolves the customer from it. Without an order number there is
-   * nothing to attach and nobody to attach it to, so the push reports
-   * `no-order` and the request sits approved for ever.
+   * There are two ways a coupon can reach the customer, and this used to know
+   * only the first:
    *
-   * This is the normal case for a walk-in visitor who scanned the QR code in a
-   * branch: they typed a phone number, they may have no Yiji account at all,
-   * and nothing in the CRM can look one up — Yiji's API is keyed by customer id
-   * and order id, with no lookup by phone. Approving still MEANS something
-   * (the decision is recorded, and the compensation can be honoured in the
-   * branch), but the customer will not receive it in the app, and telling them
-   * otherwise is the failure this warning exists to prevent.
+   *  1. `CreateCouponUserFromOrder` attaches it to an ORDER and resolves the
+   *     customer from it. No order, no call.
+   *  2. `AddCompensationCoupon` grants it to a USER and takes no order at all —
+   *     its `orderId` is nullable. The worker reaches it by looking the phone up
+   *     with `GetfilteredCustomers`.
+   *
+   * This comment previously said Yiji's API had "no lookup by phone" and that an
+   * order-less coupon could never be delivered. BOTH WERE WRONG, verified
+   * against the live Swagger and admin API on 2026-10-01 — see
+   * [[yiji-coupon-without-order]].
+   *
+   * So a phone is now a real chance of delivery, not a dead end. It is only a
+   * CHANCE: a walk-in may have no Yiji account at all, and roughly a third of
+   * this queue are such people. The warning below therefore fires only when
+   * there is neither an order nor a number — the one case where nothing can
+   * possibly reach them — and the softer notice covers "we will try".
    */
   // The ORDER decides, from wherever it lives — a coupon given from the
   // late-orders queue carries its own and has no ticket at all.
-  const canBeDelivered = Boolean(couponOrderId(row));
+  const hasOrder = Boolean(couponOrderId(row));
+  /* Either phone the row can carry: a late-order or WhatsApp compensation has
+     no contact row, so its number lives on the request itself. */
+  const deliveryPhone = (row.customer_phone ?? row.contact?.phone ?? '').trim();
+  const canBeDelivered = hasOrder || Boolean(deliveryPhone);
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
@@ -795,9 +806,24 @@ function Row({
               supervisor this "cannot be approved" when it can. */}
           {!canBeDelivered && !row.delivery_excluded && (
             <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
-              {t('couponApprovals.noOrder', {
+              {t('couponApprovals.noOrderNoPhone', {
                 defaultValue:
-                  'No order number on this request, so Yiji cannot attach a coupon — their coupon is created FROM an order. This cannot be approved until the order is known. Add the order number to the ticket if they have one.',
+                  'No order number and no phone on this request, so there is no way to reach the customer on Yiji. Approving still records the compensation, but nothing will arrive in the app — add the order number or the customer’s number first.',
+              })}
+            </p>
+          )}
+
+          {/* AN ORDER-LESS COUPON WITH A PHONE IS A CHANCE, NOT A PROMISE.
+              The worker looks the number up on Yiji; a customer who has never
+              used the app resolves to nobody and the coupon stays visibly owed.
+              Saying so here is what stops an agent telling them it is on the
+              way. */}
+          {!hasOrder && Boolean(deliveryPhone) && !row.delivery_excluded && (
+            <p className="mt-2 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground ring-1 ring-inset ring-foreground/[0.04]">
+              {t('couponApprovals.noOrderHasPhone', {
+                defaultValue:
+                  'No order number, so this is sent to the customer’s Yiji account found from {{phone}}. If they have never used the app it cannot be delivered and will stay approved — honour it in the branch.',
+                phone: normalizePhone(deliveryPhone) || deliveryPhone,
               })}
             </p>
           )}

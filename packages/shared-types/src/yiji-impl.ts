@@ -762,6 +762,52 @@ export class HttpYijiClient implements YijiClient {
    * else would be a second copy of Yiji's user model living in the CRM, going
    * stale.
    */
+  /**
+   * The Yiji customer behind a phone number, or null when they have no account.
+   *
+   * WHY THIS EXISTS: a coupon can be granted without an order, but only to a
+   * USER — `AddCompensationCoupon` takes a `userId`. A compensation raised from
+   * a WhatsApp complaint has no order and no Yiji id, only the number the agent
+   * typed, so this is the one bridge from what we hold to what Yiji needs.
+   *
+   * THREE TRAPS, ALL VERIFIED AGAINST THE LIVE API (2026-10-01):
+   *
+   *  1. `GetfilteredCustomers` is the endpoint for CUSTOMERS. `GetFilteredUsers`
+   *     answers 0 rows even for a customer who demonstrably exists — it is a
+   *     different population — so looking there reads as "no account" and is
+   *     simply the wrong question.
+   *  2. The LEADING ZERO must go. Yiji stores `+9665…`, so `05…` matches
+   *     nothing while `5…` matches.
+   *  3. It is a SUBSTRING match over a capped result set, so the first row is
+   *     NOT proof: a short prefix can return dozens of unrelated customers.
+   *     Every row is checked against the full national number here, and a
+   *     result that does not actually contain it is discarded.
+   *
+   * Returns null rather than guessing. A walk-in with no app account is an
+   * ordinary case — roughly a third of this queue — and must be reported
+   * honestly, never resolved to "the closest customer".
+   */
+  async findCustomerIdByPhone(phone: string): Promise<string | null> {
+    /* The national number as Yiji indexes it: digits only, no country code and
+       no leading zero. `+966 50 123 4567`, `0501234567` and `501234567` all
+       reduce to the same query. */
+    const digits = (phone ?? '').replace(/\D/g, '');
+    const national = digits.replace(/^966/, '').replace(/^0+/, '');
+    // Too short to identify anybody; a 3-digit query would match half the base.
+    if (national.length < 8) return null;
+
+    const rows = await this.adminFetch<Array<{ id?: string; phoneNumber?: string | null }> | null>(
+      `/api/User/GetfilteredCustomers?PhoneNumber=${encodeURIComponent(national)}`,
+    );
+    if (!Array.isArray(rows)) return null;
+
+    /* The row whose number really ends in this one. A substring hit elsewhere in
+       a longer number is a different customer, and granting their coupon to a
+       stranger is irreversible from our side. */
+    const hit = rows.find((r) => (r?.phoneNumber ?? '').replace(/\D/g, '').endsWith(national));
+    return hit?.id?.trim() || null;
+  }
+
   async getUserProfile(userId: string): Promise<YijiUserProfile | null> {
     const raw = await this.adminFetch<{
       id?: string;
@@ -1474,6 +1520,28 @@ export function createYijiLatestOrderReader(env: YijiClientEnv = {}): YijiLatest
  * a throwing stub, so "not configured" stays distinguishable from "configured
  * and failing".
  */
+/**
+ * Finds a Yiji customer id from a phone number, or null when they have none.
+ *
+ * Null is a real answer, not a failure: a walk-in or a WhatsApp complainant may
+ * have no Yiji account at all, and the coupon is then honoured another way.
+ */
+export type YijiCustomerFinder = (phone: string) => Promise<string | null>;
+
+export function createYijiCustomerFinder(env: YijiClientEnv = {}): YijiCustomerFinder | null {
+  if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
+    return null;
+  }
+  const client = new HttpYijiClient({
+    baseUrl: env.apiUrl || env.adminApiUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+  });
+  return (phone) => client.findCustomerIdByPhone(phone);
+}
+
 export function createYijiUserReader(env: YijiClientEnv = {}): YijiUserReader | null {
   if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
     return null;

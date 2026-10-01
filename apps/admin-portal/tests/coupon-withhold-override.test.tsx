@@ -190,38 +190,63 @@ describe('supervisor override on Yiji delivery', () => {
    * here, so the warning would describe an obstacle to something nobody is
    * attempting, and it wrongly tells the supervisor this cannot be approved.
    */
-  it('stops warning about a missing order when the coupon is withheld', async () => {
+  it('stops warning about delivery when the coupon is withheld', async () => {
     const user = userEvent.setup();
     api.useCouponApprovals.mockReturnValue({
       isLoading: false,
       data: [
         row({
           ticket: { id: 't1', subject: 'Missing item', complaint_type: 'Missing item' },
+          contact: { id: 'k1', name: 'Saad', phone: null },
           delivery_excluded: true,
         }),
       ],
     });
     renderPage();
     await expandFirst(user);
-    expect(
-      screen.queryByText(/cannot be approved until the order is known/i),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
   });
 
-  /* ...but it still warns when the coupon IS meant to be delivered. */
-  it('still warns about a missing order on a coupon that will be sent', async () => {
+  /* NEITHER an order NOR a phone: nothing can reach this customer, which is the
+     only case the hard warning should fire on now. */
+  it('warns when there is no order and no phone at all', async () => {
     const user = userEvent.setup();
     api.useCouponApprovals.mockReturnValue({
       isLoading: false,
       data: [
         row({
           ticket: { id: 't1', subject: 'Missing item', complaint_type: 'Missing item' },
+          contact: { id: 'k1', name: 'Saad', phone: null },
           delivery_excluded: false,
         }),
       ],
     });
     renderPage();
     await expandFirst(user);
-    expect(screen.getByText(/cannot be approved until the order is known/i)).toBeInTheDocument();
+    expect(screen.getByText(/no way to reach the customer/i)).toBeInTheDocument();
+  });
+
+  /*
+   * A PHONE IS A CHANCE, NOT A DEAD END — the opposite of what this page used to
+   * say. `AddCompensationCoupon` grants by user id and the worker finds that id
+   * from the number, so an order-less coupon with a phone IS deliverable. Only a
+   * chance, though: a customer who never used the app resolves to nobody.
+   */
+  it('says an order-less coupon will be tried via the phone', async () => {
+    const user = userEvent.setup();
+    api.useCouponApprovals.mockReturnValue({
+      isLoading: false,
+      data: [
+        row({
+          ticket: { id: 't1', subject: 'Missing item', complaint_type: 'Missing item' },
+          contact: { id: 'k1', name: 'Saad', phone: '+966545808075' },
+          delivery_excluded: false,
+        }),
+      ],
+    });
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText(/found from/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
   });
 });
