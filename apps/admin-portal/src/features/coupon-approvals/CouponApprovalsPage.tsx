@@ -1440,9 +1440,13 @@ export function CouponApprovalsPage() {
             // Named, because "could not record that decision" would leave a
             // supervisor retrying a click that can never work.
             err instanceof Error && err.message === 'COUPON_APPROVAL_NO_ORDER'
-              ? t('couponApprovals.approveNoOrder', {
+              ? t('couponApprovals.approveUnreachable', {
+                  /* The message must name the REAL precondition, or it sends a
+                     supervisor hunting for an order number that is not needed.
+                     A coupon reaches the customer by its order OR by their
+                     phone; only a request with neither can be refused. */
                   defaultValue:
-                    'This request has no order, so the coupon cannot be delivered. Ask the agent which order it is for.',
+                    'This request has no order number and no customer phone, so there is no way to deliver the coupon. Ask the agent for either one.',
                 })
               : t('couponApprovals.decideError', {
                   defaultValue: 'Could not record that decision',

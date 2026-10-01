@@ -229,23 +229,38 @@ export function useDecideCoupon() {
         /**
          * APPROVING SOMETHING THAT CANNOT BE DELIVERED IS THE FAILURE TO STOP.
          *
-         * This used to demand a TICKET. Approving without one skipped the write
-         * and marked the request approved anyway, and the page then said "the
-         * coupon is on the ticket" when it was not on anything: the supervisor
-         * believed they had issued it, the agent told the customer it was done,
-         * and nothing existed.
+         * The history matters, because this guard has now been wrong twice in
+         * the same way — by naming one route to the customer and treating it as
+         * the only one.
          *
-         * The real precondition was never the ticket — it is the ORDER, which
-         * is the only thing Yiji needs to deliver a coupon. A coupon given
-         * straight from the late-orders queue has an order and no complaint
-         * behind it, and refusing that would block the compensation the queue
-         * exists to give (owner, 2026-09-21). So the guard now asks the
-         * question that decides whether the decision can be carried out.
+         * It first demanded a TICKET. Approving without one skipped the write
+         * and marked the request approved anyway, so the page said "the coupon
+         * is on the ticket" when it was on nothing at all.
          *
-         * A rejection is still allowed without either — turning something down
+         * It was then narrowed to the ORDER, on the premise that the order "is
+         * the only thing Yiji needs to deliver a coupon". THAT IS NO LONGER
+         * TRUE, and arguably never was: `AddCompensationCoupon` grants by
+         * `userId` with a nullable `orderId`, and the worker reaches it by
+         * resolving the customer's PHONE (see `coupon-push.ts`). A WhatsApp
+         * compensation has no order and delivers perfectly well.
+         *
+         * The symptom was precise: three real pending coupons — OPS-433RHNBB,
+         * OPS-ZGTYPVZQ, OPS-A2KK9EL7 — could not be approved at all, because
+         * this threw before anything was written (owner, 2026-10-01). Two of
+         * them resolve to real Yiji customers and would have been delivered.
+         *
+         * So the question is no longer "is there an order?" but "is there ANY
+         * way to reach this customer?" — an order, or a phone. Only a request
+         * with neither is refused, which is the one case where approving would
+         * record a compensation that nothing can carry out.
+         *
+         * A rejection is still allowed without either: turning something down
          * needs no destination.
          */
-        if (!couponOrderId(row)) {
+        const reachable =
+          Boolean(couponOrderId(row)) ||
+          Boolean((row.customer_phone ?? row.contact?.phone ?? '').trim());
+        if (!reachable) {
           throw new Error('COUPON_APPROVAL_NO_ORDER');
         }
         // The coupon reaches the ticket FIRST — see the note at the top — and
