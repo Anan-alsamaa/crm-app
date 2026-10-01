@@ -48,6 +48,10 @@ const api = vi.hoisted(() => ({
   useDecideCoupon: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useSaveCouponTerms: vi.fn(),
   useRetryCouponDelivery: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  /* The card asks Yiji whether an order-less coupon can actually reach the
+     customer. Default here is the quiet answer — a configured lookup that
+     found them — so these tests assert what they were written for. */
+  useCustomerReachable: vi.fn(() => ({ data: { configured: true, exists: true } })),
 }));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
 
@@ -232,7 +236,7 @@ describe('supervisor override on Yiji delivery', () => {
    * from the number, so an order-less coupon with a phone IS deliverable. Only a
    * chance, though: a customer who never used the app resolves to nobody.
    */
-  it('says an order-less coupon will be tried via the phone', async () => {
+  it('says nothing about an order-less coupon whose customer exists', async () => {
     const user = userEvent.setup();
     api.useCouponApprovals.mockReturnValue({
       isLoading: false,
@@ -246,7 +250,9 @@ describe('supervisor override on Yiji delivery', () => {
     });
     renderPage();
     await expandFirst(user);
-    expect(screen.getByText(/found from/i)).toBeInTheDocument();
+    /* Nothing is said when the customer exists — the card only speaks up when
+       the coupon genuinely cannot reach them. */
+    expect(screen.queryByText(/has no Yiji account/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
   });
 });

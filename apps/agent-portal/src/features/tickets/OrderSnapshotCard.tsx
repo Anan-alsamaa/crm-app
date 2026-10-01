@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Pill, Skeleton, cn, formatDateTime } from '@yiji/ui';
-import type { YijiOrder } from '@yiji/shared-types';
+import { normalizePhone, type YijiOrder } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { useOrderStore } from './useStoreMatch.js';
 
@@ -56,6 +56,18 @@ export interface TicketOrderSnapshot {
   deliveryAddress?: string;
   paymentStatus?: string;
   paymentMode?: string;
+  /**
+   * WHO the order belonged to, captured at decision time.
+   *
+   * Yiji's order carries `customerPhoneNumber`, and the shaper was dropping it
+   * — so the admin late-orders report had a "Customer mobile" column that was
+   * permanently empty: the collection has no phone field and the snapshot
+   * beside it never recorded one (owner, 2026-10-01).
+   *
+   * Stored canonically (`05…`), like every other number in this CRM, so the
+   * report, the contacts table and the coupon lookup all agree.
+   */
+  customerPhone?: string;
   /** When this copy was taken (ISO). */
   capturedAt?: string;
 }
@@ -85,6 +97,9 @@ export function orderToSnapshot(order: YijiOrder): TicketOrderSnapshot {
     ...(order.deliveryAddress ? { deliveryAddress: order.deliveryAddress } : {}),
     ...(order.paymentStatus ? { paymentStatus: order.paymentStatus } : {}),
     ...(order.paymentMode ? { paymentMode: order.paymentMode } : {}),
+    /* Canonical `05…`: Yiji answers `+9665…`, and a report that shows one
+       spelling beside a contacts table using the other reads as two customers. */
+    ...(order.customerPhone ? { customerPhone: normalizePhone(order.customerPhone) } : {}),
   };
 }
 

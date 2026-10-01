@@ -29,6 +29,14 @@ export interface CommerceDeps {
   yiji: Yiji;
   /** Read-through cache. Optional so existing tests construct deps unchanged. */
   cache?: CommerceCache;
+  /**
+   * Resolves a phone to a Yiji customer id, for `/commerce/customer-exists`.
+   *
+   * Optional: without the admin credential the route reports
+   * `configured: false` rather than claiming the customer does not exist, and
+   * the caller shows no warning off an unanswered question.
+   */
+  findCustomer?: (phone: string) => Promise<string | null>;
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -61,6 +69,7 @@ export async function registerCommerceRoutes(
   app: FastifyInstance,
   deps: CommerceDeps,
 ): Promise<void> {
+  const findCustomer = deps.findCustomer;
   /** Require a verified Directus agent session; replies + returns false on fail. */
   async function requireAgent(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
     try {
@@ -134,6 +143,36 @@ export async function registerCommerceRoutes(
     return answering(reply, { route: 'orders', vendorId, customerId }, () =>
       listOrders(vendorId, customerId, limit),
     );
+  });
+
+  /**
+   * DOES THIS PHONE BELONG TO A YIJI CUSTOMER?
+   *
+   * For the coupon approval card (owner, 2026-10-01). A coupon with no order is
+   * delivered by resolving the customer from their number — see
+   * `AddCompensationCoupon` in the coupon worker — so the only honest question
+   * before approving one is whether that resolution will succeed.
+   *
+   * The card used to carry a permanent caveat on every order-less coupon
+   * ("if they have never used the app it cannot be delivered"), which is noise
+   * on the great majority that CAN be delivered. Asking the real question lets
+   * the warning appear only when it is true.
+   *
+   * Returns a BOOLEAN and the id, never a profile: the card needs to know
+   * whether delivery will work, and a lookup endpoint that hands back customer
+   * records to any signed-in agent is a different, wider thing.
+   */
+  app.get('/commerce/customer-exists', async (req, reply) => {
+    if (!(await requireAgent(req, reply))) return;
+    const q = req.query as Record<string, string | undefined>;
+    const phone = str(q.phone);
+    if (!phone) return reply.code(400).send({ error: 'missing_params' });
+    return answering(reply, { route: 'customer-exists', phone }, async () => {
+      const id = findCustomer ? await findCustomer(phone) : null;
+      /* `configured: false` is NOT "they do not exist" — without the credential
+         nothing was asked, and the caller must not render a warning off it. */
+      return { configured: Boolean(findCustomer), exists: Boolean(id), customerId: id ?? null };
+    });
   });
 
   app.get('/commerce/order', async (req, reply) => {

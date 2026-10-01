@@ -40,6 +40,10 @@ const api = vi.hoisted(() => ({
   useDecideCoupon: vi.fn(),
   useSaveCouponTerms: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRetryCouponDelivery: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  /* The card asks Yiji whether an order-less coupon can actually reach the
+     customer. Default here is the quiet answer — a configured lookup that
+     found them — so these tests assert what they were written for. */
+  useCustomerReachable: vi.fn(() => ({ data: { configured: true, exists: true } })),
 }));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
 
@@ -359,14 +363,41 @@ describe('CouponApprovalsPage — how an order-less coupon can still be delivere
     expect(screen.getByText(/no way to reach the customer/i)).toBeInTheDocument();
   });
 
-  /* The correction itself: a phone means it will be tried, not refused. */
-  it('says an order-less coupon with a phone will be tried on Yiji', async () => {
+  /*
+   * SILENT WHEN IT WILL WORK. The card used to carry a standing caveat on every
+   * order-less coupon; the great majority deliver fine, and a warning that is
+   * almost always wrong trains a supervisor to ignore the one that is not
+   * (owner, 2026-10-01). The default mock answers "configured, exists".
+   */
+  it('says NOTHING when the phone resolves to a Yiji customer', async () => {
     api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
     const user = userEvent.setup();
     renderPage();
     await expandFirst(user);
-    expect(screen.getByText(/found from/i)).toBeInTheDocument();
+    expect(screen.queryByText(/has no Yiji account/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
+  });
+
+  /* ...and warns when it genuinely cannot be delivered. 0536418952 is a real
+     example: it resolves to nobody on Yiji. */
+  it('warns when the phone resolves to NOBODY', async () => {
+    api.useCustomerReachable.mockReturnValue({ data: { configured: true, exists: false } });
+    api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText(/has no Yiji account/i)).toBeInTheDocument();
+  });
+
+  /* An UNANSWERED question is not evidence of absence: with no lookup
+     configured the card must stay quiet rather than accuse the customer. */
+  it('stays quiet when the lookup is not configured', async () => {
+    api.useCustomerReachable.mockReturnValue({ data: { configured: false, exists: false } });
+    api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.queryByText(/has no Yiji account/i)).not.toBeInTheDocument();
   });
 
   it('still lets the decision be made — it is a warning, not a block', async () => {

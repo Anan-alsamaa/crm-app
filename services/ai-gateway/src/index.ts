@@ -19,7 +19,7 @@ import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
 import { CommerceCache } from './commerce/cache.js';
 import { Registry } from './metrics.js';
-import { createYijiClient } from '@yiji/shared-types';
+import { createYijiClient, createYijiCustomerFinder } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
@@ -172,7 +172,20 @@ async function main(): Promise<void> {
   // Read-through cache in front of Yiji. The inbox opens the same customer's
   // orders repeatedly and several agents open the same chat; without this every
   // one of those is a fresh external round trip.
-  await registerCommerceRoutes(app, { directus, yiji, cache: new CommerceCache(redis) });
+  /* Null without the admin credential, in which case `/commerce/customer-exists`
+     reports `configured: false` and the coupon card shows no verdict either way. */
+  const findCustomer = createYijiCustomerFinder({
+    apiUrl: process.env.YIJI_API_URL ?? '',
+    adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+    adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+    adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+  });
+  await registerCommerceRoutes(app, {
+    directus,
+    yiji,
+    cache: new CommerceCache(redis),
+    ...(findCustomer ? { findCustomer } : {}),
+  });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
   logger.info(`ai-gateway listening on :${config.PORT}`);

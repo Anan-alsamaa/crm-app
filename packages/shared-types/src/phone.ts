@@ -216,3 +216,36 @@ export function isDialablePhone(raw: string | null | undefined): boolean {
   }
   return false;
 }
+
+/**
+ * A contact's display name, with a phone-like name rendered CANONICALLY.
+ *
+ * Many customers have no name: they arrive from the app or a WhatsApp
+ * complaint and the number becomes the name. Those names were stored in
+ * whatever shape the source used — on live production, 44 of 77 contacts carry
+ * a numeric name and they disagree with each other (`+966564490993`,
+ * `509040892`) while the `phone` COLUMN beside them is correctly `05…`. The
+ * same customer therefore reads two different ways on one screen, and two
+ * customers with the same number look like different people (owner,
+ * 2026-10-01).
+ *
+ * So a name that is ONLY a phone number is normalised to `05…`. A real name is
+ * returned untouched — `isDialablePhone` rejects anything with letters, which
+ * is what keeps "Ahmed" out of this — and so is a foreign number, which must
+ * not be made to look Saudi.
+ *
+ * DISPLAY ONLY. It changes nothing in the database; it makes every surface
+ * agree about what is already there.
+ */
+export function displayContactName(
+  name: string | null | undefined,
+  fallbackPhone?: string | null,
+): string {
+  const raw = (name ?? '').trim();
+  if (!raw) return normalizePhone(fallbackPhone) || '';
+  if (!isDialablePhone(raw)) return raw;
+  /* Only a SAUDI number is rewritten. `normalizePhone` returns a foreign
+     number unchanged, so comparing against it keeps "+447…" as it was. */
+  const local = normalizePhone(raw);
+  return /^05\d{8}$/.test(local) ? local : raw;
+}

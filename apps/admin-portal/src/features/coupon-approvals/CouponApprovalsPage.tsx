@@ -31,6 +31,7 @@ import { businessDayWindow } from '../../lib/date-range.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import {
   useCouponApprovals,
+  useCustomerReachable,
   useDecideCoupon,
   useRetryCouponDelivery,
   useSaveCouponTerms,
@@ -366,6 +367,15 @@ function Row({
      no contact row, so its number lives on the request itself. */
   const deliveryPhone = (row.customer_phone ?? row.contact?.phone ?? '').trim();
   const canBeDelivered = hasOrder || Boolean(deliveryPhone);
+  /*
+   * Can this number actually be reached on Yiji?
+   *
+   * Asked only for the rows where it changes what the card says: no order, a
+   * phone to try, and not deliberately withheld. One cheap upstream call per
+   * such row, cached for the session, so opening the queue does not become a
+   * burst of lookups.
+   */
+  const reach = useCustomerReachable(!hasOrder && !row.delivery_excluded ? deliveryPhone : '');
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
@@ -818,15 +828,37 @@ function Row({
               used the app resolves to nobody and the coupon stays visibly owed.
               Saying so here is what stops an agent telling them it is on the
               way. */}
-          {!hasOrder && Boolean(deliveryPhone) && !row.delivery_excluded && (
-            <p className="mt-2 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-muted-foreground ring-1 ring-inset ring-foreground/[0.04]">
-              {t('couponApprovals.noOrderHasPhone', {
-                defaultValue:
-                  'No order number, so this is sent to the customer’s Yiji account found from {{phone}}. If they have never used the app it cannot be delivered and will stay approved — honour it in the branch.',
-                phone: normalizePhone(deliveryPhone) || deliveryPhone,
-              })}
-            </p>
-          )}
+          {/*
+            ONLY WHEN THE ANSWER IS ACTUALLY NO.
+
+            This used to carry a standing caveat on every order-less coupon
+            ("if they have never used the app it cannot be delivered"), which is
+            noise on the great majority that deliver perfectly well and trains
+            a supervisor to ignore the line that matters (owner, 2026-10-01).
+
+            So the card ASKS: `/commerce/customer-exists` resolves the number
+            against Yiji, exactly as the delivery worker will. A customer who
+            exists gets no notice at all. One who does not gets a real warning,
+            because approving that coupon records a compensation nothing will
+            deliver — and an agent must not tell them it is on the way.
+
+            Nothing is said while the answer is loading, and nothing is said
+            when the lookup is not configured: an unanswered question is not
+            evidence of absence.
+          */}
+          {!hasOrder &&
+            Boolean(deliveryPhone) &&
+            !row.delivery_excluded &&
+            reach.data?.configured === true &&
+            reach.data.exists === false && (
+              <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+                {t('couponApprovals.noYijiAccount', {
+                  defaultValue:
+                    'No order number, and {{phone}} has no Yiji account — so this coupon cannot reach the app. Approving still records the compensation; honour it in the branch.',
+                  phone: normalizePhone(deliveryPhone) || deliveryPhone,
+                })}
+              </p>
+            )}
 
           {/* Never-send outranks every other delivery state: there is nothing
               to report on and nothing to retry. */}

@@ -8,6 +8,7 @@ import {
 } from '@yiji/shared-types';
 import { jobProducer } from '../../lib/job-producer.js';
 import { directus } from '../../lib/directus.js';
+import { commerce } from '../../lib/commerce-client.js';
 
 /**
  * The supervisor's side of coupon approval.
@@ -364,5 +365,29 @@ export function useRetryCouponDelivery() {
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['coupon-approvals'] }),
+  });
+}
+
+/**
+ * Whether a phone resolves to a Yiji customer — i.e. whether an order-less
+ * coupon can actually be delivered.
+ *
+ * The approval card warns only when the answer is a definite NO, so the shape
+ * matters: `configured` false means nothing was asked and the caller must stay
+ * silent rather than treat an unanswered question as absence.
+ *
+ * DISABLED on an empty phone, so a row that needs no lookup makes no call. The
+ * answer is cached for the session — a customer does not acquire an account
+ * while a supervisor reads one card — and never retried, because a failure here
+ * must not turn into a warning about the customer.
+ */
+export function useCustomerReachable(phone: string) {
+  const trimmed = (phone ?? '').trim();
+  return useQuery({
+    queryKey: ['yiji-customer-exists', trimmed],
+    enabled: trimmed.length > 0,
+    retry: false,
+    staleTime: 10 * 60_000,
+    queryFn: () => commerce.customerExists(trimmed),
   });
 }

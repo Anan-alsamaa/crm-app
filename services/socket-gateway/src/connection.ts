@@ -13,6 +13,7 @@ import {
   type YijiUserReader,
   type YijiLatestOrderReader,
   normalizePhone,
+  displayContactName,
 } from '@yiji/shared-types';
 import type { GatewayDirectus } from './directus.js';
 import type { CustomerVerifier } from './auth/customer-jwt.js';
@@ -346,7 +347,19 @@ export async function resolveCustomerClaims(
        * after the first end-to-end run, not from the code.
        */
       phone: normalizePhone(profile.phone),
-      ...(profile.name ? { name: profile.name } : {}),
+      /*
+       * AND THE NAME IN THE SAME SHAPE, when the name IS the number.
+       *
+       * Yiji's `fullName` is frequently the customer's own number — often
+       * `+966564490993 - +966564490993` — so the name column filled up with a
+       * spelling the phone column beside it had already been fixed to avoid.
+       * On live production 44 of 77 contacts read that way, disagreeing with
+       * their own phone on the same row (owner, 2026-10-01).
+       *
+       * `displayContactName` rewrites ONLY a name that is purely a Saudi
+       * number; a real name and a foreign number pass through untouched.
+       */
+      ...(profile.name ? { name: displayContactName(profile.name) } : {}),
       ...(profile.email ? { email: profile.email } : {}),
       /*
        * NOT a walk-in. This customer arrived through the Yiji app and their id

@@ -55,6 +55,16 @@ export interface LateOrderSnapshot {
   deliveryAddress?: string | null;
   paymentStatus?: string | null;
   paymentMode?: string | null;
+  /**
+   * The customer, captured with the order.
+   *
+   * This is where the report's "Customer mobile" column comes from. It read
+   * `customer_phone` off the decision row, which has no such field, so the
+   * column was permanently blank — the snapshot shaper had been dropping Yiji's
+   * `customerPhoneNumber` (owner, 2026-10-01). Stored canonical `05…`.
+   */
+  customerPhone?: string | null;
+  customerName?: string | null;
   /** When the copy was taken — what makes it a snapshot rather than a claim. */
   capturedAt?: string | null;
 }
@@ -137,10 +147,35 @@ export function mergeLateOrders(
   const decided = new Set<string>();
   const out: LateOrderRegisterRow[] = [];
 
+  /* The live queue, by order, so a decided row can still answer "whose order
+     was this?" — see `customer_phone` below. */
+  const queueByOrder = new Map(queue.map((q) => [q.orderId?.trim() ?? '', q]));
+
   for (const d of decisions) {
     const key = d.order_id?.trim();
     if (key) decided.add(key);
-    out.push({ ...d, state: lateOrderState(d), pendingOnly: false });
+    out.push({
+      ...d,
+      state: lateOrderState(d),
+      pendingOnly: false,
+      /*
+       * THE CUSTOMER'S NUMBER, WHICH A DECIDED ROW NEVER CARRIED.
+       *
+       * `late_order_decisions` has no phone column, so spreading the row left
+       * `customer_phone` undefined and the report's "Customer mobile" column
+       * was blank on every decided order — while pending rows, which take it
+       * from the live queue, showed one (owner, 2026-10-01).
+       *
+       * The SNAPSHOT first: it is what the order was when the decision was
+       * made, which is the honest answer for a historical row. The live queue
+       * second, so a decision taken before the snapshot captured a phone still
+       * shows one while the order remains in the window.
+       */
+      customer_phone:
+        d.order_snapshot?.customerPhone?.trim() ||
+        (key ? (queueByOrder.get(key)?.customerPhone ?? null) : null) ||
+        null,
+    });
   }
 
   for (const q of queue) {
