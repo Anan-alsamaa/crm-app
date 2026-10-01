@@ -119,6 +119,19 @@ module.exports = {
         magenta: 'oklch(var(--magenta) / <alpha-value>)',
         // Incoming chat bubble surface (messenger-vibrant direction).
         bubble: 'oklch(var(--bubble) / <alpha-value>)',
+        /*
+         * A HYPERLINK OUT OF THE APP (owner, 2026-10-01).
+         *
+         * The courier-tracking link was `text-brand`, which resolves to
+         * `brand.primary` — a GOLD, not the indigo it reads as by name — so it
+         * rendered as amber text that nobody would take for a link.
+         *
+         * A true blue, because that is what a link looks like everywhere else
+         * on the web. Falls back to the same value when `--link` is absent, so
+         * a surface that has not defined the token still gets a blue rather
+         * than an invisible colour.
+         */
+        link: 'oklch(var(--link, 0.5 0.19 250) / <alpha-value>)',
         // Per-vendor branding hook (legacy + runtime override).
         brand: {
           primary: 'var(--brand-primary, oklch(0.84 0.19 80.46))',

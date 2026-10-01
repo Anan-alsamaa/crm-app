@@ -15,6 +15,7 @@ import {
   Td,
   Th,
   Tr,
+  Modal,
   formatDate,
   formatDateTime,
 } from '@yiji/ui';
@@ -398,6 +399,12 @@ export function LateOrdersReportPage() {
   const canSeeOrder = canExport;
   /** Which row is open. One at a time: two order panels is a page, not a table. */
   const [openOrder, setOpenOrder] = useState<string | null>(null);
+  /* The row the dialog is showing. Resolved from the id rather than stored, so
+     a refetch that replaces the row object still shows current data. */
+  const openRow = useMemo(
+    () => (openOrder ? (rows.find((r) => r.id === openOrder) ?? null) : null),
+    [openOrder, rows],
+  );
 
   const exportByAgent = () => {
     const header = [
@@ -913,6 +920,22 @@ export function LateOrdersReportPage() {
                       </tbody>
                     </Table>
                   </TableSurface>
+                  {/*
+                    ONE dialog for the whole register, outside the table.
+                    Mounted only while open, so a page of rows never pays for
+                    snapshots nobody asked to see.
+                  */}
+                  <Modal
+                    open={!!openOrder}
+                    onClose={() => setOpenOrder(null)}
+                    size="lg"
+                    title={t('lateOrdersReport.snapshot.title', {
+                      order: openRow?.order_id ?? '',
+                      defaultValue: 'Order {{order}}',
+                    })}
+                  >
+                    {openRow && <OrderSnapshotPanel snapshot={openRow.order_snapshot} />}
+                  </Modal>
                   <TablePager
                     page={current}
                     onPage={setPage}
@@ -1167,34 +1190,30 @@ export function LateOrdersReportPage() {
                                     type="button"
                                     size="sm"
                                     variant="secondary"
-                                    aria-expanded={openOrder === r.id}
-                                    onClick={() =>
-                                      setOpenOrder((cur) => (cur === r.id ? null : r.id))
-                                    }
+                                    aria-haspopup="dialog"
+                                    onClick={() => setOpenOrder(r.id)}
                                   >
-                                    {openOrder === r.id
-                                      ? t('lateOrdersReport.snapshot.hide', {
-                                          defaultValue: 'Hide',
-                                        })
-                                      : t('lateOrdersReport.snapshot.view', {
-                                          defaultValue: 'Order',
-                                        })}
+                                    {t('lateOrdersReport.snapshot.view', {
+                                      defaultValue: 'Order',
+                                    })}
                                   </Button>
                                 </Td>
                               )}
                             </Tr>
-                            {/* A SECOND ROW rather than an overlay: the register is
-                          read by scrolling, and a dialog would take the reader
-                          out of the list they are working down. `colSpan` is
-                          deliberately generous — a short span would leave the
-                          panel boxed inside one column's width. */}
-                            {canSeeOrder && openOrder === r.id && (
-                              <Tr>
-                                <Td colSpan={16} className="bg-secondary/20 p-0">
-                                  <OrderSnapshotPanel snapshot={r.order_snapshot} />
-                                </Td>
-                              </Tr>
-                            )}
+                            {/*
+                          A DIALOG, NOT A SECOND ROW (owner, 2026-10-01).
+
+                          This used to expand inline, which pushed every row
+                          below it down and left the order boxed inside the
+                          table's own horizontal scroll — on a register this
+                          wide the panel was frequently off-screen to begin
+                          with. The agent portal's "Cart & tracking" has always
+                          been a modal for the same reason, and the two screens
+                          should not read differently.
+
+                          The dialog itself is rendered ONCE, outside the table
+                          — see `openRow` below. One overlay, not one per row.
+                        */}
                           </Fragment>
                         ))}
                       </tbody>

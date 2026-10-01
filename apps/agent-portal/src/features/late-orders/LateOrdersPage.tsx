@@ -22,6 +22,7 @@ import {
   Textarea,
   Tr,
   formatDate,
+  formatDateTime,
   pageCountOf,
   toast,
   MultiSelectMenu,
@@ -32,6 +33,7 @@ import {
   businessDayRange,
   matchStore,
   normalizePhone,
+  displayContactName,
   orderEventTimes,
   type LateOrderRow,
   causeRaisesTicket,
@@ -498,6 +500,12 @@ export function LateOrdersPage() {
    */
   const stateOf = useCallback(
     (orderId: string): LateOrderState => lateOrderState(decisions.data?.get(orderId) ?? null),
+    [decisions.data],
+  );
+
+  /** The decision for an order, or null while it is still pending. */
+  const decisionOf = useCallback(
+    (orderId: string) => decisions.data?.get(orderId) ?? null,
     [decisions.data],
   );
 
@@ -1197,6 +1205,15 @@ export function LateOrdersPage() {
                 <Table>
                   <thead>
                     <Tr>
+                      {/*
+                  WHEN THE DECISION WAS TAKEN, and the business day it belongs
+                  to (owner, 2026-10-01: the queue should show what the admin
+                  register shows). Blank while an order is still pending —
+                  nobody has decided anything yet, and dating it "now" would be
+                  a claim rather than a fact.
+                */}
+                      <Th>{t('lateOrders.col.created', { defaultValue: 'Creation time' })}</Th>
+                      <Th>{t('lateOrders.col.businessDay', { defaultValue: 'Business day' })}</Th>
                       <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>
                       {/*
                   "Running" said nothing (owner, 2026-09-28) — running for how
@@ -1250,10 +1267,19 @@ export function LateOrdersPage() {
                           })}
                         </span>
                       </Th>
-                      <Th>{t('lateOrders.col.brand', { defaultValue: 'Brand / branch' })}</Th>
-                      <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer' })}</Th>
-                      <Th>{t('lateOrders.col.status', { defaultValue: 'Status' })}</Th>
+                      {/* SPLIT, like the register: brand and restaurant are two
+                  facts, and one joined cell cannot be sorted or read as
+                  either. */}
+                      <Th>{t('lateOrders.col.brandOnly', { defaultValue: 'Brand' })}</Th>
+                      <Th>{t('lateOrders.col.restaurant', { defaultValue: 'Restaurant' })}</Th>
+                      <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer mobile' })}</Th>
+                      <Th>{t('lateOrders.col.status', { defaultValue: 'Order status' })}</Th>
                       <Th>{t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}</Th>
+                      {/* WHAT WAS DECIDED, and by whom — the three the register
+                  carries and the queue did not. */}
+                      <Th>{t('lateOrders.col.agent', { defaultValue: 'Agent' })}</Th>
+                      <Th>{t('lateOrders.col.reason', { defaultValue: 'Reason' })}</Th>
+                      <Th>{t('lateOrders.col.actionTaken', { defaultValue: 'Action taken' })}</Th>
                       {/*
                   THE ACTIONS, SPLIT INTO THREE (owner, 2026-09-28).
 
@@ -1276,6 +1302,18 @@ export function LateOrdersPage() {
                     {paged.map((row) => (
                       <Fragment key={row.orderId}>
                         <Tr>
+                          {/* The decision's own timestamp and business day. A
+                              pending order has neither — nothing has been
+                              decided — and a dash says so honestly. */}
+                          <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
+                            {decisions.data?.get(row.orderId)?.date_created
+                              ? formatDateTime(decisions.data.get(row.orderId)!.date_created!)
+                              : '-'}
+                          </Td>
+                          <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
+                            {businessDay(decisions.data?.get(row.orderId)?.date_created ?? null) ??
+                              '-'}
+                          </Td>
                           <Td className="whitespace-nowrap font-medium tabular-nums">
                             {row.orderId}
                           </Td>
@@ -1403,15 +1441,16 @@ export function LateOrdersPage() {
                               minutes={timesOf(row.orderId).preparationMinutes}
                             />
                           </Td>
-                          <Td className="max-w-[16rem] truncate">
-                            {[row.brandName, row.restaurantName].filter(Boolean).join(' - ') || '-'}
-                          </Td>
+                          <Td className="max-w-[12rem] truncate">{row.brandName || '-'}</Td>
+                          <Td className="max-w-[14rem] truncate">{row.restaurantName || '-'}</Td>
                           <Td className="whitespace-nowrap">
                             {/* NORMALISED FOR DISPLAY, not just for storage. Yiji
                           sends `+9665XXXXXXXX`; every number in this CRM reads
                           `05XXXXXXXX`, and this cell was the one place showing
                           Yiji's shape to an agent (owner, 2026-09-28). */}
-                            {row.customerName || normalizePhone(row.customerPhone) || '-'}
+                            {displayContactName(row.customerName, row.customerPhone) ||
+                              normalizePhone(row.customerPhone) ||
+                              '-'}
                           </Td>
                           <Td className="whitespace-nowrap text-muted-foreground">
                             {t(`commerce.orderStatuses.${row.status}`, {
@@ -1440,6 +1479,27 @@ export function LateOrdersPage() {
                               onChange={(v) => pickKind(row.orderId, v)}
                               options={causeOptions}
                             />
+                          </Td>
+                          {/*
+                      WHAT WAS DECIDED — the three the register carries, so an
+                      agent reads the same facts here as a manager reads there
+                      (owner, 2026-10-01). Blank on a pending order, because
+                      nobody has decided anything yet.
+                    */}
+                          <Td className="whitespace-nowrap">
+                            {decisions.data?.get(row.orderId)?.decided_by?.first_name || '-'}
+                          </Td>
+                          <Td
+                            className="max-w-[18rem] truncate"
+                            title={decisionOf(row.orderId)?.reason ?? undefined}
+                          >
+                            {decisionOf(row.orderId)?.reason || '-'}
+                          </Td>
+                          <Td
+                            className="max-w-[18rem] truncate"
+                            title={decisionOf(row.orderId)?.action_taken ?? undefined}
+                          >
+                            {decisionOf(row.orderId)?.action_taken || '-'}
                           </Td>
                           {/*
                       COLUMN 1 — WHAT YOU LOOK AT. Always offered, decided or

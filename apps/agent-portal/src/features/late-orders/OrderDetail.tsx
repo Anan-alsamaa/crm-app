@@ -122,7 +122,7 @@ function CartLines({ orderId }: { orderId: string }) {
           href={cart.trackingUrl}
           target="_blank"
           rel="noreferrer noopener"
-          className="inline-flex items-center gap-1 text-xs font-medium text-brand underline decoration-brand/30 underline-offset-4 transition-colors hover:decoration-brand"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-link underline decoration-link/40 underline-offset-4 transition-colors hover:decoration-link"
         >
           {t('lateOrders.cart.trackingLink', { defaultValue: "Open the courier's tracking" })}
         </a>
@@ -267,7 +267,7 @@ export function LateOrderDetail({
             href={trackingUrl}
             target="_blank"
             rel="noreferrer noopener"
-            className="inline-flex items-center gap-1 text-xs font-medium text-brand underline decoration-brand/30 underline-offset-4 transition-colors hover:decoration-brand"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-link underline decoration-link/40 underline-offset-4 transition-colors hover:decoration-link"
           >
             {t('lateOrders.cart.trackingLink', { defaultValue: "Open the courier's tracking" })}
           </a>

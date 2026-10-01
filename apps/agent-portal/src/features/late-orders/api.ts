@@ -138,7 +138,20 @@ export function useLateOrderDecisions() {
             filter: {
               date_created: { _gte: new Date(Date.now() - 30 * 86_400_000).toISOString() },
             },
-            fields: ['id', 'order_id', 'action', 'kind', 'reason', 'action_taken', 'ticket'],
+            /* `date_created` and `decided_by` so the queue can show WHEN a
+               decision was taken and by WHOM — the register in the admin
+               portal reports both, and the two screens must agree. */
+            fields: [
+              'id',
+              'order_id',
+              'action',
+              'kind',
+              'reason',
+              'action_taken',
+              'ticket',
+              'date_created',
+              { decided_by: ['id', 'first_name'] },
+            ],
             sort: ['-date_created'],
             limit: -1,
           } as never,
@@ -162,6 +175,10 @@ export interface LateOrderDecisionRow {
   kind: string | null;
   reason: string | null;
   action_taken: string | null;
+  /** When the decision was taken — the register's "Creation time". */
+  date_created?: string | null;
+  /** Who took it. Expanded so the queue can name them without a second read. */
+  decided_by?: { id: string; first_name: string | null } | null;
   /**
    * The ticket this decision raised, when it raised one.
    *

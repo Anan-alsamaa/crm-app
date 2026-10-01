@@ -1680,7 +1680,8 @@
       "payment": "الدفع",
       "deliveryType": "التوصيل",
       "branch": "العلامة / الفرع",
-      "capturedAt": "سُجِّل في {{when}}"
+      "capturedAt": "سُجِّل في {{when}}",
+      "title": "الطلب {{order}}"
     }
   },
   "lateOrders": {

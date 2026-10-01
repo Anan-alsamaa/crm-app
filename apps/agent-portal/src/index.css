@@ -83,6 +83,19 @@
   --primary-subtle: 0.457 0.215 277 / 0.1;
   --brand: 0.457 0.215 277;
 
+  /*
+   * A LINK THAT READS AS A LINK (owner, 2026-10-01).
+   *
+   * The courier-tracking link used `--brand`, which is hue 277 — indigo/violet.
+   * Correct brand colour, and at small sizes it reads as dark TEXT rather than
+   * something to click. This is a true blue (hue 250) at the same lightness, so
+   * it still belongs to the palette while being unmistakably a hyperlink.
+   *
+   * For an actual `<a>` to somewhere else. In-app navigation keeps the brand
+   * colour; this is for leaving the app.
+   */
+  --link: 0.5 0.19 250;
+
   --bubble: 0.965 0.012 255;
 
   /* Ink: the dark counterweight in a light app — masthead, table headers, the
@@ -230,6 +243,8 @@
   --primary-foreground: 0.16 0.03 277;
   --primary-subtle: 0.72 0.16 277 / 0.18;
   --brand: 0.72 0.16 277;
+  /* Lifted for contrast on the dark surface, like `--primary` above it. */
+  --link: 0.74 0.14 250;
   --bubble: 0.26 0.014 258;
   --secondary: 0.24 0.012 258;
   --secondary-foreground: 0.96 0.005 250;
