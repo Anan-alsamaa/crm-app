@@ -56,6 +56,21 @@ describe('the approval guard', () => {
   });
 
   /*
+   * A WITHHELD COUPON IS APPROVABLE WITH NO ROUTE AT ALL.
+   *
+   * `delivery_excluded` means "record this, do not send it" — the refund
+   * customer who will not accept an app coupon. Nothing goes to Yiji, so
+   * demanding an order or a phone would block the exact case the checkbox
+   * exists to serve. I missed this in the first pass of the fix: the guard
+   * asked about reachability without asking whether anything was being sent.
+   */
+  it('lets a withheld coupon through without an order or a phone', () => {
+    expect(API).toContain('row.delivery_excluded === true');
+    // And it is the FIRST term, so an excluded row short-circuits the rest.
+    expect(API).toMatch(/const reachable =\s*withheld \|\|/);
+  });
+
+  /*
    * THE MESSAGE MUST NAME THE REAL PRECONDITION. The old wording sent a
    * supervisor hunting for an order number that is not needed, which is how a
    * blocked approval became "ask the agent which order it is for" on a coupon

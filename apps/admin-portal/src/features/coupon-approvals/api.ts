@@ -257,7 +257,22 @@ export function useDecideCoupon() {
          * A rejection is still allowed without either: turning something down
          * needs no destination.
          */
+        /*
+         * A WITHHELD COUPON NEEDS NO ROUTE AT ALL.
+         *
+         * `delivery_excluded` means "record this, do not send it" — the refund
+         * customer who will not accept an app coupon. Nothing is going to Yiji,
+         * so demanding a way to reach them is demanding a destination for a
+         * journey nobody is making, and it would block the very case the
+         * checkbox exists to serve (owner, 2026-10-01).
+         *
+         * Checked FIRST, before reachability, for the same reason the push
+         * worker checks it before everything else: an excluded row must be
+         * inert however it got here.
+         */
+        const withheld = row.delivery_excluded === true;
         const reachable =
+          withheld ||
           Boolean(couponOrderId(row)) ||
           Boolean((row.customer_phone ?? row.contact?.phone ?? '').trim());
         if (!reachable) {
