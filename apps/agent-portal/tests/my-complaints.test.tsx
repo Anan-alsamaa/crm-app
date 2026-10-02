@@ -130,6 +130,7 @@ describe('toComplaintRow', () => {
         coupon_value: null,
         coupon_percent: null,
         order_snapshot: null,
+        order_id: null,
         store_snapshot: null,
         contact: null,
       },

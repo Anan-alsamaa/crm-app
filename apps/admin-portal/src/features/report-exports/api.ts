@@ -782,7 +782,10 @@ async function loadAgentReport(
           responseDesc: t.response_desc ?? '',
           complaintSource: t.complaint_source ?? '',
           orderAmount: toNumber(snap?.total),
-          orderNumber: snap?.orderId ? String(snap.orderId) : '',
+          /* The same fault as the agent portal's: `order_id` was FETCHED here
+             (it is in the field list above) and then ignored, so a ticket with
+             no `order_snapshot` reported no order number. The column first. */
+          orderNumber: String(t.order_id ?? snap?.orderId ?? ''),
           communicationMethod: t.communication_method ?? '',
           couponCode: t.coupon_code ?? '',
           couponValue: toNumber(t.coupon_value),

@@ -64,6 +64,8 @@ interface TicketRow {
     brandName?: string | null;
     restaurantName?: string | null;
   } | null;
+  /** The searchable copy of the order number — see the field list below. */
+  order_id: string | null;
   store_snapshot: StoreSnapshot | null;
   contact: { name: string | null; phone: string | null } | null;
 }
@@ -95,6 +97,19 @@ const FIELDS = [
   'coupon_value',
   'coupon_percent',
   'order_snapshot',
+  /*
+   * THE SEARCHABLE ORDER NUMBER, and the reason it is a COLUMN.
+   *
+   * `order_snapshot` is json, which Directus cannot filter — which is exactly
+   * why `tickets.order_id` exists beside it. It was not requested here, so
+   * `orderNumber` below was built from the snapshot alone and a ticket with no
+   * snapshot was unfindable by its order number (ops, 2026-10-03).
+   *
+   * A ticket raised from the LATE-ORDERS queue is precisely that case: it is
+   * created with `order_id` set and no snapshot at all, so the number was in
+   * the database and invisible to the search above it.
+   */
+  'order_id',
   'store_snapshot',
   { contact: ['name', 'phone'] },
 ] as const;
@@ -132,7 +147,10 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
     responseDesc: t.response_desc ?? '',
     complaintSource: t.complaint_source ?? '',
     orderAmount: toNumber(snap?.total),
-    orderNumber: snap?.orderId ? String(snap.orderId) : '',
+    /* The COLUMN first, the snapshot second. The column is the one that is
+       always written; the snapshot is absent on a late-order ticket. Either
+       alone leaves a real order number unsearchable. */
+    orderNumber: String(t.order_id ?? snap?.orderId ?? ''),
     communicationMethod: t.communication_method ?? '',
     couponCode: t.coupon_code ?? '',
     couponValue: toNumber(t.coupon_value),

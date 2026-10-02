@@ -53,7 +53,6 @@ import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
 import {
   resolveLateOrderContact,
-  useHandledLateOrders,
   useLateOrders,
   useLateOrderCauses,
   useLateOrderDecisions,
@@ -330,7 +329,11 @@ export function LateOrdersPage() {
   /* Today keeps polling — orders cross the threshold while an agent watches.
      A searched range is a fixed answer and does not. */
   const queue = useLateOrders(activeRange, true, showingToday);
-  const handled = useHandledLateOrders();
+  /* `useHandledLateOrders` is deliberately NOT used here any more (ops,
+     2026-10-03). It asked only for the last 24 hours, so an order compensated
+     the day before looked unhandled and the row offered a second coupon.
+     `stateOf` below answers the same question from the decisions actually
+     loaded for the range, with no time bound. */
   const record = useRecordLateDecision();
 
   /** The classification per row, defaulted to late delivery. */
@@ -1533,7 +1536,23 @@ export function LateOrdersPage() {
                         the same order. What decides this is whether a decision
                         EXISTS, not which view happens to be open.
                       */}
-                            {handled.data?.has(row.orderId) ? (
+                            {/*
+                        `stateOf`, NOT the `handled` set (ops, 2026-10-03).
+
+                        `useHandledLateOrders` only ever asks for the last 24
+                        HOURS, so an order compensated the day before was absent
+                        from it, this test read false, and the row offered
+                        "Assign coupon" on an order that plainly had a coupon.
+                        Filter by Status = Handled on any older range and EVERY
+                        row showed the button.
+
+                        The page already knows the right answer — `stateOf` is
+                        what the status filter itself uses, and `lateOrderState`
+                        has no time bound at all. The same mistake as the `range`
+                        gate this replaced: deciding from the view that happens
+                        to be loaded rather than from whether a decision EXISTS.
+                      */}
+                            {stateOf(row.orderId) === 'handled' ? (
                               <Pill tone="success" size="sm">
                                 {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
                               </Pill>
@@ -1562,12 +1581,13 @@ export function LateOrdersPage() {
                       GONE ONCE HANDLED. A handled order's story is the coupon's
                       own reason — the spec is explicit that it overrides the
                       comment — so offering to edit a comment nobody will read
-                      again would only invite a contradiction. `handled`, not
-                      `stateOf`: it is the same set the Decision cell keys on, so
-                      the two cells can never disagree about one row.
+                      again would only invite a contradiction. `stateOf`, the
+                      same test the Decision cell uses, so the two cells can
+                      never disagree about one row — and so neither of them
+                      forgets an order compensated more than a day ago.
                     */}
                           <Td>
-                            {handled.data?.has(row.orderId) ? (
+                            {stateOf(row.orderId) === 'handled' ? (
                               <span className="text-xs text-muted-foreground">—</span>
                             ) : (
                               <Button
