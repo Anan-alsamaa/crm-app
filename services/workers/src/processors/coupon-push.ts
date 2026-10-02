@@ -931,8 +931,46 @@ export async function processCouponPushJob(
       }
     }
     if (!compensationUserId) {
+      /*
+       * "THIS PERSON HAS NO APP ACCOUNT" IS A SETTLED ANSWER, NOT A FAILURE.
+       *
+       * This used to return without recording anything, which left
+       * `yiji_push_error` null — and the delivery sweep selects exactly the
+       * rows that are approved, unexcluded and carry no error. So the coupon
+       * was re-examined EVERY SWEEP (60s by default), asking Yiji the same
+       * question about the same number for ever: ~1,440 futile lookups a day,
+       * permanently, per coupon. One of the owner's own coupons
+       * (OPS-433RHNBB, 0536418952) is in exactly that state, and a number that
+       * resolves to nobody today will not resolve in sixty seconds.
+       *
+       * Recorded ONLY when a lookup was genuinely possible and genuinely
+       * answered "nobody". The two other ways to arrive here are not settled
+       * and must stay retryable:
+       *   - no `findCustomer`: the credential is absent, nothing was asked;
+       *   - no phone at all: a supervisor may yet add one.
+       * A lookup that THREW is handled above — it rethrows, because an outage
+       * is the opposite of a settled answer.
+       *
+       * This is not a dead end: `yiji_push_error` is what the Retry control
+       * clears, so if the customer later installs the app a supervisor can
+       * release it with one click.
+       */
+      if (findCustomer && phone) {
+        await recordFailure(
+          directus,
+          id,
+          `no Yiji account for ${phone} — nothing to attach the coupon to. ` +
+            'Retry once the customer has an app account, or honour it in the branch.',
+        );
+      }
       logger.warn(
-        { id, code: row.coupon_code, hasPhone: Boolean(phone), lookup: Boolean(findCustomer) },
+        {
+          id,
+          code: row.coupon_code,
+          hasPhone: Boolean(phone),
+          lookup: Boolean(findCustomer),
+          settled: Boolean(findCustomer && phone),
+        },
         'coupon has no order and no Yiji customer behind its phone — staying approved',
       );
       return 'no-order';

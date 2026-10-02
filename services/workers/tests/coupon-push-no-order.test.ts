@@ -149,8 +149,14 @@ describe('a coupon with no order', () => {
    * A WALK-IN WITH NO APP ACCOUNT IS AN ORDINARY OUTCOME — roughly a third of
    * this queue. It must be reported honestly and left visibly owed, never
    * resolved to the nearest customer.
+   *
+   * AND IT IS SETTLED, SO IT IS RECORDED. The sweep selects rows that are
+   * approved, unexcluded and carry no `yiji_push_error`; writing nothing here
+   * meant the coupon was re-examined every sweep — 60s by default — asking Yiji
+   * the same question about the same number for ever. A number that resolves to
+   * nobody today will not resolve in a minute.
    */
-  it('stays approved when the phone belongs to nobody on Yiji', async () => {
+  it('records a definite "no Yiji account" so the sweep stops asking', async () => {
     const {
       deps: d,
       postCoupon,
@@ -160,6 +166,34 @@ describe('a coupon with no order', () => {
     });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('no-order');
     expect(postCoupon).not.toHaveBeenCalled();
+    /* The status is untouched — the compensation is still owed and still
+       approved. Only the delivery is marked settled. */
+    expect(patches).toHaveLength(1);
+    const patch = patches[0] as Record<string, unknown>;
+    expect(String(patch.yiji_push_error)).toMatch(/no Yiji account/i);
+    expect(patch).not.toHaveProperty('status');
+  });
+
+  /*
+   * NOT SETTLED: nothing was asked. Without the admin credential there was no
+   * lookup, so recording "no account" would park a coupon on a configuration
+   * gap and a supervisor would have to clear it by hand after the credential
+   * arrives.
+   */
+  it('records NOTHING when no lookup is configured', async () => {
+    const { deps: d, patches } = deps({ findCustomer: undefined });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('no-order');
+    expect(patches).toHaveLength(0);
+  });
+
+  /* NOT SETTLED either: a supervisor may yet add the number. */
+  it('records NOTHING when the row has no phone to look up', async () => {
+    const { deps: d, patches } = deps({}, {
+      ...NO_ORDER_ROW,
+      contact: null,
+      customer_phone: null,
+    } as unknown as CouponApprovalRow);
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('no-order');
     expect(patches).toHaveLength(0);
   });
 
