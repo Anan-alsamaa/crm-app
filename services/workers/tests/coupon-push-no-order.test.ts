@@ -97,7 +97,17 @@ function deps(
       return row;
     }),
   };
-  const postCoupon = vi.fn(async () => OK_BODY);
+  /*
+   * TWO CALLS, TWO ANSWERS. The order-less grant CREATES the coupon
+   * (`AddCoupon` → `couponId` in `exceptionMessage`) and then ATTACHES it
+   * (`AddUserCoupon` → `CouponUserId`). A mock returning one canned body for
+   * both would pass while the real two-step was broken.
+   */
+  const postCoupon = vi.fn(async (path: string) =>
+    path === YIJI_UNASSIGNED_COUPON_PATH
+      ? { result: 1, exceptionMessage: 'couponId 73900', extendedProperties: {} }
+      : OK_BODY,
+  );
   const calls: string[] = [];
   const findCustomer = vi.fn(async (phone: string) => {
     calls.push(phone);
@@ -128,8 +138,10 @@ describe('a coupon with no order', () => {
     const { deps: d, postCoupon, lookedUp } = deps();
     await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
     expect(lookedUp).toEqual(['0536418952']);
-    // The compensation endpoint, NOT the order one.
-    expect(postCoupon.mock.calls[0]![0]).toBe(YIJI_COMPENSATION_COUPON_PATH);
+    /* CREATE then ATTACH — `AddUserCoupon` attaches an EXISTING coupon, so a
+       single call could never have worked. */
+    expect(postCoupon.mock.calls[0]![0]).toBe(YIJI_UNASSIGNED_COUPON_PATH);
+    expect(postCoupon.mock.calls[1]![0]).toBe(YIJI_COMPENSATION_COUPON_PATH);
   });
 
   /*
@@ -137,14 +149,21 @@ describe('a coupon with no order', () => {
    * wrapper would bury the customer and the terms a level too deep; Yiji would
    * answer 200 and grant nothing.
    */
-  it('sends the CouponUserVM itself, not the order envelope', async () => {
+  it('attaches by couponId, naming the customer', async () => {
     const { deps: d, postCoupon } = deps();
     await processCouponPushJob(job(), d);
-    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
+    /* The ATTACH call: the id Yiji just minted, and who it is for. The nested
+       `coupon` object belongs to the CREATE call and is not repeated here. */
+    const body = postCoupon.mock.calls[1]![1] as Record<string, unknown>;
+    expect(body).toMatchObject({
+      couponId: 73900,
+      userId: 'yiji-user-abc',
+      couponCode: 'OPS-433RHNBB',
+    });
     expect(body).not.toHaveProperty('couponUser');
-    expect(body).toMatchObject({ userId: 'yiji-user-abc', couponCode: 'OPS-433RHNBB' });
-    // And the terms the supervisor approved still travel with it.
-    expect((body.coupon as Record<string, unknown>).discount).toBe(10);
+    // And the CREATE call carried the approved money.
+    const created = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
+    expect(created.discount).toBe(10);
   });
 
   /*
@@ -180,7 +199,9 @@ describe('a coupon with no order', () => {
        the receipt is what lets the two systems be matched later. */
     const patch = patches[0] as Record<string, unknown>;
     expect(patch).toMatchObject({ status: 'assigned', yiji_push_error: null });
-    expect(String(patch.yiji_coupon_user_id)).toBe('21500');
+    /* The COUPON id from `AddCoupon` (returned in `exceptionMessage`), not a
+       coupon-user id — nobody holds this coupon yet. */
+    expect(String(patch.yiji_coupon_user_id)).toBe('73900');
   });
 
   /* NOBODY IS NAMED. That is what makes the code redeemable by whoever enters
@@ -285,10 +306,9 @@ describe('a coupon with no order', () => {
     await processCouponPushJob(job(), d);
     expect(lookedUp).toEqual(['0537301009']);
     expect(lookedUp).not.toContain('0536418952');
-    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
-    // The id that was granted is the one resolved from the test number.
+    const body = postCoupon.mock.calls[1]![1] as Record<string, unknown>;
+    // The id that was granted is the one resolved from the TEST number.
     expect(body.userId).toBe('yiji-user-abc');
-    expect(String(body.customerPhone)).toContain('537301009');
   });
 
   /* An order-less coupon still records its receipt, like any other grant. */

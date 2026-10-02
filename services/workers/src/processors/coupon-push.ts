@@ -80,6 +80,22 @@ export const YIJI_COUPON_PATH = '/api/CouponUserOrder/CreateCouponUserFromOrder'
 export const YIJI_COMPENSATION_COUPON_PATH = '/api/CouponUser/AddUserCoupon';
 
 /**
+ * `AddCoupon` answers with the new id in `exceptionMessage`, not in a field.
+ *
+ *     { "result": 1, "exceptionMessage": "couponId 73900", "extendedProperties": {} }
+ *
+ * `extendedProperties` is EMPTY here — unlike every other coupon call, where
+ * `CouponUserId` lives in it. Confirmed twice against the live API. So the id
+ * is dug out of the message, and `result` is still what decides success.
+ */
+export function readNewCouponId(body: YijiCouponResponse): number | null {
+  if (body?.result !== 1) return null;
+  const m = /(\d+)/.exec(String(body?.exceptionMessage ?? ''));
+  const id = m ? Number.parseInt(m[1]!, 10) : NaN;
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+/**
  * The endpoint this USED to call, kept named so the reason is not lost.
  *
  * `AddCompensationCoupon` is the obvious choice by name and takes the very
@@ -965,12 +981,18 @@ async function createUnassignedCoupon(args: {
     );
   }
 
-  /* A 200 is not a yes — see `readCouponUserId`. Yiji answers 200 whether it
-     created the coupon or refused it. */
-  const verdict = readCouponUserId(body);
-  if (!verdict.ok) {
-    await recordFailure(directus, id, verdict.error ?? 'yiji refused the unassigned coupon');
-    logger.warn({ id, code: row.coupon_code, err: verdict.error }, 'unassigned coupon refused');
+  /*
+   * A 200 IS NOT A YES, and `AddCoupon` reports differently from every other
+   * coupon call: the new id arrives in `exceptionMessage` as "couponId 73900"
+   * while `extendedProperties` is EMPTY. Reading it with `readCouponUserId`
+   * — which looks in `extendedProperties.CouponUserId` — would call a real
+   * creation a refusal. Confirmed twice against the live API.
+   */
+  const newCouponId = readNewCouponId(body);
+  if (newCouponId == null) {
+    const detail = describeRefusal(body);
+    await recordFailure(directus, id, `yiji refused the unassigned coupon: ${detail}`);
+    logger.warn({ id, code: row.coupon_code, err: detail }, 'unassigned coupon refused');
     return 'refused';
   }
 
@@ -982,13 +1004,15 @@ async function createUnassignedCoupon(args: {
   await directus.request(
     updateItem('coupon_approvals' as never, id, {
       status: 'assigned',
-      yiji_coupon_user_id: verdict.couponUserId ?? null,
+      /* The COUPON id, not a coupon-user id: nobody holds it yet. It is still
+         the receipt that lets the two systems be matched from either side. */
+      yiji_coupon_user_id: String(newCouponId),
       yiji_pushed_at: new Date().toISOString(),
       yiji_push_error: null,
     } as never),
   );
   logger.info(
-    { id, code: row.coupon_code, phone, receipt: verdict.couponUserId },
+    { id, code: row.coupon_code, phone, couponId: newCouponId },
     'customer has no Yiji account — coupon created UNASSIGNED; send them the code to redeem',
   );
   return 'unassigned';
@@ -1295,17 +1319,69 @@ export async function processCouponPushJob(
 
   let body: YijiCouponResponse;
   try {
-    /* The order-less grant goes to its own endpoint: same credential, same
-       tenant header, different body and different path — see
-       YIJI_COMPENSATION_COUPON_PATH. */
-    const path = compensationUserId ? YIJI_COMPENSATION_COUPON_PATH : endpoint.path;
-    body = await postCoupon<YijiCouponResponse>(path, payload, {
+    const headers = {
       // Yiji's API is multi-tenant and routes on this.
       ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
       // Stable across retries of the same job, so a timeout that in fact
       // succeeded cannot become a second coupon.
       'idempotency-key': row.coupon_code ?? id,
-    });
+    };
+
+    if (compensationUserId) {
+      /*
+       * THE ORDER-LESS GRANT IS TWO CALLS, NOT ONE.
+       *
+       * `AddUserCoupon` ATTACHES AN EXISTING COUPON: its `couponId` is the
+       * subject, and the nested `coupon` object is ignored. Sending it a
+       * coupon to create answers, misleadingly,
+       *
+       *     { "result": 2, "exceptionMessage": "User already have this coupon" }
+       *
+       * — which is not about the user at all. Proved by sending two
+       * brand-new, never-seen codes for a user id that does not exist: a
+       * nonexistent user cannot already hold anything, and both came back with
+       * that same sentence. The message means "I could not attach coupon 0".
+       *
+       * So: CREATE first (`AddCoupon` → `couponId`), then ATTACH that id. Both
+       * calls are inside this try, so a failure at either step is handled by
+       * the one set of rules below — a considered refusal is recorded, an
+       * outage is rethrown and retried.
+       */
+      const created = await postCoupon<YijiCouponResponse>(
+        YIJI_UNASSIGNED_COUPON_PATH,
+        yijiCouponPayload(row, order, { redirectCouponsTo, unassigned: true }),
+        headers,
+      );
+      const couponId = readNewCouponId(created);
+      if (couponId == null) {
+        /* Yiji declined to create it. Recorded, not retried: the same body
+           will be declined the same way next sweep. */
+        const detail = describeRefusal(created);
+        await recordFailure(directus, id, `yiji would not create the coupon: ${detail}`);
+        logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused to create the coupon');
+        return 'refused';
+      }
+      logger.info(
+        { id, code: row.coupon_code, couponId },
+        'coupon created on yiji — attaching it to the customer',
+      );
+      body = await postCoupon<YijiCouponResponse>(
+        YIJI_COMPENSATION_COUPON_PATH,
+        {
+          id: 0,
+          couponId,
+          userId: compensationUserId,
+          couponCode: row.coupon_code ?? '',
+          couponName: row.title ?? '',
+          compensationReason: row.reason ?? '',
+          status: 0,
+          totalCount: 0,
+        },
+        headers,
+      );
+    } else {
+      body = await postCoupon<YijiCouponResponse>(endpoint.path, payload, headers);
+    }
   } catch (err) {
     /*
      * TWO KINDS OF FAILURE, AND THEY NEED OPPOSITE HANDLING.
