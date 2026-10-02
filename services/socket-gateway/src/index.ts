@@ -586,6 +586,26 @@ async function main(): Promise<void> {
   // also accepts the Agent role (service accounts, which have no app access, are
   // still excluded — they must not be able to drive user-facing notifications).
   const STAFF_ROLES = new Set([...ADMIN_ROLES, 'Agent']);
+  /**
+   * WHO MAY OPEN A CHAT WITH A CUSTOMER (owner, 2026-10-03): every WeCare role,
+   * plus the agents and admins already in `STAFF_ROLES`.
+   *
+   * The names are matched exactly as Directus holds them — verified against the
+   * live production role list rather than guessed, because `requireRole`
+   * compares a STRING and a near-miss like "Wecare Agent" is not a visible
+   * error: it is a 403 for a role that should have been allowed, which reads to
+   * the agent as the feature being broken.
+   *
+   * `STAFF_ROLES` is deliberately not widened in place. It guards other
+   * endpoints, and quietly granting those to three more roles while adding a
+   * feature is the kind of change nobody reviews.
+   */
+  const CHAT_INITIATE_ROLES = new Set([
+    ...STAFF_ROLES,
+    'WeCare Agent',
+    'WeCare Supervisor',
+    'WeCare Admin',
+  ]);
   const bearerToken = (req: FastifyRequest): string => {
     const raw = req.headers['authorization'];
     const header = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
@@ -1067,7 +1087,12 @@ async function main(): Promise<void> {
     /* Staff only, and the ROLE is checked rather than the button being hidden:
        an outbound message to a customer is exactly the sort of thing that must
        not be reachable by anyone who can reach the endpoint. */
-    const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
+    const identity = await requireRole(
+      req,
+      reply,
+      CHAT_INITIATE_ROLES,
+      'you do not have permission to start a chat',
+    );
     if (!identity) return reply;
 
     const parsed = AgentInitiateRequest.safeParse(req.body);

@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 /* Same harness as directus.test.ts: canned rows in call order, so the real
    resume-or-create logic runs rather than a restatement of it. */
@@ -150,6 +152,46 @@ describe('startConversationWithCustomer', () => {
        as a real `userId` by the coupon push, and a fabricated value there
        addresses a grant to a customer that does not exist on their side. */
     expect(await bodyOf(1)).toMatchObject({ external_customer_id: null });
+  });
+});
+
+/**
+ * WHO MAY START A CHAT (owner, 2026-10-03): every WeCare role, plus the agents
+ * and admins already trusted with the other staff endpoints.
+ *
+ * Asserted against the SOURCE because `requireRole` is wired to a live
+ * Directus token check. What matters is the SPELLING: the gateway compares a
+ * string to the role name Directus holds, so "Wecare Agent" is not a visible
+ * error — it is a 403 for somebody who should have been allowed, which reads
+ * to them as the feature being broken rather than as a permission problem.
+ *
+ * These six were read off the live production role list, not guessed.
+ */
+describe('who may open a chat', () => {
+  const INDEX = readFileSync(resolve(import.meta.dirname, '..', 'src/index.ts'), 'utf8');
+
+  it.each(['WeCare Agent', 'WeCare Supervisor', 'WeCare Admin'])('includes %s', (role) => {
+    expect(INDEX).toContain(`'${role}'`);
+  });
+
+  /* Agent/Admin/Administrator ride in from STAFF_ROLES rather than being
+     repeated, so the two lists cannot disagree. */
+  it('builds on the existing staff roles', () => {
+    expect(INDEX).toMatch(/CHAT_INITIATE_ROLES = new Set\(\[\s*\.\.\.STAFF_ROLES/);
+  });
+
+  /*
+   * STAFF_ROLES ITSELF MUST NOT BE WIDENED. It guards other endpoints, and
+   * granting those to three more roles as a side effect of adding a feature is
+   * exactly the kind of change that passes review unnoticed.
+   */
+  it('does not widen the shared staff role set', () => {
+    expect(INDEX).toMatch(/const STAFF_ROLES = new Set\(\[\.\.\.ADMIN_ROLES, 'Agent'\]\)/);
+  });
+
+  /* The endpoint is gated, not just the button: hiding is not securing. */
+  it('gates the endpoint on that set', () => {
+    expect(INDEX).toMatch(/requireRole\(\s*req,\s*reply,\s*CHAT_INITIATE_ROLES/);
   });
 });
 
