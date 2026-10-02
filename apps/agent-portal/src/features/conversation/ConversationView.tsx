@@ -928,13 +928,33 @@ export function ConversationView({
             {grouped.map((run, runIdx) => {
               const head = run[0]!;
               const isAgent = head.sender_type === 'agent';
+              /*
+               * THE THIRD SENDER. A chat has three voices, not two: the agent,
+               * the customer, and the SYSTEM — the idle-close goodbye is written
+               * with `sender_type: 'system'` and belongs to no person.
+               *
+               * This was a binary (`isAgent` or else the customer), so a system
+               * message inherited the customer's whole identity: their name,
+               * their avatar carrying their phone and email, and their side of
+               * the thread. The owner saw the farewell WE send appear as though
+               * the customer had sent it (2026-10-02). The stored rows were
+               * right all along — all 10 on production carry
+               * `sender_type: 'system'` with a null user and a null contact —
+               * so this was only ever a rendering fault.
+               *
+               * The customer's own widget already renders these as a third,
+               * centred kind. The two surfaces now agree.
+               */
+              const isSystem = head.sender_type === 'system';
               const isNote = isAgent && head.is_internal_note;
               const last = run[run.length - 1]!;
-              const senderLabel = isAgent
-                ? isNote
-                  ? t('conversation.internalNote')
-                  : t('conversation.you', { defaultValue: 'You' })
-                : contactName;
+              const senderLabel = isSystem
+                ? t('conversation.system', { defaultValue: 'System' })
+                : isAgent
+                  ? isNote
+                    ? t('conversation.internalNote')
+                    : t('conversation.you', { defaultValue: 'You' })
+                  : contactName;
               const time = last.pending
                 ? t('conversation.sending', { defaultValue: 'Sending…' })
                 : formatRelative(last.date_created);
@@ -956,27 +976,43 @@ export function ConversationView({
                   <div
                     className={cn(
                       'flex gap-2.5',
-                      isAgent ? 'flex-row-reverse text-end' : 'flex-row',
+                      isSystem
+                        ? 'flex-col items-center'
+                        : isAgent
+                          ? 'flex-row-reverse text-end'
+                          : 'flex-row',
                     )}
                   >
-                    <Avatar
-                      name={isAgent ? 'You' : c?.contact?.name}
-                      email={isAgent ? undefined : c?.contact?.email}
-                      phone={isAgent ? undefined : c?.contact?.phone}
-                      size="sm"
-                      className={cn(isAgent && isNote && 'ring-2 ring-warning/40 ring-offset-1')}
-                    />
+                    {/* NO AVATAR ON A SYSTEM MESSAGE. It belongs to no person,
+                        and the customer's avatar here is what made our own
+                        farewell look like something they had written. */}
+                    {!isSystem && (
+                      <Avatar
+                        name={isAgent ? 'You' : c?.contact?.name}
+                        email={isAgent ? undefined : c?.contact?.email}
+                        phone={isAgent ? undefined : c?.contact?.phone}
+                        size="sm"
+                        className={cn(isAgent && isNote && 'ring-2 ring-warning/40 ring-offset-1')}
+                      />
+                    )}
                     <div
                       className={cn(
                         'flex max-w-[78%] min-w-0 flex-col gap-1',
                         isAgent && 'items-end',
+                        isSystem && 'max-w-[90%] items-center text-center',
                       )}
                     >
                       <div className="flex items-baseline gap-2 text-2xs">
                         <span className="font-medium text-foreground">{senderLabel}</span>
                         <span className="text-muted-foreground tabular-nums">{time}</span>
                       </div>
-                      <div className={cn('flex flex-col gap-0.5', isAgent && 'items-end')}>
+                      <div
+                        className={cn(
+                          'flex flex-col gap-0.5',
+                          isAgent && 'items-end',
+                          isSystem && 'items-center',
+                        )}
+                      >
                         {run.map((m, i) => {
                           const isLast = i === run.length - 1;
                           const hasContent = (m.content ?? '').trim().length > 0;
@@ -985,7 +1021,7 @@ export function ConversationView({
                               key={m.id}
                               className={cn(
                                 'flex flex-col gap-1',
-                                isAgent ? 'items-end' : 'items-start',
+                                isSystem ? 'items-center' : isAgent ? 'items-end' : 'items-start',
                               )}
                             >
                               {hasContent && (
@@ -1004,13 +1040,19 @@ export function ConversationView({
                                       // hairline ring. One rounding everywhere.
                                       isNote
                                         ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
-                                        : isAgent
-                                          ? 'bg-primary text-primary-foreground'
-                                          : 'bg-bubble text-foreground ring-1 ring-foreground/[0.06]',
+                                        : isSystem
+                                          ? /* Quiet and neutral: this is the app
+                                               speaking, not a person, so it must
+                                               not borrow either side's colour. */
+                                            'bg-secondary/60 text-muted-foreground ring-1 ring-foreground/[0.04] text-center text-sm'
+                                          : isAgent
+                                            ? 'bg-primary text-primary-foreground'
+                                            : 'bg-bubble text-foreground ring-1 ring-foreground/[0.06]',
                                       // rounded-2xl consistency, tail only on the LAST bubble of a run.
                                       'rounded-2xl',
-                                      isLast && isAgent && 'rounded-ee-md',
-                                      isLast && !isAgent && 'rounded-es-md',
+                                      // No tail on a system bubble — a tail points at a sender.
+                                      isLast && isAgent && !isSystem && 'rounded-ee-md',
+                                      isLast && !isAgent && !isSystem && 'rounded-es-md',
                                       // Optimistic message: dim until the server confirms.
                                       m.pending && 'opacity-60',
                                     )}
