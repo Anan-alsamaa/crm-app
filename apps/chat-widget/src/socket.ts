@@ -23,14 +23,26 @@ export interface WidgetMessage {
    */
   status?: 'sending' | 'sent' | 'failed';
   /**
-   * This bubble is the widget's OWN offline notice, not a real message.
+   * This bubble is the WIDGET'S OWN notice, not a real message.
    *
-   * It never existed on the server: it is written locally to reassure somebody
-   * who wrote in while nobody was there. Marking it is what lets it be taken
-   * back down when an agent arrives — matching on the text would break in the
-   * other language and the moment the wording is edited.
+   * It never existed on the server: it is written locally to tell the customer
+   * something about the chat itself. Marking it does two jobs, and both would
+   * break if they matched on the text instead — the wording is translated and
+   * editable:
+   *
+   *   `agents-offline` is taken back down the moment an agent appears.
+   *
+   *   ALL of them render as a centred grey aside, while a system message that
+   *   ARRIVED from the server is the business speaking and renders as a normal
+   *   incoming message. That is the whole distinction: the idle-close farewell
+   *   is support saying goodbye, and showing it as machinery made the
+   *   business's own closing words look automated (owner, 2026-10-02).
+   *
+   * So every locally-created system bubble MUST carry one of these. An
+   * unmarked one is indistinguishable from a message the server sent, and will
+   * be shown to the customer as though an agent wrote it.
    */
-  localNotice?: 'agents-offline';
+  localNotice?: 'agents-offline' | 'send-failed' | 'attach-failed';
 }
 
 export interface SocketCallbacks {

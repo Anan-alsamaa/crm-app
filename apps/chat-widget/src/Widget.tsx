@@ -493,6 +493,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
               // The gateway writes these for a human ("too many messages, slow
               // down"); fall back to our own wording if it ever sends none.
               content: message?.trim() ? message : tr.sendFailed,
+              /* Ours, not the server's — so it stays a centred grey aside
+                 rather than being read as an agent's words. */
+              localNotice: 'send-failed' as const,
               attachments: [],
               createdAt: new Date().toISOString(),
             },
@@ -1064,6 +1067,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
           conversationId: convoRef.current ?? '',
           senderType: 'system',
           content: `${tr.attachFailed} ${failures.join(', ')}`,
+          /* Ours, not the server's — a failed upload is machinery talking
+             about the chat, not support speaking to the customer. */
+          localNotice: 'attach-failed' as const,
           attachments: [],
           createdAt: new Date().toISOString(),
         },
@@ -1309,7 +1315,37 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     className={`yiji-msg ${
                       m.senderType === 'customer'
                         ? 'mine'
-                        : m.senderType === 'system'
+                        : /*
+                           * THE CUSTOMER AND THE AGENT SEE THE SAME MESSAGE
+                           * DIFFERENTLY, AND BOTH ARE RIGHT.
+                           *
+                           * `system` carries two unrelated kinds of bubble:
+                           *
+                           *   OUR OWN local notices — "message not sent",
+                           *   "nobody is online", "that file was too big".
+                           *   Machinery talking about the chat, correctly a
+                           *   centred grey aside, and always marked
+                           *   `localNotice` because they never came from the
+                           *   server.
+                           *
+                           *   The IDLE-CLOSE FAREWELL, written by the sweep and
+                           *   delivered over the socket. To the customer this
+                           *   is simply the support team saying goodbye, and
+                           *   showing it as a system notice made the business's
+                           *   own closing words look like a machine's
+                           *   (owner, 2026-10-02).
+                           *
+                           * So the SOURCE decides, not the type: a system
+                           * message that ARRIVED is the business speaking, and
+                           * reads as `theirs`. The agent portal keeps labelling
+                           * it "System", which is right for the agent — they
+                           * need to know the sweep wrote it, not a colleague.
+                           *
+                           * Keyed on `localNotice`, never on the text: the
+                           * farewell is translated and editable, so matching
+                           * its wording would break the first time it changed.
+                           */
+                          m.senderType === 'system' && m.localNotice
                           ? 'system'
                           : 'theirs'
                     }${

@@ -383,6 +383,20 @@ export const processors: Record<QueueName, Processor> = {
       /* Signed in as the service, the same way the coupon push is — no pasted
          bearer token to rotate, and nothing goes silent when one lapses. */
       postNotification: yijiAdminPoster ?? undefined,
+      /*
+       * Records "this handset cannot be rung" where an AGENT can see it.
+       *
+       * Yiji's refusal is a fact about the customer, and the person who needs
+       * it is the agent waiting for a reply — so it goes on the conversation,
+       * not only into CloudWatch. Cleared on a later success, because the
+       * condition is not permanent for the person, only for the attempt.
+       */
+      markUnreachable: async (conversationId, reason) => {
+        await createConversationRepo(deps.directus).patchConversation(conversationId, {
+          push_unreachable_at: reason ? new Date().toISOString() : null,
+          push_unreachable_reason: reason,
+        });
+      },
     });
   },
 };

@@ -122,11 +122,92 @@ export interface CustomerPushDeps {
     body: unknown,
     headers?: Record<string, string>,
   ) => Promise<unknown>;
+  /**
+   * Records — or clears — "this customer cannot be reached by push" on the
+   * conversation.
+   *
+   * A LOG LINE CANNOT REACH AN AGENT. The whole point of knowing that a
+   * handset has no FCM token is to tell the person who just sent a message, so
+   * they can nudge the customer another way instead of waiting for a reply
+   * that was never prompted. That needs a column the portal can read.
+   *
+   * `null` clears it, because the condition is not forever: a customer who
+   * installs the app or re-enables notifications starts receiving pushes
+   * again, and a stale warning would send agents to WhatsApp for no reason.
+   *
+   * Optional, so a deployment without it degrades to the old behaviour (minus
+   * the retry storm) rather than failing to start.
+   */
+  markUnreachable?: (conversationId: string, reason: string | null) => Promise<void>;
   /** Injectable for tests. */
   fetchImpl?: typeof fetch;
 }
 
-export type CustomerPushOutcome = 'delivered' | 'disabled' | 'unaddressable';
+export type CustomerPushOutcome = 'delivered' | 'disabled' | 'unaddressable' | 'unreachable';
+
+/**
+ * YIJI SAID NO, AND SAYING IT AGAIN WILL NOT HELP.
+ *
+ * Measured against their live endpoint (2026-10-02), with a deliberately
+ * non-existent number so no real handset was touched:
+ *
+ *     {"result":2,"exceptionMessage":"Customer has no registered FCM device token."}
+ *     {"result":2,"exceptionMessage":"Either UserId or PhoneNumber must be provided."}
+ *
+ * The first is a fact about a PERSON: they never installed the Yiji app, or
+ * they denied notifications. It held for 126 jobs across 39 conversations in
+ * 14 days — about a third of all attempts — and every one of them was thrown,
+ * so BullMQ retried it five times with backoff. Roughly 630 log lines and five
+ * pointless calls to Yiji per unreachable customer, for a condition no amount
+ * of waiting can change.
+ *
+ * MATCHED ON YIJI'S OWN WORDS, NOT ON THE STATUS CODE. A 400 is also how a
+ * malformed payload fails, and that one genuinely should retry — a bad brand
+ * id or a missing tenant is our bug and may be fixed by a redeploy between
+ * attempts. Classifying the whole status as terminal would hide our own
+ * faults; classifying none of it wastes the customer's notification budget on
+ * a phone that cannot ring.
+ *
+ * Phrases, not exact strings: their wording is theirs to change, and a full
+ * stop or a capital should not turn a known condition back into a retry storm.
+ */
+const TERMINAL_REFUSALS: readonly RegExp[] = [
+  /no registered fcm device token/i,
+  /customer not found/i,
+  /either userid or phonenumber must be provided/i,
+];
+
+/**
+ * Yiji's explanation, wherever it is on the error.
+ *
+ * `YijiRefusedError` keeps the parsed response on `.body`; a plain fetch
+ * failure only ever has a message. Both are read, because this must not depend
+ * on which of the two paths produced the failure.
+ */
+export function refusalReason(err: unknown): string | null {
+  const body = (err as { body?: unknown })?.body;
+  const fromBody =
+    body && typeof body === 'object'
+      ? ((body as { exceptionMessage?: unknown }).exceptionMessage ?? null)
+      : null;
+  if (typeof fromBody === 'string' && fromBody.trim()) return fromBody.trim();
+  const msg = (err as { message?: unknown })?.message;
+  return typeof msg === 'string' && msg.trim() ? msg.trim() : null;
+}
+
+/**
+ * Is this refusal a permanent fact about the customer?
+ *
+ * Only ever consulted for a refusal Yiji CONSIDERED (a 4xx with a parsed
+ * body). A timeout or a 5xx is never terminal — that is the upstream being
+ * unwell, which is exactly what retries are for.
+ */
+export function isTerminalRefusal(err: unknown): boolean {
+  const status = (err as { status?: unknown })?.status;
+  if (typeof status === 'number' && (status < 400 || status >= 500)) return false;
+  const reason = refusalReason(err);
+  return reason ? TERMINAL_REFUSALS.some((re) => re.test(reason)) : false;
+}
 
 /**
  * What the mobile app is asked to show.
@@ -515,8 +596,43 @@ export async function processCustomerPushJob(
    * — the same contract as the direct fetch below.
    */
   if (isYijiCrmEndpoint && deps.postNotification) {
-    await deps.postNotification(yijiNotifyUrl, body, { 'idempotency-key': idempotencyKey });
+    try {
+      await deps.postNotification(yijiNotifyUrl, body, { 'idempotency-key': idempotencyKey });
+    } catch (err) {
+      /*
+       * A PERMANENT REFUSAL IS AN ANSWER, NOT A FAILURE.
+       *
+       * Rethrown for anything we do not recognise, so a real fault still gets
+       * its retries. Only Yiji's known "this handset cannot be rung" verdicts
+       * stop here — and they are RECORDED rather than merely logged, because a
+       * CloudWatch line cannot reach the agent who is waiting to find out
+       * whether their message landed.
+       */
+      if (!isTerminalRefusal(err)) throw err;
+      const reason = refusalReason(err) ?? 'refused';
+      logger.info(
+        { conversationId: data.conversationId, reason },
+        'customer push unreachable - permanent refusal, not retrying',
+      );
+      await deps
+        .markUnreachable?.(data.conversationId, reason)
+        /* Best effort: losing the marker costs the agent a hint, while
+           throwing here would resurrect the retry storm this just removed. */
+        .catch((e: unknown) =>
+          logger.warn(
+            { conversationId: data.conversationId, err: (e as Error)?.message },
+            'could not record push_unreachable on the conversation',
+          ),
+        );
+      return 'unreachable';
+    }
     logger.info({ conversationId: data.conversationId }, 'customer push delivered to Yiji');
+    /* A later success clears an earlier verdict: the customer installed the app,
+       or turned notifications back on. A stale warning on a chat that now
+       delivers fine would send agents to WhatsApp for no reason. */
+    await deps.markUnreachable?.(data.conversationId, null).catch(() => {
+      /* The notice is advisory; a failed clear must not fail a delivered push. */
+    });
     return 'delivered';
   }
 

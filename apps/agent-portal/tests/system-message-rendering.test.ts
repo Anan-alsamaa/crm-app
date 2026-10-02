@@ -73,16 +73,54 @@ describe('a system message in the agent thread', () => {
 });
 
 /**
- * The widget was already correct, and must stay so — it is the surface the
- * CUSTOMER reads, where mislabelling our farewell as their own message would be
- * the more confusing of the two failures.
+ * THE TWO SURFACES MUST DISAGREE, ON PURPOSE.
+ *
+ * The first version of this file asserted that the widget rendered every
+ * system message as `system`, and called that "already correct". The owner
+ * then looked at the result (2026-10-02): the farewell reached the CUSTOMER as
+ * a machine notice, when to them it is simply the support team saying goodbye.
+ * The business's own closing words read as automated.
+ *
+ * So the rule is not "system renders as system" — it is that the SOURCE
+ * decides:
+ *
+ *   the AGENT sees "System", because they need to know the idle sweep wrote
+ *   it and not a colleague;
+ *
+ *   the CUSTOMER sees a normal incoming message, because from their side the
+ *   business is speaking to them.
+ *
+ * The widget's own local notices ("not sent", "nobody is online", "that file
+ * was too big") stay machinery on both sides, and are told apart by
+ * `localNotice` — never by their text, which is translated and editable.
  */
 const WIDGET = read('../chat-widget/src/Widget.tsx');
+const WIDGET_SOCKET = read('../chat-widget/src/socket.ts');
 
 describe('the customer widget', () => {
-  it('still renders system messages as their own kind', () => {
-    expect(WIDGET).toMatch(/senderType === 'system'\s*\?\s*'system'/);
+  it('shows an arriving system message as the business speaking', () => {
+    expect(WIDGET).toMatch(/m\.senderType === 'system' && m\.localNotice\s*\?\s*'system'/);
   });
+
+  /* The regression this replaced: an unconditional `system` branch put the
+     farewell in a grey machine bubble. */
+  it('no longer renders every system message as machinery', () => {
+    expect(WIDGET).not.toMatch(/senderType === 'system'\s*\n?\s*\?\s*'system'/);
+  });
+
+  /*
+   * EVERY LOCALLY-CREATED SYSTEM BUBBLE MUST BE MARKED. An unmarked one is
+   * indistinguishable from a message the server sent, so it would be shown to
+   * the customer as though an agent had written it — "could not upload that
+   * file" in support's own voice.
+   */
+  it.each(['agents-offline', 'send-failed', 'attach-failed'])(
+    'marks its own %s notice as local',
+    (marker) => {
+      expect(WIDGET).toContain(`localNotice: '${marker}'`);
+      expect(WIDGET_SOCKET).toContain(`'${marker}'`);
+    },
+  );
 });
 
 /**

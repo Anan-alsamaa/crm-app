@@ -175,6 +175,24 @@ export function createConversationRepo(client: YijiDirectusClient): Conversation
             status: { _in: ['open', 'pending'] },
             first_responded_at: { _null: true },
             archived_at: { _null: true },
+            /*
+             * AN AGENT-INITIATED CHAT HAS NOBODY WAITING FOR AN ANSWER.
+             *
+             * The first-response promise is "a customer wrote to us and we
+             * will reply within N minutes". A chat the AGENT opened inverts
+             * that: the only message is ours, so `first_responded_at` is null
+             * for the whole life of the chat and this sweep would start a
+             * clock, let it expire and record a BREACH against an agent who
+             * did nothing wrong — in fact against the one who made the first
+             * move. Every outbound chat would arrive pre-broken.
+             *
+             * `_neq` rather than `_eq: 'customer'` on purpose: every row that
+             * existed before this field did has it NULL, and `_eq` would
+             * silently drop all of them out of the sweep — the
+             * [[silent-empty-failures]] shape, where a filter that matches
+             * nothing reads as a clean zero.
+             */
+            initiated_by: { _neq: 'agent' },
           },
           fields: [
             'id',

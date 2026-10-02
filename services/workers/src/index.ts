@@ -275,8 +275,33 @@ async function main(): Promise<void> {
         err?.message ||
         (err as unknown as { errors?: Array<{ message?: string }> })?.errors?.[0]?.message ||
         (typeof err === 'object' ? JSON.stringify(err).slice(0, 400) : String(err));
+      /*
+       * THE SAME LESSON AGAIN, ONE LAYER OUT: a refusal's REASON is not in its
+       * message.
+       *
+       * `YijiRefusedError` is built with Yiji's parsed response as a third
+       * constructor argument and keeps it on `.body` — but `.message` is only
+       * ever `admin <path> refused (400)`. So for the whole life of the
+       * customer-push feature the log said "refused (400)" and nothing else,
+       * and the actual cause ("Customer has no registered FCM device token.")
+       * had to be discovered by probing Yiji's live endpoint by hand.
+       *
+       * 630 failure lines over 14 days, none of them stating why. That is the
+       * cost of dropping a field that was already on the error object.
+       */
+      const upstream = (err as unknown as { body?: unknown })?.body;
       logger.error(
-        { queue: w.name, jobId: job?.id, err: detail, stack: err?.stack?.slice(0, 600) },
+        {
+          queue: w.name,
+          jobId: job?.id,
+          err: detail,
+          /* Only when it carries something — an absent `body` must not add a
+             null key to every unrelated queue's failures. */
+          ...(upstream === undefined || upstream === null
+            ? {}
+            : { upstream: JSON.stringify(upstream).slice(0, 400) }),
+          stack: err?.stack?.slice(0, 600),
+        },
         'job failed',
       );
     });

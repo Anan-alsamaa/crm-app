@@ -75,6 +75,19 @@ export interface ConversationRow {
    * waiting must not push their own deadline further away.
    */
   date_created: string | null;
+  /**
+   * When Yiji last said this customer's handset cannot be rung, and why.
+   *
+   * NOT read by the sweep — it is written by the customer-push worker and read
+   * by the agent portal. It lives on this row only because `patchConversation`
+   * takes a `Partial<ConversationRow>`, and inventing a second repo to write
+   * two columns on the same table would be the worse shape.
+   *
+   * Nullable in both directions: a later successful push clears it, because a
+   * customer who installs the app stops being unreachable.
+   */
+  push_unreachable_at?: string | null;
+  push_unreachable_reason?: string | null;
 }
 
 export interface ConversationRepo {

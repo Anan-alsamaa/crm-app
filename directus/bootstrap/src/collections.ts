@@ -320,6 +320,40 @@ export const collections: CollectionSpec[] = [
         type: 'dateTime',
         note: 'When the snapshot was taken — NOT when the order was placed. Says how stale the painted panel may be.',
       },
+      /*
+       * WHY A PUSH FAILURE NEEDS A COLUMN AND NOT JUST A LOG LINE.
+       *
+       * Yiji refuses about a third of our notifications with "Customer has no
+       * registered FCM device token" — a fact about the person, not a fault to
+       * retry. The agent who just sent a message is the one who needs to know,
+       * so they can nudge the customer another way instead of waiting for a
+       * reply nothing ever prompted. CloudWatch cannot tell them that.
+       */
+      {
+        field: 'push_unreachable_at',
+        type: 'dateTime',
+        note: 'When a push to this customer was permanently refused — they have no app notifications. CLEARED on a later success: installing the app makes them reachable again.',
+      },
+      {
+        field: 'push_unreachable_reason',
+        type: 'string',
+        note: "Yiji's own words for the refusal, kept verbatim so a change in their wording is visible rather than silently reclassified.",
+      },
+      /*
+       * A CHAT THE AGENT STARTED IS A DIFFERENT OBJECT.
+       *
+       * It has no customer first message, so anything that measures "how long
+       * did the customer wait for an answer" must not count it. Recorded rather
+       * than inferred: inferring it from "is the first message from an agent"
+       * would also catch a chat whose customer message was deleted.
+       */
+      {
+        field: 'initiated_by',
+        type: 'string',
+        choices: ['customer', 'agent'],
+        defaultValue: 'customer',
+        note: 'Who opened this chat. An agent-initiated chat has no inbound first message, so the first-response promise does not apply to it.',
+      },
     ],
   },
   {
