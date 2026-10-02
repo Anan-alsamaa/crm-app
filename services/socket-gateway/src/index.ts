@@ -33,6 +33,8 @@ import {
   WALK_IN_CODE_LENGTH,
   WalkInCodeRequest,
   WalkInLinkRequest,
+  AgentInitiateRequest,
+  isDialablePhone,
   WalkInSessionRequest,
   createYijiUserReader,
   createYijiLatestOrderReader,
@@ -1043,6 +1045,80 @@ async function main(): Promise<void> {
    * that has a real WebSocket. This is not a migration.
    */
   const attachmentBuckets = new Map<string, ReturnType<typeof createTokenBucket>>();
+  /**
+   * AN AGENT OPENS A CHAT WITH A CUSTOMER WHO HAS NOT WRITTEN TO US.
+   *
+   * Until now the customer always spoke first. This is the other direction: a
+   * complaint taken by phone, a promised callback, a check on a late order.
+   *
+   * UNDER `/chat/` BECAUSE THAT IS WHAT THE ALB ROUTES HERE. Rules 12 and 112
+   * send `/chat/*` to this service on staging and production; a path outside
+   * that set is answered by DIRECTUS with "Route doesn't exist", so the
+   * endpoint would exist, run in tests, and be unreachable in both
+   * environments. No load-balancer change is needed for this one.
+   *
+   * IT DOES NOT SEND THE MESSAGE. It resolves the customer and the thread, and
+   * the agent's own socket then sends through the ordinary path — which
+   * already persists, broadcasts and enqueues the customer push. A second
+   * implementation of "send a message" would drift from the first, and the
+   * push enqueue is the half this feature depends on.
+   */
+  app.post('/chat/agent-initiate', async (req, reply) => {
+    /* Staff only, and the ROLE is checked rather than the button being hidden:
+       an outbound message to a customer is exactly the sort of thing that must
+       not be reachable by anyone who can reach the endpoint. */
+    const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
+    if (!identity) return reply;
+
+    const parsed = AgentInitiateRequest.safeParse(req.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ ok: false, error: 'a valid phone number is required' });
+    }
+
+    const vendor = await directus.resolveVendor(parsed.data.vendorId).catch(() => null);
+    if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
+
+    /*
+     * CANONICAL `05XXXXXXXX` BEFORE ANYTHING LOOKS IT UP.
+     *
+     * Every stored number is this shape. An agent types `+966 50 123 4567` or
+     * `0501234567` for the same person, and an unnormalised lookup would miss
+     * the existing contact and create a SECOND one — the duplicate-customer
+     * bug that took a migration to clean up last time.
+     */
+    const phone = normalizePhone(parsed.data.phone);
+    if (!isDialablePhone(phone)) {
+      return reply.code(400).send({ ok: false, error: 'not a dialable phone number' });
+    }
+
+    try {
+      const result = await directus.startConversationWithCustomer(vendor.id, phone);
+      logger.info(
+        {
+          conversationId: result.conversationId,
+          created: result.created,
+          contactIsNew: result.contactIsNew,
+          by: identity.id,
+        },
+        result.created ? 'agent opened a new chat' : 'agent joined an existing chat',
+      );
+      return reply.send({
+        ok: true,
+        conversationId: result.conversationId,
+        contactId: result.contactId,
+        /* The UI says "you have joined their existing chat" rather than
+           silently appending to a thread the agent did not know about. */
+        created: result.created,
+        contactIsNew: result.contactIsNew,
+        name: result.name,
+        phone,
+      });
+    } catch (err) {
+      logger.error({ err, by: identity.id }, 'agent-initiated chat failed');
+      return reply.code(500).send({ ok: false, error: 'could not start the conversation' });
+    }
+  });
+
   app.post('/chat/attachment', async (req, reply) => {
     /* Per IP, mirroring the socket handler's own upload budget: generous enough
        that picking a few photos never trips it, bounded because an unauthenticated

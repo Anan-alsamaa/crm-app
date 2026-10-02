@@ -291,6 +291,25 @@ export const WalkInLinkRequest = z.object({
 export type WalkInLinkRequest = z.infer<typeof WalkInLinkRequest>;
 
 /**
+ * An agent opening a chat with a customer who has not written to us.
+ *
+ * Only a phone number and a vendor: the MESSAGE is not here, because this
+ * endpoint does not send one. It resolves the customer and the thread, and the
+ * agent's socket sends through the ordinary path — the one that already
+ * persists, broadcasts and enqueues the customer push.
+ *
+ * Deliberately NOT accepting a contact id or a conversation id. An agent
+ * reaches for a phone number, which is also the only identifier they can read
+ * off a complaint or a late-order report; taking an id would mean the UI had
+ * to resolve the customer first, which is this endpoint's whole job.
+ */
+export const AgentInitiateRequest = z.object({
+  phone: WalkInSessionRequest.shape.phone,
+  vendorId: z.string().min(1),
+});
+export type AgentInitiateRequest = z.infer<typeof AgentInitiateRequest>;
+
+/**
  * Crockford base32 — no I, L, O or U.
  *
  * Those four are what turn a code read off a printed card, or over the phone,

@@ -9,7 +9,7 @@ import {
 } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
-import { isPhoneDerivedCustomerId } from '@yiji/shared-types';
+import { isPhoneDerivedCustomerId, phoneCustomerId } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
 import type { AttachmentMeta } from './attachments.js';
 import type { AssignmentEntity, AssignmentEntityType } from './assignment-notify.js';
@@ -360,6 +360,16 @@ export class GatewayDirectus {
     contactId: string,
     /** Yiji's order id, when the chat was opened from order tracking. */
     orderId: string | null = null,
+    /**
+     * Who is opening this chat.
+     *
+     * Only ever stamped on a conversation this call CREATES. An agent writing
+     * to somebody who already has a live thread joins that thread — it was
+     * started by the customer and it stays theirs, because the first-response
+     * promise they are already owed must not be cancelled by us replying into
+     * it.
+     */
+    initiatedBy: 'customer' | 'agent' = 'customer',
   ): Promise<{ id: string; created: boolean }> {
     const live = (await this.client.request(
       readItems('conversations', {
@@ -381,6 +391,9 @@ export class GatewayDirectus {
         priority: 'medium',
         unread_count_agent: 0,
         last_message_at: new Date().toISOString(),
+        /* An agent-initiated chat carries no inbound first message, so the
+           first-response sweep must skip it or it would breach on its own. */
+        initiated_by: initiatedBy,
         /* Only when the customer came from an order's tracking screen.
            BOTH columns: `entry_order_id` is the durable fact (never stamped
            over by the portal) and `last_order_id` seeds the inbox's order
@@ -477,6 +490,69 @@ export class GatewayDirectus {
     });
 
     return { id: created.id, created: true };
+  }
+
+  /**
+   * OPEN A CHAT WITH A CUSTOMER WHO HAS NOT WRITTEN TO US.
+   *
+   * The agent types a phone number in the inbox and sends the first message —
+   * a complaint followed up by phone, a promised callback, a check on a late
+   * order. Everything until now assumed the customer speaks first.
+   *
+   * RESUMES RATHER THAN DUPLICATES. A customer who already has a live thread
+   * gets the agent's message in THAT thread: a second conversation for one
+   * person is the exact bug that was fixed once already, and it is worse here
+   * because the agent cannot see the number they are about to write to has a
+   * chat open. `created` tells the caller which happened, so the UI can say so.
+   *
+   * The conversation is only stamped `initiated_by: 'agent'` when this call
+   * CREATES it. Joining a customer's existing thread leaves it theirs — they
+   * are owed a first response on it, and our message must not cancel that
+   * promise.
+   *
+   * NO MESSAGE IS WRITTEN HERE. The agent's own socket sends it through the
+   * ordinary path, which already persists it, broadcasts it to every agent
+   * surface and enqueues the customer push. Duplicating that here would mean
+   * two implementations of "send a message" drifting apart — and the push
+   * enqueue is the half that matters most to this feature.
+   */
+  async startConversationWithCustomer(
+    vendorUuid: string,
+    /** Canonical `05XXXXXXXX` — the caller normalises BEFORE this point. */
+    phone: string,
+  ): Promise<{
+    conversationId: string;
+    contactId: string;
+    created: boolean;
+    contactIsNew: boolean;
+    name: string | null;
+  }> {
+    /*
+     * Reuses the contact upsert the chat sessions use, rather than a second
+     * find-or-create for the same table. It already dedupes by phone and
+     * email, and already promotes a walk-in to a real Yiji account — behaviour
+     * a parallel implementation here would silently lack.
+     *
+     * `customer_id` is phone-derived because that is the truth: nobody has
+     * proved this number belongs to a Yiji account, and `isPhoneDerivedCustomerId`
+     * is what stops a minted handle being written into `external_customer_id`
+     * and later sent to Yiji as a real `userId`.
+     */
+    const contact = await this.upsertContact(vendorUuid, {
+      vendor_id: vendorUuid,
+      customer_id: phoneCustomerId(phone),
+      phone,
+    } as CustomerClaims);
+
+    const convo = await this.findOrCreateConversation(vendorUuid, contact.id, null, 'agent');
+
+    return {
+      conversationId: convo.id,
+      contactId: contact.id,
+      created: convo.created,
+      contactIsNew: contact.isNew,
+      name: contact.name,
+    };
   }
 
   /**

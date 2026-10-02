@@ -80,6 +80,25 @@ stamped link builder (`features/tickets/whatsapp.ts:85`) already exist.
 
 ---
 
+## Progress
+
+| #   | task                                         | state              |
+| --- | -------------------------------------------- | ------------------ |
+| 1   | carry Yiji's refusal reason into the log     | **done** `a620643` |
+| 2   | stop retrying a permanent refusal; record it | **done** `a620643` |
+| 3   | `initiated_by` + SLA sweep exclusion         | **done** `a620643` |
+| 3b  | farewell reads as the agent in the WIDGET    | **done** `a620643` |
+| 4   | gateway `POST /chat/agent-initiate`          | **done**           |
+| 5   | inbox `+` button and compose dialog          | next               |
+| 6   | unreachable notice + WhatsApp fallback       |                    |
+| 7   | permissions                                  |                    |
+| 8   | staging deploy + real-handset proof          |                    |
+| 9   | production, on double confirmation           |                    |
+
+Tasks 1-3 are verified: 60/60 worker push tests, 12/12 rendering tests,
+typechecks clean on workers, chat-widget, shared-types and bootstrap.
+NOT yet deployed anywhere.
+
 ## The sequence
 
 Each task is independently shippable and verified before the next begins.
