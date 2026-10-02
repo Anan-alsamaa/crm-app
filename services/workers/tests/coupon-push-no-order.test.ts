@@ -6,6 +6,7 @@ import {
   yijiCouponPayload,
   YIJI_COUPON_PATH,
   YIJI_COMPENSATION_COUPON_PATH,
+  YIJI_COMPENSATION_COUPON_PATH_FORBIDDEN,
   YIJI_UNASSIGNED_COUPON_PATH,
   type CouponApprovalRow,
 } from '../src/processors/coupon-push.js';
@@ -311,6 +312,32 @@ describe('a coupon with no order', () => {
     await expect(processCouponPushJob(job(), d)).resolves.toBe('excluded');
     expect(findCustomer).not.toHaveBeenCalled();
     expect(postCoupon).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * THE ENDPOINT OUR ACCOUNT IS ACTUALLY ALLOWED TO CALL.
+ *
+ * `AddCompensationCoupon` is the obvious choice by name and takes the identical
+ * `CouponUserVM` — and it answers 403 for us, every time. `AddUserCoupon`
+ * beside it answers in Yiji's own business vocabulary instead:
+ *
+ *     POST /api/CouponUser/AddCompensationCoupon  -> 403 Forbidden
+ *     POST /api/CouponUser/AddUserCoupon          -> {"result":2,
+ *                                "exceptionMessage":"User already have this coupon"}
+ *
+ * The CRM token carries the role claim `agent 1`, not an admin role, and the
+ * 403s cluster on exactly the endpoints an agent is not trusted with. So this
+ * was never one missing grant to chase — it is what the role permits, and this
+ * is the endpoint inside it that does the job.
+ */
+describe('the order-less grant uses the permitted endpoint', () => {
+  it('posts to AddUserCoupon, not AddCompensationCoupon', () => {
+    expect(YIJI_COMPENSATION_COUPON_PATH).toBe('/api/CouponUser/AddUserCoupon');
+  });
+
+  it('keeps the forbidden path named, so the reason is not rediscovered', () => {
+    expect(YIJI_COMPENSATION_COUPON_PATH_FORBIDDEN).toBe('/api/CouponUser/AddCompensationCoupon');
   });
 });
 

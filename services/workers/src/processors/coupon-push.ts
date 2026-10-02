@@ -68,11 +68,37 @@ export const YIJI_COUPON_PATH = '/api/CouponUserOrder/CreateCouponUserFromOrder'
  * questions, two different bodies — the same reason the path and payload are
  * declared together here.
  *
+ * `AddUserCoupon`, NOT `AddCompensationCoupon`. The latter is the obvious pick
+ * by name and takes the identical `CouponUserVM`, but our account is 403 on it
+ * — see the constant below for the measurements and why chasing that grant is
+ * the wrong move.
+ *
  * This corrects a comment this file used to carry, that Yiji "cannot attach a
  * coupon without an order". It can; it just needs to be told who the customer
  * is. See [[yiji-coupon-without-order]].
  */
-export const YIJI_COMPENSATION_COUPON_PATH = '/api/CouponUser/AddCompensationCoupon';
+export const YIJI_COMPENSATION_COUPON_PATH = '/api/CouponUser/AddUserCoupon';
+
+/**
+ * The endpoint this USED to call, kept named so the reason is not lost.
+ *
+ * `AddCompensationCoupon` is the obvious choice by name and takes the very
+ * same `CouponUserVM` — but our service account is **403 Forbidden** on it,
+ * while `AddUserCoupon` beside it answers 400 to the same probe. Measured
+ * against the live admin API, same token, same second:
+ *
+ *     POST /api/CouponUser/AddCompensationCoupon   403   FORBIDDEN
+ *     POST /api/CouponUser/AddUserCoupon           400   reachable
+ *     POST /api/Coupon/AddCoupon                   400   reachable
+ *     GET  /api/CouponUser/GetAllUserCoupons       403   FORBIDDEN
+ *     GET  /api/Coupon/GetAllCoupons               403   FORBIDDEN
+ *
+ * The CRM token carries the role claim `agent 1`, not an admin role, and the
+ * 403s cluster on the endpoints an agent is not trusted with. This is NOT one
+ * missing grant to chase — it is what that role is allowed to do, and
+ * `AddUserCoupon` is the one inside it that does exactly what we need.
+ */
+export const YIJI_COMPENSATION_COUPON_PATH_FORBIDDEN = '/api/CouponUser/AddCompensationCoupon';
 
 /**
  * Create a coupon that belongs to NOBODY YET, redeemable by its code.
