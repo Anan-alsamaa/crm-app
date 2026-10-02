@@ -347,6 +347,25 @@ export const collections: CollectionSpec[] = [
        * than inferred: inferring it from "is the first message from an agent"
        * would also catch a chat whose customer message was deleted.
        */
+      /*
+       * ONE THREAD, MANY SESSIONS.
+       *
+       * A returning customer keeps their conversation — never a second one —
+       * so the thread outlives the exchange that opened it. The first-response
+       * PROMISE does not: somebody writing today is waiting today, and being
+       * answered quickly last week says nothing about that.
+       *
+       * This is the clock's zero, stamped when a solved chat reopens.
+       * `date_created` cannot do the job: for a chat reopened weeks later it
+       * points at the original message, so the deadline is already past and
+       * the chat breaches the instant the sweep sees it.
+       */
+      {
+        field: 'session_started_at',
+        type: 'dateTime',
+        index: true,
+        note: 'When the CURRENT session began. A reopened chat starts a new first-response clock from here, not from date_created — which belongs to the exchange that first opened the thread.',
+      },
       {
         field: 'initiated_by',
         type: 'string',

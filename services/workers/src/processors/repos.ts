@@ -76,6 +76,19 @@ export interface ConversationRow {
    */
   date_created: string | null;
   /**
+   * When the CURRENT session began — the first-response clock's zero.
+   *
+   * One conversation per contact means the thread outlives the exchange that
+   * opened it. A customer who was answered last week and writes again today
+   * starts a new session in the same thread, and the promise restarts with it;
+   * `date_created` still points at last week, so measuring from it would
+   * breach the chat instantly.
+   *
+   * Null on a chat still in its first session, where `date_created` IS the
+   * session start, and on every row written before the field existed.
+   */
+  session_started_at?: string | null;
+  /**
    * When Yiji last said this customer's handset cannot be rung, and why.
    *
    * NOT read by the sweep — it is written by the customer-push worker and read

@@ -204,6 +204,11 @@ export function createConversationRepo(client: YijiDirectusClient): Conversation
             'assigned_agent',
             'assigned_team',
             'date_created',
+            /* The clock's zero for a REOPENED chat — see ConversationRow. A
+               field the sweep reads but never SELECTS is always undefined, so
+               it would silently fall back to `date_created` and breach every
+               reopened chat on sight. */
+            'session_started_at',
           ],
           limit: -1,
         }),

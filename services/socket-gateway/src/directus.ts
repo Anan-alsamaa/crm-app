@@ -790,6 +790,43 @@ export class GatewayDirectus {
           // Clear the solve time with the status. Leaving it would report a
           // chat that is demonstrably still running as having been finished.
           patch.solved_at = null;
+          /*
+           * A REOPENED CHAT IS A NEW SESSION, NOT A CONTINUATION — SO THE
+           * FIRST-RESPONSE PROMISE STARTS AGAIN.
+           *
+           * The thread is deliberately the same one (one conversation per
+           * contact, never forked), but the PROMISE is per session: this
+           * customer is waiting for an answer now, and whether they were
+           * answered quickly last week says nothing about that.
+           *
+           * Leaving these set made every session after the first invisible to
+           * the SLA sweep, which skips any chat that already has a
+           * `first_responded_at` (`sla.ts:451`). Measured on production,
+           * conversation `63c22abf`: answered in 2 minutes on 29 Sep, solved,
+           * then the customer wrote again on 2 Oct at 10:16 and waited 83
+           * MINUTES for a reply. The chat still reports a 2-minute first
+           * response and no breach, because the stamp from the first session
+           * was never cleared.
+           *
+           * Cleared, not recomputed: the sweep owns the deadline and will set
+           * `first_response_due_at` from the policy on its next pass — which
+           * is also why the old due date and breach marker must go, or a
+           * stale deadline from a previous session would breach the moment it
+           * is looked at.
+           */
+          patch.first_responded_at = null;
+          patch.first_response_due_at = null;
+          patch.first_response_breached_at = null;
+          /*
+           * WHEN THIS SESSION STARTED — the clock's zero.
+           *
+           * The sweep measures from `date_created`, which for a reopened chat
+           * is when the customer FIRST wrote, possibly weeks ago. Without this
+           * the recomputed deadline would already be long past and the chat
+           * would breach the instant the sweep looked at it: an agent paged
+           * for being slow to a message that arrived seconds earlier.
+           */
+          patch.session_started_at = now;
         }
       } else if (input.senderType === 'agent') {
         patch.unread_count_agent = 0;

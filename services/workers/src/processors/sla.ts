@@ -456,8 +456,22 @@ export async function runChatReconcile(deps: SlaDeps): Promise<void> {
       if (!policy) continue;
       // See `predatesPolicy`. Judging the chats already waiting would page the
       // whole team at once, about conversations nobody was ever promised.
-      if (predatesPolicy(c.date_created, policy)) continue;
-      const start = c.date_created ? new Date(c.date_created) : new Date();
+      if (predatesPolicy(c.session_started_at ?? c.date_created, policy)) continue;
+      /*
+       * THE CLOCK STARTS WHEN THIS SESSION DID, NOT WHEN THE CHAT WAS CREATED.
+       *
+       * One conversation per contact means a thread outlives the exchange that
+       * opened it: a customer answered in two minutes last week writes again
+       * today, the chat reopens, and `date_created` still points at last week.
+       * Measuring from it would make the deadline already long past, breaching
+       * a chat the moment it was looked at — paging an agent for being slow to
+       * a message that arrived seconds ago.
+       *
+       * `session_started_at` is stamped by the reopen. Falls back to
+       * `date_created` for a chat still in its FIRST session, where the two
+       * are the same thing, and for every row written before the field existed.
+       */
+      const start = new Date(c.session_started_at ?? c.date_created ?? Date.now());
       try {
         dueAt = computeDueAt(
           start,
