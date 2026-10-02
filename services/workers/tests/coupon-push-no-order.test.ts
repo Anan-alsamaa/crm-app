@@ -6,6 +6,7 @@ import {
   yijiCouponPayload,
   YIJI_COUPON_PATH,
   YIJI_COMPENSATION_COUPON_PATH,
+  YIJI_UNASSIGNED_COUPON_PATH,
   type CouponApprovalRow,
 } from '../src/processors/coupon-push.js';
 
@@ -156,7 +157,14 @@ describe('a coupon with no order', () => {
    * the same question about the same number for ever. A number that resolves to
    * nobody today will not resolve in a minute.
    */
-  it('records a definite "no Yiji account" so the sweep stops asking', async () => {
+  /*
+   * THE OWNER'S PROCESS (2026-10-02). A customer with no Yiji account has no
+   * order to attach to and no user to grant to, so both other paths are
+   * impossible by definition. Rather than give up, the coupon is created ON
+   * Yiji belonging to NOBODY; the agent sends the code, the app link and how to
+   * redeem, and the customer attaches it themselves on install.
+   */
+  it('creates an UNASSIGNED coupon when the customer has no Yiji account', async () => {
     const {
       deps: d,
       postCoupon,
@@ -164,14 +172,58 @@ describe('a coupon with no order', () => {
     } = deps({
       findCustomer: (async () => null) as never,
     });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('unassigned');
+    // It goes to AddCoupon, not to either user-bound endpoint.
+    expect(postCoupon.mock.calls[0]![0]).toBe(YIJI_UNASSIGNED_COUPON_PATH);
+    /* `assigned` with Yiji's receipt: the coupon EXISTS and is spendable, and
+       the receipt is what lets the two systems be matched later. */
+    const patch = patches[0] as Record<string, unknown>;
+    expect(patch).toMatchObject({ status: 'assigned', yiji_push_error: null });
+    expect(String(patch.yiji_coupon_user_id)).toBe('21500');
+  });
+
+  /* NOBODY IS NAMED. That is what makes the code redeemable by whoever enters
+     it — and what would be a privacy leak if a phone rode along. */
+  it('names no customer in the unassigned body', async () => {
+    const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
+    await processCouponPushJob(job(), d);
+    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body).not.toHaveProperty('userId');
+    expect(body).not.toHaveProperty('customerPhone');
+    expect(body).not.toHaveProperty('couponUser');
+    // It IS the CouponVM: our code and the approved money travel with it.
+    expect(body.code).toBe('OPS-433RHNBB');
+    expect(body.discount).toBe(10);
+  });
+
+  /*
+   * GENERAL, NOT PRIVATE. A private coupon is bound to a person and this one
+   * has no person yet; it is also the type the mobile app can actually list
+   * (`GetAllGeneralCoupon` is its only coupon-listing endpoint).
+   */
+  it('creates it as a General coupon', async () => {
+    const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
+    await processCouponPushJob(job(), d);
+    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.type).toBe(0);
+  });
+
+  /* A code over WhatsApp is bearer-like, so the blast radius is one grant. */
+  it('caps the unassigned coupon at a single use', async () => {
+    const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
+    await processCouponPushJob(job(), d);
+    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.reachLimit).toBe(1);
+    expect(body.limitForUser).toBe(1);
+  });
+
+  /* An old assertion kept honest: nothing is created when there is nothing to
+     act on, so a missing lookup still records nothing. */
+  it('creates nothing when the customer could not be looked up', async () => {
+    const { deps: d, postCoupon, patches } = deps({ findCustomer: undefined });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('no-order');
     expect(postCoupon).not.toHaveBeenCalled();
-    /* The status is untouched — the compensation is still owed and still
-       approved. Only the delivery is marked settled. */
-    expect(patches).toHaveLength(1);
-    const patch = patches[0] as Record<string, unknown>;
-    expect(String(patch.yiji_push_error)).toMatch(/no Yiji account/i);
-    expect(patch).not.toHaveProperty('status');
+    expect(patches).toHaveLength(0);
   });
 
   /*

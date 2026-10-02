@@ -75,6 +75,37 @@ export const YIJI_COUPON_PATH = '/api/CouponUserOrder/CreateCouponUserFromOrder'
 export const YIJI_COMPENSATION_COUPON_PATH = '/api/CouponUser/AddCompensationCoupon';
 
 /**
+ * Create a coupon that belongs to NOBODY YET, redeemable by its code.
+ *
+ * THE CASE THIS EXISTS FOR (owner, 2026-10-02): the customer complained over
+ * WhatsApp and has no Yiji account at all, so there is no `userId` to grant to
+ * and no order to attach to. Both other paths are impossible by definition, and
+ * the compensation was simply never delivered.
+ *
+ * This creates the coupon ON Yiji, unassigned — `CouponVM.assignee` is nullable
+ * and no user is named — carrying OUR code. The agent then sends the customer
+ * the code, the app link and how to redeem; when they install and enter it,
+ * Yiji attaches it to the account they just made (their own
+ * `AddCouponToUserByCode` is the other half of that).
+ *
+ * WHY THIS PATH AND NOT THE OTHER TWO. Measured against the live admin API on
+ * 2026-10-02 with our service credential:
+ *
+ *     POST /api/Coupon/AddCoupon                      400  reachable
+ *     POST /api/CouponUser/AddCouponToUserByCode/..   200  reachable
+ *     POST /api/CouponUser/AddCompensationCoupon      403  FORBIDDEN
+ *     POST /api/CouponUserOrder/CreateCouponUserFromOrder  400  reachable
+ *
+ * (400 = the endpoint rejected a deliberately empty probe body, which proves
+ * permission; 403 = no permission at all. Nothing was created by the probe.)
+ *
+ * So the account that cannot grant a coupon directly to a user CAN create an
+ * unassigned one — which is why this fallback is usable today while
+ * `AddCompensationCoupon` is still refused.
+ */
+export const YIJI_UNASSIGNED_COUPON_PATH = '/api/Coupon/AddCoupon';
+
+/**
  * WHICH PLATFORM GRANTS THE COUPON, KEYED BY VENDOR.
  *
  * One entry today, and deliberately so: Yiji is the only platform that issues
@@ -293,6 +324,12 @@ export function yijiCouponPayload(
      * SHAPE to that endpoint's `CouponUserVM` — see the return below.
      */
     compensationUserId?: string;
+    /**
+     * Build the body for `AddCoupon`: a coupon belonging to NOBODY, redeemable
+     * by its code. For a customer with no Yiji account, where there is neither
+     * an order to attach to nor a user to grant to.
+     */
+    unassigned?: boolean;
   },
 ): Record<string, unknown> {
   const orderId = num(couponOrderId(row));
@@ -583,6 +620,48 @@ export function yijiCouponPayload(
    */
   if (opts?.compensationUserId) return couponUser;
 
+  /*
+   * THE UNASSIGNED BODY IS THE `coupon` OBJECT, ON ITS OWN.
+   *
+   * `AddCoupon` takes a `CouponVM` — the very object nested at
+   * `couponUser.coupon` above. Reusing it is the point: every field in there
+   * was learned the hard way (see docs/YIJI-COUPON-NOT-VISIBLE.md, where five
+   * omissions each produced a coupon that existed, notified the customer and
+   * could not be used, because in this API an absent field is NOT a neutral
+   * default — zero on a ceiling means zero). Rebuilding it here would be
+   * rediscovering all five.
+   *
+   * `type: 0` (General/Public), not Private. A private coupon is bound to a
+   * person, and this one has no person yet — that is the whole case. It also
+   * happens to be the type the mobile app can list: `GetAllGeneralCoupon` is
+   * the only coupon-listing endpoint the app has.
+   *
+   * Nothing names a customer: no `userId`, no `customerPhone`, no `assignee`.
+   * That is what makes it redeemable by whoever enters the code — which is why
+   * the caller caps it at one use.
+   */
+  if (opts?.unassigned) {
+    return {
+      ...(couponUser.coupon as Record<string, unknown>),
+      /*
+       * FORCED TO GENERAL, overriding whatever the request asked for.
+       *
+       * The agent's choice of Private/Public describes who the coupon is FOR,
+       * and it is usually Private because a compensation is for one customer.
+       * But a Private coupon is bound to a person, and this one has no person —
+       * that is the entire reason it is being created unassigned. Leaving it
+       * Private would create a coupon addressed to nobody, which is the shape
+       * of failure this codebase keeps finding: it would exist, and be
+       * unusable.
+       *
+       * General is also the only type the mobile app can LIST
+       * (`GetAllGeneralCoupon`), so it is what the customer will actually see
+       * after redeeming the code.
+       */
+      type: YIJI_COUPON_TYPE.general,
+    };
+  }
+
   return {
     id: 0,
     orderId,
@@ -676,6 +755,14 @@ async function recordFailure(
 /** What a push attempt concluded, for the log and the tests. */
 export type PushOutcome =
   | 'delivered'
+  /**
+   * Created on Yiji but belonging to NOBODY yet, because the customer has no
+   * app account. The agent sends them the code; redeeming it is what attaches
+   * the coupon to the account they then create. Honest as its own outcome: the
+   * coupon EXISTS and is spendable, but nobody holds it, so a report must not
+   * count it as received.
+   */
+  | 'unassigned'
   | 'disabled'
   | 'not-approved'
   | 'already-assigned'
@@ -799,6 +886,86 @@ export async function runCouponDeliverySweep(deps: {
   }
   if (queued > 0) logger.info({ queued }, 'undelivered coupons enqueued');
   return queued;
+}
+
+/**
+ * Create a coupon on Yiji that belongs to nobody, redeemable by its code.
+ *
+ * For the customer who has no Yiji account: there is no order to attach the
+ * coupon to and no user to grant it to, so both other paths are impossible by
+ * definition and the compensation was previously never delivered at all.
+ *
+ * The agent then sends the customer the code, the app link and how to redeem.
+ * Yiji's own `AddCouponToUserByCode` is the other half of that journey, and the
+ * customer walks it themselves when they install the app.
+ *
+ * ONE USE, deliberately. A code travelling over WhatsApp is bearer-like:
+ * whoever types it first gets it. `reachLimit`, `limitForUser` and
+ * `monthlyReachLimit` already carry the request's own usage limit (1 unless a
+ * supervisor said otherwise), so the exposure is one grant of a known amount —
+ * not an open cheque.
+ */
+async function createUnassignedCoupon(args: {
+  row: CouponApprovalRow;
+  id: string;
+  directus: YijiDirectusClient;
+  logger: Logger;
+  postCoupon: YijiAdminPoster;
+  yijiTenantId: string;
+  phone: string;
+}): Promise<PushOutcome> {
+  const { row, id, directus, logger, postCoupon, yijiTenantId, phone } = args;
+  const payload = yijiCouponPayload(row, null, { unassigned: true });
+
+  let body: YijiCouponResponse;
+  try {
+    body = await postCoupon<YijiCouponResponse>(YIJI_UNASSIGNED_COUPON_PATH, payload, {
+      ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
+      /* Stable across retries of the same coupon, so a timeout that in fact
+         succeeded cannot mint a SECOND coupon carrying the same code. */
+      'idempotency-key': `unassigned:${row.coupon_code ?? id}`,
+    });
+  } catch (err) {
+    /* Same two-kinds-of-failure rule as the assigned path: a considered refusal
+       is recorded and not retried; an outage throws so BullMQ backs off. */
+    if (isYijiRefused(err)) {
+      const detail = describeRefusal(err.body);
+      await recordFailure(directus, id, `yiji refused the unassigned coupon: ${detail}`);
+      logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused the unassigned coupon');
+      return 'refused';
+    }
+    throw new Error(
+      `${isYijiUnavailable(err) ? 'yiji unavailable' : 'unassigned coupon create failed'}: ${describeError(err)}`,
+    );
+  }
+
+  /* A 200 is not a yes — see `readCouponUserId`. Yiji answers 200 whether it
+     created the coupon or refused it. */
+  const verdict = readCouponUserId(body);
+  if (!verdict.ok) {
+    await recordFailure(directus, id, verdict.error ?? 'yiji refused the unassigned coupon');
+    logger.warn({ id, code: row.coupon_code, err: verdict.error }, 'unassigned coupon refused');
+    return 'refused';
+  }
+
+  /*
+   * `assigned`, not `delivered`: the coupon exists and is spendable, but nobody
+   * holds it until the customer redeems the code. `yiji_coupon_user_id` carries
+   * Yiji's receipt so the two systems can still be matched from either side.
+   */
+  await directus.request(
+    updateItem('coupon_approvals' as never, id, {
+      status: 'assigned',
+      yiji_coupon_user_id: verdict.couponUserId ?? null,
+      yiji_pushed_at: new Date().toISOString(),
+      yiji_push_error: null,
+    } as never),
+  );
+  logger.info(
+    { id, code: row.coupon_code, phone, receipt: verdict.couponUserId },
+    'customer has no Yiji account — coupon created UNASSIGNED; send them the code to redeem',
+  );
+  return 'unassigned';
 }
 
 export async function processCouponPushJob(
@@ -955,13 +1122,36 @@ export async function processCouponPushJob(
        * clears, so if the customer later installs the app a supervisor can
        * release it with one click.
        */
-      if (findCustomer && phone) {
-        await recordFailure(
-          directus,
+      /*
+       * NO ACCOUNT IS NO LONGER A DEAD END — CREATE THE COUPON UNASSIGNED.
+       *
+       * The owner's process (2026-10-02): put the coupon ON Yiji without giving
+       * it to anybody, then have the agent send the customer the code, the app
+       * link and how to redeem it. When they install and enter the code, Yiji
+       * attaches it to the account they have just created.
+       *
+       * That is the only route left for this customer: no order to attach to,
+       * and no user to grant to. Before this they were simply never
+       * compensated through the app.
+       *
+       * Only when a lookup actually RAN and actually answered "nobody". The two
+       * other ways to reach this branch are not settled facts and must stay
+       * retryable rather than minting a coupon on a guess:
+       *   - no `findCustomer`: the credential is absent, nothing was asked;
+       *   - no phone at all: a supervisor may yet add one.
+       * A lookup that THREW rethrows above — an outage is the opposite of a
+       * settled answer.
+       */
+      if (findCustomer && phone && postCoupon) {
+        return await createUnassignedCoupon({
+          row,
           id,
-          `no Yiji account for ${phone} — nothing to attach the coupon to. ` +
-            'Retry once the customer has an app account, or honour it in the branch.',
-        );
+          directus,
+          logger,
+          postCoupon,
+          yijiTenantId,
+          phone,
+        });
       }
       logger.warn(
         {
@@ -969,9 +1159,8 @@ export async function processCouponPushJob(
           code: row.coupon_code,
           hasPhone: Boolean(phone),
           lookup: Boolean(findCustomer),
-          settled: Boolean(findCustomer && phone),
         },
-        'coupon has no order and no Yiji customer behind its phone — staying approved',
+        'coupon has no order and no way to look the customer up — staying approved',
       );
       return 'no-order';
     }
