@@ -217,3 +217,58 @@ Digest-verify 4/4 against the ECR tag — a COMPLETED rollout is not proof.
 - Worth asking Yiji whether the ~36% without an FCM token is expected, or
   whether their app build registers for push unreliably. 39 distinct
   conversations in 14 days is enough to be worth a question.
+
+---
+
+## STAGING VERIFICATION, 2026-10-03
+
+CI green (3/3, Playwright included). Staging deploy green (4/4 services).
+
+**Proved on staging, not assumed:**
+
+| check                                   | before                         | after                                         |
+| --------------------------------------- | ------------------------------ | --------------------------------------------- |
+| widget bundle                           | `index-DPOJajqA.js`            | `index-D9IyEZMW.js`                           |
+| `send-failed` / `attach-failed` markers | absent                         | present                                       |
+| render branch                           | `system ? 'system' : 'theirs'` | `system && localNotice ? 'system' : 'theirs'` |
+| `POST /chat/agent-initiate`             | 404                            | 401 (no token) / 403 (junk token)             |
+
+Functional, as a real Administrator:
+
+- a chat was CREATED for `0500000288`, `initiated_by = 'agent'`
+- the same number again RESUMED it (`created: false`, same conversation id)
+- `+966500000288` normalised to `0500000288` and found the SAME contact — no
+  duplicate
+- `external_customer_id` stayed EMPTY: a typed number is not a proven Yiji
+  account
+- the agent-initiated chat is EXCLUDED from the first-response sweep (count 0)
+
+Test conversations and contacts were deleted afterwards.
+
+## THE TRAP THIS RELEASE FOUND — read before the next schema change
+
+**The three new fields were MISSING from staging after a fully green deploy.**
+The bootstrap image is built by the pipeline and never run; schema reaches an
+environment only through a manual apply.
+
+That is not a harmless gap, because **Directus 403s a whole query that names an
+inaccessible field** — it does not ignore the term. The first-response sweep's
+own filter was therefore failing completely:
+
+    with `filter[initiated_by][_neq]=agent`   -> ERROR 403
+    without it (the old filter)               -> 150 conversations
+
+So the sweep silently found nothing, which reads exactly like "no chats are
+overdue". `docs/RELEASE.md` warns about this in one line — _"bootstrap first,
+then the new images. A new column the old code ignores is harmless; new code
+against a missing column is not"_ — and this release did it backwards.
+
+**The fix was NOT `pnpm apply`:** a full apply rewrites roles and has twice
+taken production agent access down. The three fields were POSTed directly to
+`/fields/conversations`, copying exactly what `fieldPayload()` in `apply.ts`
+builds (`dateTime` -> `timestamp`, `choices` -> `select-dropdown` +
+`{text,value}` options, `default_value: 'customer'`).
+
+**BEFORE THE PRODUCTION TAG, THE SAME THREE FIELDS MUST EXIST ON PROD.** They
+are additive and the old code ignores them, so they can go in first — and they
+must, or the SLA sweep breaks on production exactly as it did here.
