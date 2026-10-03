@@ -979,8 +979,9 @@
   },
   "quickReplies": {
     "filtering": "مطابقة",
-    "more": "⋯ الكل ({{n}})",
-    "fewer": "عرض أقل"
+    "open": "الردود السريعة",
+    "langAll": "الكل",
+    "noneInLang": "لا توجد ردود بهذه اللغة. جرّب الكل."
   },
   "lists": {
     "issuingSide": "جهة الإصدار",
