@@ -4,11 +4,22 @@ import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   LATE_DELIVERY_MINUTES_KEY,
   lateDeliveryMinutes,
-  lateOrderState,
-  type LateOrderKind,
+  mergeLateOrders,
   type LateOrderRow,
+  type LateOrderDecisionRow,
+  type LateOrderRegisterRow,
+  type LateOrderSnapshot,
   type LateOrderState,
 } from '@yiji/shared-types';
+
+/* Re-exported so the admin pages and tests that already import these from here
+   keep working, and so there is still one obvious place to look. */
+export {
+  mergeLateOrders,
+  type LateOrderDecisionRow,
+  type LateOrderRegisterRow,
+  type LateOrderSnapshot,
+};
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 
@@ -20,202 +31,10 @@ import { commerce } from '../../lib/commerce-client.js';
  * pruned by the feature that writes it.
  */
 
-/**
- * The stored order copy, as much of it as this report reads.
- *
- * Declared HERE rather than imported: the full `TicketOrderSnapshot` lives in
- * the agent portal, and reaching across portals for a type would drag that
- * app's commerce client in with it. The admin portal already declares its own
- * narrow view of this shape for the ticket reports — see `RawOrderSnapshot` in
- * `report-exports/api.ts`.
- *
- * Every field optional, because a snapshot is a point-in-time copy of whatever
- * Yiji answered: an order with no address, no payment mode or no items is a
- * real order, not a malformed row.
- */
-export interface LateOrderSnapshot {
-  orderId?: string | null;
-  status?: string | null;
-  total?: number | null;
-  currency?: string | null;
-  placedAt?: string | null;
-  items?: Array<{
-    sku?: string | null;
-    name?: string | null;
-    /** How many. Absent means one — see `snapshotLines`. */
-    qty?: number | null;
-    /** The price of ONE. The LINE is `qty * price`. */
-    price?: number | null;
-    category?: string | null;
-  }> | null;
-  brandName?: string | null;
-  restaurantName?: string | null;
-  restaurantId?: string | null;
-  deliveryType?: string | null;
-  deliveryAddress?: string | null;
-  paymentStatus?: string | null;
-  paymentMode?: string | null;
-  /**
-   * The customer, captured with the order.
-   *
-   * This is where the report's "Customer mobile" column comes from. It read
-   * `customer_phone` off the decision row, which has no such field, so the
-   * column was permanently blank — the snapshot shaper had been dropping Yiji's
-   * `customerPhoneNumber` (owner, 2026-10-01). Stored canonical `05…`.
-   */
-  customerPhone?: string | null;
-  customerName?: string | null;
-  /** When the copy was taken — what makes it a snapshot rather than a claim. */
-  capturedAt?: string | null;
-}
-
-export interface LateOrderDecisionRow {
-  id: string;
-  order_id: string | null;
-  kind: LateOrderKind | null;
-  action: 'commented' | 'compensated' | null;
-  reason: string | null;
-  /**
-   * What the agent DID about it — the Comments box's second field.
-   *
-   * OPTIONAL, because every decision recorded before 2026-09-27 predates the
-   * field and genuinely has nothing to show. A required type here would be a
-   * claim the data does not support.
-   */
-  action_taken?: string | null;
-  /**
-   * The ORDER AS IT STOOD when the agent decided.
-   *
-   * Written by the agent portal on every decision — comment and compensation
-   * alike — from the same `orderToSnapshot` the tickets path uses, so there is
-   * one idea of what an order snapshot is rather than two that drift.
-   *
-   * Read here rather than re-fetched, deliberately. A coupon is judged against
-   * what the customer actually received on the day, and Yiji keeps mutating an
-   * order afterwards — order 1323407 gained a `force_closed` five hours after
-   * its `closed`. Asking Yiji again months later would answer a different
-   * question, and would cost one call per row on a report that can hold
-   * thousands.
-   *
-   * NULL is normal and must render as such: a pending order has no decision, so
-   * nothing was ever captured, and a handful of rows predate the column.
-   */
-  order_snapshot?: LateOrderSnapshot | null;
-  minutes_elapsed: number | null;
-  brand_name: string | null;
-  restaurant_name: string | null;
-  date_created: string | null;
-  decided_by: { id: string; first_name: string | null; last_name: string | null } | null;
-  ticket: { id: string } | null;
-}
-
-/**
- * A late order as the register shows it: decided or not.
- *
- * A PENDING late order has NO DATABASE ROW — it exists only in Yiji's queue
- * until somebody comments on it or gives a coupon (owner, 2026-09-29). So the
- * register is a MERGE of two sources, and a row can come from either.
- */
-export interface LateOrderRegisterRow extends Omit<LateOrderDecisionRow, 'id'> {
-  /** The decision's id, or a synthetic one for a queue-only row. */
-  id: string;
-  /** pending | commented | handled — never the ORDER's own status. */
-  state: LateOrderState;
-  /** The order's own status from Yiji — a different thing entirely. */
-  order_status?: string | null;
-  customer_phone?: string | null;
-  /** True when nothing has been recorded: the row is queue-only. */
-  pendingOnly: boolean;
-}
-
-/**
- * Merge the live queue with what has been decided.
- *
- * DECISIONS WIN. An order that has been commented on or compensated is
- * described by its decision; the queue only supplies the orders nobody has
- * touched. Merged on `orderId`, the one identifier both sides share.
- *
- * The queue is the source for a pending row's branch, brand, phone and ORDER
- * STATUS — which is not the handling state and must never be confused with it.
- *
- * Exported so the tests exercise the real rule.
- */
-export function mergeLateOrders(
-  decisions: readonly LateOrderDecisionRow[],
-  queue: readonly LateOrderRow[],
-): LateOrderRegisterRow[] {
-  const decided = new Set<string>();
-  const out: LateOrderRegisterRow[] = [];
-
-  /* The live queue, by order, so a decided row can still answer "whose order
-     was this?" — see `customer_phone` below. */
-  const queueByOrder = new Map(queue.map((q) => [q.orderId?.trim() ?? '', q]));
-
-  for (const d of decisions) {
-    const key = d.order_id?.trim();
-    if (key) decided.add(key);
-    out.push({
-      ...d,
-      state: lateOrderState(d),
-      pendingOnly: false,
-      /*
-       * THE CUSTOMER'S NUMBER, WHICH A DECIDED ROW NEVER CARRIED.
-       *
-       * `late_order_decisions` has no phone column, so spreading the row left
-       * `customer_phone` undefined and the report's "Customer mobile" column
-       * was blank on every decided order — while pending rows, which take it
-       * from the live queue, showed one (owner, 2026-10-01).
-       *
-       * The SNAPSHOT first: it is what the order was when the decision was
-       * made, which is the honest answer for a historical row. The live queue
-       * second, so a decision taken before the snapshot captured a phone still
-       * shows one while the order remains in the window.
-       */
-      customer_phone:
-        d.order_snapshot?.customerPhone?.trim() ||
-        (key ? (queueByOrder.get(key)?.customerPhone ?? null) : null) ||
-        null,
-    });
-  }
-
-  for (const q of queue) {
-    const key = q.orderId?.trim();
-    /* Already answered for. The decision describes it, not the queue. */
-    if (!key || decided.has(key)) continue;
-    out.push({
-      /* Synthetic and PREFIXED, so it can never collide with a decision's uuid
-         and so anything keying off it is obviously not a decision. */
-      id: `pending:${key}`,
-      order_id: key,
-      /* Unclassified until somebody says otherwise — the cause is a judgement
-         an agent makes, not something the queue knows. */
-      kind: null,
-      action: null,
-      reason: null,
-      action_taken: null,
-      minutes_elapsed: q.minutesElapsed ?? null,
-      brand_name: q.brandName ?? null,
-      restaurant_name: q.restaurantName ?? null,
-      /* The ORDER's creation time. A pending row has no decision, so there is
-         no decision time to show — and dating it "now" would put every pending
-         order at the top of a report sorted by when things happened. */
-      date_created: q.placedAt ?? null,
-      decided_by: null,
-      ticket: null,
-      /* NULL, and that is the truth rather than a gap: nobody has acted on this
-         order, so no snapshot was ever captured. The panel says so. */
-      order_snapshot: null,
-      state: 'pending',
-      order_status: q.status ?? null,
-      customer_phone: q.customerPhone ?? null,
-      pendingOnly: true,
-    });
-  }
-
-  /* Newest first, like the decisions query — one ordering for the whole
-     register rather than decisions first and pending appended. */
-  return out.sort((a, b) => (b.date_created ?? '').localeCompare(a.date_created ?? ''));
-}
+/* The register's shape and its merge now live in `@yiji/shared-types`, beside
+   `lateOrderState` — both portals show this register and a second copy is how
+   they drift. Re-exported below so this module stays the one import site for
+   the admin pages that already use it. */
 
 /**
  * One row per order: the LATEST decision, newest first.
