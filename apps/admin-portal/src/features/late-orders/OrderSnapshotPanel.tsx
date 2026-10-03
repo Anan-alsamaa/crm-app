@@ -28,18 +28,21 @@ export function OrderSnapshotPanel({
   /*
    * NOTHING CAPTURED IS A FACT, NOT A BLANK PANEL.
    *
-   * Two ways a row arrives here with no snapshot, and both are normal: a PENDING
-   * order has no decision, so nothing was ever captured; and a handful of
-   * decisions predate the column. An empty panel would read as "this order had
-   * nothing in it", which is the failure shape this codebase keeps producing —
-   * see [[silent-empty-failures]]. So it says which it is.
+   * A PENDING row no longer reaches here empty — the page fetches that order
+   * live from Yiji, because nothing is captured until somebody decides (owner,
+   * 2026-10-03). What is left are the genuinely blank cases: a decision that
+   * predates the snapshot column, and an order Yiji itself cannot find.
+   *
+   * An empty panel would read as "this order had nothing in it", which is the
+   * failure shape this codebase keeps producing — see
+   * [[silent-empty-failures]] — so it says plainly that there is nothing to
+   * show rather than showing nothing.
    */
   if (!snapshot) {
     return (
       <p className="px-5 py-4 text-xs text-muted-foreground">
         {t('lateOrdersReport.snapshot.none', {
-          defaultValue:
-            'No order detail was captured for this row - it is either still pending, or it was decided before the order was recorded.',
+          defaultValue: 'Yiji has no record of this order, and nothing was captured for it here.',
         })}
       </p>
     );
