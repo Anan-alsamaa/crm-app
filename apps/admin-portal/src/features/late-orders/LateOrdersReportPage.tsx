@@ -384,19 +384,27 @@ export function LateOrdersReportPage() {
   const canExport = isOwner || EXPORT_ROLES.includes(user?.role?.name ?? '');
 
   /*
-   * WHO MAY OPEN THE ORDER PANEL (owner, 2026-09-30).
+   * WHO MAY OPEN THE ORDER PANEL — EVERY WeCare ROLE (owner, 2026-10-03).
    *
-   * The same gate as the export, and for the same reason: the stored snapshot
-   * carries the customer's DELIVERY ADDRESS, which this report does not otherwise
-   * show anywhere. Operations and the five Area Managers can read the register
-   * but not open an order — matching how the export already treats the same data
-   * rather than inventing a second rule for it.
+   * This used to be `canExport`, which names only WeCare Admin and Supervisor.
+   * A WeCare AGENT therefore saw no button at all, reported it as "blocked",
+   * and there was nothing on screen to say why — the cell simply was not
+   * rendered.
    *
-   * Hiding is not securing and does not pretend to be: the snapshot rides on the
-   * row this page already reads. This decides who is OFFERED it, which is what
-   * was asked for — the same honest limit as `canExport` above.
+   * Agents are the people working these orders: refusing them the order behind
+   * a late delivery is refusing them the job. Exporting is a different act —
+   * it takes the whole register, addresses included, off the system — so that
+   * one keeps its narrower list rather than being widened by association. The
+   * two were only ever the same gate because they touch the same column.
+   *
+   * Matched by PREFIX, not by an exact list: `WeCare Agent`, `WeCare
+   * Supervisor` and `WeCare Admin` all qualify, and a WeCare role added later
+   * does not silently lose the button the way a hardcoded array would.
+   *
+   * Hiding is not securing and does not pretend to be: the snapshot rides on
+   * the row this page already reads. This decides who is OFFERED it.
    */
-  const canSeeOrder = canExport;
+  const canSeeOrder = isOwner || /^WeCare\b/i.test(user?.role?.name ?? '') || canExport;
   /** Which row is open. One at a time: two order panels is a page, not a table. */
   const [openOrder, setOpenOrder] = useState<string | null>(null);
   /* The row the dialog is showing. Resolved from the id rather than stored, so

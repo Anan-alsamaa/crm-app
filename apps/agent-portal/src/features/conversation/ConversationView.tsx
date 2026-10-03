@@ -726,7 +726,23 @@ export function ConversationView({
     const el = draftRef.current;
     const at = el?.selectionStart ?? draft.length;
     const next = draft.slice(0, at) + emoji + draft.slice(el?.selectionEnd ?? at);
-    setDraft(next);
+    /*
+     * THROUGH `onDraftChange`, NOT `setDraft` (ops, 2026-10-03: "button is
+     * visible, on click nothing comes").
+     *
+     * The composer is `rows={1}` and its height is set IMPERATIVELY — only
+     * `onDraftChange` measures `scrollHeight` and grows the box. Calling
+     * `setDraft` directly stored the emoji and left the textarea one line tall,
+     * so on a draft that already filled that line the character landed below
+     * the clip: really inserted, genuinely invisible, and indistinguishable
+     * from a dead button.
+     *
+     * It was reported against the sunglasses face, but nothing here is
+     * emoji-specific — 😎 is a plain single-codepoint character like its
+     * neighbours. Every emoji had this, and only a full line of text made it
+     * show.
+     */
+    onDraftChange(next, at + emoji.length);
     requestAnimationFrame(() => {
       const box = draftRef.current;
       if (!box) return;
