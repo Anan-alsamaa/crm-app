@@ -314,6 +314,41 @@ function num(v: number | string | null | undefined): number | null {
 }
 
 /**
+ * THE NAME THE CUSTOMER READS IN THEIR YIJI WALLET.
+ *
+ * `coupon_approvals.title` defaults to the customer's PHONE NUMBER — the
+ * Assign-coupon dialog pre-fills it that way, and its placeholder says so. That
+ * is a useful handle inside the CRM, where an agent is scanning a list of
+ * compensations and the number is the fastest way to tell them apart.
+ *
+ * It must not leave the building. We send that title on to Yiji as the coupon's
+ * NAME, and their app prints the name in the customer's wallet — so a customer
+ * opening their coupons saw entries labelled `(0596190599)`, `(0550640444)`,
+ * `(0564118118)`: other people's phone numbers, inside their app (owner,
+ * 2026-10-03). All 102 coupons on production carried one.
+ *
+ * It read as "these coupons belong to somebody else", which is how it was
+ * first reported, and it is a privacy leak in its own right.
+ *
+ * So a title that is ONLY a phone number is replaced with the reason the
+ * compensation was given — which is what a customer would want to see anyway —
+ * and failing that a plain, honest label. A title an agent actually typed is
+ * left alone: they wrote it for the customer to read.
+ */
+export function customerFacingCouponName(
+  title: string | null | undefined,
+  reason: string | null | undefined,
+): string {
+  const t = (title ?? '').trim();
+  /* Digits, spaces, dashes and an optional +, and enough of them to be a phone
+     rather than a short word. Anything with a letter in it is a real name. */
+  const looksLikePhone = /^\+?[\d\s()-]{8,}$/.test(t);
+  if (t && !looksLikePhone) return t;
+  const r = (reason ?? '').trim();
+  return r || 'Compensation';
+}
+
+/**
  * The body Yiji receives, shaped to `CreateCouponUserFromOrder`.
  *
  * The field names come from Yiji's own schema and from a captured request that
@@ -446,7 +481,7 @@ export function yijiCouponPayload(
     status: 0,
     // OUR code, so the two systems can be matched from either side later.
     couponCode: row.coupon_code ?? '',
-    couponName: row.title ?? '',
+    couponName: customerFacingCouponName(row.title, row.reason),
     compensationReason: row.reason ?? '',
     ...(yijiUserId ? { userId: yijiUserId } : {}),
     ...(phone ? { customerPhone: phone } : {}),
@@ -460,7 +495,7 @@ export function yijiCouponPayload(
     // off rather than sent as zero, which would read as "no discount".
     coupon: {
       id: 0,
-      name: row.title ?? '',
+      name: customerFacingCouponName(row.title, row.reason),
       code: row.coupon_code ?? '',
       compensationReason: row.reason ?? '',
       /*
@@ -530,26 +565,47 @@ export function yijiCouponPayload(
       discountPercentage: isPct ? (percent ?? 0) : 0,
       ...(cap != null ? { maximumDiscount: cap } : {}),
       /*
-       * HOW MANY TIMES IT MAY BE USED.
+       * HOW MANY TIMES IT MAY BE USED — AND BY WHOM.
        *
-       * Yiji has three separate limit fields and the CRM has one box, so all
-       * three carry the same number rather than leaving any of them at its
-       * default:
-       *   reachLimit        total redemptions
-       *   limitForUser      per-customer cap
-       *   monthlyReachLimit what their console labels "Monthly coupon use"
+       * Yiji has three limit fields and the CRM has one box, "Number of uses",
+       * whose hint reads "How many times it may be redeemed":
        *
-       * `monthlyReachLimit` was NOT being sent, so it sat at 0 in their UI
-       * while the CRM said 1 — the owner reads that field, and a blank there
-       * reads as "no limit" on a coupon that is meant to be a single grant.
+       *   limitForUser      per-customer cap     <- what the CRM box MEANS
+       *   reachLimit        TOTAL redemptions, across every holder
+       *   monthlyReachLimit per-customer, per month
        *
-       * A compensation coupon is one grant unless somebody said otherwise, so
-       * the same figure in all three is the honest encoding: use it once, by
-       * this customer, this month.
+       * ALL THREE USED TO CARRY THE SAME NUMBER, and that is what broke
+       * redemption in production (owner, via the Yiji team, 2026-10-03):
+       * customers were told "Coupon exceeds usage limit" at checkout, on
+       * coupons nobody had used.
+       *
+       * `reachLimit: 1` does not mean "once per person". It means the coupon
+       * may be redeemed ONCE IN TOTAL — so the first customer to spend theirs
+       * exhausts it, and every other holder is refused. Every one of the 102
+       * coupons issued on production carried it.
+       *
+       * The box the agent fills is a PER-CUSTOMER allowance, so that is where
+       * its number goes. `reachLimit` is left UNSET: capping the total is a
+       * decision nobody has made, the CRM has no field for it, and a number we
+       * invent here is a refusal waiting to happen. `monthlyReachLimit` is
+       * per-customer too, so it tracks the same box.
        */
-      reachLimit: limit,
       limitForUser: limit,
       monthlyReachLimit: limit,
+      /*
+       * THE TOTAL CAP — only on a coupon NOBODY HOLDS.
+       *
+       * An UNASSIGNED coupon is created without a customer and its code is sent
+       * to one person over WhatsApp. It is bearer-like: anybody who learns the
+       * code can spend it, and `limitForUser` cannot help because every spender
+       * is a different user. So the total is capped, and the blast radius is
+       * the grant that was approved.
+       *
+       * An ASSIGNED coupon is attached to one named customer, so `limitForUser`
+       * already says everything — and capping the total is what refused every
+       * holder after the first.
+       */
+      ...(opts?.unassigned ? { reachLimit: limit } : {}),
       /*
        * The order-value window this coupon may be applied to.
        *
@@ -1372,7 +1428,7 @@ export async function processCouponPushJob(
           couponId,
           userId: compensationUserId,
           couponCode: row.coupon_code ?? '',
-          couponName: row.title ?? '',
+          couponName: customerFacingCouponName(row.title, row.reason),
           compensationReason: row.reason ?? '',
           status: 0,
           totalCount: 0,

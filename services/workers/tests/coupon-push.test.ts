@@ -190,14 +190,25 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
     expect(c.orderMinimum).toBe(0);
   });
 
-  it('sends the number of uses to all THREE of Yiji limit fields', () => {
+  it('caps the number of uses PER CUSTOMER, never in total', () => {
     /*
-     * `monthlyReachLimit` is what their console labels "Monthly coupon use",
-     * and it was not being sent — so it sat at 0 there while the CRM said 1.
-     * A blank reads as "no limit" on a coupon meant to be a single grant.
+     * THIS TEST USED TO ASSERT THE BUG. It required the CRM's single
+     * "Number of uses" box to be copied into all three Yiji limit fields,
+     * including `reachLimit` — which is the TOTAL across every holder, not a
+     * per-person allowance.
+     *
+     * So the first customer to spend theirs exhausted the coupon and every
+     * other holder was refused at checkout with "Coupon exceeds usage limit"
+     * (owner, via the Yiji team, 2026-10-03). All 102 coupons on production
+     * carried it.
+     *
+     * `reachLimit` is now left UNSET: capping the total is a decision nobody
+     * has made, the CRM has no field for it, and a number invented here is a
+     * refusal waiting to happen. `monthlyReachLimit` is per-customer, so it
+     * still tracks the box.
      */
     const c = coupon({ ...ROW, usage_limit: '1' });
-    expect(c.reachLimit).toBe(1);
+    expect(c).not.toHaveProperty('reachLimit');
     expect(c.limitForUser).toBe(1);
     expect(c.monthlyReachLimit).toBe(1);
   });
@@ -347,8 +358,8 @@ describe('yijiCouponPayload', () => {
     expect(p.couponUser.coupon.discount).toBe(25);
     expect(p.couponUser.coupon.maximumDiscount).toBe(50);
     expect(p.couponUser.coupon.code).toBe('OPS-ABC23456');
-    // A compensation coupon is a single grant.
-    expect(p.couponUser.coupon.reachLimit).toBe(1);
+    // One grant, PER CUSTOMER. The total is deliberately uncapped — see the
+    // limits test above for why `reachLimit` broke redemption in production.
     expect(p.couponUser.coupon.limitForUser).toBe(1);
   });
 
