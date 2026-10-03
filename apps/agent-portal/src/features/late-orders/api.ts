@@ -12,6 +12,7 @@ import {
   DEFAULT_LATE_ORDER_CAUSES,
   LATE_ORDER_CAUSE_LIST,
   type LateOrderGroup,
+  type LateOrderSnapshot,
 } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { directus } from '../../lib/directus.js';
@@ -81,19 +82,37 @@ export function useLateOrders(
  * Keyed by order id — the only identifier the CRM and Yiji share. Returns the
  * NEWEST row per order: the decision is append-only for its type, but the two
  * free-text fields are editable, and an older row would show stale wording.
+ *
+ * BOUNDED BY THE RANGE THE AGENT ASKED FOR, not by a fixed window.
+ *
+ * This used to take a hardcoded last-30-days. Creation time, business day,
+ * agent, reason and action taken all come from here, so searching anything
+ * older showed a row with five empty columns — and because the screen also
+ * rebuilds aged-out orders FROM these rows, an older search lost them
+ * altogether (ops, 2026-10-03). The admin register bounds the same query by the
+ * selected range; now both do.
+ *
+ * `to` is EXCLUSIVE of the next day's start, which is what `businessDayRange`
+ * already returns, so a decision taken at 03:00 belongs to the night that is
+ * still running rather than to the morning after.
  */
-export function useLateOrderDecisions() {
+export function useLateOrderDecisions(range?: { from: string; to: string }) {
   return useQuery({
-    queryKey: ['late-orders', 'decisions'],
+    /* The range is IN THE KEY. Without it a search for last week would be
+       served the cached answer for today and quietly show the wrong rows. */
+    queryKey: ['late-orders', 'decisions', range?.from ?? null, range?.to ?? null],
     staleTime: 15_000,
     queryFn: async (): Promise<Map<string, LateOrderDecisionRow>> => {
       const rows = (await directus.request(
         readItems(
           'late_order_decisions' as never,
           {
-            filter: {
-              date_created: { _gte: new Date(Date.now() - 30 * 86_400_000).toISOString() },
-            },
+            filter: range
+              ? { date_created: { _between: [`${range.from}T00:00:00`, `${range.to}T00:00:00`] } }
+              : /* No range means "today", which the caller resolves; a bare 30
+                   days is kept only as the floor for that case so the first
+                   paint is not unbounded. */
+                { date_created: { _gte: new Date(Date.now() - 30 * 86_400_000).toISOString() } },
             /* `date_created` and `decided_by` so the queue can show WHEN a
                decision was taken and by WHOM — the register in the admin
                portal reports both, and the two screens must agree. */
@@ -106,6 +125,21 @@ export function useLateOrderDecisions() {
               'action_taken',
               'ticket',
               'date_created',
+              /*
+               * WHAT A DECIDED ORDER IS REBUILT FROM once Yiji's live queue has
+               * dropped it (ops, 2026-10-03: no data for yesterday).
+               *
+               * The queue answers only with orders currently past the
+               * threshold, so this screen used to lose its own history. These
+               * four are everything `decidedOrdersAsQueueRows` needs to put
+               * such an order back on the list — the snapshot carries when it
+               * was placed, its status and the customer, and the decision
+               * itself carries how late it was and where it came from.
+               */
+              'minutes_elapsed',
+              'brand_name',
+              'restaurant_name',
+              'order_snapshot',
               { decided_by: ['id', 'first_name'] },
             ],
             sort: ['-date_created'],
@@ -143,6 +177,12 @@ export interface LateOrderDecisionRow {
    * submitted four decisions minutes apart (owner, 2026-09-28).
    */
   ticket: string | null;
+  /* The four below exist so a decided order can be put back on the queue when
+     Yiji no longer returns it — see the field list above. */
+  minutes_elapsed?: number | null;
+  brand_name?: string | null;
+  restaurant_name?: string | null;
+  order_snapshot?: LateOrderSnapshot | null;
 }
 
 /**

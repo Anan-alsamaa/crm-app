@@ -40,6 +40,7 @@ import {
   DEFAULT_LATE_ORDER_CAUSES,
   type LateOrderGroup,
   lateOrderState,
+  decidedOrdersAsQueueRows,
   type LateOrderState,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -494,7 +495,10 @@ export function LateOrdersPage() {
   /* What has already been decided — the source of the handling state, and what
      the Comment box opens populated from. Needed BEFORE `rows`, which filters
      on that state. */
-  const decisions = useLateOrderDecisions();
+  /* The SAME window the queue is showing, so the decisions behind these orders
+     are the ones actually fetched — a fixed 30 days left an older search with
+     five empty columns and no aged-out rows at all. */
+  const decisions = useLateOrderDecisions(activeRange ?? undefined);
   /*
    * THE HANDLING STATE of one order: pending, commented or handled.
    *
@@ -522,16 +526,38 @@ export function LateOrdersPage() {
    * Computed from the UNFILTERED queue, so choosing a status never removes the
    * other options from the menu that offered it.
    */
+  /*
+   * EVERY LATE ORDER THIS SCREEN SHOULD KNOW ABOUT — live AND already decided.
+   *
+   * The queue is live: Yiji answers with orders currently past the threshold,
+   * and an order drops out once it is old enough. Our DECISION against it never
+   * drops out. Filtering the queue alone therefore lost this screen's own
+   * history, which is what operations reported (2026-10-03): "not showing any
+   * data for yesterday or day before", while the same orders sat plainly in the
+   * admin register — which has always merged the two sources.
+   *
+   * `decidedOrdersAsQueueRows` rebuilds the missing ones from the snapshot
+   * captured when the agent decided, in the queue's own shape, so everything
+   * downstream — the filters, the pickers, the business-day cut, the table —
+   * keeps reading one kind of row. A live order is never duplicated: the live
+   * row wins, because it is current and a snapshot is a copy of one moment.
+   */
+  const allOrders = useMemo(() => {
+    const live = queue.data?.rows ?? [];
+    const decided = decidedOrdersAsQueueRows([...(decisions.data?.values() ?? [])], live);
+    return [...live, ...decided];
+  }, [queue.data, decisions.data]);
+
   const presentStatuses = useMemo(() => {
     const seen = new Set<string>();
-    for (const r of queue.data?.rows ?? []) if (r.status) seen.add(r.status);
+    for (const r of allOrders) if (r.status) seen.add(r.status);
     return [...seen].sort();
-  }, [queue.data]);
+  }, [allOrders]);
 
   const rows = useMemo(() => {
     const order = orderQuery.trim();
     const brand = brandQuery.trim().toLowerCase();
-    return (queue.data?.rows ?? []).filter((r) => {
+    return allOrders.filter((r) => {
       /*
        * TODAY MEANS TODAY'S BUSINESS DAY, not the calendar date.
        *
@@ -563,7 +589,7 @@ export function LateOrdersPage() {
       return true;
     });
   }, [
-    queue.data,
+    allOrders,
     orderQuery,
     brandQuery,
     showingToday,

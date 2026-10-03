@@ -733,3 +733,98 @@ export function mergeLateOrders(
      register rather than decisions first and pending appended. */
   return out.sort((a, b) => (b.date_created ?? '').localeCompare(a.date_created ?? ''));
 }
+
+/** Exactly what rebuilding a queue row needs from a recorded decision. */
+export interface DecidedOrderSource {
+  order_id: string | null;
+  minutes_elapsed?: number | null;
+  brand_name?: string | null;
+  restaurant_name?: string | null;
+  date_created?: string | null;
+  order_snapshot?: LateOrderSnapshot | null;
+}
+
+/**
+ * A DECIDED ORDER THAT YIJI NO LONGER RETURNS, in the queue's own shape.
+ *
+ * The late-orders QUEUE is live: Yiji answers with orders currently past the
+ * threshold, and an order drops out of that answer once it is old enough. The
+ * decision we recorded against it does not drop out — it is a row in our own
+ * database for ever.
+ *
+ * So a screen that renders only the queue loses its own history. Operations
+ * reported exactly that (2026-10-03): the user portal showed "no data for
+ * yesterday or the day before", while the same orders sat plainly in the admin
+ * register, which merges the two sources.
+ *
+ * `mergeLateOrders` above is the full answer and returns the REGISTER shape.
+ * This is the other direction, for a screen already built around `LateOrderRow`:
+ * it rebuilds a queue-shaped row from what the decision captured, so the two
+ * lists can simply be concatenated. Nothing is invented — every field comes
+ * from the snapshot taken when the agent decided, or from the decision's own
+ * columns, and anything neither holds is left undefined rather than guessed.
+ *
+ * ORDERS STILL IN THE QUEUE ARE NOT DUPLICATED: the live row wins, because it
+ * is current and the snapshot is a copy of one moment.
+ */
+export function decidedOrdersAsQueueRows(
+  /*
+   * STRUCTURAL, not the register's row type.
+   *
+   * The two portals select different columns from `late_order_decisions` and
+   * declare their own narrower rows for what they asked for. Demanding the full
+   * register row here would force a caller to claim fields its query never
+   * fetched. This asks for exactly what a queue row is rebuilt FROM, so a
+   * caller missing any of it fails to compile rather than silently rendering a
+   * row of zeroes.
+   */
+  decisions: ReadonlyArray<DecidedOrderSource>,
+  queue: ReadonlyArray<LateOrderRow>,
+): LateOrderRow[] {
+  const live = new Set(queue.map((q) => q.orderId?.trim()).filter(Boolean));
+  const seen = new Set<string>();
+  const out: LateOrderRow[] = [];
+
+  for (const d of decisions) {
+    const id = d.order_id?.trim();
+    /* No id, already on screen, or already rebuilt from a newer decision for
+       the same order — the decisions query returns newest first. */
+    if (!id || live.has(id) || seen.has(id)) continue;
+    seen.add(id);
+
+    const s = d.order_snapshot ?? null;
+    out.push({
+      orderId: id,
+      /* The order's OWN status, as captured. Unknown is honest: the column the
+         status filter reads must not claim a state nobody recorded. */
+      status: s?.status ?? '',
+      /* How late it was, from the decision. The queue recomputes this against
+         the gateway clock for a live order; a finished one has a fixed answer
+         and this is it. */
+      minutesElapsed: d.minutes_elapsed ?? 0,
+      /* Not live by definition — it is no longer in the queue. The UI uses this
+         to stop implying the clock is still running. */
+      live: false,
+      /*
+       * WHEN THE ORDER WAS PLACED, not when the decision was taken.
+       *
+       * The business-day cut keys on this, so using the decision time would
+       * file an order under the night somebody got round to looking at it.
+       * Falls back to the decision time only when the snapshot predates the
+       * field, which is better than dropping the row entirely.
+       */
+      placedAt: s?.placedAt ?? d.date_created ?? '',
+      ...(s?.brandName?.trim() || d.brand_name
+        ? { brandName: (s?.brandName?.trim() || d.brand_name) ?? undefined }
+        : {}),
+      ...(s?.restaurantName?.trim() || d.restaurant_name
+        ? { restaurantName: (s?.restaurantName?.trim() || d.restaurant_name) ?? undefined }
+        : {}),
+      ...(s?.restaurantId ? { restaurantId: s.restaurantId } : {}),
+      ...(s?.customerName ? { customerName: s.customerName } : {}),
+      ...(s?.customerPhone ? { customerPhone: s.customerPhone } : {}),
+      ...(typeof s?.total === 'number' ? { total: s.total } : {}),
+    });
+  }
+  return out;
+}
