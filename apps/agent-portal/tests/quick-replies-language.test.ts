@@ -135,4 +135,35 @@ describe('the quick-reply chooser', () => {
   it('offers all three language choices', () => {
     expect(SRC).toMatch(/\['ar', 'en', 'all'\]/);
   });
+
+  /*
+   * ONE REPLY MUST LOOK LIKE ONE REPLY.
+   *
+   * Every row was `text-2xs` on both lines with nothing between them, so a
+   * panel of replies read as a single slab of grey and an agent could not see
+   * where one ended (owner, 2026-10-04). Three things separate them, and each
+   * is asserted because losing any one brings the slab back.
+   */
+  it('separates each reply with a hairline', () => {
+    expect(SRC).toMatch(/after:bg-border/);
+    /* The last card has no trailing line, or the list ends on a stray rule. */
+    expect(SRC).toContain('last:after:hidden');
+  });
+
+  it('makes the label outrank the body text', () => {
+    /* The label is `text-xs` and the body `text-2xs`. Equal sizes is what made
+       nothing stand out. */
+    expect(SRC).toMatch(/text-xs font-semibold leading-tight text-foreground/);
+  });
+
+  it('lifts the whole card on hover, not just the text', () => {
+    expect(SRC).toMatch(/hover:border-primary\/25/);
+    expect(SRC).toMatch(/hover:bg-primary\/\[0\.05\]/);
+  });
+
+  /* A long reply must not push the rest of the list out of view. The full text
+     still reaches the composer — only the preview is clamped. */
+  it('clamps a long reply in the preview', () => {
+    expect(SRC).toContain('line-clamp-3');
+  });
 });

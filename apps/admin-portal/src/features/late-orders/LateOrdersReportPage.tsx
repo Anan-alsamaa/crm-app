@@ -34,7 +34,10 @@ import {
   useLateOrderEventTimes,
   useLateOrderQueue,
   useLateOrderThreshold,
+  useLiveOrder,
+  type LateOrderSnapshot,
 } from './api.js';
+import { useVendors } from '../vendors/api.js';
 
 /**
  * Rows per page. The same ladder the ticket reports use, 1000 included — a
@@ -413,6 +416,59 @@ export function LateOrdersReportPage() {
     () => (openOrder ? (rows.find((r) => r.id === openOrder) ?? null) : null),
     [openOrder, rows],
   );
+
+  /*
+   * A PENDING ROW HAS NO SNAPSHOT, SO THE ORDER IS FETCHED LIVE.
+   *
+   * Nothing is captured until somebody decides on an order, so the dialog could
+   * only say "nothing was recorded" for every pending row — which is most of
+   * them (owner, 2026-10-03: the Order button should work for all records).
+   *
+   * A DECIDED row keeps its snapshot, deliberately. That is the order as it
+   * stood when the agent judged it, and Yiji keeps mutating an order
+   * afterwards — one gained a `force_closed` five hours after its `closed`.
+   * Asking them again months later answers a different question.
+   *
+   * One order, only while its dialog is open. The hook is disabled otherwise,
+   * so a page of rows costs nothing.
+   */
+  const vendors = useVendors();
+  const yijiVendorId = vendors.data?.[0]?.yiji_vendor_id;
+  const needsLiveOrder = !!openRow && !openRow.order_snapshot;
+  const liveOrder = useLiveOrder(
+    needsLiveOrder ? yijiVendorId : undefined,
+    needsLiveOrder ? openRow?.order_id : null,
+  );
+
+  /* The live order in the shape the panel already renders. Built here rather
+     than reaching into the agent portal for its shaper, which would drag that
+     app's commerce client across a portal boundary. */
+  const liveSnapshot: LateOrderSnapshot | null = useMemo(() => {
+    const o = liveOrder.data;
+    if (!o) return null;
+    return {
+      orderId: o.orderId,
+      status: o.status,
+      total: o.total,
+      currency: o.currency,
+      placedAt: o.placedAt,
+      items: (o.items ?? []).map((it) => ({
+        ...(it.sku ? { sku: it.sku } : {}),
+        name: it.name,
+        qty: it.qty,
+        price: it.price,
+        ...(it.category ? { category: it.category } : {}),
+      })),
+      ...(o.brandName ? { brandName: o.brandName } : {}),
+      ...(o.restaurantName ? { restaurantName: o.restaurantName } : {}),
+      ...(o.restaurantId ? { restaurantId: o.restaurantId } : {}),
+      ...(o.deliveryType ? { deliveryType: o.deliveryType } : {}),
+      ...(o.deliveryAddress ? { deliveryAddress: o.deliveryAddress } : {}),
+      ...(o.paymentStatus ? { paymentStatus: o.paymentStatus } : {}),
+      ...(o.paymentMode ? { paymentMode: o.paymentMode } : {}),
+      ...(o.customerPhone ? { customerPhone: o.customerPhone } : {}),
+    };
+  }, [liveOrder.data]);
 
   const exportByAgent = () => {
     const header = [
@@ -1265,7 +1321,22 @@ export function LateOrdersReportPage() {
           defaultValue: 'Order {{order}}',
         })}
       >
-        {openRow && <OrderSnapshotPanel snapshot={openRow.order_snapshot} />}
+        {openRow &&
+          (needsLiveOrder && liveOrder.isLoading ? (
+            /* Fetching it from Yiji. Said out loud, because a silent pause on a
+               dialog that used to answer instantly reads as the same dead
+               button this fix exists to remove. */
+            <p className="px-5 py-4 text-xs text-muted-foreground">
+              {t('lateOrdersReport.snapshot.loading', {
+                defaultValue: 'Fetching the order from Yiji…',
+              })}
+            </p>
+          ) : (
+            /* The captured snapshot for a decided row; the live order for a
+               pending one. `OrderSnapshotPanel` already says so honestly when
+               both are absent. */
+            <OrderSnapshotPanel snapshot={openRow.order_snapshot ?? liveSnapshot} />
+          ))}
       </Modal>
     </div>
   );

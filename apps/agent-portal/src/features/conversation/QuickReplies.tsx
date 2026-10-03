@@ -261,7 +261,10 @@ export function QuickReplies({
              bottom of the window, so a menu that opens downward opens
              off-screen. Capped and scrollable so a long list is reachable
              instead of being cut to the first five. */
-          className="absolute bottom-full z-30 mb-1.5 max-h-64 w-full max-w-md overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg"
+          /* A CARD, not a strip. More room to breathe and a softer shadow, so
+             the panel reads as a surface floating over the thread rather than
+             as part of the composer. */
+          className="absolute bottom-full z-30 mb-2 max-h-80 w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-popover p-1.5 shadow-float ring-1 ring-foreground/[0.04]"
         >
           {ranked.length === 0 ? (
             <p className="px-2 py-3 text-2xs text-muted-foreground">
@@ -278,13 +281,41 @@ export function QuickReplies({
                 aria-selected={false}
                 dir="auto"
                 onClick={() => pick(r)}
-                className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast hover:bg-secondary"
+                /*
+                 * ONE REPLY = ONE CARD, and it has to LOOK like one.
+                 *
+                 * Every row used to be `text-2xs` on both lines with nothing
+                 * between them, so a panel of replies read as a single slab of
+                 * grey and an agent could not tell where one ended (owner,
+                 * 2026-10-04). Three things separate them now: a hairline
+                 * between siblings, real padding, and a hover state that lifts
+                 * the whole card rather than tinting a line of text.
+                 */
+                className={cn(
+                  'group block w-full rounded-lg px-3 py-2.5 text-start',
+                  'border border-transparent',
+                  'transition-colors duration-fast ease-out',
+                  'hover:border-primary/25 hover:bg-primary/[0.05]',
+                  'focus:outline-none focus-visible:border-primary/40 focus-visible:bg-primary/[0.05]',
+                  /* The divider lives on the row ABOVE, so the last card has no
+                     trailing line and the list ends cleanly. */
+                  '[&:not(:last-child)]:mb-0.5',
+                  'relative after:absolute after:inset-x-3 after:-bottom-px after:h-px',
+                  'after:bg-border/60 last:after:hidden hover:after:opacity-0',
+                )}
               >
-                <span className="block text-2xs font-semibold text-foreground">{r.label}</span>
+                {/* THE LABEL leads: bigger, darker, and the thing an agent
+                    scans for. It was the same size as the body, which is why
+                    nothing stood out. */}
+                <span className="block text-xs font-semibold leading-tight text-foreground">
+                  {r.label}
+                </span>
                 {/* THE WHOLE TEXT, not a tooltip. An agent should never send
                     something they have not read, and a `title` is invisible on
-                    a touch screen and to anyone using a keyboard. */}
-                <span className="mt-0.5 block whitespace-pre-wrap text-2xs leading-snug text-muted-foreground">
+                    a touch screen and to anyone using a keyboard. Clamped to
+                    three lines so one long reply cannot push the rest out of
+                    view — the full text still arrives in the composer. */}
+                <span className="mt-1 line-clamp-3 block whitespace-pre-wrap text-2xs leading-relaxed text-muted-foreground">
                   {fillPlaceholders(r.text, vars)}
                 </span>
               </button>

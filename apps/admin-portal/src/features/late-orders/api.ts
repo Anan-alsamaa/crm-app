@@ -10,6 +10,7 @@ import {
   type LateOrderRegisterRow,
   type LateOrderSnapshot,
   type LateOrderState,
+  type YijiOrder,
 } from '@yiji/shared-types';
 
 /* Re-exported so the admin pages and tests that already import these from here
@@ -103,6 +104,33 @@ export function useLateOrderEventTimes(orderIds: string[]) {
     staleTime: 60_000,
     retry: false,
     queryFn: () => commerce.getOrderEventTimes(orderIds),
+  });
+}
+
+/**
+ * THE ORDER BEHIND A ROW THAT HAS NO SNAPSHOT.
+ *
+ * A PENDING late order has never been decided, so nothing was ever captured —
+ * the Order button opened a dialog that could only say "nothing was recorded"
+ * (owner, 2026-10-03: it should show the order for pending rows too).
+ *
+ * A decided row keeps using its SNAPSHOT, deliberately. That is the order as it
+ * stood when the agent judged it, and Yiji keeps mutating an order afterwards:
+ * asking them again months later answers a different question. Only a row with
+ * nothing captured falls through to this live read.
+ *
+ * One order, only while its dialog is open — never a column, never a page of
+ * them. That is the difference between one call and hundreds.
+ */
+export function useLiveOrder(vendorId: string | undefined, orderId: string | null | undefined) {
+  return useQuery<YijiOrder | null>({
+    queryKey: ['late-order-live', vendorId ?? '', orderId ?? ''],
+    enabled: !!vendorId && !!orderId,
+    /* An order that has already happened does not change while a dialog is
+       open, so this is cached long enough to survive reopening it. */
+    staleTime: 5 * 60_000,
+    retry: false,
+    queryFn: () => commerce.getOrder(vendorId!, orderId!),
   });
 }
 
