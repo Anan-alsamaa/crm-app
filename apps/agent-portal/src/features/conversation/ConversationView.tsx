@@ -824,6 +824,23 @@ export function ConversationView({
       .slice(0, 6);
   }, [mentionMenu, agents.data]);
 
+  /*
+   * ABOVE THE LOADING RETURN, because these are HOOKS.
+   *
+   * They were below it, so while messages loaded React saw three fewer hooks
+   * than on the next render — "rendered more hooks than during the previous
+   * render", which crashes the component the instant a conversation finishes
+   * loading. Four E2E specs failed on it, each after two retries: the chat
+   * never painted, so the close button, the ticket flow and the widget round
+   * trip all had nothing to click.
+   *
+   * `nameIsMissing` below is a plain derivation and may stay where it reads
+   * best; only the hooks are pinned here.
+   */
+  const updateContactName = useUpdateContact();
+  const [askName, setAskName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+
   if (messagesQuery.isLoading)
     return (
       <div className="flex h-full flex-col" aria-busy="true" aria-live="polite">
@@ -875,9 +892,6 @@ export function ConversationView({
     !c?.contact?.name?.trim() ||
     isDialablePhone(c.contact.name) ||
     c.contact.name === c.contact.phone;
-  const updateContactName = useUpdateContact();
-  const [askName, setAskName] = useState(false);
-  const [nameDraft, setNameDraft] = useState('');
 
   const dayLabel = (iso: string | null): string => {
     if (!iso) return '';
