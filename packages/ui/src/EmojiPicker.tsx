@@ -66,11 +66,28 @@ export function EmojiPicker({ onPick, label, disabled, className }: EmojiPickerP
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  /*
+   * THE PANEL IS PORTALED, SO IT IS NOT INSIDE `wrap`.
+   *
+   * Its own ref, because the dismiss handler below asks "was this click outside
+   * the picker?" and `wrap` only ever contained the TRIGGER — the panel renders
+   * into `document.body`. Every emoji button therefore counted as outside, so
+   * `mousedown` closed the panel and unmounted the button before its `click`
+   * could fire. The click never happened: operations reported "not a single
+   * emoji is working, on click nothing happens" (2026-10-03).
+   *
+   * `mousedown` is deliberate — closing on `click` would let the panel survive
+   * a press that lands outside it — so the handler has to know about both
+   * halves of a picker that lives in two places in the DOM.
+   */
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      const inside = wrap.current?.contains(t) || panelRef.current?.contains(t);
+      if (!inside) setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -129,6 +146,7 @@ export function EmojiPicker({ onPick, label, disabled, className }: EmojiPickerP
         typeof document !== 'undefined' &&
         createPortal(
           <div
+            ref={panelRef}
             role="dialog"
             aria-label={label}
             style={{

@@ -928,22 +928,6 @@ export function LateOrdersReportPage() {
                       </tbody>
                     </Table>
                   </TableSurface>
-                  {/*
-                    ONE dialog for the whole register, outside the table.
-                    Mounted only while open, so a page of rows never pays for
-                    snapshots nobody asked to see.
-                  */}
-                  <Modal
-                    open={!!openOrder}
-                    onClose={() => setOpenOrder(null)}
-                    size="lg"
-                    title={t('lateOrdersReport.snapshot.title', {
-                      order: openRow?.order_id ?? '',
-                      defaultValue: 'Order {{order}}',
-                    })}
-                  >
-                    {openRow && <OrderSnapshotPanel snapshot={openRow.order_snapshot} />}
-                  </Modal>
                   <TablePager
                     page={current}
                     onPage={setPage}
@@ -1257,6 +1241,32 @@ export function LateOrdersReportPage() {
           )}
         </div>
       </div>
+
+      {/*
+        ONE dialog for the whole page, and it must live OUTSIDE every tab.
+        
+        It used to sit inside `{tab === 'agents' && (...)}` while the Order
+        button that opens it sits in the DECISIONS tab. So a click set
+        `openOrder` for a dialog React was not rendering, and nothing happened —
+        reported by operations as "on clicking the order button nothing happens
+        or nothing opens" (2026-10-03), by a WeCare Admin, who had passed the
+        role gate all along.
+
+        That is why it is anchored to the page element here rather than to a
+        table: a dialog nested in the branch that happens to be mounted is a
+        dialog that works only from one tab.
+      */}
+      <Modal
+        open={!!openOrder}
+        onClose={() => setOpenOrder(null)}
+        size="lg"
+        title={t('lateOrdersReport.snapshot.title', {
+          order: openRow?.order_id ?? '',
+          defaultValue: 'Order {{order}}',
+        })}
+      >
+        {openRow && <OrderSnapshotPanel snapshot={openRow.order_snapshot} />}
+      </Modal>
     </div>
   );
 }
