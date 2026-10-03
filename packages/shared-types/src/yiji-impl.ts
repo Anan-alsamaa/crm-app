@@ -801,11 +801,43 @@ export class HttpYijiClient implements YijiClient {
     );
     if (!Array.isArray(rows)) return null;
 
-    /* The row whose number really ends in this one. A substring hit elsewhere in
-       a longer number is a different customer, and granting their coupon to a
-       stranger is irreversible from our side. */
-    const hit = rows.find((r) => (r?.phoneNumber ?? '').replace(/\D/g, '').endsWith(national));
-    return hit?.id?.trim() || null;
+    /*
+     * THE ROW WHOSE NUMBER IS *EXACTLY* THIS ONE — never merely ends with it.
+     *
+     * `endsWith` was not enough, and production showed why (owner, 2026-10-03).
+     * `0540041059` returns FIVE accounts: four test records stored as
+     * `+9660540041059` — Yiji's country code followed by the trunk zero, which
+     * is a malformed number — and one real customer, `+966540041059`.
+     *
+     * Every one of the five ENDS with `540041059`, so `endsWith` took whichever
+     * Yiji happened to return first: a test account, not the customer. A coupon
+     * granted to the wrong account cannot be revoked from our side.
+     *
+     * So the comparison is now on the NATIONAL number, normalised the same way
+     * on both sides: strip non-digits, drop a leading `966`, then drop any
+     * leading zeros. `+966540041059` and `+9660540041059` both reduce to
+     * `540041059` — and a longer number that merely ends in it does not,
+     * because its own national part is longer.
+     *
+     * AND IT MUST BE UNAMBIGUOUS. If two DIFFERENT accounts still reduce to the
+     * same national number, there is no way to tell which one the agent meant,
+     * and guessing is what this whole function exists to avoid. Answering null
+     * leaves the coupon approved and undelivered, which a human can see and
+     * resolve — a silent grant to the wrong person is neither.
+     */
+    const nationalOf = (v: string | null | undefined) => {
+      /* `00` is the international dialling prefix — `00966…` is the same number
+         as `+966…`, and a phone's own contact card often stores it that way.
+         Stripped FIRST, or the country code below is no longer at the front. */
+      const d = (v ?? '').replace(/\D/g, '').replace(/^00/, '');
+      /* Country code, then the trunk zero. In that order: `+9660540041059` is
+         both, and dropping the zeros first would leave `9660540041059`. */
+      return d.replace(/^966/, '').replace(/^0+/, '');
+    };
+    const matches = rows.filter((r) => nationalOf(r?.phoneNumber) === national);
+    const ids = [...new Set(matches.map((r) => r?.id?.trim()).filter(Boolean))];
+    if (ids.length !== 1) return null;
+    return ids[0] ?? null;
   }
 
   async getUserProfile(userId: string): Promise<YijiUserProfile | null> {
