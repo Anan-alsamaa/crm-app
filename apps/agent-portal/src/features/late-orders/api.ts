@@ -75,50 +75,6 @@ export function useLateOrders(
 }
 
 /**
- * Late orders that have been HANDLED — compensated, nothing less.
- *
- * Yiji has no idea we have handled anything: the order stays live and keeps
- * coming back from `GetFilteredOrders` until it completes. Without this the
- * agent would face the same rows every thirty seconds with no sign of the work
- * they just did.
- *
- * **`action: 'compensated'`, and that filter is the whole point.** This used to
- * return every order carrying ANY decision row, which was right while the two
- * decisions were "compensate" and "ignore" — both were final. Under the state
- * model the owner specified (2026-09-29) a COMMENT is a recorded state that is
- * explicitly *not* handling, so an unfiltered set would mark a commented order
- * Handled, take its Assign coupon button away and collapse
- * `Pending → Commented → Handled` into two states. See [[silent-empty-failures]]
- * for this shape: the query still returns rows, so nothing looks broken.
- *
- * Keyed on the ORDER id rather than a row id because that is the only
- * identifier the two sides share.
- */
-export function useHandledLateOrders() {
-  return useQuery({
-    queryKey: ['late-orders', 'handled'],
-    staleTime: 15_000,
-    queryFn: async (): Promise<Set<string>> => {
-      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      const rows = (await directus.request(
-        readItems(
-          'late_order_decisions' as never,
-          {
-            filter: {
-              date_created: { _gte: since },
-              action: { _eq: 'compensated' },
-            },
-            fields: ['order_id'],
-            limit: -1,
-          } as never,
-        ),
-      )) as unknown as Array<{ order_id: string | null }>;
-      return new Set(rows.map((r) => r.order_id?.trim()).filter((v): v is string => !!v));
-    },
-  });
-}
-
-/**
  * The decision already recorded for each order, so Comments can show and edit
  * it rather than starting blank.
  *
@@ -401,17 +357,21 @@ export function useRecordLateDecision() {
       ),
     onSuccess: () => {
       /*
-       * BOTH queries, or the row does not go away.
+       * ONE INVALIDATION, AND IT COVERS EVERYTHING.
        *
-       * The queue hides a decided order by checking it against the HANDLED set
-       * (`useHandledLateOrders`), which is a separate query. Invalidating only
-       * the queue refetched the same rows from Yiji — who has no idea we
-       * decided anything — and compared them against a stale handled set, so
-       * an ignored order sat there until the 15s staleTime lapsed and looked
-       * like the button had done nothing (owner, 2026-09-27).
+       * `['late-orders']` is a PREFIX in React Query, so it already takes the
+       * queue, the decisions and the event times with it. There used to be a
+       * second, explicit invalidation of `['late-orders','handled']` because
+       * the page hid a decided order by checking a separate 24-hour HANDLED
+       * set, and refetching the queue alone left that set stale — a decided
+       * order sat there until the 15s staleTime lapsed and the button looked
+       * dead (owner, 2026-09-27).
+       *
+       * That set is gone (ops, 2026-10-03): its 24-hour window meant an order
+       * compensated the day before read as unhandled, and the page now answers
+       * the question from the decisions it already holds.
        */
       void qc.invalidateQueries({ queryKey: ['late-orders'] });
-      void qc.invalidateQueries({ queryKey: ['late-orders', 'handled'] });
     },
   });
 }
