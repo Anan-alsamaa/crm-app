@@ -33,6 +33,22 @@ import { directus } from '../../lib/directus.js';
 /** Arabic range — enough to tell which language a message is in. */
 const AR = /[\u0600-\u06FF]/;
 
+/** What the language selector can be set to. `all` shows both. */
+export type ReplyLang = 'all' | 'en' | 'ar';
+
+/**
+ * Which language to OFFER for this conversation, before the agent chooses.
+ *
+ * From what the CUSTOMER wrote, not from what we sent: an Arabic template we
+ * used earlier must not make an English conversation look Arabic. With nothing
+ * written yet there is nothing to infer from, so both are shown rather than
+ * guessing and hiding half the list.
+ */
+export function defaultReplyLang(customerText: string): ReplyLang {
+  if (!customerText.trim()) return 'all';
+  return AR.test(customerText) ? 'ar' : 'en';
+}
+
 export interface QuickReply {
   id: string;
   label: string;
@@ -107,11 +123,21 @@ export function rankReplies(
   customerText: string,
   query: string,
   uiLocale?: string,
+  /*
+   * WHICH LANGUAGE TO SHOW — 'all' keeps the old ordering-only behaviour.
+   *
+   * Ranking alone was not enough in practice (ops, 2026-10-03): with replies in
+   * both languages the right one is first but the list is still half wrong, and
+   * an agent scanning it reads past Arabic to reach English. Filtering answers
+   * "show me only what I can send this customer".
+   */
+  lang: ReplyLang = 'all',
 ): QuickReply[] {
   const q = query.trim().toLowerCase();
+  const byLang = lang === 'all' ? replies : replies.filter((r) => r.lang === lang);
   const filtered = q
-    ? replies.filter((r) => `${r.label} ${r.text}`.toLowerCase().includes(q))
-    : [...replies];
+    ? byLang.filter((r) => `${r.label} ${r.text}`.toLowerCase().includes(q))
+    : [...byLang];
   const arabicConversation = AR.test(customerText);
   const arabicAgent = uiLocale ? uiLocale.toLowerCase().startsWith('ar') : null;
   return filtered.sort((a, b) => {
@@ -150,59 +176,121 @@ export function QuickReplies({
 }) {
   const { t, i18n } = useTranslation();
   const replies = useQuickReplies();
-  const [showAll, setShowAll] = useState(false);
+  const [open, setOpen] = useState(false);
+  /*
+   * THE LANGUAGE THE AGENT IS BROWSING — seeded from the customer, then theirs.
+   *
+   * `null` means "not chosen yet", so the default keeps following the
+   * conversation as the customer writes. Once the agent picks, their choice
+   * sticks: a customer who types one English word must not swap the list out
+   * from under someone mid-scan.
+   */
+  const [lang, setLang] = useState<ReplyLang | null>(null);
+  const effectiveLang = lang ?? defaultReplyLang(customerText);
 
   const ranked = useMemo(
-    () => rankReplies(replies.data ?? [], customerText, query, i18n.language),
-    [replies.data, customerText, query, i18n.language],
+    () => rankReplies(replies.data ?? [], customerText, query, i18n.language, effectiveLang),
+    [replies.data, customerText, query, i18n.language, effectiveLang],
   );
+  /* How many exist at all, so the toggle can say when a language is empty
+     rather than looking broken. */
+  const total = replies.data?.length ?? 0;
+  if (total === 0) return null;
 
-  if (ranked.length === 0) return null;
+  const pick = (r: QuickReply) => {
+    onPick(fillPlaceholders(r.text, vars));
+    setOpen(false);
+  };
 
-  // Five without a search, more once the agent is looking for something —
-  // a row that scrolls past the fold is a row nobody reaches the end of.
-  const shown = showAll || query ? ranked : ranked.slice(0, 5);
-  const hidden = ranked.length - shown.length;
+  /* Typing `/` in the composer IS the search, so the list opens itself and
+     stays a flat list — no second search box to tab into. */
+  const listOpen = open || !!query;
 
   return (
-    <div className={cn('flex items-center gap-1.5 overflow-x-auto pb-1', className)}>
-      {query && (
-        <span className="shrink-0 text-2xs text-muted-foreground">
-          {t('quickReplies.filtering', { defaultValue: 'matching' })}
-        </span>
-      )}
-      {shown.map((r) => (
-        <button
-          key={r.id}
-          type="button"
-          dir="auto"
-          // The full text on hover: a label alone does not say what will land
-          // in the box, and an agent should never send something unseen.
-          title={fillPlaceholders(r.text, vars)}
-          onClick={() => onPick(fillPlaceholders(r.text, vars))}
-          className="shrink-0 whitespace-nowrap rounded-full border border-dashed border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-solid hover:border-primary/40 hover:bg-primary/[0.06] hover:text-foreground"
-        >
-          {r.label}
-        </button>
-      ))}
-      {hidden > 0 && (
+    <div className={cn('relative', className)}>
+      <div className="flex items-center gap-1.5">
         <button
           type="button"
-          onClick={() => setShowAll(true)}
-          className="shrink-0 whitespace-nowrap rounded-full border border-border px-2.5 py-1 text-2xs font-semibold text-foreground transition-colors duration-fast hover:bg-secondary"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={listOpen}
+          aria-haspopup="listbox"
+          className="shrink-0 rounded-full border border-dashed border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-solid hover:border-primary/40 hover:bg-primary/[0.06] hover:text-foreground"
         >
-          {t('quickReplies.more', { defaultValue: '⋯ all {{n}}', n: ranked.length })}
+          {t('quickReplies.open', { defaultValue: 'Quick replies' })}
+          <span className="ms-1 opacity-60">{ranked.length}</span>
         </button>
-      )}
-      {showAll && !query && (
-        <button
-          type="button"
-          onClick={() => setShowAll(false)}
-          className="shrink-0 rounded-full px-2 py-1 text-2xs text-muted-foreground hover:text-foreground"
-          aria-label={t('quickReplies.fewer', { defaultValue: 'Show fewer' })}
+
+        {/* ARABIC / ENGLISH / BOTH. A segmented control rather than a dropdown:
+            three options an agent flips between all day should cost one click,
+            not two. */}
+        <div className="flex shrink-0 items-center rounded-full border border-border p-0.5">
+          {(['ar', 'en', 'all'] as const).map((opt) => (
+            <button
+              key={opt}
+              type="button"
+              onClick={() => setLang(opt)}
+              aria-pressed={effectiveLang === opt}
+              className={cn(
+                'rounded-full px-2 py-0.5 text-2xs font-medium transition-colors duration-fast',
+                effectiveLang === opt
+                  ? 'bg-secondary text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {opt === 'all'
+                ? t('quickReplies.langAll', { defaultValue: 'Both' })
+                : opt === 'ar'
+                  ? 'عربي'
+                  : 'EN'}
+            </button>
+          ))}
+        </div>
+
+        {query && (
+          <span className="shrink-0 text-2xs text-muted-foreground">
+            {t('quickReplies.filtering', { defaultValue: 'matching' })}
+          </span>
+        )}
+      </div>
+
+      {listOpen && (
+        <div
+          role="listbox"
+          aria-label={t('quickReplies.open', { defaultValue: 'Quick replies' })}
+          /* ABOVE the composer, not below: the composer is already at the
+             bottom of the window, so a menu that opens downward opens
+             off-screen. Capped and scrollable so a long list is reachable
+             instead of being cut to the first five. */
+          className="absolute bottom-full z-30 mb-1.5 max-h-64 w-full max-w-md overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-lg"
         >
-          ✕
-        </button>
+          {ranked.length === 0 ? (
+            <p className="px-2 py-3 text-2xs text-muted-foreground">
+              {t('quickReplies.noneInLang', {
+                defaultValue: 'No replies in this language. Try Both.',
+              })}
+            </p>
+          ) : (
+            ranked.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                role="option"
+                aria-selected={false}
+                dir="auto"
+                onClick={() => pick(r)}
+                className="block w-full rounded-md px-2 py-1.5 text-start transition-colors duration-fast hover:bg-secondary"
+              >
+                <span className="block text-2xs font-semibold text-foreground">{r.label}</span>
+                {/* THE WHOLE TEXT, not a tooltip. An agent should never send
+                    something they have not read, and a `title` is invisible on
+                    a touch screen and to anyone using a keyboard. */}
+                <span className="mt-0.5 block whitespace-pre-wrap text-2xs leading-snug text-muted-foreground">
+                  {fillPlaceholders(r.text, vars)}
+                </span>
+              </button>
+            ))
+          )}
+        </div>
       )}
     </div>
   );
