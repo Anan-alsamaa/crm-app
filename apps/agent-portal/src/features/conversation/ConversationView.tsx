@@ -17,7 +17,8 @@ import {
   toast,
   useIsDesktop,
 } from '@yiji/ui';
-import { SOCKET_EVENTS, type MessageNew } from '@yiji/shared-types';
+import { SOCKET_EVENTS, isDialablePhone, type MessageNew } from '@yiji/shared-types';
+import { useUpdateContact } from '../contacts/api.js';
 import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { noteSelfSend } from '../../lib/sound.js';
 import { formatBytes, isImage, validateAttachment, ATTACHMENT_ACCEPT } from '../../lib/files.js';
@@ -858,6 +859,26 @@ export function ConversationView({
   const contactName =
     c?.contact?.name ?? c?.contact?.phone ?? c?.contact?.email ?? t('inbox.unknownContact');
 
+  /*
+   * WE DO NOT KNOW THIS CUSTOMER'S NAME.
+   *
+   * Most contacts arrive from the app or a QR code carrying only a phone, and
+   * the stored "name" is then the number itself — `displayContactName` exists
+   * because 44 of 77 contacts on production were in exactly that state.
+   *
+   * The sidebar has always been able to fix this, but it is a 24px pencil in a
+   * right-hand panel nobody looks at, so agents ignore it (owner, 2026-10-03).
+   * The prompt therefore goes in the HEADER, where the agent is already reading
+   * the customer's name, and says what to do rather than offering an icon.
+   */
+  const nameIsMissing =
+    !c?.contact?.name?.trim() ||
+    isDialablePhone(c.contact.name) ||
+    c.contact.name === c.contact.phone;
+  const updateContactName = useUpdateContact();
+  const [askName, setAskName] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+
   const dayLabel = (iso: string | null): string => {
     if (!iso) return '';
     const d = new Date(iso);
@@ -927,9 +948,76 @@ export function ConversationView({
                   </span>
                 </span>
                 <div className="space-y-1">
-                  <div className="text-lg font-bold tracking-tight text-foreground">
-                    {contactName}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-lg font-bold tracking-tight text-foreground">
+                      {contactName}
+                    </div>
+                    {/*
+                      ASK FOR THE NAME, HERE, WHERE THE AGENT IS LOOKING.
+
+                      Not another pencil: a prompt that says what to do. The
+                      sidebar's editor has always worked and agents ignore it,
+                      because a 24px icon in a right-hand panel is not an
+                      instruction (owner, 2026-10-03).
+
+                      Only when we genuinely have no name — a contact whose
+                      "name" is their own phone number counts as no name, which
+                      is most of them.
+                    */}
+                    {nameIsMissing && c?.contact?.id && !askName && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setNameDraft('');
+                          setAskName(true);
+                        }}
+                        className="rounded-full border border-dashed border-primary/40 px-2.5 py-0.5 text-2xs font-medium text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.08]"
+                      >
+                        {t('conversation.askName', {
+                          defaultValue: 'Ask for their name',
+                        })}
+                      </button>
+                    )}
                   </div>
+                  {nameIsMissing && c?.contact?.id && askName && (
+                    <form
+                      className="flex items-center gap-1.5"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const v = nameDraft.trim();
+                        if (!v) return;
+                        updateContactName.mutate(
+                          { id: c.contact!.id, patch: { name: v } },
+                          { onSuccess: () => setAskName(false) },
+                        );
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        value={nameDraft}
+                        onChange={(e) => setNameDraft(e.target.value)}
+                        placeholder={t('conversation.namePlaceholder', {
+                          defaultValue: 'Type the name they gave you',
+                        })}
+                        aria-label={t('sidebar.name', { defaultValue: 'Name' })}
+                        className="h-7 w-56 rounded-md border border-border bg-background px-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!nameDraft.trim() || updateContactName.isPending}
+                        className="rounded-md bg-primary px-2.5 py-1 text-2xs font-semibold text-primary-foreground disabled:opacity-50"
+                      >
+                        {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setAskName(false)}
+                        className="rounded-md px-2 py-1 text-2xs text-muted-foreground hover:text-foreground"
+                      >
+                        {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                      </button>
+                    </form>
+                  )}
                   <div className="text-xs text-muted-foreground">
                     {threadMessages.length > 0
                       ? t('conversation.startedOn', {

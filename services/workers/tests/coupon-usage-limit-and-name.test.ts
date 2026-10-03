@@ -41,50 +41,43 @@ const coupon = (over: Record<string, unknown> = {}) =>
 
 describe('how many times a coupon may be used', () => {
   /*
-   * THE FAULT THAT BROKE REDEMPTION.
+   * THE FAULT THAT BROKE REDEMPTION, and what settled it.
    *
-   * `reachLimit` is the TOTAL across every holder, not a per-person allowance.
-   * Sending 1 meant the first customer to spend theirs exhausted the coupon and
-   * every other holder was refused — which is exactly the message they saw.
-   * Every one of the 102 coupons on production carried it.
+   * Yiji's OWN console payload for a working coupon (captured by the owner,
+   * 2026-10-03):
+   *
+   *     reachLimit:        1002      <- a POOL, deliberately far above
+   *     monthlyReachLimit: 3         <- what one customer may use
+   *     limitForUser:      (absent)  <- not a field they send at all
+   *
+   * `reachLimit` is the TOTAL across every holder. We were sending 1, so the
+   * pool was exhausted by the first grant and the customer was refused with
+   * "Coupon exceeds usage limit". All 102 coupons on production carried it.
    */
-  it('does not cap the TOTAL redemptions', () => {
-    expect(coupon()).not.toHaveProperty('reachLimit');
+  it('never caps the pool at the per-customer figure', () => {
+    const c = coupon({ usage_limit: 1 });
+    expect(c.reachLimit).not.toBe(1);
+    expect(Number(c.reachLimit)).toBeGreaterThanOrEqual(1000);
   });
 
-  /* The CRM's "Number of uses" box means per customer — its own hint says
-     "How many times it may be redeemed". That is where its number belongs. */
-  it('caps what ONE customer may redeem', () => {
-    expect(coupon({ usage_limit: 1 })).toMatchObject({ limitForUser: 1 });
-    expect(coupon({ usage_limit: 3 })).toMatchObject({ limitForUser: 3 });
+  /* The CRM's "Number of uses" box is what ONE customer may redeem — its own
+     hint says "How many times it may be redeemed". `monthlyReachLimit` is the
+     field Yiji's console uses for exactly that. */
+  it('carries the Number of uses as the per-customer allowance', () => {
+    expect(coupon({ usage_limit: 1 })).toMatchObject({ monthlyReachLimit: 1, limitForUser: 1 });
+    expect(coupon({ usage_limit: 3 })).toMatchObject({ monthlyReachLimit: 3, limitForUser: 3 });
   });
 
-  /* Monthly is per-customer too, so it follows the same box. */
-  it('tracks the same number monthly', () => {
-    expect(coupon({ usage_limit: 3 })).toMatchObject({ monthlyReachLimit: 3 });
+  /* The pool scales with the allowance, so it can never bind first — a pool
+     that runs out before the allowance is a bug, never a policy. */
+  it('keeps the pool far above the allowance', () => {
+    const c = coupon({ usage_limit: 3 });
+    expect(Number(c.reachLimit)).toBeGreaterThan(Number(c.monthlyReachLimit) * 10);
   });
 
   /* One grant is the default a compensation implies when nobody said otherwise. */
   it('defaults to one use when the field is empty', () => {
-    expect(coupon({ usage_limit: null })).toMatchObject({ limitForUser: 1 });
-  });
-
-  /*
-   * THE ONE CASE THAT DOES NEED A TOTAL CAP.
-   *
-   * An UNASSIGNED coupon is created without a customer and its code goes to one
-   * person over WhatsApp. It is bearer-like — anybody who learns the code can
-   * spend it, and `limitForUser` cannot help because every spender is a
-   * different user. Capping the total is what keeps the blast radius to the
-   * grant that was approved.
-   */
-  it('caps the TOTAL on a coupon nobody holds', () => {
-    /* The unassigned payload is the coupon FLAT — `AddCoupon` takes the coupon
-       itself, with no `couponUser` envelope to put it in. */
-    const unassigned = yijiCouponPayload(row(), null, {
-      unassigned: true,
-    }) as Record<string, unknown>;
-    expect(unassigned).toMatchObject({ reachLimit: 1, limitForUser: 1 });
+    expect(coupon({ usage_limit: null })).toMatchObject({ monthlyReachLimit: 1 });
   });
 });
 

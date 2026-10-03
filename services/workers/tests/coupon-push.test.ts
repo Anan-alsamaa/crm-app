@@ -202,13 +202,16 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
      * (owner, via the Yiji team, 2026-10-03). All 102 coupons on production
      * carried it.
      *
-     * `reachLimit` is now left UNSET: capping the total is a decision nobody
-     * has made, the CRM has no field for it, and a number invented here is a
-     * refusal waiting to happen. `monthlyReachLimit` is per-customer, so it
-     * still tracks the box.
+     * Yiji's own console payload settled it (owner, 2026-10-03): they send
+     * `reachLimit: 1002` beside `monthlyReachLimit: 3`, and no `limitForUser`
+     * at all. The pool is deliberately an order of magnitude above the
+     * per-customer figure so that it never binds first.
      */
     const c = coupon({ ...ROW, usage_limit: '1' });
-    expect(c).not.toHaveProperty('reachLimit');
+    /* Yiji's own console sends `reachLimit: 1002` beside `monthlyReachLimit: 3`
+       — the pool is deliberately far above the allowance so it never binds. */
+    expect(c.reachLimit).not.toBe(1);
+    expect(Number(c.reachLimit)).toBeGreaterThanOrEqual(1000);
     expect(c.limitForUser).toBe(1);
     expect(c.monthlyReachLimit).toBe(1);
   });

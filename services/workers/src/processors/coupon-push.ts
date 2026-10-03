@@ -565,47 +565,43 @@ export function yijiCouponPayload(
       discountPercentage: isPct ? (percent ?? 0) : 0,
       ...(cap != null ? { maximumDiscount: cap } : {}),
       /*
-       * HOW MANY TIMES IT MAY BE USED — AND BY WHOM.
+       * HOW MANY TIMES IT MAY BE USED — MATCHED TO YIJI'S OWN CONSOLE.
        *
-       * Yiji has three limit fields and the CRM has one box, "Number of uses",
-       * whose hint reads "How many times it may be redeemed":
+       * Their console's payload for a working coupon, captured by the owner
+       * (2026-10-03), ends the guesswork:
        *
-       *   limitForUser      per-customer cap     <- what the CRM box MEANS
-       *   reachLimit        TOTAL redemptions, across every holder
-       *   monthlyReachLimit per-customer, per month
+       *     reachLimit:        1002      <- a POOL, deliberately far above
+       *     monthlyReachLimit: 3         <- what one customer may use
+       *     limitForUser:      (absent)  <- not a field they send AT ALL
        *
-       * ALL THREE USED TO CARRY THE SAME NUMBER, and that is what broke
-       * redemption in production (owner, via the Yiji team, 2026-10-03):
-       * customers were told "Coupon exceeds usage limit" at checkout, on
-       * coupons nobody had used.
+       * `reachLimit` is the total across every holder of the coupon, and Yiji
+       * sets it an order of magnitude above the per-customer figure precisely
+       * so it never binds. We were sending `reachLimit: 1`, so the pool was
+       * exhausted by the first grant and the customer was refused at checkout
+       * with "Coupon exceeds usage limit" — on all 102 coupons issued.
        *
-       * `reachLimit: 1` does not mean "once per person". It means the coupon
-       * may be redeemed ONCE IN TOTAL — so the first customer to spend theirs
-       * exhausts it, and every other holder is refused. Every one of the 102
-       * coupons issued on production carried it.
+       * `limitForUser` was ours, not theirs. It is kept because it is harmless
+       * and may be read, but it is no longer the only thing stating the
+       * per-customer allowance: `monthlyReachLimit` is the field their own
+       * console uses for that, and it carries the CRM's "Number of uses" box.
        *
-       * The box the agent fills is a PER-CUSTOMER allowance, so that is where
-       * its number goes. `reachLimit` is left UNSET: capping the total is a
-       * decision nobody has made, the CRM has no field for it, and a number we
-       * invent here is a refusal waiting to happen. `monthlyReachLimit` is
-       * per-customer too, so it tracks the same box.
+       * The pool is derived rather than asked for — nobody wants a second
+       * number — and it is generous on purpose: the CRM creates one coupon per
+       * customer, so a pool that binds before the allowance does is always a
+       * bug, never a policy.
        */
+      /*
+       * THE POOL. Generous for an ASSIGNED coupon, which belongs to one named
+       * customer — `monthlyReachLimit` is what bounds them, and a pool that
+       * runs out first is the bug this fixes.
+       *
+       * TIGHT for an UNASSIGNED one. That coupon has no customer: its code
+       * goes to somebody over WhatsApp and anyone who learns it can spend it.
+       * The pool is the ONLY bound there, so it is exactly the allowance.
+       */
+      reachLimit: opts?.unassigned ? limit : Math.max(limit * 100, 1000),
       limitForUser: limit,
       monthlyReachLimit: limit,
-      /*
-       * THE TOTAL CAP — only on a coupon NOBODY HOLDS.
-       *
-       * An UNASSIGNED coupon is created without a customer and its code is sent
-       * to one person over WhatsApp. It is bearer-like: anybody who learns the
-       * code can spend it, and `limitForUser` cannot help because every spender
-       * is a different user. So the total is capped, and the blast radius is
-       * the grant that was approved.
-       *
-       * An ASSIGNED coupon is attached to one named customer, so `limitForUser`
-       * already says everything — and capping the total is what refused every
-       * holder after the first.
-       */
-      ...(opts?.unassigned ? { reachLimit: limit } : {}),
       /*
        * The order-value window this coupon may be applied to.
        *

@@ -317,6 +317,8 @@
     "bulkDeletePartial": "تم حذف {{count}} ثم توقفت العملية — الباقي لم يُمس."
   },
   "conversation": {
+    "askName": "اسأل عن اسمه",
+    "namePlaceholder": "اكتب الاسم الذي ذكره",
     "replyPlaceholder": "اكتب ردًا…",
     "notePlaceholder": "ملاحظة داخلية — مرئية للوكلاء فقط…",
     "customerTyping": "العميل يكتب…",
