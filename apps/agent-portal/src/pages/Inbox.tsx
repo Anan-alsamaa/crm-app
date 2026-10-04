@@ -31,6 +31,7 @@ import {
   type ConversationStatus,
   type Priority,
 } from '@yiji/shared-types';
+import { StartChatDialog } from '../features/inbox/StartChatDialog.js';
 import {
   conversationIdsForOrder,
   useConversations,
@@ -303,6 +304,8 @@ export function Inbox() {
   const tags = useTags();
   const prefetchOrders = usePrefetchInboxOrders();
   const [selected, setSelected] = useState<string | null>(null);
+  /* Whether the "start a chat" dialog is open (EMA-10). */
+  const [composing, setComposing] = useState(false);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   /** The bulk-delete confirmation. Deleting chats is irreversible. */
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -568,28 +571,62 @@ export function Inbox() {
           {/* Search + ghost filter row — mt-3 keeps the same breath between the
               stat tiles above and the search field as between title and tiles. */}
           <div className="mt-3 space-y-2 px-4 pb-3">
-            <div className="relative">
-              <svg
-                aria-hidden
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <svg
+                  aria-hidden
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+                >
+                  <circle cx="7" cy="7" r="4.5" />
+                  <path d="m10.5 10.5 3 3" />
+                </svg>
+                <input
+                  type="search"
+                  aria-label={t('inbox.search')}
+                  placeholder={t('inbox.search')}
+                  className="block h-9 w-full rounded-full border-none bg-secondary/50 ps-9 pe-3 text-sm text-foreground ring-1 ring-inset ring-foreground/10 placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 text-start transition-[background-color,box-shadow] duration-fast ease-out"
+                  value={filters.search ?? ''}
+                  onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+                />
+              </div>
+              {/*
+                START A CHAT WITH A CUSTOMER WHO HAS NOT WRITTEN TO US (EMA-10).
+
+                Beside the search box, because both answer "find me this
+                customer" — one among the chats that exist, the other when none
+                does. A `+` rather than a labelled button: the column is 320px
+                and a word here would crowd the filters below it.
+
+                Not gated in the UI. The ENDPOINT checks the role
+                (`CHAT_INITIATE_ROLES`), which is the check that matters — an
+                outbound message to a customer must not be reachable by hiding a
+                button. Every role that reaches this inbox is in that set.
+              */}
+              <button
+                type="button"
+                onClick={() => setComposing(true)}
+                aria-label={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
+                title={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
+                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground ring-1 ring-inset ring-primary/20 transition-colors duration-fast ease-out hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               >
-                <circle cx="7" cy="7" r="4.5" />
-                <path d="m10.5 10.5 3 3" />
-              </svg>
-              <input
-                type="search"
-                aria-label={t('inbox.search')}
-                placeholder={t('inbox.search')}
-                className="block h-9 w-full rounded-full border-none bg-secondary/50 ps-9 pe-3 text-sm text-foreground ring-1 ring-inset ring-foreground/10 placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 text-start transition-[background-color,box-shadow] duration-fast ease-out"
-                value={filters.search ?? ''}
-                onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
-              />
+                <svg
+                  aria-hidden
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.75"
+                  strokeLinecap="round"
+                  className="h-4 w-4"
+                >
+                  <path d="M8 3.5v9M3.5 8h9" />
+                </svg>
+              </button>
             </div>
             {/* One quiet cluster, same anatomy as the conversation toolbar's
                 property group, so the selects read as one filter control. */}
@@ -1181,6 +1218,23 @@ export function Inbox() {
         loading={removeConversation.isPending}
         onConfirm={() => void bulkDelete()}
         onCancel={() => setConfirmDelete(false)}
+      />
+
+      {/*
+        START A CHAT (EMA-10). Lands the agent in the new thread on the SAME
+        page — the spec is explicit that there is no navigation away, and the
+        inbox already renders the selected conversation beside the list.
+      */}
+      <StartChatDialog
+        open={composing}
+        onClose={() => setComposing(false)}
+        onStarted={(conversationId) => {
+          setSelected(conversationId);
+          /* The chat is brand new, so the list query has never seen it. Without
+             this the thread opens beside a list that does not contain it, and
+             the agent's own new chat looks like it did not happen. */
+          void qc.invalidateQueries({ queryKey: ['conversations'] });
+        }}
       />
     </div>
   );

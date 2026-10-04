@@ -323,7 +323,22 @@
     "bulkDeleteTitle": "حذف {{count}} محادثة؟",
     "bulkDeleteBody": "لا يمكن التراجع عن هذا. سيتم حذف كل الرسائل بداخلها أيضًا. التذاكر المنشأة من هذه المحادثات تبقى كما هي.",
     "bulkDeleteDone": "تم حذف {{count}} محادثة.",
-    "bulkDeletePartial": "تم حذف {{count}} ثم توقفت العملية — الباقي لم يُمس."
+    "bulkDeletePartial": "تم حذف {{count}} ثم توقفت العملية — الباقي لم يُمس.",
+    "startChat": {
+      "title": "بدء محادثة",
+      "phone": "جوال العميل",
+      "message": "الرسالة الأولى",
+      "messagePlaceholder": "ما تريد قوله للعميل.",
+      "send": "إرسال",
+      "checking": "جارٍ البحث عن العميل…",
+      "known": "عميل معروف — {{name}}",
+      "knownNoName": "عميل معروف، بدون اسم مسجّل",
+      "newContact": "عميل جديد — لا يوجد سجل بعد",
+      "invalidPhone": "هذا ليس رقم جوال صحيح.",
+      "needPhone": "أدخل رقم جوال صحيح.",
+      "needMessage": "اكتب الرسالة الأولى.",
+      "needVendor": "لا يوجد بائع مُعد."
+    }
   },
   "conversation": {
     "askName": "اسأل عن اسمه",
