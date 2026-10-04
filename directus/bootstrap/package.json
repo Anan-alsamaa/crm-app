@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "apply": "tsx src/apply.ts",
+    "apply:fields": "tsx src/apply.ts --fields-only",
     "seed:demo": "tsx src/seed-demo.ts",
     "verify": "tsx src/verify.ts",
     "validate-compose": "node scripts/validate-compose.mjs",

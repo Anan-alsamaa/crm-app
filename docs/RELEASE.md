@@ -210,6 +210,34 @@ Code rolls back. Data does not. So:
   never drops. That is what makes it safe to run before the new code arrives.
 - **Order of operations:** bootstrap first, then the new images. A new column
   the old code ignores is harmless; new code against a missing column is not.
+- **A SCHEMA CHANGE DOES NOT TRAVEL THROUGH A DEPLOY.** The workflow _builds_
+  the bootstrap image and never runs it, so a field added in `collections.ts`,
+  reviewed, merged and deployed green is simply **absent** from every database.
+  This has bitten four times (`tickets.customer_phone`, `app_settings`, the SLA
+  sweep, `quick_replies.kind`), and it is worse than a missing column usually
+  is: Directus **403s the whole query** that names an inaccessible field rather
+  than ignoring the term, so new code filtering on it finds nothing and renders
+  a plausible zero.
+
+  **Before tagging, if the release adds or changes a field, run:**
+
+  ```bash
+  export DIRECTUS_URL=... DIRECTUS_ADMIN_EMAIL=... DIRECTUS_ADMIN_PASSWORD=...
+  pnpm --filter @yiji/directus-bootstrap run apply:fields
+  ```
+
+  `apply:fields` is collections, fields, relations and junctions **only**. It
+  stops before roles, service users, constraints and the project owner — which
+  is what makes it safe to run against production. A **full** `apply` rewrites
+  roles and has twice taken production agent access down; never reach for it to
+  add a column.
+
+  Verified on staging 2026-10-04: permissions 732 → 732, policies 16 → 16,
+  users 23 → 23, agent login and reads unaffected.
+
+  **Then re-run the real filter.** A field existing is not proof the query
+  works — that is the half that actually failed last time.
+
 - **One-off data repairs are scripts, dry-run by default** — `normalise-phones`,
   `repair-store-snapshots`, `backfill-store-snapshots`. Run them on staging
   first, read the report, then `--write`. Every one of them prints what it will

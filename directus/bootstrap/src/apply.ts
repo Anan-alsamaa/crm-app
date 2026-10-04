@@ -868,16 +868,66 @@ async function applyConstraints(): Promise<void> {
   }
 }
 
-async function main(): Promise<void> {
-  const env = loadEnv();
-  console.log(`Bootstrapping Directus at ${env.directusUrl} ...`);
-  const client = makeClient(env.directusUrl);
-  await client.login(env.adminEmail, env.adminPassword);
-
+/**
+ * SCHEMA ONLY — collections, fields, relations and junctions. NO ROLES.
+ *
+ * Added for EMA-12, 2026-10-04. A field added in `collections.ts` reaches NO
+ * database on deploy: the workflow builds the bootstrap image and never runs
+ * it. So every new column has been applied by hand, and forgetting costs more
+ * than a missing column normally would — Directus 403s a WHOLE query that names
+ * an inaccessible field rather than ignoring the term, so new code filtering on
+ * it finds nothing and renders a plausible zero. That has now bitten four
+ * times: `tickets.customer_phone`, `app_settings`, the SLA sweep, and
+ * `quick_replies.kind` on 2026-10-04.
+ *
+ * WHY NOT JUST RUN `apply`: a full bootstrap REWRITES ROLES, and that has twice
+ * taken production agent access down. There was no middle option — which is
+ * exactly why people reached for hand-rolled POSTs instead.
+ *
+ * This is that middle option. It runs the half that is additive and safe and
+ * stops before `applyRoles`, so it can be run against production without
+ * touching a single permission.
+ *
+ * It is still NOT automatic. Making it a deploy step would mean every merge
+ * writes schema to production unattended, and `docs/RELEASE.md` is explicit
+ * that the ORDER matters — bootstrap first, then the images. This makes the
+ * correct action one command instead of a hand-written payload.
+ */
+async function applySchemaOnly(client: AnyClient): Promise<void> {
   await applyCollections(client);
   await applyUserFields(client);
   await applyRelations(client);
   await applyJunctions(client);
+}
+
+async function main(): Promise<void> {
+  const env = loadEnv();
+  /*
+   * `--fields-only` is checked against argv rather than an env var on purpose:
+   * an env var set once in a shell is a mode you can forget you are in, and the
+   * difference between the two modes is whether roles get rewritten.
+   */
+  const fieldsOnly = process.argv.includes('--fields-only');
+  console.log(
+    fieldsOnly
+      ? `Applying SCHEMA ONLY (no roles, no users, no constraints) at ${env.directusUrl} ...`
+      : `Bootstrapping Directus at ${env.directusUrl} ...`,
+  );
+  const client = makeClient(env.directusUrl);
+  await client.login(env.adminEmail, env.adminPassword);
+
+  if (fieldsOnly) {
+    await applySchemaOnly(client);
+    const cols = (await client.request(readCollections())) as Array<{ collection: string }>;
+    console.log(`Schema applied. Directus reports ${cols.length} collections.`);
+    console.log(
+      'Roles, service users, constraints and the project owner were NOT touched. ' +
+        'A field existing is not proof the query works — re-run the real filter.',
+    );
+    return;
+  }
+
+  await applySchemaOnly(client);
   // After the CRM schema (the compensation issue catalog has an m2o onto
   // `sla_policies`) and before roles — the Agent policy grants read/update on
   // these collections, and a permission on a collection that doesn't exist yet
