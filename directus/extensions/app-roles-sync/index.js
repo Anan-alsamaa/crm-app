@@ -85,7 +85,28 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       },
     ],
   };
-  const MESSAGE_OF_VISIBLE_CONVERSATION = { conversation: ASSIGNED_OR_UNASSIGNED };
+  /*
+   * THE SAME THREE WAYS, PLUS: anybody may READ a CLOSED chat (ops,
+   * 2026-10-04). Mirrors ASSIGNED_UNASSIGNED_OR_SOLVED in
+   * directus/bootstrap/src/roles.ts — `scripts/check-permission-drift.mjs`
+   * fails if one moves without the other.
+   *
+   * Narrower than the widening refused on 2026-09-14: that protected a LIVE
+   * thread somebody owns, and a solved chat is finished work with no owner left
+   * to respect. An agent still cannot see a colleague's OPEN chat.
+   *
+   * All three legacy spellings are named. `normaliseConversationStatus`
+   * collapses the vocabulary to `open | solved`, but the column has also held
+   * `resolved` and `closed` — matching RESUMABLE_STATUSES in the gateway. A
+   * filter matching only `solved` would leave older rows invisible, which is
+   * the silent empty-result shape this codebase keeps producing.
+   */
+  const ASSIGNED_UNASSIGNED_OR_SOLVED = {
+    _or: [...ASSIGNED_OR_UNASSIGNED._or, { status: { _in: ['solved', 'resolved', 'closed'] } }],
+  };
+  /* Messages follow their conversation, closed ones included: a history you
+     can list but not open is not history. */
+  const MESSAGE_OF_VISIBLE_CONVERSATION = { conversation: ASSIGNED_UNASSIGNED_OR_SOLVED };
   const SELF_RECIPIENT = { recipient: { _eq: '$CURRENT_USER' } };
   const OWN_TICKET = { assigned_agent: { _eq: '$CURRENT_USER' } };
 
@@ -176,7 +197,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   const CATALOG = {
     use_chat: [
       g('conversations', 'create'),
-      g('conversations', 'read', ASSIGNED_OR_UNASSIGNED),
+      g('conversations', 'read', ASSIGNED_UNASSIGNED_OR_SOLVED),
       /*
        * UPDATE IS UNSCOPED; READ IS NOT (owner, 2026-09-30).
        *
@@ -192,7 +213,22 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        * ASSIGNED_OR_UNASSIGNED itself would have handed them everyone's history,
        * which is a different and much larger change.
        */
-      g('conversations', 'update'),
+      /*
+       * SCOPED AGAIN 2026-10-04, and this is a CORRECTION, not a new policy.
+       *
+       * The reasoning just above — "any chat in practice means any chat they
+       * could already open" — depended entirely on the READ being scoped.
+       * Opening CLOSED chats to every agent breaks that premise: left
+       * unscoped, the same change would have silently handed every agent write
+       * access to every closed conversation, including reassigning and
+       * re-opening them.
+       *
+       * So update keeps the ORIGINAL live scope. A closed chat is readable by
+       * all and writable by whoever it was already writable by. The wide
+       * update for people who must act on other people's work still rides with
+       * `edit_all_tickets` below, and Directus ORs the two.
+       */
+      g('conversations', 'update', ASSIGNED_OR_UNASSIGNED),
       g('messages', 'create'),
       g('messages', 'read', MESSAGE_OF_VISIBLE_CONVERSATION),
       /*

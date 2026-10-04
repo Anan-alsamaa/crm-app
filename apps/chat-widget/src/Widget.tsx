@@ -174,6 +174,56 @@ const clientId = () => `c${Date.now()}_${msgSeq++}`;
 // deduped (never added twice) and can be styled distinctly in the thread.
 const GREETING_ID = '__yiji_welcome__';
 
+/** The greeting operations maintain, per language. Null = use the built-in. */
+export interface WelcomeTemplates {
+  ar: string | null;
+  en: string | null;
+}
+
+/**
+ * THE WELCOME LINE a customer sees, from operations' own template when there is
+ * one (ops, 2026-10-04: the automatic message *"should come from رسالة ترحيب"*).
+ *
+ * One function because the greeting is built in TWO places — when `ready`
+ * arrives, and again when the customer flips the language — and they must not
+ * drift into two different ideas of what the greeting is.
+ *
+ * PRECEDENCE, and each step is a deliberate choice:
+ *
+ *  1. The template for the CURRENT language, if operations wrote one. It is
+ *     theirs to word, so it wins outright.
+ *  2. `{name}` is still substituted inside it, so a template may greet a
+ *     returning customer by name exactly as the built-in one does — and a
+ *     template that omits the placeholder simply reads the same for everybody,
+ *     which is a legitimate choice rather than a fault.
+ *  3. A template with `{name}` but NO name on file has the placeholder removed
+ *     rather than rendered literally. "Welcome {name}," reaching a customer is
+ *     the kind of visible breakage that makes a team stop editing templates.
+ *  4. No template: the built-in wording, named for a returning customer and
+ *     generic for a new one — unchanged behaviour.
+ */
+export function welcomeLine(
+  tr: { welcomeNamed: string; welcomeNew: string },
+  locale: 'ar' | 'en',
+  customer: { name: string | null; isNew: boolean },
+  welcome?: WelcomeTemplates | null,
+): string {
+  const name = customer.name?.trim() ?? '';
+  const template = (locale === 'ar' ? welcome?.ar : welcome?.en)?.trim();
+  if (template) {
+    return name
+      ? template.replace(/\{name\}/g, name)
+      : /* No name: drop the placeholder AND the space or comma left clinging to
+           it, so "Welcome {name}, how can we help?" reads as "Welcome, how can
+           we help?" rather than "Welcome , how can we help?". */
+        template
+          .replace(/\s*\{name\}\s*([,،])?/g, (_m, p) => (p ? `${p} ` : ' '))
+          .replace(/\s+/g, ' ')
+          .trim();
+  }
+  return !customer.isNew && name ? tr.welcomeNamed.replace('{name}', name) : tr.welcomeNew;
+}
+
 /**
  * Surface gateway agent-presence to the host page via a window CustomEvent.
  * Host pages can subscribe with:
@@ -359,6 +409,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
     name: null,
     isNew: true,
   });
+  /* The greeting operations maintain, as sent by the gateway on `ready`. Held
+     in state because the language switch rebuilds the bubble and needs it
+     again. Null until `ready`, and null for ever if nobody wrote one. */
+  const [welcome, setWelcome] = useState<WelcomeTemplates | null>(null);
   const [csat, setCsat] = useState<{ score: number; comment: string; submitted: boolean } | null>(
     null,
   );
@@ -453,10 +507,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
     // The greeting is a local bubble written in the language of the moment it
     // was added; say it again in the new one, or the first line of the chat
     // stays in the language the customer just left.
-    const nt = t(next);
-    const name = customer.name?.trim();
-    const greeting =
-      !customer.isNew && name ? nt.welcomeNamed.replace('{name}', name) : nt.welcomeNew;
+    const greeting = welcomeLine(t(next), next, customer, welcome);
     setMessages((prev) =>
       prev.map((m) => (m.id === GREETING_ID ? { ...m, content: greeting } : m)),
     );
@@ -509,6 +560,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
           vendorName,
           contact,
           isNew,
+          welcome,
         }) => {
           // null on a fresh session; `onConversationReady` fills it in when the
           // customer's first message creates the conversation.
@@ -529,9 +581,16 @@ export function Widget({ config }: { config: WidgetConfig }) {
           // (`[...history, ...prev]`), so the greeting lands AFTER the loaded
           // history — and any message sent afterwards appends below it (pushing the
           // greeting up), instead of being stuck at the bottom.
-          const name = contact?.name?.trim();
-          const greeting =
-            !(isNew ?? true) && name ? tr.welcomeNamed.replace('{name}', name) : tr.welcomeNew;
+          /* Operations' own template when there is one, else the built-in
+             wording — one function, shared with the language switch below so
+             the two can never disagree about what the greeting is. */
+          setWelcome(welcome ?? null);
+          const greeting = welcomeLine(
+            tr,
+            locale,
+            { name: contact?.name ?? null, isNew: isNew ?? true },
+            welcome ?? null,
+          );
           setMessages((prev) => {
             if (prev.some((m) => m.id === GREETING_ID)) return prev;
             return [

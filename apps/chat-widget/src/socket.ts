@@ -61,6 +61,14 @@ export interface SocketCallbacks {
      *  — lets the widget greet a returning customer by name. */
     contact?: { name: string | null; phone: string | null };
     isNew?: boolean;
+    /**
+     * The greeting operations maintain, per language (ops, 2026-10-04).
+     *
+     * Absent or null means no template exists, and the widget keeps its
+     * built-in wording — so an older gateway, or a CRM where nobody has
+     * created the row, behaves exactly as before.
+     */
+    welcome?: { ar: string | null; en: string | null } | null;
   }) => void;
   onMessage: (msg: WidgetMessage) => void;
   /** Existing thread pushed by the gateway on (re)connect, so a returning
@@ -341,6 +349,7 @@ export function connectWidget(
       vendorName?: string | null;
       contact?: { name: string | null; phone: string | null };
       isNew?: boolean;
+      welcome?: { ar: string | null; en: string | null } | null;
     }) => cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),
   );
   socket.on('conversation:ready', (info: { conversationId: string }) =>

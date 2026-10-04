@@ -721,6 +721,59 @@ async function ensureConversation(socket: Socket, deps: ConnectionDeps): Promise
   }
 }
 
+/**
+ * The welcome wording, read once and reused.
+ *
+ * EVERY customer handshake asks for this, and the answer changes only when
+ * operations edit the row — so reading it per connection would add a Directus
+ * round-trip to the one path that must stay fast, for a string that is the same
+ * all day.
+ *
+ * TTL rather than forever: an edit has to reach customers without a deploy,
+ * which is the whole reason the wording moved out of the widget. Five minutes
+ * is the same staleness the portal already accepts for the reply library.
+ *
+ * A FAILED READ IS CACHED TOO, deliberately — as `{ar: null, en: null}`, which
+ * means "use the built-in wording". Retrying on every connection while Directus
+ * is unhealthy would turn a missing greeting into a thundering herd against the
+ * service the chat itself depends on.
+ */
+const WELCOME_TTL_MS = 5 * 60_000;
+let welcomeCache: { at: number; value: { ar: string | null; en: string | null } } | null = null;
+
+async function cachedWelcome(
+  deps: ConnectionDeps,
+): Promise<{ ar: string | null; en: string | null }> {
+  const now = Date.now();
+  if (welcomeCache && now - welcomeCache.at < WELCOME_TTL_MS) return welcomeCache.value;
+  /*
+   * GUARDED AT THE CALL SITE, not only inside the method.
+   *
+   * `welcomeTemplates` catches its own query failures, but it is reached
+   * through an INJECTED client — and a client that does not have the method at
+   * all would throw a TypeError here, before `ready` is ever emitted. That is
+   * not hypothetical: it is what the gateway's own test doubles look like, and
+   * a partial client in production would mean a chat that never opens because
+   * a greeting could not be read.
+   *
+   * A greeting is never worth failing a handshake over, so anything that goes
+   * wrong resolves to "no template" and the widget uses its built-in wording.
+   */
+  let value: { ar: string | null; en: string | null } = { ar: null, en: null };
+  try {
+    value = (await deps.directus.welcomeTemplates?.()) ?? value;
+  } catch {
+    /* Already the fallback. */
+  }
+  welcomeCache = { at: now, value };
+  return value;
+}
+
+/** Testing seam: drop the cache so a test is not served another test's answer. */
+export function resetWelcomeCache(): void {
+  welcomeCache = null;
+}
+
 async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<void> {
   const { io, directus, logger } = deps;
   const data = socket.data as SocketData;
@@ -750,6 +803,19 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
     agentsOnline: agentPresence.distinctOnline(),
     contact: { name: data.contactName ?? null, phone: data.contactPhone ?? null },
     isNew: data.contactIsNew ?? true,
+    /*
+     * THE WELCOME WORDING operations maintain (ops, 2026-10-04).
+     *
+     * Sent as DATA rather than rendered here, because the widget already
+     * decides which greeting a customer gets — named for a returning customer,
+     * generic for a new one — and moving that decision into the gateway would
+     * split one rule across two services.
+     *
+     * Null when no template exists, which is the normal case until operations
+     * create the row; the widget then keeps its built-in wording. Cached, so
+     * this costs nothing per handshake.
+     */
+    welcome: await cachedWelcome(deps),
   });
 
   /*

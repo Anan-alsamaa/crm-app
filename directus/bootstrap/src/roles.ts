@@ -148,6 +148,34 @@ const ASSIGNED_OR_UNASSIGNED = {
 };
 
 /**
+ * THE SAME THREE WAYS, PLUS: anybody may read a CLOSED chat.
+ *
+ * Asked for by operations (2026-10-04): *"Once any chat is closed, the chat
+ * should be visible to all agents. Right now we have an assignment mechanism.
+ * Once a chat is closed, it should become open to all agents."*
+ *
+ * This is narrower than the widening the owner REFUSED on 2026-09-14, and the
+ * difference is the whole justification. That refusal was about a chat
+ * *assigned to one agent* being visible to the others while it is being
+ * worked — a live thread somebody owns. A solved chat is finished work: nobody
+ * is working it, there is no ownership left to respect, and the 2026-08-16
+ * complaint that caused the earlier widening (a returning customer made to
+ * repeat a story the company already had) is precisely about closed history.
+ *
+ * So: the live scope is untouched, and `solved` is added beside it. An agent
+ * still cannot see a colleague's OPEN chat.
+ *
+ * `normaliseConversationStatus` collapses the vocabulary to `open | solved`,
+ * but the column has historically also held `resolved` and `closed`, so all
+ * three are named — matching `RESUMABLE_STATUSES` in the gateway. A filter that
+ * matched only `solved` would leave older rows invisible, which is the silent
+ * empty-result shape this codebase keeps producing.
+ */
+const ASSIGNED_UNASSIGNED_OR_SOLVED = {
+  _or: [...ASSIGNED_OR_UNASSIGNED._or, { status: { _in: ['solved', 'resolved', 'closed'] } }],
+};
+
+/**
  * The same ownership test, reached THROUGH the parent conversation.
  *
  * `messages` carries no `assigned_agent` of its own — only a `conversation`
@@ -161,7 +189,10 @@ const ASSIGNED_OR_UNASSIGNED = {
  * A message you may not read is also one you may not mark read or reply to,
  * which the update/create grants already gate separately.
  */
-const CONVERSATION_ASSIGNED_OR_UNASSIGNED = { conversation: ASSIGNED_OR_UNASSIGNED };
+/* Closed ones included, matching the conversation read above: a history you can
+   list but whose messages you cannot open is not history — the 2026-08-16
+   complaint all over again. */
+const CONVERSATION_ASSIGNED_OR_UNASSIGNED = { conversation: ASSIGNED_UNASSIGNED_OR_SOLVED };
 
 /**
  * The same scoping, reached through a message's parent conversation.
@@ -394,8 +425,21 @@ export const roles: RoleSpec[] = [
        * WeCare Admin can always see the whole picture. If the history gap bites
        * again, the fix is a read-only history surface scoped to the CONTACT,
        * not re-opening every chat to everybody.
+       *
+       *   2026-10-04  CLOSED chats opened to every agent (ops). Narrower than
+       *               the 08-16 widening and compatible with the 09-14
+       *               refusal: that refusal protected a LIVE thread somebody
+       *               owns, and a solved chat is finished work with no owner
+       *               left to respect. It is also the 08-16 complaint's actual
+       *               subject — the history a returning customer should not
+       *               have to repeat. An OPEN chat assigned to a colleague
+       *               remains invisible.
        */
-      { collection: 'conversations', action: 'read', permissions: ASSIGNED_OR_UNASSIGNED },
+      {
+        collection: 'conversations',
+        action: 'read',
+        permissions: ASSIGNED_UNASSIGNED_OR_SOLVED,
+      },
       { collection: 'conversations', action: 'create' },
       /*
        * UPDATE IS UNSCOPED FROM 2026-09-30 (owner), while the READ above stays
@@ -411,8 +455,27 @@ export const roles: RoleSpec[] = [
        * they could already open". Widening ASSIGNED_OR_UNASSIGNED itself would
        * hand them every colleague's history, which is the change the 09-14 note
        * explicitly refused.
+       *
+       * SCOPED AGAIN 2026-10-04, and this is a correction rather than a new
+       * policy. The reasoning above — "in practice this means any chat they
+       * could already open" — depended entirely on READ being narrow. Opening
+       * CLOSED chats to every agent breaks that premise: left unscoped, the
+       * same change would have silently handed every agent write access to
+       * every closed conversation in the system, including reassigning and
+       * re-opening them.
+       *
+       * So update keeps the ORIGINAL live scope. The effect is exactly what
+       * was asked for and nothing more: a closed chat is readable by all,
+       * writable by the people it was already writable by. An agent who needs
+       * to work a closed chat reopens it the way a customer does — by the
+       * thread receiving a new message, which runs the assignment mechanism
+       * again.
        */
-      { collection: 'conversations', action: 'update' },
+      {
+        collection: 'conversations',
+        action: 'update',
+        permissions: ASSIGNED_OR_UNASSIGNED,
+      },
       { collection: 'messages', action: 'create' },
       /* Messages follow their conversation — in BOTH directions.
        *

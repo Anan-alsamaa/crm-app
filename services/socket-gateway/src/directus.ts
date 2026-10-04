@@ -97,6 +97,67 @@ export class GatewayDirectus {
   }
 
   /**
+   * THE WELCOME MESSAGE, FROM THE EDITABLE LIBRARY.
+   *
+   * Asked for by operations (2026-10-04): the automatic message a customer sees
+   * should come from **رسالة ترحيب** — a named template they maintain — rather
+   * than from strings compiled into the widget.
+   *
+   * It lives in `quick_replies`, which operations already edit in the admin
+   * portal (Lists → Quick replies) and which already carries exactly the two
+   * things this needs: a `lang` so Arabic and English are separate rows, and an
+   * `active` flag so a greeting can be withdrawn without deleting the wording.
+   * A new collection for one string would be a second place to look.
+   *
+   * MATCHED ON THE LABEL, in both languages, because the row is named by the
+   * people who own it: `رسالة ترحيب` is what they call it, and "Welcome
+   * message" is what an English-speaking admin would type. Case-insensitive and
+   * trimmed — a label is typed by hand.
+   *
+   * RETURNS NULL RATHER THAN THROWING, and null is a normal answer: if nobody
+   * has created the row the widget keeps its built-in wording. A greeting is
+   * not worth failing a handshake over, and a chat that will not open because a
+   * template is missing is far worse than a generic hello.
+   */
+  async welcomeTemplates(): Promise<{ ar: string | null; en: string | null }> {
+    const empty = { ar: null, en: null };
+    try {
+      const rows = (await this.client.request(
+        readItems('quick_replies', {
+          filter: {
+            active: { _eq: true },
+            /* The two names the row is known by. `_in` on a trimmed label would
+               miss "رسالة ترحيب " with a trailing space, so this is a contains
+               match on each — narrow enough that nothing else in a reply
+               library collides with it. */
+            _or: [
+              { label: { _icontains: 'رسالة ترحيب' } },
+              { label: { _icontains: 'welcome message' } },
+            ],
+          },
+          fields: ['label', 'text', 'lang'],
+          sort: ['sort'],
+          limit: 10,
+        }),
+      )) as Array<{ label: string | null; text: string | null; lang: string | null }>;
+      const pick = (lang: 'ar' | 'en') =>
+        rows.find((r) => (r.lang ?? '').toLowerCase() === lang)?.text?.trim() || null;
+      /*
+       * A SINGLE ROW WITH NO LANGUAGE still works, and answers both: an
+       * operator who creates one greeting has made a deliberate choice, and
+       * refusing it because the `lang` column is blank would read as the
+       * feature being broken.
+       */
+      const any = rows.find((r) => !!r.text?.trim())?.text?.trim() || null;
+      return { ar: pick('ar') ?? any, en: pick('en') ?? any };
+    } catch {
+      /* No collection, no permission, no row — all the same answer: use the
+         built-in wording. Never block the handshake. */
+      return empty;
+    }
+  }
+
+  /**
    * Upsert a contact, deduped per vendor by phone then email (SC-007). Returns
    * the id plus `isNew` (was created now vs. resumed) and the contact's stored
    * name/phone — the gateway feeds these into the widget's `ready` event so a

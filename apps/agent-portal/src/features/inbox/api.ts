@@ -112,7 +112,10 @@ export interface InboxFilters {
   currentTeamId?: string | null;
 }
 
-function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
+/* EXPORTED so the visibility rule is testable. Who can see which chat is not a
+   detail to assert by mounting a page — and the closed-chat clause added on
+   2026-10-04 is the kind of rule that must not drift silently. */
+export function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
   const and: Array<Record<string, unknown>> = [];
   /**
    * Archived chats are out of the inbox, including under "all conversations" —
@@ -144,6 +147,26 @@ function buildFilter(f: InboxFilters): Record<string, unknown> | undefined {
       { assigned_agent: { _null: true } },
     ];
     if (f.currentTeamId) or.push({ assigned_team: { _eq: f.currentTeamId } });
+    /*
+     * AND EVERY CLOSED CHAT (ops, 2026-10-04): *"Once any chat is closed, the
+     * chat should be visible to all agents."*
+     *
+     * A solved chat is finished work — nobody is working it, so there is no
+     * ownership left to respect, and it is exactly the history a returning
+     * customer should not have to repeat. A colleague's OPEN chat stays
+     * invisible, which is the distinction the owner drew on 2026-09-14.
+     *
+     * All three legacy spellings, matching the Directus filter and the
+     * gateway's `RESUMABLE_STATUSES`: the column has held `resolved` and
+     * `closed` as well as `solved`, and naming only one would leave older rows
+     * invisible for no visible reason.
+     *
+     * THE CLIENT FILTER ALONE IS COSMETIC — the row-level permission in
+     * `directus/bootstrap/src/roles.ts` is the real boundary, and without the
+     * matching change there the API simply returns fewer rows than this asks
+     * for.
+     */
+    or.push({ status: { _in: ['solved', 'resolved', 'closed'] } });
     and.push({ _or: or });
   }
   if (f.search?.trim()) {
