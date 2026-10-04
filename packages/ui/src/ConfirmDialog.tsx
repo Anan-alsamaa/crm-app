@@ -36,6 +36,18 @@ export interface ConfirmDialogProps {
   destructive?: boolean;
   /** Disable the confirm button + show a spinner while the action runs. */
   loading?: boolean;
+  /**
+   * Disable the confirm button because the form is INCOMPLETE — distinct from
+   * `loading`, which means "busy".
+   *
+   * Without this a dialog with a required field has nowhere to express it, and
+   * the only options were to let the press commit a bad record or to silently
+   * swallow it — which reads as a dead button, the single most-reported shape
+   * in this codebase. Pair it with `confirmHint` so the button says WHY.
+   */
+  confirmDisabled?: boolean;
+  /** Shown beside the buttons when `confirmDisabled` — what is still missing. */
+  confirmHint?: string;
   /** Invoked when the user confirms. */
   onConfirm: () => void;
   /** Invoked when the user cancels (button, Esc, or backdrop click). */
@@ -54,6 +66,8 @@ export function ConfirmDialog({
   cancelLabel = 'Cancel',
   destructive = false,
   loading = false,
+  confirmDisabled = false,
+  confirmHint,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps): JSX.Element | null {
@@ -136,7 +150,13 @@ export function ConfirmDialog({
             </p>
           )}
         </div>
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex items-center justify-end gap-2 pt-2">
+          {/* WHY the button is dead, where the eye already is. A disabled
+              control cannot explain itself, and "nothing happens" is how every
+              one of these has been reported. */}
+          {confirmDisabled && confirmHint && (
+            <p className="me-auto text-2xs leading-snug text-muted-foreground">{confirmHint}</p>
+          )}
           <Button type="button" variant="ghost" size="md" onClick={onCancel} disabled={loading}>
             {cancelLabel}
           </Button>
@@ -146,6 +166,7 @@ export function ConfirmDialog({
             size="md"
             variant={destructive ? 'destructive' : 'default'}
             loading={loading}
+            disabled={confirmDisabled}
             onClick={onConfirm}
           >
             {confirmLabel}

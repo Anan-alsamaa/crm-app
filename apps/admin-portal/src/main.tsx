@@ -7,7 +7,9 @@ import './i18n/index.js';
 import './index.css';
 import { App } from './App.js';
 import { EnvironmentBanner } from '@yiji/ui';
+import { OrderCommerceProvider } from '@yiji/order-views';
 import { runtimeConfig } from '@yiji/shared-config';
+import { commerce } from './lib/commerce-client.js';
 
 /**
  * The admin portal keeps itself current without a reload.
@@ -51,8 +53,23 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <EnvironmentBanner environment={runtimeConfig().ENVIRONMENT} />
-      <App />
+      {/*
+        THIS PORTAL'S COMMERCE CLIENT, handed to the shared order views.
+
+        The late-orders report renders `LateOrderDetail` from
+        `@yiji/order-views` — the same component the agent portal's queue uses,
+        so the Cart and Tracking are the same thing rather than two lookalikes
+        that drift (ops, 2026-10-04). The package imports no portal module: this
+        app's client carries this app's Directus session, and the component is
+        given one rather than choosing one.
+
+        Mounted at the root, INSIDE `QueryClientProvider`, because the views are
+        react-query callers.
+      */}
+      <OrderCommerceProvider client={commerce}>
+        <EnvironmentBanner environment={runtimeConfig().ENVIRONMENT} />
+        <App />
+      </OrderCommerceProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 );

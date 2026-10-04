@@ -38,6 +38,26 @@ const APPS = ['agent-portal', 'admin-portal'];
 const COMMON_AR = 'packages/i18n/src/locales/ar/common.json';
 
 /**
+ * SHARED REACT PACKAGES, checked against EVERY app that mounts them.
+ *
+ * `@yiji/order-views` holds the order card both portals render (ops,
+ * 2026-10-04). Its strings live in neither app's `src`, so this guard — which
+ * walked `apps/<app>/src` and nothing else — went from checking them to
+ * checking nothing the moment the component moved out of the agent portal. A
+ * guard that silently stops looking is worse than no guard: it reports the app
+ * clean and an Arabic reader sees English controls, which is the exact failure
+ * the file's own header describes.
+ *
+ * Every app is checked against the SAME package sources, because a shared
+ * component renders in both: a key present in the agent portal's `ar.json` and
+ * absent from the admin portal's is still English for half the users. The keys
+ * are app-level rather than `ns: 'common'` — they are product vocabulary for
+ * orders, not the shared status words — so each app's file carries its own copy
+ * and this is what keeps the two copies honest.
+ */
+const SHARED_PACKAGE_SRC = ['packages/order-views/src'];
+
+/**
  * `t('key', { ...options })` — the options object is matched loosely enough to
  * survive nested `{{interpolation}}`, which a naive brace match trips over.
  */
@@ -69,7 +89,7 @@ for (const app of APPS) {
   const common = JSON.parse(readFileSync(COMMON_AR, 'utf8'));
   const missing = new Map();
 
-  for (const file of tsxFiles(join(root, 'src'))) {
+  for (const file of [...tsxFiles(join(root, 'src')), ...SHARED_PACKAGE_SRC.flatMap(tsxFiles)]) {
     const src = readFileSync(file, 'utf8');
     for (const m of src.matchAll(CALL)) {
       const [, , key, options = ''] = m;

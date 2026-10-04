@@ -25,7 +25,8 @@
     "send": "إرسال",
     "toggleLanguage": "تبديل اللغة",
     "previous": "السابق",
-    "next": "التالي"
+    "next": "التالي",
+    "dismiss": "إخفاء"
   },
   "auth": {
     "signIn": "تسجيل الدخول",

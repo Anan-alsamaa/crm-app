@@ -27,6 +27,7 @@ import {
 import {
   SOCKET_EVENTS,
   normaliseConversationStatus,
+  displayContactName,
   type ConversationStatus,
   type Priority,
 } from '@yiji/shared-types';
@@ -759,8 +760,12 @@ export function Inbox() {
                   {conversations.data.map((c) => {
                     const active = selected === c.id;
                     const unread = c.unread_count_agent > 0;
+                    /* THROUGH `displayContactName`: a stored name that is
+                       really a phone or a machine address (`…@yiji.com`) shows
+                       as the MOBILE, which is what an agent scans this list
+                       for (ops, 2026-10-04). */
                     const displayName =
-                      c.contact?.name ||
+                      displayContactName(c.contact?.name, c.contact?.phone) ||
                       c.contact?.phone ||
                       c.contact?.email ||
                       t('inbox.unknownContact');

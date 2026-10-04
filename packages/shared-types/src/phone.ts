@@ -234,15 +234,38 @@ export function isDialablePhone(raw: string | null | undefined): boolean {
  * is what keeps "Ahmed" out of this — and so is a foreign number, which must
  * not be made to look Saudi.
  *
+ * AND A MACHINE EMAIL IS NOT A NAME EITHER (ops, 2026-10-04: *"still shows
+ * email in agent portal"*).
+ *
+ * Yiji registers app customers against a synthesised address, so its order
+ * records carry names like `176732564464481@AFCO.com` and
+ * `9665410950517557@yiji.com` — measured on the live late-orders queue, where
+ * most rows look like that. Those reached the screen untouched, because
+ * `isDialablePhone` rejects anything with an `@` and the name was returned as
+ * given. An agent then sees a machine address where they need the customer's
+ * mobile — the number they dial, WhatsApp and paste into Yiji.
+ *
+ * So an email-shaped name falls back to the PHONE, exactly as a blank name
+ * does. Only when there is no phone is the address shown, because something is
+ * better than an empty cell and it is at least an identifier.
+ *
+ * A REAL name containing an `@` is not a thing; requiring a dot-suffix after
+ * the `@` keeps the test narrow, so a nickname like "a@b" is left alone.
+ *
  * DISPLAY ONLY. It changes nothing in the database; it makes every surface
  * agree about what is already there.
  */
+const MACHINE_EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 export function displayContactName(
   name: string | null | undefined,
   fallbackPhone?: string | null,
 ): string {
   const raw = (name ?? '').trim();
   if (!raw) return normalizePhone(fallbackPhone) || '';
+  /* An address is not a name. The phone is what the agent needs; the address
+     only stands in when there is no phone at all. */
+  if (MACHINE_EMAIL.test(raw)) return normalizePhone(fallbackPhone) || raw;
   if (!isDialablePhone(raw)) return raw;
   /* Only a SAUDI number is rewritten. `normalizePhone` returns a foreign
      number unchanged, so comparing against it keeps "+447…" as it was. */

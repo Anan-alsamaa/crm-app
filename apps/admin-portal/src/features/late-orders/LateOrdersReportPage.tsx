@@ -35,7 +35,19 @@ import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
 import { businessDayWindow, useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
-import { OrderSnapshotPanel } from './OrderSnapshotPanel.js';
+/*
+ * THE SAME CART AND TRACKING THE AGENT PORTAL SHOWS (ops, 2026-10-04).
+ *
+ * Asked for as *"a resonance and mirror image and exactly of the cart and
+ * tracking in the late orders page in the agent portal. the data displayed, the
+ * style everything"*. This page used to render `OrderSnapshotPanel` — its own
+ * thinner panel over the frozen `order_snapshot` — and no amount of matching it
+ * by hand would have kept the two identical past the next change to either.
+ * `LateOrderDetail` is now one component in `@yiji/order-views` that both
+ * portals render; this app's commerce client reaches it through the
+ * `OrderCommerceProvider` mounted in `main.tsx`.
+ */
+import { LateOrderDetail } from '@yiji/order-views';
 import {
   agentLateStats,
   agentName,
@@ -44,9 +56,7 @@ import {
   useLateOrderEventTimes,
   useLateOrderQueue,
   useLateOrderThreshold,
-  useLiveOrder,
   useLateOrderCoupons,
-  type LateOrderSnapshot,
   type LateOrderRegisterRow,
 } from './api.js';
 import { useVendors } from '../vendors/api.js';
@@ -502,57 +512,32 @@ export function LateOrdersReportPage() {
   );
 
   /*
-   * A PENDING ROW HAS NO SNAPSHOT, SO THE ORDER IS FETCHED LIVE.
+   * THE VENDOR, because every order lookup is scoped to one.
    *
-   * Nothing is captured until somebody decides on an order, so the dialog could
-   * only say "nothing was recorded" for every pending row — which is most of
-   * them (owner, 2026-10-03: the Order button should work for all records).
+   * `LateOrderDetail` fetches the order, its cart and its timeline itself — the
+   * same three calls, on the same query keys, that the agent portal's queue
+   * makes — so this page no longer shapes anything for it. It used to hold a
+   * `useLiveOrder` hook and a `liveSnapshot` memo that rebuilt a `YijiOrder`
+   * into the old panel's narrower snapshot shape; both are gone with the panel
+   * they fed.
    *
-   * A DECIDED row keeps its snapshot, deliberately. That is the order as it
-   * stood when the agent judged it, and Yiji keeps mutating an order
-   * afterwards — one gained a `force_closed` five hours after its `closed`.
-   * Asking them again months later answers a different question.
-   *
-   * One order, only while its dialog is open. The hook is disabled otherwise,
-   * so a page of rows costs nothing.
+   * ALL THREE ROW KINDS STILL ANSWER, which was the point of the live fetch
+   * (owner, 2026-10-03: the Order button should work for all records):
+   *   - a PENDING row has no stored snapshot at all, and never did — nothing is
+   *     captured until somebody decides — so it is answered entirely by the
+   *     live fetch, exactly as the agent portal answers the same order;
+   *   - a DECIDED row is fetched live too, deliberately. The frozen
+   *     `order_snapshot` is still written and still read by the register's own
+   *     columns; what the dialog now shows is the whole order — cart lines with
+   *     their modifiers, the status timeline, the courier's tracking link —
+   *     none of which the snapshot ever held. "Exactly the agent portal's"
+   *     means exactly its data too, and the agent portal reads Yiji;
+   *   - with NO VENDOR configured there is no order endpoint to call, and the
+   *     component falls back to its cart-and-timeline pair, which is keyed by
+   *     order id alone and needs no vendor.
    */
   const vendors = useVendors();
   const yijiVendorId = vendors.data?.[0]?.yiji_vendor_id;
-  const needsLiveOrder = !!openRow && !openRow.order_snapshot;
-  const liveOrder = useLiveOrder(
-    needsLiveOrder ? yijiVendorId : undefined,
-    needsLiveOrder ? openRow?.order_id : null,
-  );
-
-  /* The live order in the shape the panel already renders. Built here rather
-     than reaching into the agent portal for its shaper, which would drag that
-     app's commerce client across a portal boundary. */
-  const liveSnapshot: LateOrderSnapshot | null = useMemo(() => {
-    const o = liveOrder.data;
-    if (!o) return null;
-    return {
-      orderId: o.orderId,
-      status: o.status,
-      total: o.total,
-      currency: o.currency,
-      placedAt: o.placedAt,
-      items: (o.items ?? []).map((it) => ({
-        ...(it.sku ? { sku: it.sku } : {}),
-        name: it.name,
-        qty: it.qty,
-        price: it.price,
-        ...(it.category ? { category: it.category } : {}),
-      })),
-      ...(o.brandName ? { brandName: o.brandName } : {}),
-      ...(o.restaurantName ? { restaurantName: o.restaurantName } : {}),
-      ...(o.restaurantId ? { restaurantId: o.restaurantId } : {}),
-      ...(o.deliveryType ? { deliveryType: o.deliveryType } : {}),
-      ...(o.deliveryAddress ? { deliveryAddress: o.deliveryAddress } : {}),
-      ...(o.paymentStatus ? { paymentStatus: o.paymentStatus } : {}),
-      ...(o.paymentMode ? { paymentMode: o.paymentMode } : {}),
-      ...(o.customerPhone ? { customerPhone: o.customerPhone } : {}),
-    };
-  }, [liveOrder.data]);
 
   const exportByAgent = () => {
     const header = [
@@ -1674,21 +1659,34 @@ export function LateOrdersReportPage() {
           defaultValue: 'Order {{order}}',
         })}
       >
+        {/*
+          THE AGENT PORTAL'S OWN PANEL, rendered here (ops, 2026-10-04).
+
+          Padded by this page rather than by the component: the shared
+          `LateOrderDetail` sits inside an expanded table row in the agent
+          portal, which supplies its own gutter, so giving it padding of its own
+          would double it there. The old `OrderSnapshotPanel` carried `px-5
+          py-4` internally; that spacing moves out here, where it belongs to the
+          dialog.
+
+          `LateOrderDetail` owns its loading and failure states — a skeleton
+          while the order is in flight, and the cart-and-timeline fallback when
+          the order cannot be read — so the dialog no longer needs a loading
+          line of its own. A row with NO order id at all cannot be looked up by
+          anything, and says so rather than mounting a lookup for an empty
+          string.
+        */}
         {openRow &&
-          (needsLiveOrder && liveOrder.isLoading ? (
-            /* Fetching it from Yiji. Said out loud, because a silent pause on a
-               dialog that used to answer instantly reads as the same dead
-               button this fix exists to remove. */
+          (openRow.order_id?.trim() ? (
+            <div className="px-5 py-4">
+              <LateOrderDetail orderId={openRow.order_id.trim()} vendorId={yijiVendorId ?? null} />
+            </div>
+          ) : (
             <p className="px-5 py-4 text-xs text-muted-foreground">
-              {t('lateOrdersReport.snapshot.loading', {
-                defaultValue: 'Fetching the order from Yiji…',
+              {t('lateOrdersReport.snapshot.noOrderId', {
+                defaultValue: 'This record carries no order number, so the order cannot be read.',
               })}
             </p>
-          ) : (
-            /* The captured snapshot for a decided row; the live order for a
-               pending one. `OrderSnapshotPanel` already says so honestly when
-               both are absent. */
-            <OrderSnapshotPanel snapshot={openRow.order_snapshot ?? liveSnapshot} />
           ))}
       </Modal>
     </div>

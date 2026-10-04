@@ -25,7 +25,8 @@
     "send": "Send",
     "toggleLanguage": "Toggle language",
     "previous": "Previous",
-    "next": "Next"
+    "next": "Next",
+    "dismiss": "Dismiss"
   },
   "auth": {
     "signIn": "Sign in",

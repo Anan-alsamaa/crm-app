@@ -32,7 +32,10 @@
       "positive": "إيجابي",
       "neutral": "محايد",
       "negative": "سلبي"
-    }
+    },
+    "suggestionTitle": "اقتراح الذكاء الاصطناعي",
+    "useSuggestion": "استخدم هذا",
+    "regenerate": "حاول مرة أخرى"
   },
   "helpAssistant": {
     "launch": "أورا",
@@ -1106,6 +1109,8 @@
       "handled": "تمت المعالجة"
     },
     "rowsPerPage": "عدد الصفوف في الصفحة",
-    "showingRange": "عرض {{from}}-{{to}} من {{total}}"
+    "showingRange": "عرض {{from}}-{{to}} من {{total}}",
+    "reasonRequired": "التفسير مطلوب.",
+    "actionRequired": "اذكر ما قمت به حيال ذلك."
   }
 }

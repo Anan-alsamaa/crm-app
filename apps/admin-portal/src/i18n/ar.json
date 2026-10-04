@@ -261,7 +261,64 @@
       "carhop": "الاستلام من السيارة",
       "in_restaurant": "داخل المطعم"
     },
-    "each": "للواحدة"
+    "each": "للوحدة",
+    "newComplaint": "تذكرة جديدة على الطلب",
+    "restaurant": "المطعم",
+    "restaurantId": "معرّف المطعم",
+    "deliveryType": "نوع التوصيل",
+    "subtotal": "إجمالي الأصناف",
+    "total": "الإجمالي",
+    "noItems": "لا توجد أصناف في هذا الطلب.",
+    "deliverTo": "التوصيل إلى",
+    "orderStatus": "حالة الطلب",
+    "paymentStatus": "حالة الدفع",
+    "paymentType": "طريقة الدفع",
+    "customerPhone": "هاتف العميل",
+    "orderStatuses": {
+      "initial": "مبدئي",
+      "pending_payment": "بانتظار الدفع",
+      "received": "تم الاستلام",
+      "finding_driver": "البحث عن سائق",
+      "driver_accepted": "قبِل السائق الطلب",
+      "in_kitchen": "قيد التحضير",
+      "manual": "يدوي",
+      "ready_to_pickup": "جاهز للاستلام",
+      "in_delivery": "قيد التوصيل",
+      "delivered": "تم التوصيل",
+      "closed": "مغلق",
+      "canceled": "ملغى",
+      "force_cancel": "إلغاء إجباري",
+      "force_closed": "إغلاق إجباري",
+      "not_valid": "غير صالح",
+      "paid": "مدفوع",
+      "pos_accepted": "مقبول من نقطة البيع",
+      "pending_pos_accepted": "بانتظار قبول نقطة البيع",
+      "arrived": "وصل",
+      "unknown": "غير معروف"
+    },
+    "paymentStatuses": {
+      "not_paid": "غير مدفوع",
+      "paid": "مدفوع"
+    },
+    "paymentModes": {
+      "cash": "نقدًا",
+      "credit_card": "بطاقة ائتمانية",
+      "apple_pay": "Apple Pay",
+      "pay_later": "الدفع لاحقًا",
+      "mada": "mada",
+      "visa": "Visa",
+      "master": "Mastercard"
+    },
+    "cart": "السلة",
+    "tracking": "التتبع",
+    "notReported": "غير مُبلّغ عنه",
+    "timeUnknown": "الوقت غير مسجّل",
+    "totalPoints": "إجمالي مبلغ النقاط",
+    "totalCoupons": "إجمالي مبلغ الكوبونات",
+    "totalDiscount": "إجمالي الخصم",
+    "trackingDerived": "مبني من سجل الطلب — المنصة لا تُبلغ عن الخطوات الوسيطة بعد.",
+    "trackingUnavailable": "تتبع الطلب غير متاح.",
+    "orderViews": "عروض الطلب"
   },
   "compensationAll": {
     "title": "التعويضات",
@@ -1685,7 +1742,8 @@
       "deliveryType": "التوصيل",
       "branch": "العلامة / الفرع",
       "capturedAt": "سُجِّل في {{when}}",
-      "title": "الطلب {{order}}"
+      "title": "الطلب {{order}}",
+      "noOrderId": "لا يحمل هذا السجل رقم طلب، لذا لا يمكن قراءة الطلب."
     }
   },
   "lateOrders": {
@@ -1697,6 +1755,18 @@
       "pending": "قيد الانتظار",
       "commented": "تم التعليق",
       "handled": "تمت المعالجة"
-    }
+    },
+    "cart": {
+      "food": "الطعام",
+      "delivery": "التوصيل",
+      "discount": "الخصم",
+      "total": "الإجمالي",
+      "coupon": "القسيمة",
+      "noLines": "لا توجد أصناف مسجّلة.",
+      "trackingLink": "فتح تتبّع شركة التوصيل"
+    },
+    "cartHeading": "السلة",
+    "trackingHeading": "التتبّع",
+    "cartUnavailable": "تعذّر عرض السلة."
   }
 }

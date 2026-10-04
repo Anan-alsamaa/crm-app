@@ -22,7 +22,7 @@ import { resolve } from 'node:path';
  * the wrong record.
  */
 
-import { decisionOutcome } from '../src/features/late-orders/LateOrdersPage.js';
+import { canCommit, decisionOutcome } from '../src/features/late-orders/LateOrdersPage.js';
 
 /** The confirm button's label, from the same condition the dialog uses. */
 const confirmLabel = (draft: { action: 'commented' | 'compensated' }): string =>
@@ -128,5 +128,62 @@ describe('reading a long reason', () => {
   /* THE REGRESSION: the bare `title` tooltip these replace. */
   it('no longer relies on a title attribute alone', () => {
     expect(SRC).not.toMatch(/title=\{decisionOf\(row\.orderId\)\?\.reason \?\? undefined\}/);
+  });
+});
+
+/**
+ * WHAT MUST BE FILLED IN BEFORE A DECISION CAN BE SAVED.
+ *
+ * The REASON has always been required. The ACTION became required for a COUPON
+ * on 2026-10-04 (ops: *"for assign a coupon, the reason and action both are
+ * mandatory. currently action is optional"*) — that is the case where something
+ * was actually done, and a compensation whose action nobody wrote is a row the
+ * register cannot explain: "why did this customer get money?" answered by a
+ * blank cell.
+ *
+ * A plain comment still needs only the reason, which is the owner's earlier
+ * call and still right (2026-09-28: *"no need action. just reason is
+ * enough"*): writing the comment IS the act.
+ *
+ * The refusal is now VISIBLE — the confirm button is disabled and a hint names
+ * the missing field. It used to be a silently swallowed press, which is
+ * indistinguishable from a dead button and is the single most-reported shape in
+ * this app.
+ */
+describe('whether a decision can be saved', () => {
+  const C = { action: 'commented' as const };
+  const P = { action: 'compensated' as const };
+
+  it('always needs a reason', () => {
+    expect(canCommit(C, null, '', '')).toBe(false);
+    expect(canCommit(C, null, '   ', '')).toBe(false);
+    expect(canCommit(P, null, '', 'called the branch')).toBe(false);
+  });
+
+  /* A FRESH COMMENT: the reason alone. */
+  it('saves a fresh comment on the reason alone', () => {
+    expect(canCommit(C, null, 'driver was late', '')).toBe(true);
+  });
+
+  /* A COUPON: both, and this is the change. */
+  it('needs the action too when assigning a coupon', () => {
+    expect(canCommit(P, null, 'driver was late', '')).toBe(false);
+    expect(canCommit(P, null, 'driver was late', '   ')).toBe(false);
+    expect(canCommit(P, null, 'driver was late', 'gave a voucher')).toBe(true);
+  });
+
+  /*
+   * EDITING an existing decision needs both, because the action field is SHOWN
+   * then — a decision that already carries one must not be saveable with it
+   * emptied.
+   */
+  it('needs both when editing a decision that already exists', () => {
+    expect(canCommit(C, 'dec-1', 'corrected reason', '')).toBe(false);
+    expect(canCommit(C, 'dec-1', 'corrected reason', 'called the branch')).toBe(true);
+  });
+
+  /* Whitespace is not an answer, in either field. */
+  it('does not accept whitespace as an answer', () => {
+    expect(canCommit(P, null, '  ', '  ')).toBe(false);
   });
 });

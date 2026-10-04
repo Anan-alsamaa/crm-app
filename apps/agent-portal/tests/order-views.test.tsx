@@ -15,12 +15,24 @@ const client = vi.hoisted(() => ({
   getOrders: vi.fn(),
   getOrder: vi.fn(),
   getInboxOrders: vi.fn(),
+  /*
+   * The cart and the timeline the shared order card may reach for.
+   *
+   * These cases never open the Cart or Tracking segment, so neither is called —
+   * but a bare `undefined` on the client would crash the component rather than
+   * fail the assertion, which is how a mock turns a real regression into an
+   * unreadable stack. Resolving null is the same answer the real client gives
+   * when Yiji has no service credential configured.
+   */
+  getOrderCart: vi.fn().mockResolvedValue(null),
+  getOrderTimeline: vi.fn().mockResolvedValue(null),
 }));
 vi.mock('../src/lib/commerce-client.js', () => ({ commerce: client }));
 // The panel records the order it resolved back onto the conversation, which is
 // a Directus write. Not the subject of these cases — stub it so it succeeds.
 vi.mock('../src/lib/directus.js', () => ({ directus: { request: vi.fn().mockResolvedValue({}) } }));
 
+import { OrderCommerceProvider } from '@yiji/order-views';
 import { LatestOrder, CustomerOrders } from '../src/features/commerce/OrderViews.js';
 import {
   addOrder,
@@ -30,9 +42,23 @@ import {
   removeOrder,
 } from '../src/features/commerce/pinned-order.js';
 
+/*
+ * The provider `main.tsx` mounts, stood up around each case.
+ *
+ * The order CARD moved to `@yiji/order-views` (ops, 2026-10-04) so the admin
+ * portal renders the same one; it takes its commerce client from context rather
+ * than importing a portal's module, because each portal's client carries that
+ * app's own Directus session. So the module mock above is no longer enough on
+ * its own — the mocked client has to be HANDED to the card, exactly as the real
+ * app hands it the real one.
+ */
 function renderView(node: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}>{node}</QueryClientProvider>);
+  return render(
+    <QueryClientProvider client={qc}>
+      <OrderCommerceProvider client={client}>{node}</OrderCommerceProvider>
+    </QueryClientProvider>,
+  );
 }
 
 /** A list summary (no items — mirrors the Yiji list endpoint). */

@@ -7,7 +7,9 @@ import './i18n/index.js';
 import './index.css';
 import { App } from './App.js';
 import { EnvironmentBanner } from '@yiji/ui';
+import { OrderCommerceProvider } from '@yiji/order-views';
 import { runtimeConfig } from '@yiji/shared-config';
+import { commerce } from './lib/commerce-client.js';
 
 /*
  * THE AGENT PORTAL POLLS, like the admin portal already does.
@@ -38,8 +40,23 @@ const queryClient = new QueryClient({
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
-      <EnvironmentBanner environment={runtimeConfig().ENVIRONMENT} />
-      <App />
+      {/*
+        THIS PORTAL'S COMMERCE CLIENT, handed to the shared order views.
+
+        `@yiji/order-views` renders the order card both portals show and
+        deliberately imports no portal module: each app's client authenticates
+        through that app's own Directus session and reads that app's own `VITE_`
+        config, so the component is given one rather than choosing one (ops,
+        2026-10-04).
+
+        Mounted at the root, INSIDE `QueryClientProvider`: the views are
+        react-query callers, and an order card can appear on the inbox sidebar,
+        a contact panel or the late-orders queue — three unrelated trees.
+      */}
+      <OrderCommerceProvider client={commerce}>
+        <EnvironmentBanner environment={runtimeConfig().ENVIRONMENT} />
+        <App />
+      </OrderCommerceProvider>
     </QueryClientProvider>
   </React.StrictMode>,
 );

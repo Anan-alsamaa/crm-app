@@ -52,31 +52,53 @@ export function LongText({ value, empty = '-', className }: LongTextProps): JSX.
         tabIndex={0}
         title={text}
         className={cn(
-          'block truncate outline-none',
-          'focus-visible:rounded focus-visible:ring-2 focus-visible:ring-ring/50',
+          'block truncate rounded outline-none',
+          /* A HINT THAT THERE IS MORE, rather than a hard edge. The underline
+             appears on hover, so a column of these reads as text until you
+             reach for one — a permanent affordance on every cell would make a
+             report look like a wall of links. */
+          'decoration-border decoration-dotted underline-offset-[3px]',
+          'transition-colors duration-fast group-hover/longtext:underline',
+          'focus-visible:ring-2 focus-visible:ring-ring/50',
           className,
         )}
       >
         {text}
       </span>
       {/*
-       * THE PANEL. `pointer-events-none` so it can never swallow a click meant
-       * for the row beneath it, and `z-20` so it sits over the following rows
-       * rather than being clipped by them.
+       * THE PANEL.
        *
-       * Opens DOWNWARD from the cell and is width-bounded rather than
-       * width-matched: a long reason in an 18rem column needs more room than
-       * the column has, which is the entire point.
+       * Redesigned 2026-10-04 — the first cut was "boxy" (owner): a hard
+       * border, square-ish corners and a flat popover fill, which read as a
+       * dialog bolted onto a table cell rather than the value expanding.
+       *
+       * What changed, and why each one: the border is gone in favour of the
+       * app's own elevation ramp (`shadow-float` + a hairline ring), which is
+       * how every other floating surface here separates itself; the radius
+       * steps up to `rounded-xl` to match `Card`; it fades and lifts in rather
+       * than appearing, so the eye follows it from the cell it came from; and
+       * the first line is given room to breathe instead of being packed to the
+       * edges.
+       *
+       * `pointer-events-none` so it can never swallow a click meant for the row
+       * beneath it, and `z-20` so it sits over the following rows rather than
+       * being clipped by them.
        */}
       <span
         role="tooltip"
         aria-hidden
         className={cn(
-          'pointer-events-none absolute start-0 top-full z-20 mt-1 hidden w-max max-w-sm',
-          'whitespace-pre-wrap break-words rounded-lg border border-border bg-popover p-2',
-          'text-start text-2xs font-normal normal-case leading-relaxed text-foreground',
-          'shadow-float ring-1 ring-foreground/[0.04]',
-          'group-hover/longtext:block group-focus-within/longtext:block',
+          'pointer-events-none absolute start-0 top-full z-20 mt-1.5 w-max max-w-sm',
+          'whitespace-pre-wrap break-words rounded-xl bg-popover px-3.5 py-2.5',
+          'text-start text-xs font-normal normal-case leading-relaxed text-foreground',
+          'shadow-float ring-1 ring-border/60',
+          /* Invisible by default and ANIMATED in, rather than `hidden`: a
+             display swap cannot transition, which is half of why it felt
+             abrupt. */
+          'invisible -translate-y-1 opacity-0',
+          'transition-[opacity,transform,visibility] duration-base ease-out',
+          'group-hover/longtext:visible group-hover/longtext:translate-y-0 group-hover/longtext:opacity-100',
+          'group-focus-within/longtext:visible group-focus-within/longtext:translate-y-0 group-focus-within/longtext:opacity-100',
         )}
       >
         {text}

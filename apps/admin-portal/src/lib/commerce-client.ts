@@ -4,6 +4,8 @@ import type {
   YijiPaymentStatus,
   YijiPurchaseActivity,
   YijiShipmentTracking,
+  YijiOrderCart,
+  YijiOrderTimeline,
 } from '@yiji/shared-types';
 import { auth } from './directus.js';
 import { resolveUrl } from '@yiji/shared-config';
@@ -86,6 +88,22 @@ export const commerce = {
     get<YijiPaymentStatus | null>('/commerce/payment', { vendorId, orderId }),
   getShipmentTracking: (vendorId: string, orderId: string) =>
     get<YijiShipmentTracking | null>('/commerce/shipment', { vendorId, orderId }),
+  /*
+   * THE CART AND THE TRACKING — the two the agent portal already reads.
+   *
+   * Added 2026-10-04 so the admin late-orders report can render the SAME
+   * "Cart & tracking" panel rather than a thinner lookalike (ops: *"should be
+   * a mirror image... the data displayed, the style, everything"*). The
+   * endpoints are identical and both are cached server-side; this client was
+   * simply missing the two calls, which is why the admin panel had to be
+   * written as a different, smaller thing.
+   *
+   * `getOrderCart` takes the ORDER alone — it is keyed by order id and needs no
+   * vendor, which is what lets it answer even when the order lookup cannot.
+   */
+  getOrderCart: (orderId: string) => get<YijiOrderCart | null>('/commerce/cart', { orderId }),
+  getOrderTimeline: (vendorId: string, orderId: string) =>
+    get<YijiOrderTimeline | null>('/commerce/tracking', { vendorId, orderId }),
 };
 
 export type CommerceClient = typeof commerce;

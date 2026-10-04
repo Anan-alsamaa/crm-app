@@ -17,7 +17,12 @@ import {
   toast,
   useIsDesktop,
 } from '@yiji/ui';
-import { SOCKET_EVENTS, isDialablePhone, type MessageNew } from '@yiji/shared-types';
+import {
+  SOCKET_EVENTS,
+  isDialablePhone,
+  displayContactName,
+  type MessageNew,
+} from '@yiji/shared-types';
 import { useUpdateContact } from '../contacts/api.js';
 import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { noteSelfSend } from '../../lib/sound.js';
@@ -806,11 +811,12 @@ export function ConversationView({
    *     The AI panel's own `onReplySuggested` had this bug too; it is fixed
    *     alongside, since both land AI text in the same box.
    *
-   *  2. THE AGENT'S OWN WORDS STAY RECOVERABLE. Enhance overwrites a reply
-   *     somebody wrote, and the AI is sometimes worse. It reuses the canned
-   *     reply's undo — `replacedDraftRef` plus Ctrl+Z — rather than inventing a
-   *     second idea of undo, and it says so, because silently swallowing a
-   *     typed sentence is what stops an agent trusting a button.
+   *  2. THE AGENT'S OWN WORDS STAY RECOVERABLE. Accepting a suggestion is now
+   *     a deliberate second press — the proposal is read beside the draft
+   *     before it replaces anything (ops, 2026-10-04) — but the undo stays,
+   *     because "Use this" is still one click away from losing a carefully
+   *     worded reply. It reuses the canned reply's `replacedDraftRef` plus
+   *     Ctrl+Z rather than inventing a second idea of undo.
    */
   const applyEnhanced = (text: string) => {
     const prior = draft;
@@ -925,8 +931,16 @@ export function ConversationView({
     );
 
   const c = conversation.data;
+  /* THROUGH `displayContactName`, so a name that is really a phone number or a
+     machine address (`…@yiji.com`, `…@AFCO.com` — what Yiji registers app
+     customers under) resolves to the MOBILE the agent actually needs, rather
+     than being printed as-is. The email remains the last resort, after the
+     phone. */
   const contactName =
-    c?.contact?.name ?? c?.contact?.phone ?? c?.contact?.email ?? t('inbox.unknownContact');
+    displayContactName(c?.contact?.name, c?.contact?.phone) ||
+    c?.contact?.phone ||
+    c?.contact?.email ||
+    t('inbox.unknownContact');
 
   /*
    * WE DO NOT KNOW THIS CUSTOMER'S NAME.
@@ -943,6 +957,11 @@ export function ConversationView({
   const nameIsMissing =
     !c?.contact?.name?.trim() ||
     isDialablePhone(c.contact.name) ||
+    /* A MACHINE ADDRESS IS NOT A NAME EITHER. Yiji registers app customers
+       under a synthesised address (`…@yiji.com`, `…@AFCO.com`), and a header
+       showing one is exactly the "we do not know who this is" case the prompt
+       exists for — it simply did not recognise the shape (ops, 2026-10-04). */
+    displayContactName(c.contact.name, c.contact.phone) !== c.contact.name ||
     c.contact.name === c.contact.phone;
 
   const dayLabel = (iso: string | null): string => {
@@ -1334,7 +1353,7 @@ export function ConversationView({
                   conversationId={conversationId}
                   vendorId={aiVendorId}
                   draft={draft}
-                  onEnhanced={applyEnhanced}
+                  onAccept={applyEnhanced}
                   onError={(m) => toast.error(m)}
                 />
                 {aiVendorId && (

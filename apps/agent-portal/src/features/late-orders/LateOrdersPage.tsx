@@ -53,6 +53,7 @@ import { orderToSnapshot } from '../tickets/OrderSnapshotCard.js';
 import { useVendors } from '../tickets/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
+import { QuickReplies } from '../conversation/QuickReplies.js';
 import {
   resolveLateOrderContact,
   useLateOrders,
@@ -167,6 +168,42 @@ export function decisionOutcome(
      into a comment. */
   if (editingDecisionId) return 'update';
   return 'record-comment';
+}
+
+/**
+ * WHETHER THE DECISION CAN BE SAVED YET.
+ *
+ * The REASON is required in every case — a comment is a recorded state, so
+ * there is no path that may save nothing.
+ *
+ * The ACTION is required only when a COUPON is being assigned (ops,
+ * 2026-10-04: *"for assign a coupon, the reason and action both are mandatory.
+ * currently action is optional."*). That is the case where something was
+ * actually done, and a compensation whose action nobody wrote is a row the
+ * register cannot explain — "why did this customer get money?" answered by a
+ * blank cell.
+ *
+ * A plain comment still needs only the reason, which is the owner's earlier
+ * call and still right (2026-09-28: *"no need action. just reason is
+ * enough"*): writing the comment IS the act, so asking what was done about it
+ * invites an empty box or a restatement of the line above.
+ *
+ * EDITING an existing decision requires both, because the action field is shown
+ * then — a decision that already carries one must not be saveable with it
+ * emptied.
+ *
+ * Exported so the test exercises the real rule rather than a restatement that
+ * passes whatever the page happens to do.
+ */
+export function canCommit(
+  draft: { action: 'commented' | 'compensated' },
+  editingDecisionId: string | null,
+  reason: string,
+  actionTaken: string,
+): boolean {
+  if (!reason.trim()) return false;
+  const actionRequired = draft.action === 'compensated' || !!editingDecisionId;
+  return actionRequired ? !!actionTaken.trim() : true;
 }
 
 /**
@@ -366,6 +403,24 @@ export function LateOrdersPage() {
   /** The decision being EDITED via Comments, when the row already has one. */
   const [editingDecisionId, setEditingDecisionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /* Whether the open decision dialog has everything it needs. `draft` is null
+     when the dialog is closed, in which case there is nothing to validate. */
+  const canCommitDecision = draft
+    ? canCommit(draft, editingDecisionId, reason, actionTaken)
+    : false;
+
+  /*
+   * "/" IN THE REASON BOX, exactly as in the chat composer.
+   *
+   * `null` means "not searching", DISTINCT from `''` which is a bare `/` with
+   * nothing typed after it — the panel opens on the gesture itself, not on the
+   * second keystroke. Same two values the composer derives, same reason.
+   *
+   * Only when the slash STARTS the box: mid-sentence a slash is a slash.
+   */
+  const reasonSlashMatch = /^\/(.*)$/.exec(reason);
+  const reasonSlash = reasonSlashMatch?.[1] ?? '';
+  const reasonSearching = reasonSlashMatch !== null;
   /** The row whose cart + tracking is open. One at a time: the panel is tall,
       and two open rows push the queue itself off the screen. */
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -1742,6 +1797,11 @@ export function LateOrdersPage() {
                   <label className="block space-y-1">
                     <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                       {t('lateOrders.reasonLabel', { defaultValue: 'Reason' })}
+                      {/* REQUIRED, and said so rather than discovered by pressing
+                          a button that does nothing. */}
+                      <span aria-hidden className="ms-1 text-destructive">
+                        *
+                      </span>
                     </span>
                     <Textarea
                       autoFocus
@@ -1749,8 +1809,36 @@ export function LateOrdersPage() {
                       value={reason}
                       onChange={(e) => setReason(e.target.value)}
                       placeholder={t('lateOrders.reasonPlaceholder', {
-                        defaultValue: 'The reason - recorded against this order.',
+                        defaultValue: 'The reason - or type / for a ready one.',
                       })}
+                    />
+                    {/*
+                      READY REASONS, THE SAME "/" THE COMPOSER USES (ops,
+                      2026-10-04: *"/ opening instant replies for late orders
+                      reason is not implemented"*).
+
+                      The same component and the same library the inbox uses,
+                      not a second one: agents already know the gesture, and two
+                      implementations of "ready text" would drift. Typing `/`
+                      opens the list and filters it; a pick REPLACES the box,
+                      because a reason is one statement rather than a sentence
+                      being assembled.
+
+                      `{order}` and `{restaurant}` are filled from the row, so a
+                      template reads as a real reason rather than a form with
+                      holes in it.
+                    */}
+                    <QuickReplies
+                      className="pt-1"
+                      customerText=""
+                      query={reasonSlash}
+                      searching={reasonSearching}
+                      vars={{
+                        order: draft.row.orderId,
+                        brand: draft.row.brandName ?? null,
+                        restaurant: draft.row.restaurantName ?? null,
+                      }}
+                      onPick={setReason}
                     />
                   </label>
                   {/*
@@ -1767,6 +1855,12 @@ export function LateOrdersPage() {
                     <label className="block space-y-1">
                       <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                         {t('lateOrders.actionLabel', { defaultValue: 'Action taken' })}
+                        {/* MANDATORY WHEN A COUPON IS BEING ASSIGNED (ops,
+                            2026-10-04). A compensation whose action nobody wrote
+                            is a row the register cannot explain. */}
+                        <span aria-hidden className="ms-1 text-destructive">
+                          *
+                        </span>
                       </span>
                       <Textarea
                         rows={2}
@@ -1805,12 +1899,28 @@ export function LateOrdersPage() {
               }
               cancelLabel={t('common.cancel', { defaultValue: 'Cancel' })}
               loading={busy}
+              /*
+               * REFUSED, AND IT SAYS WHY (ops, 2026-10-04).
+               *
+               * The press used to be swallowed silently when the reason was
+               * empty — indistinguishable from a dead button, which is the
+               * single most-reported shape in this app. Now the button is
+               * visibly disabled and the hint names the field that is missing.
+               */
+              confirmDisabled={!canCommitDecision}
+              confirmHint={
+                !reason.trim()
+                  ? t('lateOrders.reasonRequired', { defaultValue: 'A reason is required.' })
+                  : t('lateOrders.actionRequired', {
+                      defaultValue: 'Say what you did about it.',
+                    })
+              }
               onConfirm={() => {
-                /* The reason is required in EVERY case now: a comment is a recorded
+                /* The reason is required in EVERY case: a comment is a recorded
                state, so there is no longer a read-only path that may save
-               nothing. `ConfirmDialog`'s button cannot express "required", so an
-               empty one is simply refused rather than committed. */
-                if (reason.trim()) void commit();
+               nothing. */
+                if (!canCommitDecision) return;
+                void commit();
               }}
               onCancel={() => {
                 setDraft(null);
