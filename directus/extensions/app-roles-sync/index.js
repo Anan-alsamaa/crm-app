@@ -214,21 +214,23 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        * which is a different and much larger change.
        */
       /*
-       * SCOPED AGAIN 2026-10-04, and this is a CORRECTION, not a new policy.
+       * AND IT STAYS UNSCOPED THROUGH THE 2026-10-04 WIDENING, deliberately.
        *
-       * The reasoning just above — "any chat in practice means any chat they
-       * could already open" — depended entirely on the READ being scoped.
-       * Opening CLOSED chats to every agent breaks that premise: left
-       * unscoped, the same change would have silently handed every agent write
-       * access to every closed conversation, including reassigning and
-       * re-opening them.
+       * The reasoning just above depended on the READ being scoped, so opening
+       * CLOSED chats to every agent does change what this reaches: every agent
+       * can now update any closed conversation.
        *
-       * So update keeps the ORIGINAL live scope. A closed chat is readable by
-       * all and writable by whoever it was already writable by. The wide
-       * update for people who must act on other people's work still rides with
-       * `edit_all_tickets` below, and Directus ORs the two.
+       * That was raised with the owner and is the ANSWER THEY GAVE: a closed
+       * chat opened to all agents must come with "open, send message and all
+       * functionalities" — not a read-only archive. `messages.create` is
+       * already unscoped, so replying worked either way; scoping this would
+       * have left a visible chat whose buttons 403 for no stated reason, the
+       * same fault that blocked supervisors.
+       *
+       * The LIVE scope is untouched: a colleague's OPEN chat is still
+       * unreadable, so it cannot be updated either — the read is the gate.
        */
-      g('conversations', 'update', ASSIGNED_OR_UNASSIGNED),
+      g('conversations', 'update'),
       g('messages', 'create'),
       g('messages', 'read', MESSAGE_OF_VISIBLE_CONVERSATION),
       /*

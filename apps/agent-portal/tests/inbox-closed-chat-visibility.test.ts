@@ -125,24 +125,34 @@ describe('the row-level permission', () => {
   });
 
   /*
-   * AND UPDATE IS SCOPED AGAIN — the half that makes this safe.
+   * AND UPDATE STAYS UNSCOPED — the owner's explicit call (2026-10-04).
    *
-   * `conversations.update` was UNSCOPED, and the comment above it said why that
-   * was acceptable: "the scoped READ is what keeps this narrow… any chat they
-   * could already open". Opening closed chats to everyone destroys that
-   * premise. Left alone, this request would have silently granted every agent
-   * write access to every closed conversation in the system — reassigning and
-   * re-opening included.
+   * This was raised with them precisely because widening the read changes what
+   * an unscoped update reaches: every agent can now update any CLOSED
+   * conversation. Their answer was that a closed chat opened to all agents must
+   * come with *"open, send message and all functionalities"* — a read-only
+   * archive is a window, not a tool, and the point of the change is that
+   * whoever picks the customer up can actually serve them.
    *
-   * The wide update for people who must act on other people's work still rides
-   * with `edit_all_tickets`, and Directus ORs the two, so supervisors keep
-   * being able to close a chat they do not own.
+   * `messages.create` is unscoped too, so replying already worked; scoping the
+   * update would have produced a visible chat whose buttons 403 for no stated
+   * reason — the fault that blocked supervisors.
+   *
+   * Asserted so a future reader does not "fix" it back: it looks like an
+   * oversight and is a decision.
    */
-  it('keeps update on the LIVE scope, not the widened one', () => {
-    expect(ROLES).toMatch(/action: 'update',\s*permissions: ASSIGNED_OR_UNASSIGNED/);
-    expect(SYNC).toMatch(/g\('conversations', 'update', ASSIGNED_OR_UNASSIGNED\)/);
-    /* THE REGRESSION: an unscoped update beside a widened read. */
-    expect(SYNC).not.toMatch(/g\('conversations', 'update'\),/);
+  it('leaves update unscoped so a closed chat can be worked', () => {
+    expect(SYNC).toMatch(/g\('conversations', 'update'\),/);
+    expect(ROLES).toMatch(/\{ collection: 'conversations', action: 'update' \}/);
+  });
+
+  /* THE LIVE SCOPE IS WHAT GATES IT. An unscoped update is only as wide as the
+     read that precedes it, so a colleague's OPEN chat stays unreadable and
+     therefore un-updatable. If the read ever loses its scope, this stops being
+     true — which is why the read is asserted above. */
+  it('still scopes the read, which is what bounds the update', () => {
+    expect(ROLES).toMatch(/ASSIGNED_OR_UNASSIGNED = \{/);
+    expect(ROLES).toMatch(/assigned_agent: \{ _eq: '\$CURRENT_USER' \}/);
   });
 
   it('leaves the supervisors their wide update', () => {

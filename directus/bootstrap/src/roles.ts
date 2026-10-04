@@ -456,26 +456,30 @@ export const roles: RoleSpec[] = [
        * hand them every colleague's history, which is the change the 09-14 note
        * explicitly refused.
        *
-       * SCOPED AGAIN 2026-10-04, and this is a correction rather than a new
-       * policy. The reasoning above — "in practice this means any chat they
-       * could already open" — depended entirely on READ being narrow. Opening
-       * CLOSED chats to every agent breaks that premise: left unscoped, the
-       * same change would have silently handed every agent write access to
-       * every closed conversation in the system, including reassigning and
-       * re-opening them.
+       * AND IT STAYS UNSCOPED THROUGH THE 2026-10-04 WIDENING, deliberately.
        *
-       * So update keeps the ORIGINAL live scope. The effect is exactly what
-       * was asked for and nothing more: a closed chat is readable by all,
-       * writable by the people it was already writable by. An agent who needs
-       * to work a closed chat reopens it the way a customer does — by the
-       * thread receiving a new message, which runs the assignment mechanism
-       * again.
+       * The reasoning above — "in practice this means any chat they could
+       * already open" — depended on READ being narrow, so opening CLOSED chats
+       * to every agent does change what this grant reaches: every agent can now
+       * update any closed conversation.
+       *
+       * That was raised with the owner and is the ANSWER THEY GAVE
+       * (2026-10-04): a closed chat opened to all agents must come with *"open,
+       * send message and all functionalities"* — not a read-only archive. An
+       * agent who can read a finished chat but cannot reply to it, tag it or
+       * close it again has a window, not a tool, and the point of the change is
+       * that whoever picks the customer up can actually serve them.
+       *
+       * `messages.create` is likewise unscoped, so replying already worked; a
+       * scoped update here would have produced exactly the shape this codebase
+       * keeps hitting — a visible chat with buttons that 403 for no stated
+       * reason, as in [[supervisor-cannot-close-chat]].
+       *
+       * What it does NOT do is widen the live scope: a colleague's OPEN chat is
+       * still unreadable, so it cannot be updated either — the read is what
+       * gates it.
        */
-      {
-        collection: 'conversations',
-        action: 'update',
-        permissions: ASSIGNED_OR_UNASSIGNED,
-      },
+      { collection: 'conversations', action: 'update' },
       { collection: 'messages', action: 'create' },
       /* Messages follow their conversation — in BOTH directions.
        *
