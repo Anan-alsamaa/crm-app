@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
-import type { StoreSnapshot } from '@yiji/shared-types';
+import { normaliseTicketStatus, type StoreSnapshot } from '@yiji/shared-types';
 import { splitLocalDateTime, type ComplaintReportRow } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 
@@ -155,7 +155,30 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
     couponCode: t.coupon_code ?? '',
     couponValue: toNumber(t.coupon_value),
     couponPercent: toNumber(t.coupon_percent),
-    complaintStatus: t.status,
+    /*
+     * NORMALISED, like the admin report already does (EMA-31, 2026-10-04).
+     *
+     * The stored value is NOT always one of `open | pending | solved`. Retired
+     * spellings are deliberately never rewritten in place — `enums.ts` says so:
+     * 1,671 of staging's tickets are `closed` imported history, and rewriting
+     * them would destroy the only record of what operations actually filed.
+     * Every READER is meant to normalise instead. This one did not.
+     *
+     * The cost was total and silent: the status tiles compare against the
+     * canonical three, so a `closed`, `new` or `resolved` ticket matched NONE
+     * of them and was invisible under every filter except All. Measured on
+     * staging: 1,692 of 1,694 tickets — 99% — unfilterable. That is what
+     * prompted the request for "a filter to show open ones": the filter was
+     * there and appeared not to work.
+     *
+     * It matters for production too. Prod is clean today (74 solved, 1 open)
+     * only because the historical import has not landed yet; EMA-30 brings the
+     * same 1,671 `closed` rows with it.
+     *
+     * `normaliseTicketStatus` is the same function the admin report uses, so
+     * the two screens can no longer disagree about one ticket.
+     */
+    complaintStatus: normaliseTicketStatus(t.status),
     agent: agentName,
     compensation: t.compensation ?? '',
     // The agent queue never shows the audit stamp; the admin report does.

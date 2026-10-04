@@ -213,9 +213,11 @@ export function TicketsPage() {
     [complaints.data, storeIndex],
   );
   const stats = useMemo(() => {
-    const open = list.filter(
-      (r) => r.complaintStatus === 'open' || r.complaintStatus === 'new',
-    ).length;
+    /* `new` is gone from this test: the query now normalises, and `new` folds
+       into `open` there (EMA-31). Leaving it would be a second, stale idea of
+       what open means — and the tile below counts with `filterCount`, which
+       never knew about `new` at all, so the KPI and the tile disagreed. */
+    const open = list.filter((r) => r.complaintStatus === 'open').length;
     const pending = list.filter((r) => r.complaintStatus === 'pending').length;
     const overdue = list.filter(isOverdue).length;
     // `date` is already the row's LOCAL calendar day, so comparing strings
