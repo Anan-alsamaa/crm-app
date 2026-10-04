@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
@@ -156,6 +156,7 @@ export function rankReplies(
 export function QuickReplies({
   customerText,
   query,
+  searching,
   vars,
   onPick,
   className,
@@ -164,6 +165,14 @@ export function QuickReplies({
   customerText: string;
   /** The live "/…" filter from the composer, or ''. */
   query: string;
+  /**
+   * Whether the composer is in "/" SEARCH MODE at all.
+   *
+   * Separate from `query` because a bare `/` is an empty query and still has to
+   * open the list — testing `!!query` meant the panel stayed shut until a
+   * second character arrived (ops, 2026-10-04).
+   */
+  searching?: boolean;
   vars: {
     order?: string | null;
     name?: string | null;
@@ -177,6 +186,8 @@ export function QuickReplies({
   const { t, i18n } = useTranslation();
   const replies = useQuickReplies();
   const [open, setOpen] = useState(false);
+  /** The whole control — trigger, language toggle and panel — for click-outside. */
+  const wrap = useRef<HTMLDivElement>(null);
   /*
    * THE LANGUAGE THE AGENT IS BROWSING — seeded from the customer, then theirs.
    *
@@ -192,6 +203,48 @@ export function QuickReplies({
     () => rankReplies(replies.data ?? [], customerText, query, i18n.language, effectiveLang),
     [replies.data, customerText, query, i18n.language, effectiveLang],
   );
+  /*
+   * Typing `/` in the composer IS the search, so the list opens itself.
+   *
+   * `searching` rather than `!!query`: a bare `/` is an empty query and must
+   * still open the list with everything in it (ops, 2026-10-04).
+   */
+  const listOpen = open || !!searching || !!query;
+
+  /*
+   * CLICKING AWAY CLOSES IT (ops, 2026-10-04).
+   *
+   * There was no dismiss at all: the panel opened on the button and the only
+   * way back out was the button again or picking a reply — so an agent who
+   * opened it to look, then went to type, was left with the list covering the
+   * thread.
+   *
+   * Only while OPEN, and only for a press that lands outside the whole control
+   * — the language toggle lives inside it and flipping Arabic/English must not
+   * close the thing you are reading. `pointerdown`, not `click`: a press that
+   * starts outside should dismiss even if the pointer travels before release,
+   * which is how a real mis-click behaves.
+   *
+   * A `/` search is NOT dismissed this way — the composer owns that, and the
+   * list must stay up while the agent types into the box next to it.
+   */
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: PointerEvent) => {
+      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+    };
+    /* Escape too — the panel is a listbox and that is the expected key. */
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   /* How many exist at all, so the toggle can say when a language is empty
      rather than looking broken. */
   const total = replies.data?.length ?? 0;
@@ -202,12 +255,8 @@ export function QuickReplies({
     setOpen(false);
   };
 
-  /* Typing `/` in the composer IS the search, so the list opens itself and
-     stays a flat list — no second search box to tab into. */
-  const listOpen = open || !!query;
-
   return (
-    <div className={cn('relative', className)}>
+    <div ref={wrap} className={cn('relative', className)}>
       <div className="flex items-center gap-1.5">
         <button
           type="button"
@@ -246,9 +295,14 @@ export function QuickReplies({
           ))}
         </div>
 
-        {query && (
+        {/* `searching`, not `query`: a bare `/` has opened the list and the
+            agent should be told the box is now a search, BEFORE they have typed
+            anything to match on. */}
+        {searching && (
           <span className="shrink-0 text-2xs text-muted-foreground">
-            {t('quickReplies.filtering', { defaultValue: 'matching' })}
+            {query
+              ? t('quickReplies.filtering', { defaultValue: 'matching' })
+              : t('quickReplies.typeToSearch', { defaultValue: 'type to search' })}
           </span>
         )}
       </div>

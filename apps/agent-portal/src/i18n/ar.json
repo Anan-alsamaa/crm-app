@@ -12,6 +12,11 @@
   "ai": {
     "title": "المساعدة بالذكاء الاصطناعي",
     "running": "جارٍ التنفيذ…",
+    "enhance": "تحسين",
+    "enhanceHint": "اكتب الردّ أولًا، ثم يحسّنه زر التحسين.",
+    "enhanceEmpty": "لم يصل أي اقتراح.",
+    "enhanceFailed": "تعذّر تحسين هذا الردّ.",
+    "enhanceRateLimited": "طلبات كثيرة جدًا للذكاء الاصطناعي. أعد المحاولة بعد قليل.",
     "action": {
       "summarize": "تلخيص",
       "suggestReply": "اقتراح ردّ",
@@ -301,6 +306,7 @@
     "bulkTagDone_other": "تم وسم {{count}} محادثة.",
     "clearFilter": "انقر مرة أخرى لإزالة هذا الفلتر",
     "quickReplyReplaced": "تم استبدال ما كتبته — اضغط Ctrl+Z للتراجع",
+    "enhancedReplaced": "تم تحسين ما كتبته — اضغط Ctrl+Z للتراجع",
     "assignedMine": "قائمتي",
     "assignedAll": "كل المحادثات",
     "emptyFiltered": "لا شيء يطابق عوامل التصفية هذه.",
@@ -981,6 +987,7 @@
   },
   "quickReplies": {
     "filtering": "مطابقة",
+    "typeToSearch": "اكتب للبحث",
     "open": "الردود السريعة",
     "langAll": "الكل",
     "noneInLang": "لا توجد ردود بهذه اللغة. جرّب الكل."
@@ -1089,6 +1096,7 @@
     "noBranchForTicket": "لا يوجد فرع في قائمة الفروع يطابق \"{{branch}}\"، لذلك لن تطهر هذه التذكرة في التقارير. أضفه أولاً.",
     "ticketFailed": "تم طلب القسيمة، لكن تعذّر إنشاء تذكرة.",
     "comment": "تعليق",
+    "editComment": "تعديل",
     "commentTitle": "التعليق على هذا الطلب",
     "commentEditTitle": "تعديل التعليق",
     "commentSaved": "تم حفظ التعليق.",

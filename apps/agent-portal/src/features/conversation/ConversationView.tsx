@@ -35,6 +35,7 @@ import { AttachmentChips } from './AttachmentChips.js';
 import { ConversationToolbar } from './ConversationToolbar.js';
 import { ConversationSidebar } from './ConversationSidebar.js';
 import { QuickReplies } from './QuickReplies.js';
+import { EnhanceButton } from './EnhanceButton.js';
 import { resolveMentions } from './mentions.js';
 
 let seq = 0;
@@ -663,8 +664,17 @@ export function ConversationView({
    *
    * Only when the slash STARTS the draft: mid-sentence a slash is a slash, and
    * an agent typing "9/10" should not watch the reply row start hunting.
+   *
+   * `null` means "not searching" — DISTINCT from `''`, which is a bare `/` with
+   * nothing typed after it yet. They used to be the same value, and that is why
+   * typing `/` on its own did nothing: the panel opened on `!!query`, an empty
+   * string is falsy, so the list appeared only once a second character landed
+   * (ops, 2026-10-04). A bare `/` is the whole gesture — it must open the list
+   * with everything in it.
    */
-  const replyFilter = /^\/(.*)$/.exec(draft)?.[1] ?? '';
+  const slashMatch = /^\/(.*)$/.exec(draft);
+  const replyFilter = slashMatch?.[1] ?? '';
+  const replySearching = slashMatch !== null;
 
   /**
    * What the CUSTOMER has written, for language ranking.
@@ -779,6 +789,48 @@ export function ConversationView({
         draftRef.current.style.height = 'auto';
         draftRef.current.style.height = `${Math.min(draftRef.current.scrollHeight, 160)}px`;
       }
+    });
+  };
+
+  /**
+   * THE ENHANCED REPLY, landed in the composer (ops, 2026-10-04).
+   *
+   * Two things this must get right, and both were learned the hard way:
+   *
+   *  1. THROUGH `onDraftChange`, never `setDraft`. The composer is `rows={1}`
+   *     and its height is set imperatively — only `onDraftChange` measures
+   *     `scrollHeight` and grows the box. This is the same fault that made the
+   *     emoji button look dead (ops, 2026-10-03), and it would bite harder
+   *     here: an enhanced reply is usually LONGER than the draft it replaces,
+   *     so the agent would see one clipped line and conclude nothing happened.
+   *     The AI panel's own `onReplySuggested` had this bug too; it is fixed
+   *     alongside, since both land AI text in the same box.
+   *
+   *  2. THE AGENT'S OWN WORDS STAY RECOVERABLE. Enhance overwrites a reply
+   *     somebody wrote, and the AI is sometimes worse. It reuses the canned
+   *     reply's undo — `replacedDraftRef` plus Ctrl+Z — rather than inventing a
+   *     second idea of undo, and it says so, because silently swallowing a
+   *     typed sentence is what stops an agent trusting a button.
+   */
+  const applyEnhanced = (text: string) => {
+    const prior = draft;
+    /* Only worth restoring if there was real work there. Enhance is disabled on
+       an empty draft, so in practice there always is. */
+    replacedDraftRef.current = prior.trim() ? prior : null;
+    lastQuickReplyRef.current = null;
+    onDraftChange(text, text.length);
+    if (replacedDraftRef.current) {
+      toast(
+        t('inbox.enhancedReplaced', {
+          defaultValue: 'Enhanced your text — press Ctrl+Z to undo',
+        }),
+      );
+    }
+    requestAnimationFrame(() => {
+      const box = draftRef.current;
+      if (!box) return;
+      box.focus();
+      box.setSelectionRange(text.length, text.length);
     });
   };
 
@@ -1265,6 +1317,7 @@ export function ConversationView({
                   className="min-w-0 flex-1"
                   customerText={customerText}
                   query={replyFilter}
+                  searching={replySearching}
                   vars={{
                     order: c?.last_order_id ?? null,
                     name: c?.contact?.name ?? null,
@@ -1272,6 +1325,17 @@ export function ConversationView({
                     restaurant: c?.last_order_snapshot?.restaurantName ?? null,
                   }}
                   onPick={insertQuickReply}
+                />
+                {/* ENHANCE — improve what the agent already wrote (ops,
+                    2026-10-04). Beside Quick replies, because those are the two
+                    ways of not typing a reply from scratch, and an agent
+                    reaches for them in the same moment. */}
+                <EnhanceButton
+                  conversationId={conversationId}
+                  vendorId={aiVendorId}
+                  draft={draft}
+                  onEnhanced={applyEnhanced}
+                  onError={(m) => toast.error(m)}
                 />
                 {aiVendorId && (
                   <button
@@ -1303,7 +1367,10 @@ export function ConversationView({
                 conversationId={conversationId}
                 vendorId={aiVendorId}
                 draft={draft}
-                onReplySuggested={(reply) => setDraft(reply)}
+                /* Through `applyEnhanced`, not `setDraft`: the panel's
+                   suggestion lands in the same one-line composer and had the
+                   same invisible-growth bug as the emoji button. */
+                onReplySuggested={applyEnhanced}
               />
             )}
 

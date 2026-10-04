@@ -167,3 +167,80 @@ describe('the quick-reply chooser', () => {
     expect(SRC).toContain('line-clamp-3');
   });
 });
+
+/**
+ * OPENING AND CLOSING THE PANEL (ops, 2026-10-04).
+ *
+ * Two complaints, one about each direction:
+ *
+ *   "If `/` is entered in the input field, it should search for the Quick Reply
+ *    and display it."
+ *   "If the user clicks anywhere outside the Quick Reply value box, it should
+ *    close."
+ *
+ * The first was a FALSY EMPTY STRING. The composer handed down
+ * `/^\/(.*)$/.exec(draft)?.[1] ?? ''`, so a bare `/` and no slash at all were
+ * both `''`; the panel opened on `!!query`, and the list therefore appeared
+ * only once a SECOND character was typed. A bare `/` is the whole gesture.
+ *
+ * The second simply did not exist — there was no dismiss handler of any kind,
+ * so the only way out was the button again or picking a reply.
+ */
+describe('opening on a bare slash', () => {
+  /* The composer must tell the panel that it is in search mode SEPARATELY from
+     what has been typed, or the empty-string case is unrecoverable. */
+  it('takes a searching flag distinct from the query', () => {
+    expect(SRC).toMatch(/searching\?: boolean/);
+    expect(SRC).toMatch(/const listOpen = open \|\| !!searching/);
+  });
+
+  /* THE REGRESSION: opening on the query alone. */
+  it('no longer opens on the query alone', () => {
+    expect(SRC).not.toMatch(/const listOpen = open \|\| !!query;/);
+  });
+
+  /* And the composer has to distinguish the two cases to be able to pass it. */
+  it('is given a searching flag by the composer', () => {
+    const view = readFileSync(
+      resolve(import.meta.dirname, '../src/features/conversation/ConversationView.tsx'),
+      'utf8',
+    );
+    expect(view).toMatch(/const replySearching = slashMatch !== null/);
+    expect(view).toMatch(/searching=\{replySearching\}/);
+  });
+});
+
+describe('closing when the agent clicks away', () => {
+  it('dismisses on a press outside the control', () => {
+    expect(SRC).toMatch(/addEventListener\('pointerdown', onDown\)/);
+    expect(SRC).toMatch(/wrap\.current\?\.contains\(e\.target as Node\)/);
+  });
+
+  /* The listener is removed again, or every chat ever opened leaves one behind
+     — the leak shape this codebase has already been bitten by. */
+  it('removes the listener again', () => {
+    expect(SRC).toMatch(/removeEventListener\('pointerdown', onDown\)/);
+  });
+
+  /* Escape is what a listbox is expected to answer to. */
+  it('also dismisses on Escape', () => {
+    expect(SRC).toMatch(/e\.key === 'Escape'/);
+  });
+
+  /*
+   * THE LANGUAGE TOGGLE LIVES INSIDE THE CONTROL, so flipping Arabic/English
+   * must not close the list the agent is reading. Asserted by the ref being on
+   * the OUTER wrapper — the element that contains the toggle and the panel —
+   * rather than on the panel alone.
+   */
+  it('keeps the ref on the wrapper that holds the toggle', () => {
+    expect(SRC).toMatch(/<div ref=\{wrap\} className=\{cn\('relative', className\)\}>/);
+  });
+
+  /* Only while open: a document-wide listener armed on every conversation for
+     a panel nobody opened is pure cost. */
+  it('arms the listener only while open', () => {
+    const fx = SRC.slice(SRC.indexOf('useEffect(() => {'), SRC.indexOf('const total ='));
+    expect(fx).toMatch(/if \(!open\) return;/);
+  });
+});

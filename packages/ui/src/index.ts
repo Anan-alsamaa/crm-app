@@ -15,6 +15,8 @@ export { EmojiPicker } from './EmojiPicker.js';
 export type { EmojiPickerProps } from './EmojiPicker.js';
 export { Linkify } from './Linkify.js';
 export type { LinkifyProps } from './Linkify.js';
+export { LongText } from './LongText.js';
+export type { LongTextProps } from './LongText.js';
 export { Ltr } from './Ltr.js';
 export type { LtrProps } from './Ltr.js';
 export { formatRelative, formatDate, formatDateTime, useNow } from './time.js';

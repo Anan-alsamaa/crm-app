@@ -605,6 +605,16 @@ export const TICKET_REPORT_ORDER_KEY = 'yiji.ticketReport.columnOrder';
 export const COMPENSATION_REPORT_ORDER_KEY = 'yiji.compensationReport.columnOrder';
 
 /**
+ * Storage key for the late-orders register's column arrangement.
+ *
+ * Its own key, on the same reasoning as the compensation report above: the
+ * register answers a different question with different columns, and the whole
+ * point of `reconcileColumnOrder` is that a saved arrangement survives a column
+ * being added — which it cannot do if two reports write over each other.
+ */
+export const LATE_ORDERS_REPORT_ORDER_KEY = 'yiji.lateOrdersReport.columnOrder';
+
+/**
  * The compensation column reads "Compensated" or "Not compensated", always —
  * never blank.
  *

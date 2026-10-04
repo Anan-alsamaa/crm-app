@@ -1640,6 +1640,8 @@
       "decision": "القرار",
       "reason": "التفسير",
       "action": "الإجراء المتخذ",
+      "couponCode": "كود الكوبون",
+      "compensationValue": "قيمة التعويض",
       "businessDay": "يوم العمل",
       "avgHint": "في القائمة قبل القرار",
       "creationTime": "وقت الإنشاء",
@@ -1670,6 +1672,7 @@
     "uncategorised": "لم تُصنَّف بعد",
     "snapshot": {
       "view": "الطلب",
+      "cartTracking": "السلة والتتبع",
       "loading": "جارٍ جلب الطلب من يجي…",
       "hide": "إخفاء",
       "items": "الأصناف",

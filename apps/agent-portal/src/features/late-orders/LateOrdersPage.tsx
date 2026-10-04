@@ -26,6 +26,7 @@ import {
   pageCountOf,
   toast,
   MultiSelectMenu,
+  LongText,
 } from '@yiji/ui';
 import {
   lateOrderComplaintType,
@@ -148,8 +149,11 @@ interface DecisionDraft {
  * path that opens this box and must refuse to save, so `noop` is gone with it.
  *
  * Commenting is deliberately NOT handling. Only a coupon marks an order
- * handled, and once it is handled the Comment button disappears — the coupon's
- * own reason is then what the register shows.
+ * handled — but the button STAYS on a handled order (ops, 2026-10-04), because
+ * the reason and action recorded with a coupon are exactly what gets typed in a
+ * hurry and later needs correcting. Editing is safe: an existing decision
+ * yields `'update'` below, which rewrites the wording and can never convert a
+ * compensation back into a comment.
  */
 export type DecisionOutcome = 'coupon' | 'update' | 'record-comment';
 
@@ -1518,17 +1522,23 @@ export function LateOrdersPage() {
                           <Td className="whitespace-nowrap">
                             {decisions.data?.get(row.orderId)?.decided_by?.first_name || '-'}
                           </Td>
-                          <Td
-                            className="max-w-[18rem] truncate"
-                            title={decisionOf(row.orderId)?.reason ?? undefined}
-                          >
-                            {decisionOf(row.orderId)?.reason || '-'}
+                          {/*
+                      THE FULL TEXT ON HOVER (ops, 2026-10-04: *"On hover, the
+                      Reason and Action should display the full data"*).
+
+                      `title` alone was not enough. It is a native tooltip:
+                      invisible on a touch screen, invisible to a keyboard user,
+                      slow to appear, and it cannot wrap a long reason legibly —
+                      the same objection the quick-replies panel already
+                      answered. `LongText` renders the whole value in a panel on
+                      hover AND on focus, and keeps `title` as the plain-text
+                      fallback.
+                    */}
+                          <Td className="max-w-[18rem]">
+                            <LongText value={decisionOf(row.orderId)?.reason} />
                           </Td>
-                          <Td
-                            className="max-w-[18rem] truncate"
-                            title={decisionOf(row.orderId)?.action_taken ?? undefined}
-                          >
-                            {decisionOf(row.orderId)?.action_taken || '-'}
+                          <Td className="max-w-[18rem]">
+                            <LongText value={decisionOf(row.orderId)?.action_taken} />
                           </Td>
                           {/*
                       COLUMN 1 — WHAT YOU LOOK AT. Always offered, decided or
@@ -1604,26 +1614,37 @@ export function LateOrdersPage() {
                       edit, so there is one row per order however often it is
                       commented on.
 
-                      GONE ONCE HANDLED. A handled order's story is the coupon's
-                      own reason — the spec is explicit that it overrides the
-                      comment — so offering to edit a comment nobody will read
-                      again would only invite a contradiction. `stateOf`, the
-                      same test the Decision cell uses, so the two cells can
-                      never disagree about one row — and so neither of them
-                      forgets an order compensated more than a day ago.
+                      OFFERED ON A HANDLED ORDER TOO (ops, 2026-10-04:
+                      *"Handled orders should also have the Comment button so
+                      the agent can edit the reason and action"*).
+
+                      It used to disappear once a coupon was given, on the
+                      reasoning that the coupon's own reason overrides the
+                      comment and editing one nobody reads invites a
+                      contradiction. In practice the reason and action recorded
+                      WITH the coupon are exactly what gets typed in a hurry and
+                      needs correcting afterwards — and with the button gone
+                      there was no way to correct them at all.
+
+                      Editing a handled row is SAFE because `decisionOutcome`
+                      already guards it: an existing decision yields `'update'`,
+                      which rewrites the wording and never converts a
+                      compensation back into a comment. So this only ever edits
+                      text; it cannot unmake a coupon.
                     */}
                           <Td>
-                            {stateOf(row.orderId) === 'handled' ? (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            ) : (
-                              <Button
-                                size="sm"
-                                variant="secondary"
-                                onClick={() => openDecision(row, 'commented', true)}
-                              >
-                                {t('lateOrders.comment', { defaultValue: 'Comment' })}
-                              </Button>
-                            )}
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => openDecision(row, 'commented', true)}
+                            >
+                              {stateOf(row.orderId) === 'pending'
+                                ? t('lateOrders.comment', { defaultValue: 'Comment' })
+                                : /* It is an EDIT once something is recorded, and
+                                     saying so stops an agent fearing they are
+                                     about to add a second, contradictory note. */
+                                  t('lateOrders.editComment', { defaultValue: 'Edit' })}
+                            </Button>
                           </Td>
                         </Tr>
                       </Fragment>

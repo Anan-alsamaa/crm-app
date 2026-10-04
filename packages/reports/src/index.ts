@@ -21,6 +21,7 @@ export {
   saveColumnOrder,
   TICKET_REPORT_ORDER_KEY,
   COMPENSATION_REPORT_ORDER_KEY,
+  LATE_ORDERS_REPORT_ORDER_KEY,
   joinComplaintStores,
   reportFilename,
   splitLocalDateTime,

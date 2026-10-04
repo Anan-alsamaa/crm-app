@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
+import { readChunked } from '@yiji/reports';
 import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   LATE_DELIVERY_MINUTES_KEY,
@@ -381,4 +383,84 @@ export function agentLateStats(
         : null,
     }))
     .sort((a, b) => b.touched - a.touched);
+}
+
+/**
+ * THE COUPON BEHIND A COMPENSATED LATE ORDER.
+ *
+ * Asked for by operations (2026-10-04): the register needs a **Coupon code**
+ * and a **Compensation value** column. Neither is on `late_order_decisions` —
+ * a decision records WHAT was decided and why, and the coupon itself is a
+ * `coupon_approvals` row written by the coupon flow.
+ *
+ * JOINED ON `order_id`, which is the one identifier both sides share and
+ * exactly how `mergeLateOrders` already joins the live queue. A late-order
+ * coupon carries `order_id` directly (it has no ticket of its own when the
+ * cause is a `wecare` one — see the ticketless-pending-coupon rule), so the
+ * ticket's copy is the fallback rather than the source.
+ *
+ * CHUNKED, because this takes one id per row on the page's whole range. A few
+ * hundred ids in a Directus `_in` filter is an HTTP 414 from CloudFront before
+ * any service sees it — every query passes alone and the page fails whole,
+ * which only shows up once real data grows.
+ */
+export interface LateOrderCoupon {
+  order_id: string | null;
+  coupon_code: string | null;
+  coupon_value: number | string | null;
+  coupon_percent: number | string | null;
+  max_discount: number | string | null;
+  status: string | null;
+  date_created: string | null;
+}
+
+export function useLateOrderCoupons(orderIds: readonly string[]) {
+  /* Sorted and deduped so the key is stable: an unstable key refetches on every
+     render of a report whose rows arrive in whatever order Directus returns. */
+  const ids = useMemo(
+    () => [...new Set(orderIds.filter((v) => !!v && v.trim()))].sort(),
+    [orderIds],
+  );
+  return useQuery({
+    queryKey: ['late-order-coupons', ids],
+    enabled: ids.length > 0,
+    queryFn: async (): Promise<Map<string, LateOrderCoupon>> => {
+      const rows = await readChunked(
+        ids,
+        (chunk) =>
+          directus.request(
+            readItems(
+              'coupon_approvals' as never,
+              {
+                filter: { order_id: { _in: chunk } },
+                fields: [
+                  'order_id',
+                  'coupon_code',
+                  'coupon_value',
+                  'coupon_percent',
+                  'max_discount',
+                  'status',
+                  'date_created',
+                ],
+                /* Newest first, so the fold below keeps the LATEST coupon for an
+                 order that was compensated more than once. Same rule the
+                 decisions query uses for the same reason. */
+                sort: ['-date_created'],
+                limit: -1,
+              } as never,
+            ) as never,
+          ) as Promise<LateOrderCoupon[]>,
+      );
+      const byOrder = new Map<string, LateOrderCoupon>();
+      for (const r of rows) {
+        const key = r.order_id?.trim();
+        /* FIRST SEEN WINS and the sort is newest-first, so this is the latest.
+           Not `set` unconditionally, which would leave the oldest. */
+        if (key && !byOrder.has(key)) byOrder.set(key, r);
+      }
+      return byOrder;
+    },
+    /* Coupons for a closed date range do not change. */
+    staleTime: 60_000,
+  });
 }

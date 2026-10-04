@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useMemo, useState } from 'react';
+import { Fragment, useCallback, useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -16,10 +16,20 @@ import {
   Th,
   Tr,
   Modal,
+  LongText,
+  Drawer,
+  cn,
   formatDate,
   formatDateTime,
 } from '@yiji/ui';
 import { businessDay, orderEventTimes, type LateOrderState } from '@yiji/shared-types';
+import {
+  LATE_ORDERS_REPORT_ORDER_KEY,
+  loadColumnOrder,
+  moveColumn,
+  reconcileColumnOrder,
+  saveColumnOrder,
+} from '@yiji/reports';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
@@ -35,7 +45,9 @@ import {
   useLateOrderQueue,
   useLateOrderThreshold,
   useLiveOrder,
+  useLateOrderCoupons,
   type LateOrderSnapshot,
+  type LateOrderRegisterRow,
 } from './api.js';
 import { useVendors } from '../vendors/api.js';
 
@@ -45,6 +57,61 @@ import { useVendors } from '../vendors/api.js';
  * for the breakdown report's treatment (2026-09-29).
  */
 const REGISTER_PAGE_SIZES = [10, 25, 50, 100, 250, 500, 1000] as const;
+
+/**
+ * THE REGISTER'S COLUMNS, named once (ops, 2026-10-04).
+ *
+ * This tuple is the DEFAULT order and the full set. `reconcileColumnOrder`
+ * checks a saved arrangement against it, which is what lets a preference saved
+ * before `couponCode` existed gain the new column at the end instead of
+ * silently losing it — the "plausible zero" shape this codebase keeps meeting.
+ *
+ * `cartTracking` is deliberately NOT here: it is a control, not data. It does
+ * not export, it is gated on `canSeeOrder`, and dragging it into the middle of
+ * the register would only strand a button between two facts.
+ */
+const REGISTER_COLUMN_KEYS = [
+  'creationTime',
+  'businessDay',
+  'order',
+  'brand',
+  'restaurant',
+  'customerMobile',
+  'service',
+  'driverArrival',
+  'deliveryTime',
+  'preparationTime',
+  'cause',
+  'status',
+  'orderStatus',
+  'agent',
+  'reason',
+  'action',
+  'couponCode',
+  'compensationValue',
+] as const;
+
+type RegisterColumnKey = (typeof REGISTER_COLUMN_KEYS)[number];
+
+/**
+ * One register column: how it RENDERS and how it EXPORTS.
+ *
+ * Both, because they are different questions. A cell can be a `Pill`, a `<Leg>`
+ * that knows whether its batch has landed, or a hover panel; a file cell is
+ * always text, and is sometimes deliberately different text — the export gives
+ * the whole reason where the screen truncates it, and an ISO stamp where the
+ * screen shows dd/mm/yyyy.
+ */
+interface RegisterColumn {
+  key: RegisterColumnKey;
+  label: string;
+  /** Classes for the `<Td>`, since column width and alignment vary. */
+  tdClass?: string;
+  /** Right-aligned, for a number. */
+  end?: boolean;
+  render: (r: LateOrderRegisterRow) => ReactNode;
+  get: (r: LateOrderRegisterRow) => string | number;
+}
 
 /**
  * How a handling state reads at a glance: waiting, explained, done.
@@ -299,6 +366,23 @@ export function LateOrdersReportPage() {
       [paged],
     ),
   );
+  /*
+   * THE COUPONS, for EVERY FILTERED ROW — not just the open page.
+   *
+   * Unlike the durations above, this reads our OWN database, so the cost is one
+   * chunked query rather than one Yiji call per order. That matters because the
+   * export writes every filtered row: scoping it to the page would export a
+   * blank Coupon code for everything on page two, which reads as "no coupon was
+   * given" rather than "not loaded" — the plausible-zero shape again.
+   *
+   * Chunked inside the hook, because a month's register is thousands of ids and
+   * a few hundred in a Directus `_in` filter is an HTTP 414 from CloudFront
+   * before any service sees it.
+   */
+  const coupons = useLateOrderCoupons(
+    useMemo(() => rows.map((r) => r.order_id?.trim()).filter((v): v is string => !!v), [rows]),
+  );
+
   const timesOf = useCallback(
     (orderId: string | null) =>
       orderEventTimes(eventTimes.data?.[orderId?.trim() ?? ''] ?? {}, Date.now()),
@@ -493,64 +577,330 @@ export function LateOrdersReportPage() {
     downloadCsv(exportFileName('Late orders by agent', {}), toCsv(header, body));
   };
 
-  const exportDecisions = () => {
-    const header = [
-      t('lateOrdersReport.col.creationTime', { defaultValue: 'Creation time' }),
-      t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' }),
-      t('lateOrdersReport.col.order', { defaultValue: 'Order' }),
-      t('lateOrdersReport.col.brandOnly', { defaultValue: 'Brand' }),
-      t('lateOrdersReport.col.restaurant', { defaultValue: 'Restaurant' }),
-      t('lateOrdersReport.col.customerMobile', { defaultValue: 'Customer mobile' }),
-      t('lateOrdersReport.col.service', { defaultValue: 'Service time' }),
-      t('lateOrdersReport.col.driverArrival', { defaultValue: 'Driver arrival' }),
-      t('lateOrdersReport.col.deliveryTime', { defaultValue: 'Delivery time' }),
-      t('lateOrdersReport.col.preparationTime', { defaultValue: 'Preparation time' }),
-      t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
-      t('lateOrdersReport.col.status', { defaultValue: 'Status' }),
-      t('lateOrdersReport.col.orderStatus', { defaultValue: 'Order status' }),
-      t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
-      t('lateOrdersReport.col.reason', { defaultValue: 'Reason' }),
-      t('lateOrdersReport.col.action', { defaultValue: 'Action taken' }),
-    ];
+  /*
+   * THE COUPON FOR AN ORDER, and what it was worth.
+   *
+   * Two small helpers rather than inline expressions, so the table and the
+   * export cannot drift into two different ideas of "compensation value" — the
+   * exact failure the single column array exists to prevent.
+   */
+  const couponOf = useCallback(
+    (orderId: string | null | undefined) => coupons.data?.get(orderId?.trim() ?? '') ?? null,
+    [coupons.data],
+  );
+
+  /**
+   * What the customer was actually given, as text.
+   *
+   * A PERCENTAGE IS NOT AN AMOUNT. A percentage coupon's `coupon_value` is
+   * meaningless, so the percentage wins when there is one — the same rule the
+   * compensation report applies, and the reason a "568 off" coupon capped at 55
+   * was able to be approved while both numbers sat in the same row.
+   */
+  const compensationText = useCallback(
+    (orderId: string | null | undefined): string => {
+      const c = couponOf(orderId);
+      if (!c) return '';
+      const pct = Number(c.coupon_percent);
+      if (Number.isFinite(pct) && pct > 0) return `${pct}%`;
+      const val = Number(c.coupon_value);
+      if (Number.isFinite(val) && val > 0) return String(val);
+      return '';
+    },
+    [couponOf],
+  );
+
+  /* The two label lookups the columns share, so a cell and its export cell can
+     never disagree about how a raw enum is spelled out. */
+  const causeText = useCallback(
+    (kind: string) => String(t(`lateOrders.kind.${kind}`, { defaultValue: causeLabel(kind) })),
+    [t],
+  );
+  const orderStatusText = useCallback(
+    (status: string) =>
+      String(t(`commerce.orderStatuses.${status}`, { defaultValue: causeLabel(status) })),
+    [t],
+  );
+
+  /*
+   * THE ARRANGEMENT the reader has chosen, remembered per browser.
+   *
+   * `reconcileColumnOrder` on every read, not just on load: it is what drops a
+   * key that no longer exists and appends one that was added since, so a
+   * preference saved before Coupon code existed gains it at the end rather than
+   * hiding it. Without that a year-old arrangement quietly loses every new
+   * field, which is the bug this codebase has already met as a "plausible
+   * zero".
+   */
+  const [registerOrder, setRegisterOrder] = useState<RegisterColumnKey[]>(() =>
+    reconcileColumnOrder(
+      loadColumnOrder<RegisterColumnKey>(LATE_ORDERS_REPORT_ORDER_KEY),
+      REGISTER_COLUMN_KEYS,
+    ),
+  );
+  /** The column being dragged, for the arrange panel. */
+  const [dragKey, setDragKey] = useState<RegisterColumnKey | null>(null);
+  /** Whether the arrange panel is open. */
+  const [arranging, setArranging] = useState(false);
+
+  /*
+   * THE REGISTER'S COLUMNS, AS DATA (ops, 2026-10-04).
+   *
+   * Three requests land on one change: *"Column rearranging should be
+   * available"*, *"Coupon Code field is needed in the Late Orders report"*,
+   * *"Compensation Value field is needed"*.
+   *
+   * The table and the CSV each carried their own hardcoded list of the same
+   * columns in the same order, kept in step by hand — so adding a field meant
+   * two edits and a hope. They now read from one array: the header, the body
+   * and the export. The eighteenth column is one entry, not three edits.
+   *
+   * `render` AND `get`, deliberately. A register cell is not always a string —
+   * the handling state is a `Pill`, the four durations are a `<Leg>` that knows
+   * whether its batch has landed, the reason is a hover panel. `get` answers
+   * the different question the FILE asks, and must stay free to differ: the
+   * export gives the whole reason where the screen truncates it, and an ISO
+   * stamp where the screen shows dd/mm/yyyy.
+   *
+   * Reordering reuses the compensation report's machinery rather than inventing
+   * a second idea of a column arrangement. `reconcileColumnOrder` is what lets
+   * a preference saved before today survive these two new columns: unknown keys
+   * are dropped, new ones appended — so an old arrangement GAINS Coupon code at
+   * the end instead of silently hiding it.
+   */
+  const registerColumnDefs: RegisterColumn[] = [
+    {
+      key: 'creationTime',
+      label: t('lateOrdersReport.col.creationTime', { defaultValue: 'Creation time' }),
+      tdClass: 'whitespace-nowrap text-muted-foreground',
+      render: (r) => (r.date_created ? formatDateTime(r.date_created) : '-'),
+      /* ISO, not the dd/mm/yyyy on screen: a spreadsheet sorts and filters an
+         ISO stamp correctly and re-formats it for the reader either way. */
+      get: (r) => r.date_created ?? '',
+    },
+    {
+      key: 'businessDay',
+      label: t('lateOrdersReport.col.businessDay', { defaultValue: 'Business day' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      /*
+       * THE BUSINESS DAY, 10:00 to 04:00, named after the day it started.
+       * Trading runs past midnight, so the calendar date splits one night's work
+       * across two rows: 23:50 and 00:10 are the same shift and belong on the
+       * same line. Derived, never stored — the rule is one function and the
+       * report must not hold a second, older copy of it.
+       */
+      render: (r) => {
+        const day = businessDay(r.date_created);
+        return day ? formatDate(day) : '-';
+      },
+      get: (r) => businessDay(r.date_created) ?? '',
+    },
+    {
+      key: 'order',
+      label: t('lateOrdersReport.col.order', { defaultValue: 'Order' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      render: (r) => r.order_id ?? '-',
+      get: (r) => r.order_id ?? '',
+    },
+    /* §14 — BRAND AND RESTAURANT AS SEPARATE NAMED COLUMNS, plus the customer's
+       mobile. They were one joined cell, which cannot be sorted, filtered or
+       read into a spreadsheet as two facts. */
+    {
+      key: 'brand',
+      label: t('lateOrdersReport.col.brandOnly', { defaultValue: 'Brand' }),
+      tdClass: 'max-w-[12rem] truncate',
+      render: (r) => r.brand_name || '-',
+      get: (r) => r.brand_name ?? '',
+    },
+    {
+      key: 'restaurant',
+      label: t('lateOrdersReport.col.restaurant', { defaultValue: 'Restaurant' }),
+      tdClass: 'max-w-[12rem] truncate',
+      render: (r) => r.restaurant_name || '-',
+      get: (r) => r.restaurant_name ?? '',
+    },
+    {
+      key: 'customerMobile',
+      label: t('lateOrdersReport.col.customerMobile', { defaultValue: 'Customer mobile' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      render: (r) => r.customer_phone || '-',
+      get: (r) => r.customer_phone ?? '',
+    },
     /*
-     * EVERY FILTERED ROW, not just the open page — the file is what somebody
-     * takes away, and paging is a reading convenience.
+     * §12/§13 — the four durations, all from the order's status history via
+     * `orderEventTimes`. Only the rows on the open PAGE are fetched, so these
+     * are blank until that batch lands.
      *
-     * The four DURATIONS are the exception: they are fetched for the visible
-     * page only (each id is a call into Yiji upstream), so a row on another page
-     * exports them blank rather than wrong. A blank cell is honest; a zero would
-     * read as a measurement.
+     * The export writes them blank for a row on another page rather than wrong:
+     * a blank cell is honest, a zero would read as a measurement.
      */
-    const body = rows.map((r) => {
-      const day = businessDay(r.date_created);
-      const times = timesOf(r.order_id);
-      return [
-        // ISO, not the dd/mm/yyyy on screen: a spreadsheet sorts and filters an
-        // ISO stamp correctly and re-formats it for the reader either way.
-        r.date_created ?? '',
-        day ?? '',
-        r.order_id ?? '',
-        r.brand_name ?? '',
-        r.restaurant_name ?? '',
-        r.customer_phone ?? '',
-        times.serviceMinutes ?? '',
-        times.driverArrivalMinutes ?? '',
-        times.deliveryMinutes ?? '',
-        times.preparationMinutes ?? '',
-        r.kind ? t(`lateOrders.kind.${r.kind}`, { defaultValue: causeLabel(r.kind) }) : '',
-        t(`lateOrders.state.${r.state}`, { defaultValue: r.state }),
-        r.order_status
-          ? t(`commerce.orderStatuses.${r.order_status}`, {
-              defaultValue: causeLabel(r.order_status),
-            })
-          : '',
-        agentName(r, unknown),
-        // The WHOLE text, not the two clamped lines the table shows: the export
-        // exists precisely to get at what does not fit on screen.
-        r.reason ?? '',
-        r.action_taken ?? '',
-      ];
-    });
+    {
+      key: 'service',
+      label: t('lateOrdersReport.col.service', { defaultValue: 'Service time' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      render: (r) => (
+        <Leg loading={eventTimes.isLoading} minutes={timesOf(r.order_id).serviceMinutes} />
+      ),
+      get: (r) => timesOf(r.order_id).serviceMinutes ?? '',
+    },
+    {
+      key: 'driverArrival',
+      label: t('lateOrdersReport.col.driverArrival', { defaultValue: 'Driver arrival' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      render: (r) => (
+        <Leg loading={eventTimes.isLoading} minutes={timesOf(r.order_id).driverArrivalMinutes} />
+      ),
+      get: (r) => timesOf(r.order_id).driverArrivalMinutes ?? '',
+    },
+    {
+      key: 'deliveryTime',
+      label: t('lateOrdersReport.col.deliveryTime', { defaultValue: 'Delivery time' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      render: (r) => (
+        <Leg loading={eventTimes.isLoading} minutes={timesOf(r.order_id).deliveryMinutes} />
+      ),
+      get: (r) => timesOf(r.order_id).deliveryMinutes ?? '',
+    },
+    {
+      key: 'preparationTime',
+      label: t('lateOrdersReport.col.preparationTime', { defaultValue: 'Preparation time' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      render: (r) => (
+        <Leg loading={eventTimes.isLoading} minutes={timesOf(r.order_id).preparationMinutes} />
+      ),
+      get: (r) => timesOf(r.order_id).preparationMinutes ?? '',
+    },
+    {
+      key: 'cause',
+      label: t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' }),
+      tdClass: 'whitespace-nowrap',
+      /* §12 — the CAUSE, spelled out. `lateOrders.kind.*` translates the seeded
+         two; anything operations added falls back to `causeLabel`, which turns
+         `late_preparation` into "Late preparation" rather than printing the raw
+         enum with its underscore. */
+      render: (r) => (r.kind ? causeText(r.kind) : '-'),
+      get: (r) => (r.kind ? causeText(r.kind) : ''),
+    },
+    {
+      key: 'status',
+      label: t('lateOrdersReport.col.status', { defaultValue: 'Status' }),
+      /* §10 — the HANDLING state. The order's own status is the column beside
+         it, deliberately separate: an order can be force-closed upstream and
+         still be pending for WeCare. */
+      render: (r) => (
+        <Pill tone={STATE_TONE[r.state]} size="sm">
+          {t(`lateOrders.state.${r.state}`, { defaultValue: r.state })}
+        </Pill>
+      ),
+      get: (r) => String(t(`lateOrders.state.${r.state}`, { defaultValue: r.state })),
+    },
+    {
+      key: 'orderStatus',
+      label: t('lateOrdersReport.col.orderStatus', { defaultValue: 'Order status' }),
+      tdClass: 'whitespace-nowrap text-muted-foreground',
+      /* The ORDER's own status — a different fact, and the spec is explicit
+         that the two must not be confused. */
+      render: (r) => (r.order_status ? orderStatusText(r.order_status) : '-'),
+      get: (r) => (r.order_status ? orderStatusText(r.order_status) : ''),
+    },
+    {
+      key: 'agent',
+      label: t('lateOrdersReport.col.agent', { defaultValue: 'Agent' }),
+      tdClass: 'whitespace-nowrap',
+      render: (r) => agentName(r, unknown),
+      get: (r) => agentName(r, unknown),
+    },
+    {
+      key: 'reason',
+      label: t('lateOrdersReport.col.reason', { defaultValue: 'Reason' }),
+      tdClass: 'max-w-[22rem]',
+      /*
+       * THE FULL TEXT ON HOVER, the same as the agent's queue (ops,
+       * 2026-10-04). It was clamped to two lines with the rest behind `title` —
+       * a native tooltip, so invisible on a touch screen and to a keyboard
+       * user, and unable to wrap.
+       */
+      render: (r) => <LongText value={r.reason} />,
+      /* The WHOLE text, not the clamped lines the table shows: the export
+         exists precisely to get at what does not fit on screen. */
+      get: (r) => r.reason ?? '',
+    },
+    {
+      key: 'action',
+      label: t('lateOrdersReport.col.action', { defaultValue: 'Action taken' }),
+      tdClass: 'max-w-[22rem]',
+      render: (r) => <LongText value={r.action_taken} />,
+      get: (r) => r.action_taken ?? '',
+    },
+    /*
+     * THE COUPON — the two new columns (ops, 2026-10-04).
+     *
+     * Joined from `coupon_approvals` on `order_id`, because a decision records
+     * WHAT was decided and the coupon is a separate row written by the coupon
+     * flow. Blank is the normal answer and the honest one: a commented order
+     * and a pending one have no coupon, and most rows are one of those.
+     */
+    {
+      key: 'couponCode',
+      label: t('lateOrdersReport.col.couponCode', { defaultValue: 'Coupon code' }),
+      tdClass: 'whitespace-nowrap font-mono text-2xs',
+      render: (r) => couponOf(r.order_id)?.coupon_code || '-',
+      get: (r) => couponOf(r.order_id)?.coupon_code ?? '',
+    },
+    {
+      key: 'compensationValue',
+      label: t('lateOrdersReport.col.compensationValue', { defaultValue: 'Compensation value' }),
+      tdClass: 'whitespace-nowrap tabular-nums',
+      end: true,
+      /*
+       * A PERCENTAGE IS NOT AN AMOUNT, and printing one as the other is how a
+       * "568 off" coupon capped at 55 came to be approved. The same rule the
+       * compensation report uses: the percentage wins when there is one,
+       * because a percentage coupon's `coupon_value` means nothing.
+       */
+      render: (r) => compensationText(r.order_id) || '-',
+      get: (r) => compensationText(r.order_id),
+    },
+  ];
+
+  /* The arrangement, reconciled against the columns that exist today. */
+  const registerColumns: RegisterColumn[] = registerOrder
+    .map((k) => registerColumnDefs.find((c) => c.key === k))
+    .filter((c): c is RegisterColumn => c !== undefined);
+
+  /** Move one column, and remember it. One definition for drag and for arrows. */
+  const reorderRegister = (key: RegisterColumnKey, to: number) => {
+    const from = registerOrder.indexOf(key);
+    if (from < 0) return;
+    const next = moveColumn(registerOrder, from, to);
+    setRegisterOrder(next);
+    saveColumnOrder(LATE_ORDERS_REPORT_ORDER_KEY, next);
+  };
+  const moveRegisterCol = (key: RegisterColumnKey, delta: number) =>
+    reorderRegister(key, registerOrder.indexOf(key) + delta);
+  const resetRegisterOrder = () => {
+    const next = [...REGISTER_COLUMN_KEYS];
+    setRegisterOrder(next);
+    saveColumnOrder(LATE_ORDERS_REPORT_ORDER_KEY, next);
+  };
+
+  const exportDecisions = () => {
+    /*
+     * FROM THE COLUMN MODEL, in the reader's own arrangement.
+     *
+     * The header and the body used to be two hardcoded lists kept in step by
+     * hand — and in step with the TABLE's third list. Now all three read from
+     * `registerColumns`, so a column cannot appear on screen and be missing
+     * from the file, and the file comes out in the order the reader arranged.
+     *
+     * EVERY FILTERED ROW, not just the open page: the file is what somebody
+     * takes away, and paging is a reading convenience. The four DURATIONS are
+     * the exception and say so in their own `get` — they are fetched for the
+     * visible page only, so a row on another page exports them blank rather
+     * than wrong.
+     */
+    const header = registerColumns.map((c) => c.label);
+    const body = rows.map((r) => registerColumns.map((c) => c.get(r)));
     downloadCsv(exportFileName('Late orders', {}), toCsv(header, body));
   };
 
@@ -1017,12 +1367,24 @@ export function LateOrdersReportPage() {
                     <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                       {t('lateOrdersReport.register', { defaultValue: 'Order decisions' })}
                     </h3>
+                    {/* ARRANGE THE COLUMNS (ops, 2026-10-04). Beside Export,
+                        because the arrangement is the file's arrangement too —
+                        and NOT gated on `canExport`: reordering what you are
+                        reading is not taking the register off the system. */}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="ms-auto"
+                      onClick={() => setArranging(true)}
+                    >
+                      {t('agentReports.columns', { defaultValue: 'Columns' })}
+                    </Button>
                     {canExport && (
                       <Button
                         type="button"
                         variant="secondary"
                         size="sm"
-                        className="ms-auto"
                         onClick={exportDecisions}
                         disabled={rows.length === 0}
                       >
@@ -1048,72 +1410,20 @@ export function LateOrdersReportPage() {
                     <Table>
                       <thead>
                         <Tr>
-                          {/* CREATION TIME, not "When" (owner spec §12) — when the
-                          ORDER was created, which is what the column has always
-                          shown and what an admin reading a register needs. */}
-                          <Th>
-                            {t('lateOrdersReport.col.creationTime', {
-                              defaultValue: 'Creation time',
-                            })}
-                          </Th>
-                          <Th>
-                            {t('lateOrdersReport.col.businessDay', {
-                              defaultValue: 'Business day',
-                            })}
-                          </Th>
-                          <Th>{t('lateOrdersReport.col.order', { defaultValue: 'Order' })}</Th>
-                          {/* §14 — BRAND AND RESTAURANT AS SEPARATE NAMED COLUMNS,
-                          plus the customer's mobile. They were one joined cell,
-                          which cannot be sorted, filtered or read into a
-                          spreadsheet as two facts. */}
-                          <Th>{t('lateOrdersReport.col.brandOnly', { defaultValue: 'Brand' })}</Th>
-                          <Th>
-                            {t('lateOrdersReport.col.restaurant', { defaultValue: 'Restaurant' })}
-                          </Th>
-                          <Th>
-                            {t('lateOrdersReport.col.customerMobile', {
-                              defaultValue: 'Customer mobile',
-                            })}
-                          </Th>
-                          {/* §12 — SERVICE TIME here too, on the same rule as the
-                          agent's queue: driver-accept to CLOSE. */}
-                          <Th>
-                            {t('lateOrdersReport.col.service', { defaultValue: 'Service time' })}
-                          </Th>
-                          {/* §13 — the three legs. */}
-                          <Th>
-                            {t('lateOrdersReport.col.driverArrival', {
-                              defaultValue: 'Driver arrival',
-                            })}
-                          </Th>
-                          <Th>
-                            {t('lateOrdersReport.col.deliveryTime', {
-                              defaultValue: 'Delivery time',
-                            })}
-                          </Th>
-                          <Th>
-                            {t('lateOrdersReport.col.preparationTime', {
-                              defaultValue: 'Preparation time',
-                            })}
-                          </Th>
-                          <Th>
-                            {t('lateOrdersReport.col.cause', { defaultValue: 'Source of delay' })}
-                          </Th>
-                          {/* §10 — STATUS, and it is the HANDLING state. The order's
-                          own status is the column beside it, deliberately
-                          separate: an order can be force-closed upstream and
-                          still be pending for WeCare. */}
-                          <Th>{t('lateOrdersReport.col.status', { defaultValue: 'Status' })}</Th>
-                          <Th>
-                            {t('lateOrdersReport.col.orderStatus', {
-                              defaultValue: 'Order status',
-                            })}
-                          </Th>
-                          <Th>{t('lateOrdersReport.col.agent', { defaultValue: 'Agent' })}</Th>
-                          <Th>{t('lateOrdersReport.col.reason', { defaultValue: 'Reason' })}</Th>
-                          <Th>
-                            {t('lateOrdersReport.col.action', { defaultValue: 'Action taken' })}
-                          </Th>
+                          {/*
+                            THE HEADER, FROM THE COLUMN MODEL (ops, 2026-10-04).
+
+                            Seventeen hardcoded `<Th>`s became one loop over
+                            `registerColumns`, which is the same array the body
+                            and the CSV read — so a column can no longer appear
+                            in one and be missing from another, and the reader's
+                            own arrangement applies to all three.
+                          */}
+                          {registerColumns.map((c) => (
+                            <Th key={c.key} className={c.end ? 'text-end' : undefined}>
+                              {c.label}
+                            </Th>
+                          ))}
                           {/* The toggle's own column, titled for screen readers only
                           — a visible heading over a chevron reads as a column of
                           data rather than a control. */}
@@ -1130,106 +1440,20 @@ export function LateOrdersReportPage() {
                         {paged.map((r) => (
                           <Fragment key={r.id}>
                             <Tr>
-                              <Td className="whitespace-nowrap text-muted-foreground">
-                                {r.date_created ? formatDateTime(r.date_created) : '-'}
-                              </Td>
                               {/*
-                      THE BUSINESS DAY, 10:00 to 04:00, named after the day it
-                      started. Trading runs past midnight, so the calendar date
-                      splits one night's work across two rows: 23:50 and 00:10
-                      are the same shift and belong on the same line.
-                      Derived, never stored — the rule is one function and the
-                      report must not hold a second, older copy of it.
-                    */}
-                              <Td className="whitespace-nowrap tabular-nums">
-                                {(() => {
-                                  const day = businessDay(r.date_created);
-                                  return day ? formatDate(day) : '-';
-                                })()}
-                              </Td>
-                              <Td className="whitespace-nowrap tabular-nums">
-                                {r.order_id ?? '-'}
-                              </Td>
-                              {/* §14 — the NAMES, each in its own column. */}
-                              <Td className="max-w-[12rem] truncate">{r.brand_name || '-'}</Td>
-                              <Td className="max-w-[12rem] truncate">{r.restaurant_name || '-'}</Td>
-                              <Td className="whitespace-nowrap tabular-nums">
-                                {r.customer_phone || '-'}
-                              </Td>
-                              {/* §12/§13 — the four durations, all from the order's
-                            status history via `orderEventTimes`. Only the rows
-                            on the open PAGE are fetched, so these are blank
-                            until that batch lands. */}
-                              <Td className="whitespace-nowrap tabular-nums">
-                                <Leg
-                                  loading={eventTimes.isLoading}
-                                  minutes={timesOf(r.order_id).serviceMinutes}
-                                />
-                              </Td>
-                              <Td className="whitespace-nowrap tabular-nums">
-                                <Leg
-                                  loading={eventTimes.isLoading}
-                                  minutes={timesOf(r.order_id).driverArrivalMinutes}
-                                />
-                              </Td>
-                              <Td className="whitespace-nowrap tabular-nums">
-                                <Leg
-                                  loading={eventTimes.isLoading}
-                                  minutes={timesOf(r.order_id).deliveryMinutes}
-                                />
-                              </Td>
-                              <Td className="whitespace-nowrap tabular-nums">
-                                <Leg
-                                  loading={eventTimes.isLoading}
-                                  minutes={timesOf(r.order_id).preparationMinutes}
-                                />
-                              </Td>
-                              {/* §12 — the CAUSE, spelled out. `lateOrders.kind.*`
-                            translates the seeded two; anything operations added
-                            falls back to `causeLabel`, which turns
-                            `late_preparation` into "Late preparation" rather
-                            than printing the raw enum with its underscore. */}
-                              <Td className="whitespace-nowrap">
-                                {r.kind
-                                  ? t(`lateOrders.kind.${r.kind}`, {
-                                      defaultValue: causeLabel(r.kind),
-                                    })
-                                  : '-'}
-                              </Td>
-                              {/* §10 — the HANDLING state. */}
-                              <Td>
-                                <Pill tone={STATE_TONE[r.state]} size="sm">
-                                  {t(`lateOrders.state.${r.state}`, { defaultValue: r.state })}
-                                </Pill>
-                              </Td>
-                              {/* The ORDER's own status — a different fact, and the
-                            spec is explicit that the two must not be confused. */}
-                              <Td className="whitespace-nowrap text-muted-foreground">
-                                {r.order_status
-                                  ? t(`commerce.orderStatuses.${r.order_status}`, {
-                                      defaultValue: causeLabel(r.order_status),
-                                    })
-                                  : '-'}
-                              </Td>
-                              <Td className="whitespace-nowrap">{agentName(r, unknown)}</Td>
-                              <Td className="max-w-[22rem]">
-                                <span
-                                  className="line-clamp-2 block leading-snug"
-                                  title={r.reason ?? ''}
-                                >
-                                  {r.reason ?? '-'}
-                                </span>
-                              </Td>
-                              {/* What the agent DID about it, beside why it happened.
-                        `title` carries the full text, since the cell clamps. */}
-                              <Td className="max-w-[22rem]">
-                                <span
-                                  className="line-clamp-2 block leading-snug"
-                                  title={r.action_taken ?? ''}
-                                >
-                                  {r.action_taken ?? '-'}
-                                </span>
-                              </Td>
+                                THE CELLS, FROM THE SAME ARRAY as the header.
+
+                                `render` rather than a string, because a
+                                register cell is not always text: the handling
+                                state is a `Pill`, the four durations are a
+                                `<Leg>` that knows whether its batch has
+                                landed, and the reason is a hover panel.
+                              */}
+                              {registerColumns.map((c) => (
+                                <Td key={c.key} className={cn(c.tdClass, c.end && 'text-end')}>
+                                  {c.render(r)}
+                                </Td>
+                              ))}
                               {/* THE ORDER, from the stored snapshot. No network call:
                             it is already on the row. */}
                               {canSeeOrder && (
@@ -1241,8 +1465,14 @@ export function LateOrdersReportPage() {
                                     aria-haspopup="dialog"
                                     onClick={() => setOpenOrder(r.id)}
                                   >
-                                    {t('lateOrdersReport.snapshot.view', {
-                                      defaultValue: 'Order',
+                                    {/* CART & TRACKING, not "Order" (ops,
+                                        2026-10-04). It is the name the AGENT
+                                        portal already gives the same dialog, and
+                                        it says what is inside: the items and the
+                                        delivery legs. "Order" named the row, not
+                                        the thing the button opens. */}
+                                    {t('lateOrdersReport.snapshot.cartTracking', {
+                                      defaultValue: 'Cart & tracking',
                                     })}
                                   </Button>
                                 </Td>
@@ -1312,6 +1542,129 @@ export function LateOrdersReportPage() {
         table: a dialog nested in the branch that happens to be mounted is a
         dialog that works only from one tab.
       */}
+      {/*
+        ARRANGING THE REGISTER'S COLUMNS (ops, 2026-10-04).
+
+        A drawer rather than a popover, matching the compensation report and the
+        ticket breakdown: arranging eighteen columns is a task, and it needs
+        room, a search and a deliberate way out.
+
+        Drag is the fast path; the arrows are the keyboard-reachable one, and
+        both go through `reorderRegister` so there is one definition of what a
+        move means.
+      */}
+      <Drawer
+        open={arranging}
+        onClose={() => setArranging(false)}
+        title={t('agentReports.exportColumns', { defaultValue: 'Columns' })}
+        description={t('complaintReport.columnsHelp', {
+          defaultValue:
+            'Drag a row to reorder. The order here is the order in the table and the export.',
+        })}
+        width="lg"
+        footer={
+          <Button onClick={() => setArranging(false)}>
+            {t('actions.done', { ns: 'common', defaultValue: 'Done' })}
+          </Button>
+        }
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between border-b border-border p-4">
+            <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+              {t('compensationAll.columnCount', {
+                defaultValue: '{{n}} columns',
+                n: registerColumns.length,
+              })}
+            </span>
+            <button
+              type="button"
+              className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+              onClick={resetRegisterOrder}
+            >
+              {t('complaintReport.resetOrder', { defaultValue: 'Reset order' })}
+            </button>
+          </div>
+          <ul className="flex-1 space-y-0.5 overflow-auto p-3">
+            {registerColumns.map((c, i) => (
+              <li
+                key={c.key}
+                draggable
+                onDragStart={(e) => {
+                  setDragKey(c.key);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragEnd={() => setDragKey(null)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (!dragKey || dragKey === c.key) return;
+                  reorderRegister(dragKey, registerOrder.indexOf(c.key));
+                  setDragKey(null);
+                }}
+                className={cn(
+                  'flex items-center gap-1 rounded-lg',
+                  dragKey === c.key && 'opacity-40',
+                )}
+              >
+                <span
+                  aria-hidden
+                  className="shrink-0 cursor-grab select-none px-1 text-muted-foreground/60 active:cursor-grabbing"
+                  title={t('complaintReport.dragHint', { defaultValue: 'Drag to reorder' })}
+                >
+                  ⠿
+                </span>
+                <span className="w-5 shrink-0 text-end text-2xs tabular-nums text-muted-foreground/70">
+                  {i + 1}
+                </span>
+                <span className="flex-1 rounded-lg px-1.5 py-1.5 text-xs text-foreground">
+                  {c.label}
+                </span>
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => moveRegisterCol(c.key, -1)}
+                  aria-label={t('complaintReport.moveUp', {
+                    col: c.label,
+                    defaultValue: 'Move {{col}} earlier',
+                  })}
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                >
+                  ↑
+                </button>
+                <button
+                  type="button"
+                  disabled={i === registerColumns.length - 1}
+                  onClick={() => moveRegisterCol(c.key, 1)}
+                  aria-label={t('complaintReport.moveDown', {
+                    col: c.label,
+                    defaultValue: 'Move {{col}} later',
+                  })}
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                >
+                  ↓
+                </button>
+                <button
+                  type="button"
+                  disabled={i === 0}
+                  onClick={() => moveRegisterCol(c.key, -i)}
+                  aria-label={t('complaintReport.moveFirst', {
+                    col: c.label,
+                    defaultValue: 'Move {{col}} to the front',
+                  })}
+                  title={t('complaintReport.moveFirst', {
+                    col: c.label,
+                    defaultValue: 'Move {{col}} to the front',
+                  })}
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
+                >
+                  ⤒
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </Drawer>
+
       <Modal
         open={!!openOrder}
         onClose={() => setOpenOrder(null)}
