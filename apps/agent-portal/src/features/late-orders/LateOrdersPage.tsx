@@ -421,6 +421,10 @@ export function LateOrdersPage() {
   const reasonSlashMatch = /^\/(.*)$/.exec(reason);
   const reasonSlash = reasonSlashMatch?.[1] ?? '';
   const reasonSearching = reasonSlashMatch !== null;
+  /* The same gesture in the Action box, against its OWN library. */
+  const actionSlashMatch = /^\/(.*)$/.exec(actionTaken);
+  const actionSlash = actionSlashMatch?.[1] ?? '';
+  const actionSearching = actionSlashMatch !== null;
   /** The row whose cart + tracking is open. One at a time: the panel is tall,
       and two open rows push the queue itself off the screen. */
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -1830,6 +1834,7 @@ export function LateOrdersPage() {
                     */}
                     <QuickReplies
                       className="pt-1"
+                      kind="late_order_reason"
                       customerText=""
                       query={reasonSlash}
                       searching={reasonSearching}
@@ -1867,8 +1872,35 @@ export function LateOrdersPage() {
                         value={actionTaken}
                         onChange={(e) => setActionTaken(e.target.value)}
                         placeholder={t('lateOrders.actionPlaceholder', {
-                          defaultValue: 'What you did about it - e.g. called the branch.',
+                          defaultValue: 'What you did - or type / for a ready one.',
                         })}
+                      />
+                      {/*
+                        READY ACTIONS — its OWN library (ops, 2026-10-04:
+                        *"the quick reply feature in reason box... should also
+                        be implemented for action taken. the values in reason
+                        and action taken are new and isolated from each other
+                        and the inbox quick replies"*).
+
+                        Three separate sets, because they answer three different
+                        questions: a chat reply is addressed to a CUSTOMER, a
+                        reason explains why an order was late, an action says
+                        what was done about it. Pooling them would offer an
+                        agent mostly wrong answers in all three places, which is
+                        how a convenience becomes a thing people scroll past.
+                      */}
+                      <QuickReplies
+                        className="pt-1"
+                        kind="late_order_action"
+                        customerText=""
+                        query={actionSlash}
+                        searching={actionSearching}
+                        vars={{
+                          order: draft.row.orderId,
+                          brand: draft.row.brandName ?? null,
+                          restaurant: draft.row.restaurantName ?? null,
+                        }}
+                        onPick={setActionTaken}
                       />
                     </label>
                   )}

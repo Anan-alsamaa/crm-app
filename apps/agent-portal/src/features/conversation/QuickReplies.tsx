@@ -49,36 +49,87 @@ export function defaultReplyLang(customerText: string): ReplyLang {
   return AR.test(customerText) ? 'ar' : 'en';
 }
 
+/**
+ * WHICH LIBRARY a ready-made line belongs to.
+ *
+ * Three separate sets, and they must not be pooled (ops, 2026-10-04: *"the
+ * values in reason and action taken are new and isolated from each other and
+ * the inbox quick replies"*). A chat reply is addressed to a CUSTOMER; a reason
+ * explains why an order was late; an action says what was done about it. One
+ * shared list would offer an agent mostly wrong answers in all three places,
+ * which is how a convenience becomes a thing people scroll past.
+ */
+export type QuickReplyKind = 'chat' | 'late_order_reason' | 'late_order_action';
+
 export interface QuickReply {
   id: string;
   label: string;
   text: string;
   lang: 'en' | 'ar';
+  kind?: QuickReplyKind | null;
 }
 
-export function useQuickReplies() {
+export function useQuickReplies(kind: QuickReplyKind = 'chat') {
   return useQuery({
-    queryKey: ['quick-replies'],
+    queryKey: ['quick-replies', kind],
     // The library changes when operations edit it, which is rarely.
     staleTime: 5 * 60_000,
     queryFn: async () => {
+      /*
+       * READ WIDE, FILTER HERE — deliberately, and it is not laziness.
+       *
+       * Directus 403s a WHOLE query that names a column the collection does not
+       * have, so filtering on `kind` server-side would make every library in
+       * every portal return nothing on any environment where the field has not
+       * been created yet — and `catch` below would swallow it into an empty
+       * list that looks exactly like "operations have not written any". That is
+       * the silent-empty-failure shape this codebase keeps producing, and a
+       * schema field does NOT travel through a deploy.
+       *
+       * So the field is requested but never filtered on: an environment without
+       * it returns rows whose `kind` is undefined, which the fallback below
+       * reads as `chat` — where every existing row came from.
+       */
       try {
         const rows = (await directus.request(
           readItems(
             'quick_replies' as never,
             {
               filter: { active: { _eq: true } },
-              fields: ['id', 'label', 'text', 'lang'],
+              fields: ['id', 'label', 'text', 'lang', 'kind'],
               sort: ['sort', 'label'],
               limit: -1,
             } as never,
           ),
         )) as unknown as QuickReply[];
-        return rows;
+        return rows.filter((r) => (r.kind ?? 'chat') === kind);
       } catch {
-        // No library configured (or no permission) is not an error worth
-        // interrupting a chat for — the row simply does not appear.
-        return [] as QuickReply[];
+        /*
+         * A FIRST ATTEMPT THAT NAMES `kind` CAN STILL 403 on an environment
+         * where the field is missing, so retry WITHOUT it rather than returning
+         * nothing: the inbox had this library long before the two late-order
+         * ones existed and must keep working while the field is rolled out.
+         */
+        try {
+          const rows = (await directus.request(
+            readItems(
+              'quick_replies' as never,
+              {
+                filter: { active: { _eq: true } },
+                fields: ['id', 'label', 'text', 'lang'],
+                sort: ['sort', 'label'],
+                limit: -1,
+              } as never,
+            ),
+          )) as unknown as QuickReply[];
+          /* Without the column there is one undifferentiated library, and it is
+             the chat one. The late-order boxes correctly show nothing. */
+          return kind === 'chat' ? rows : ([] as QuickReply[]);
+        } catch {
+          // No library configured (or no permission) is not an error worth
+          // interrupting a chat for — the row simply does not appear.
+          return [] as QuickReply[];
+        }
       }
     },
   });
@@ -159,6 +210,7 @@ export function QuickReplies({
   searching,
   vars,
   onPick,
+  kind = 'chat',
   className,
 }: {
   /** What the customer has written, for language ranking. */
@@ -181,10 +233,15 @@ export function QuickReplies({
   };
   /** Called with the filled text. The caller decides how to insert it. */
   onPick: (text: string) => void;
+  /**
+   * WHICH LIBRARY to offer. Defaults to the inbox's, so every existing caller
+   * is unchanged. The late-order decision box passes its own two.
+   */
+  kind?: QuickReplyKind;
   className?: string;
 }) {
   const { t, i18n } = useTranslation();
-  const replies = useQuickReplies();
+  const replies = useQuickReplies(kind);
   const [open, setOpen] = useState(false);
   /** The whole control — trigger, language toggle and panel — for click-outside. */
   const wrap = useRef<HTMLDivElement>(null);
@@ -255,6 +312,16 @@ export function QuickReplies({
     setOpen(false);
   };
 
+  /* WHAT THE BUTTON IS CALLED, per library. "Quick replies" is right above a
+     composer and wrong above a reason box — nothing there is a reply to a
+     customer, and a mislabelled control is one an agent learns to ignore. */
+  const openLabel =
+    kind === 'late_order_reason'
+      ? t('quickReplies.openReasons', { defaultValue: 'Ready reasons' })
+      : kind === 'late_order_action'
+        ? t('quickReplies.openActions', { defaultValue: 'Ready actions' })
+        : t('quickReplies.open', { defaultValue: 'Quick replies' });
+
   return (
     <div ref={wrap} className={cn('relative', className)}>
       <div className="flex items-center gap-1.5">
@@ -265,7 +332,7 @@ export function QuickReplies({
           aria-haspopup="listbox"
           className="shrink-0 rounded-full border border-dashed border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-solid hover:border-primary/40 hover:bg-primary/[0.06] hover:text-foreground"
         >
-          {t('quickReplies.open', { defaultValue: 'Quick replies' })}
+          {openLabel}
           <span className="ms-1 opacity-60">{ranked.length}</span>
         </button>
 
@@ -310,7 +377,7 @@ export function QuickReplies({
       {listOpen && (
         <div
           role="listbox"
-          aria-label={t('quickReplies.open', { defaultValue: 'Quick replies' })}
+          aria-label={openLabel}
           /* ABOVE the composer, not below: the composer is already at the
              bottom of the window, so a menu that opens downward opens
              off-screen. Capped and scrollable so a long list is reachable

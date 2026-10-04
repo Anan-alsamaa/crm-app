@@ -294,8 +294,14 @@ export function OptionListsPage() {
           options={[
             ...LIST_KEYS.map((k) => ({ value: k, label: LIST_LABELS[k] })),
             {
+              /* "Ready wordings", not "Inbox: ready replies" (ops, 2026-10-04).
+                 This one entry now opens three libraries — the inbox replies
+                 plus the late-order reasons and actions — and naming only the
+                 inbox would hide the two new ones from anyone scanning this
+                 picker for where to write them. The section itself names each
+                 library on its own tab. */
               value: QUICK_REPLIES,
-              label: t('replies.title', { defaultValue: 'Inbox: ready replies' }),
+              label: t('replies.pickerLabel', { defaultValue: 'Ready wordings' }),
             },
           ]}
         />
@@ -307,10 +313,14 @@ export function OptionListsPage() {
               page, so the suite reads as one product. */}
           <div className="border-b border-foreground/10 pb-5">
             <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {/* The hero now introduces the THREE libraries; the per-library
+                  sentence moved into the section, next to the tab that selects
+                  it, because it changes with the tab and a hero that contradicts
+                  the list under it is worse than no hero. */}
               {page === QUICK_REPLIES
-                ? t('replies.hint', {
+                ? t('replies.heroSubtitle', {
                     defaultValue:
-                      'The buttons above the reply box in the inbox. The button is what the agent sees; the text is what gets inserted. Drag to reorder.',
+                      'Wordings an agent inserts with one click. Three separate libraries: the ready replies above the inbox composer, and the ready reasons and actions on a late-order decision.',
                   })
                 : t('lists.heroSubtitle', {
                     defaultValue:

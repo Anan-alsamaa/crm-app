@@ -66,42 +66,55 @@ export function LongText({ value, empty = '-', className }: LongTextProps): JSX.
         {text}
       </span>
       {/*
-       * THE PANEL.
+       * THE PANEL — and you can put the cursor IN it and select the text.
        *
-       * Redesigned 2026-10-04 — the first cut was "boxy" (owner): a hard
-       * border, square-ish corners and a flat popover fill, which read as a
-       * dialog bolted onto a table cell rather than the value expanding.
+       * Redesigned twice. The first cut was "boxy" (owner, 2026-10-04): a hard
+       * border, square corners and a flat fill, reading as a dialog bolted onto
+       * a table cell rather than the value expanding. The second was worse in
+       * the way that matters: *"when trying to place cursor to the complete
+       * value it stops being displayed"* — the whole point of showing the full
+       * text is to be able to COPY it, and it was unreachable.
        *
-       * What changed, and why each one: the border is gone in favour of the
-       * app's own elevation ramp (`shadow-float` + a hairline ring), which is
-       * how every other floating surface here separates itself; the radius
-       * steps up to `rounded-xl` to match `Card`; it fades and lifts in rather
-       * than appearing, so the eye follows it from the cell it came from; and
-       * the first line is given room to breathe instead of being packed to the
-       * edges.
+       * Two things made it unreachable, and both had to go:
        *
-       * `pointer-events-none` so it can never swallow a click meant for the row
-       * beneath it, and `z-20` so it sits over the following rows rather than
-       * being clipped by them.
+       *  1. `pointer-events-none`. It was there so the panel could never
+       *     swallow a click meant for the row beneath — but it also means the
+       *     cursor passes straight through, so the panel never counts as
+       *     hovered and the moment the pointer leaves the CELL it closes. A
+       *     panel you cannot point at is a panel you cannot select text in.
+       *     The hover now lives on the wrapper, which contains both, so moving
+       *     into the panel keeps it open.
+       *
+       *  2. THE GAP. A visible margin between the cell and the panel is dead
+       *     space: the pointer crosses it, is over neither, and the panel
+       *     closes mid-journey. The margin is replaced by transparent top
+       *     padding INSIDE the panel, so the gap is part of the hover target
+       *     and the crossing is unbroken. `pt-1.5` + `-mt-0` rather than
+       *     `mt-1.5`.
+       *
+       * `select-text` and `cursor-text` say it is selectable; `z-20` keeps it
+       * over the following rows rather than clipped by them.
        */}
       <span
         role="tooltip"
-        aria-hidden
         className={cn(
-          'pointer-events-none absolute start-0 top-full z-20 mt-1.5 w-max max-w-sm',
-          'whitespace-pre-wrap break-words rounded-xl bg-popover px-3.5 py-2.5',
-          'text-start text-xs font-normal normal-case leading-relaxed text-foreground',
-          'shadow-float ring-1 ring-border/60',
-          /* Invisible by default and ANIMATED in, rather than `hidden`: a
-             display swap cannot transition, which is half of why it felt
-             abrupt. */
+          'absolute start-0 top-full z-20 w-max max-w-sm pt-1.5',
           'invisible -translate-y-1 opacity-0',
           'transition-[opacity,transform,visibility] duration-base ease-out',
           'group-hover/longtext:visible group-hover/longtext:translate-y-0 group-hover/longtext:opacity-100',
           'group-focus-within/longtext:visible group-focus-within/longtext:translate-y-0 group-focus-within/longtext:opacity-100',
         )}
       >
-        {text}
+        <span
+          className={cn(
+            'block cursor-text select-text whitespace-pre-wrap break-words',
+            'rounded-xl bg-popover px-3.5 py-2.5',
+            'text-start text-xs font-normal normal-case leading-relaxed text-foreground',
+            'shadow-float ring-1 ring-border/60',
+          )}
+        >
+          {text}
+        </span>
       </span>
     </span>
   );

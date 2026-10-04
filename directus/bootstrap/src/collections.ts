@@ -632,6 +632,13 @@ export const collections: CollectionSpec[] = [
         defaultValue: 'en',
         note: 'Used to rank: replies in the language the CUSTOMER is writing come first.',
       },
+      {
+        field: 'kind',
+        type: 'string',
+        choices: ['chat', 'late_order_reason', 'late_order_action'],
+        defaultValue: 'chat',
+        note: 'WHICH LIBRARY this row belongs to. `chat` is the inbox composer; `late_order_reason` and `late_order_action` are the two boxes on a late-order decision. They are deliberately SEPARATE sets (ops, 2026-10-04): a reason explains why an order was late, an action says what was done about it, and neither is a reply to a customer — one shared list would offer an agent mostly wrong answers in all three places. Rows written before this existed have no value and read as `chat`, which is where they came from.',
+      },
       { field: 'sort', type: 'integer', defaultValue: 0 },
       { field: 'active', type: 'boolean', defaultValue: true },
     ],
