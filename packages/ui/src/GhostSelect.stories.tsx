@@ -17,18 +17,32 @@ const OPTIONS = [
   { value: 'closed', label: 'Closed' },
 ];
 
+/**
+ * A NAMED COMPONENT, not an inline `render` arrow.
+ *
+ * Storybook calls `render` as a component, so the `useState` below was always
+ * safe in practice — but `rules-of-hooks` cannot know that: it sees a hook in a
+ * lowercase function and has to assume the worst, because a hook in a plain
+ * helper is a real and silent crash.
+ *
+ * Hoisting it to a capitalised component makes the story say what it already
+ * was, and keeps the rule able to check it rather than having to be suppressed.
+ * A disable comment here would train the next reader to add one.
+ */
+function GhostSelectStory() {
+  const [value, setValue] = useState('open');
+  const current = OPTIONS.find((o) => o.value === value);
+  return (
+    <GhostSelect
+      label="Status"
+      value={value}
+      display={current?.label ?? value}
+      options={OPTIONS}
+      onChange={setValue}
+    />
+  );
+}
+
 export const Default: Story = {
-  render: () => {
-    const [value, setValue] = useState('open');
-    const current = OPTIONS.find((o) => o.value === value);
-    return (
-      <GhostSelect
-        label="Status"
-        value={value}
-        display={current?.label ?? value}
-        options={OPTIONS}
-        onChange={setValue}
-      />
-    );
-  },
+  render: () => <GhostSelectStory />,
 };
