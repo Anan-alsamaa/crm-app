@@ -513,3 +513,66 @@ export function lateOrderTicket(opts: {
 }
 
 export const FALLBACK_THRESHOLD = DEFAULT_LATE_DELIVERY_MINUTES;
+
+/**
+ * THE LATE-ORDER DECISION BEHIND ONE ORDER, for the ticket that came out of it.
+ *
+ * Reported by operations (EMA-26 §4, 2026-10-04): *"The selected Reason and
+ * Action Taken are currently not displayed in the User CRM. Both fields should
+ * be visible in the customer/order details for proper tracking and
+ * follow-up."*
+ *
+ * They were visible only in the late-orders QUEUE — the screen an agent leaves
+ * the moment they raise a ticket. So the agent who later picks that ticket up
+ * cannot see why the order was late or what was already done about it, and
+ * either asks the customer again or repeats the action.
+ *
+ * KEYED BY ORDER, not by ticket. A `wecare` cause deliberately raises NO ticket
+ * (the WeCare team answers it themselves), and a late-preparation order can
+ * carry several decisions over its life — so the ticket's own `order_id` is the
+ * only link that works for every case. The newest decision wins, matching the
+ * `latestPerOrder` rule the register uses: a re-decision supersedes, it does not
+ * accumulate.
+ */
+export function useLateOrderDecisionForOrder(orderId: string | null | undefined) {
+  const key = orderId?.trim() ?? '';
+  return useQuery({
+    queryKey: ['late-order-decision-for-order', key],
+    enabled: !!key,
+    /* It changes only when an agent decides again, which is rare, and this
+       mounts on every ticket that has an order. */
+    staleTime: 60_000,
+    queryFn: async (): Promise<LateOrderDecisionRow | null> => {
+      try {
+        const rows = (await directus.request(
+          readItems(
+            'late_order_decisions' as never,
+            {
+              filter: { order_id: { _eq: key } },
+              fields: [
+                'id',
+                'order_id',
+                'kind',
+                'action',
+                'reason',
+                'action_taken',
+                'date_created',
+                { decided_by: ['id', 'first_name', 'last_name'] },
+              ],
+              /* Newest first, so the first row is the one in force. */
+              sort: ['-date_created'],
+              limit: 1,
+            } as never,
+          ),
+        )) as unknown as LateOrderDecisionRow[];
+        return rows[0] ?? null;
+      } catch {
+        /* No permission, or the collection is absent on this environment. A
+           missing card is not worth interrupting a ticket for — but it is NOT
+           silently an empty one: the card renders nothing at all, so a reader
+           cannot mistake "could not read" for "nothing was recorded". */
+        return null;
+      }
+    },
+  });
+}

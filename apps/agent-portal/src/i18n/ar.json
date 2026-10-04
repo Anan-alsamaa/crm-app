@@ -1113,6 +1113,7 @@
     "rowsPerPage": "عدد الصفوف في الصفحة",
     "showingRange": "عرض {{from}}-{{to}} من {{total}}",
     "reasonRequired": "التفسير مطلوب.",
-    "actionRequired": "اذكر ما قمت به حيال ذلك."
+    "actionRequired": "اذكر ما قمت به حيال ذلك.",
+    "decisionHeading": "طلب متأخر"
   }
 }

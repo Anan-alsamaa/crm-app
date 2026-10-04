@@ -82,6 +82,24 @@ export function parseYijiTimestamp(raw: string | null | undefined): number {
  * order that is "-141 minutes late", which is both nonsense on screen and
  * sorts to the bottom of a list ordered by lateness.
  */
+/**
+ * A late-order CAUSE, spelled out for a reader.
+ *
+ * Operations add causes to an editable list, so the seeded two are not the
+ * whole set and a hardcoded map would print a raw enum for anything new —
+ * `late_preparation` rather than "Late preparation". Callers try
+ * `lateOrders.kind.<value>` first and fall back to this, which turns any value
+ * into something readable without anyone editing code.
+ *
+ * SHARED, because it was written twice: once in the admin register and once on
+ * the way to the agent portal's ticket card. Two copies of a display rule drift,
+ * and the two screens are meant to read the same.
+ */
+export function causeLabel(value: string): string {
+  const spaced = value.replace(/_/g, ' ').trim();
+  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : value;
+}
+
 export function minutesSince(placedAt: string | null | undefined, now: number): number | null {
   const started = parseYijiTimestamp(placedAt);
   if (!Number.isFinite(started)) return null;
@@ -643,6 +661,16 @@ export interface LateOrderRegisterRow extends Omit<LateOrderDecisionRow, 'id'> {
   customer_phone?: string | null;
   /** True when nothing has been recorded: the row is queue-only. */
   pendingOnly: boolean;
+  /**
+   * WHEN THE ORDER WAS PLACED, as opposed to when it was decided.
+   *
+   * `date_created` means different things on the two kinds of row — the
+   * decision's time on a decided one, the order's on a pending one — and the
+   * register's "Creation time" column needs the ORDER's, always (EMA-26). Kept
+   * beside `date_created` rather than overwriting it: the decision date is real
+   * data that the agent and acted-on columns legitimately report.
+   */
+  order_placed_at?: string | null;
 }
 
 /**
@@ -675,6 +703,34 @@ export function mergeLateOrders(
       ...d,
       state: lateOrderState(d),
       pendingOnly: false,
+      /*
+       * WHEN THE ORDER WAS PLACED — which is NOT when it was decided.
+       *
+       * Reported by operations (EMA-26, 2026-10-04): *"the Order Creation Date
+       * currently changes based on the selected date range. The actual order
+       * creation date should remain fixed and accurate."*
+       *
+       * It was never the range doing it. A DECIDED row spreads `...d`, so its
+       * `date_created` is the DECISION's — when an agent acted — while a
+       * PENDING row takes `q.placedAt`, the order's own time. One column,
+       * labelled "Creation time", showing two different facts depending on
+       * whether anybody had touched the row yet. Widening the range pulls in
+       * decisions taken on other days, so the dates appear to move.
+       *
+       * Measured on staging: order 1323103 was placed 2026-09-28 and shows
+       * 2026-10-04, the day it was compensated — six days out.
+       *
+       * The SNAPSHOT first: it is what the order was when the decision was
+       * taken, and it is immutable. The live queue second, for a decision made
+       * before snapshots captured `placedAt`. Null last, and the column falls
+       * back to the decision date rather than rendering a blank — a dash where
+       * a date belongs reads as missing data, and the decision date is at least
+       * an upper bound on when the order existed.
+       */
+      order_placed_at:
+        d.order_snapshot?.placedAt?.trim() ||
+        (key ? (queueByOrder.get(key)?.placedAt ?? null) : null) ||
+        null,
       /*
        * THE CUSTOMER'S NUMBER, WHICH A DECIDED ROW NEVER CARRIED.
        *
@@ -717,6 +773,10 @@ export function mergeLateOrders(
          no decision time to show — and dating it "now" would put every pending
          order at the top of a report sorted by when things happened. */
       date_created: q.placedAt ?? null,
+      /* A pending row has no decision, so the two are the same time — but it
+         is still stated, so every row in the register answers "when was this
+         order placed?" from one field. */
+      order_placed_at: q.placedAt ?? null,
       decided_by: null,
       ticket: null,
       /* NULL, and that is the truth rather than a gap: nobody has acted on this

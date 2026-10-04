@@ -22,7 +22,7 @@ import {
   formatDate,
   formatDateTime,
 } from '@yiji/ui';
-import { businessDay, orderEventTimes, type LateOrderState } from '@yiji/shared-types';
+import { businessDay, causeLabel, orderEventTimes, type LateOrderState } from '@yiji/shared-types';
 import {
   LATE_ORDERS_REPORT_ORDER_KEY,
   loadColumnOrder,
@@ -143,11 +143,6 @@ const STATE_TONE: Record<LateOrderState, 'highlight' | 'blue' | 'success'> = {
  * operations add to the editable list, and every Yiji order status. Printing the
  * raw enum put underscores in a report people read and export.
  */
-function causeLabel(value: string): string {
-  const spaced = value.replace(/_/g, ' ').trim();
-  return spaced ? spaced.charAt(0).toUpperCase() + spaced.slice(1) : value;
-}
-
 /**
  * One duration cell: still loading, not knowable, or minutes.
  *
@@ -658,10 +653,26 @@ export function LateOrdersReportPage() {
       key: 'creationTime',
       label: t('lateOrdersReport.col.creationTime', { defaultValue: 'Creation time' }),
       tdClass: 'whitespace-nowrap text-muted-foreground',
-      render: (r) => (r.date_created ? formatDateTime(r.date_created) : '-'),
+      /*
+       * THE ORDER'S OWN TIME, not the decision's (EMA-26, 2026-10-04:
+       * *"the Order Creation Date currently changes based on the selected date
+       * range. The actual order creation date should remain fixed"*).
+       *
+       * It was never the range. `date_created` means different things on the
+       * two kinds of row — the DECISION's time once somebody has acted, the
+       * ORDER's while it is still pending — so one column showed two facts and
+       * widening the range pulled in decisions from other days, which looks
+       * exactly like the dates moving. `order_placed_at` is the order's,
+       * always. It falls back to `date_created` so a row that predates
+       * snapshots shows a date rather than a dash.
+       */
+      render: (r) => {
+        const placed = r.order_placed_at ?? r.date_created;
+        return placed ? formatDateTime(placed) : '-';
+      },
       /* ISO, not the dd/mm/yyyy on screen: a spreadsheet sorts and filters an
          ISO stamp correctly and re-formats it for the reader either way. */
-      get: (r) => r.date_created ?? '',
+      get: (r) => r.order_placed_at ?? r.date_created ?? '',
     },
     {
       key: 'businessDay',
@@ -674,11 +685,15 @@ export function LateOrdersReportPage() {
        * same line. Derived, never stored — the rule is one function and the
        * report must not hold a second, older copy of it.
        */
+      /* FROM THE ORDER'S TIME TOO. The business day answers "which trading
+         night did this order fall in", so deriving it from the decision date
+         filed a compensated order under the night the AGENT worked rather than
+         the night the customer waited. */
       render: (r) => {
-        const day = businessDay(r.date_created);
+        const day = businessDay(r.order_placed_at ?? r.date_created);
         return day ? formatDate(day) : '-';
       },
-      get: (r) => businessDay(r.date_created) ?? '',
+      get: (r) => businessDay(r.order_placed_at ?? r.date_created) ?? '',
     },
     {
       key: 'order',

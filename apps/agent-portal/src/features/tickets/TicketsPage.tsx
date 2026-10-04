@@ -86,6 +86,7 @@ import {
   OrderSnapshotCard,
   parseLegacyOrderBlock,
 } from './OrderSnapshotCard.js';
+import { LateOrderDecisionCard } from '../late-orders/LateOrderDecisionCard.js';
 import { useContact } from '../contacts/api.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
@@ -1184,6 +1185,20 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             )}
           </section>
         )}
+
+        {/*
+          WHY THE ORDER WAS LATE, AND WHAT WAS ALREADY DONE (EMA-26 §4).
+
+          OUTSIDE the order-snapshot section above, deliberately: that section
+          is gated on a captured snapshot, and a late-order decision exists
+          whether or not one was ever taken — a `wecare` cause raises no ticket
+          at all, and an older decision predates snapshots entirely. Gating this
+          on a snapshot would hide the decision on exactly the tickets whose
+          history is hardest to reconstruct.
+
+          Renders NOTHING when the order has no decision, which is most tickets.
+        */}
+        <LateOrderDecisionCard orderId={tk.order_id} className="max-w-prose" />
       </header>
 
       {/* Two-column body: narrative (notes + history) on the left, ticket
