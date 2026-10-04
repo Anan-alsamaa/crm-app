@@ -51,8 +51,40 @@ type ReplyKind = (typeof KINDS)[number];
  * environment where the field has not been created yet still shows operations
  * their inbox replies instead of an empty page.
  */
-const kindOf = (r: { kind?: string | null }): ReplyKind =>
+export const kindOf = (r: { kind?: string | null }): ReplyKind =>
   (KINDS as readonly string[]).includes(r.kind ?? '') ? (r.kind as ReplyKind) : 'chat';
+
+/**
+ * IS THIS LABEL ALREADY TAKEN — IN THE LIBRARY IT IS GOING INTO?
+ *
+ * Scoped per `kind`, and that scoping is the whole point: "Compensated" is a
+ * perfectly good ACTION and a perfectly good chat reply, and a global check
+ * would refuse the second one for colliding with a row in a list nobody was
+ * looking at.
+ *
+ * Checked against the DESTINATION kind, not the row's current one: moving
+ * "Opening" into the reasons must collide with an existing reason, and must NOT
+ * collide with the chat reply it is leaving behind.
+ *
+ * `excludeId` is the row being edited — renaming something to its own current
+ * label is leaving it alone, not a duplicate.
+ *
+ * Exported so the rule is tested on its own. It is three conditions that have
+ * to agree, and getting any of them wrong rejects an edit an operator is
+ * entitled to make, which reads as the form being broken.
+ */
+export function labelTaken(
+  rows: ReadonlyArray<{ id: string; label: string; kind?: string | null }>,
+  label: string,
+  destinationKind: ReplyKind,
+  excludeId?: string,
+): boolean {
+  const wanted = label.trim().toLowerCase();
+  if (!wanted) return false;
+  return rows.some(
+    (r) => r.id !== excludeId && kindOf(r) === destinationKind && r.label.toLowerCase() === wanted,
+  );
+}
 
 interface ReplyRow {
   id: string;
@@ -172,14 +204,7 @@ export function QuickRepliesSection() {
      * reason called "Opening" and must not collide with the chat reply it is
      * leaving behind.
      */
-    if (
-      all.some(
-        (r) =>
-          r.id !== editing.id &&
-          kindOf(r) === editKind &&
-          r.label.toLowerCase() === l.toLowerCase(),
-      )
-    ) {
+    if (labelTaken(all, l, editKind, editing.id)) {
       toast.error(
         t('replies.duplicate', { defaultValue: 'A reply with that button already exists.' }),
       );
