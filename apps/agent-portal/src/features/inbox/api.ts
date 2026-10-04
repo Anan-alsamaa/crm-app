@@ -44,6 +44,21 @@ export interface InboxConversation {
   entry_order_id?: string | null;
   last_order_snapshot?: YijiOrder | null;
   last_order_at?: string | null;
+  /**
+   * When the push gateway last said this customer is permanently unreachable.
+   *
+   * Written by the workers when a push is refused for a reason retrying cannot
+   * fix — no FCM token, or a token the device has invalidated. About a third of
+   * customers are in this state (measured: 39 conversations in 14 days), and 20
+   * production conversations carry it today.
+   */
+  push_unreachable_at?: string | null;
+  /**
+   * Who opened this chat. An agent-initiated one has no inbound first message,
+   * which is why the first-response promise does not apply to it — and why the
+   * WhatsApp nudge does.
+   */
+  initiated_by?: 'customer' | 'agent' | null;
 }
 
 /** The vendor id, whether the relation came back expanded or as a bare id. */
@@ -633,6 +648,15 @@ export function useConversation(conversationId: string | null) {
               'entry_order_id',
               'last_order_snapshot',
               'last_order_at',
+              /*
+               * WHETHER THE CUSTOMER CAN BE REACHED, and who opened this chat
+               * (EMA-11). Together they decide whether the WhatsApp fallback is
+               * offered: it only makes sense on a chat the AGENT started, where
+               * the customer has no window open and the push was the only thing
+               * telling them to look.
+               */
+              'push_unreachable_at',
+              'initiated_by',
               { contact: ['id', 'name', 'email', 'phone'] },
               { vendor: ['id', 'name'] },
               { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },

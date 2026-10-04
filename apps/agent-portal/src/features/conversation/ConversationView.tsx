@@ -41,6 +41,7 @@ import { ConversationToolbar } from './ConversationToolbar.js';
 import { ConversationSidebar } from './ConversationSidebar.js';
 import { QuickReplies } from './QuickReplies.js';
 import { EnhanceButton } from './EnhanceButton.js';
+import { PushUnreachableNotice } from './PushUnreachableNotice.js';
 import { resolveMentions } from './mentions.js';
 
 let seq = 0;
@@ -1326,6 +1327,28 @@ export function ConversationView({
                 rather than in a side panel they have to look away to find.
                 A suggestion still only ever lands in the composer for the
                 agent to edit — nothing reaches the customer unreviewed. */}
+            {/*
+              THEY MAY NOT KNOW YOU WROTE (EMA-11).
+
+              Above the composer, where the agent is about to type — not in the
+              header they scrolled past. It only appears on a chat the AGENT
+              started and whose customer the push gateway has marked
+              permanently unreachable; the component itself holds that rule, so
+              there is one place to read it.
+
+              Hidden on an internal note for the same reason the canned replies
+              are: a note goes to the team, and nudging the customer about it
+              makes no sense.
+            */}
+            {!internalNote && (
+              <PushUnreachableNotice
+                className="mb-2"
+                pushUnreachableAt={c?.push_unreachable_at}
+                initiatedBy={c?.initiated_by}
+                phone={c?.contact?.phone}
+                name={c?.contact?.name}
+              />
+            )}
             {/* Ready-made replies, directly above the box — the operations portal
                 puts them here and agents already reach for them there. Hidden on
                 an internal note: a canned customer reply is never the right
