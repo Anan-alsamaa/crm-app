@@ -802,39 +802,44 @@ export class HttpYijiClient implements YijiClient {
     if (!Array.isArray(rows)) return null;
 
     /*
-     * THE ROW WHOSE NUMBER IS *EXACTLY* THIS ONE — never merely ends with it.
+     * THE ROW WHOSE NUMBER IS *EXACTLY* THIS ONE.
+     *
+     * The CRM stores `0540041059`; Yiji stores `+966540041059`. Those are the
+     * same number written two ways, and that conversion is the whole job here.
      *
      * `endsWith` was not enough, and production showed why (owner, 2026-10-03).
-     * `0540041059` returns FIVE accounts: four test records stored as
-     * `+9660540041059` — Yiji's country code followed by the trunk zero, which
-     * is a malformed number — and one real customer, `+966540041059`.
+     * `0540041059` returns FIVE accounts from Yiji's substring search: four
+     * test records stored as `+9660540041059` — the country code followed by a
+     * trunk zero, which is NOT a valid number — and one real customer at
+     * `+966540041059`. All five END with `540041059`, so `endsWith` took
+     * whichever Yiji listed first: a test account, not the customer.
      *
-     * Every one of the five ENDS with `540041059`, so `endsWith` took whichever
-     * Yiji happened to return first: a test account, not the customer. A coupon
-     * granted to the wrong account cannot be revoked from our side.
+     * SO THE CANONICAL FORM IS EXACT, AND `+9660…` IS NOT IT.
      *
-     * So the comparison is now on the NATIONAL number, normalised the same way
-     * on both sides: strip non-digits, drop a leading `966`, then drop any
-     * leading zeros. `+966540041059` and `+9660540041059` both reduce to
-     * `540041059` — and a longer number that merely ends in it does not,
-     * because its own national part is longer.
+     * An earlier pass normalised both sides by stripping the country code and
+     * then any leading zeros, which made `+9660540041059` and `+966540041059`
+     * compare EQUAL — the malformed row was treated as the customer's own
+     * number, so a real match sat behind an "ambiguous" refusal it should
+     * never have been part of (owner, 2026-10-04: "if on crm the number is
+     * 0540041059, then on yiji it is +966540041059").
      *
-     * AND IT MUST BE UNAMBIGUOUS. If two DIFFERENT accounts still reduce to the
-     * same national number, there is no way to tell which one the agent meant,
-     * and guessing is what this whole function exists to avoid. Answering null
-     * leaves the coupon approved and undelivered, which a human can see and
-     * resolve — a silent grant to the wrong person is neither.
+     * Now the CRM number is converted ONCE into the form Yiji should hold, and
+     * a row matches only if it is that string. A malformed row simply is not
+     * the number asked for, so it cannot win and cannot make the answer
+     * ambiguous.
      */
-    const nationalOf = (v: string | null | undefined) => {
-      /* `00` is the international dialling prefix — `00966…` is the same number
-         as `+966…`, and a phone's own contact card often stores it that way.
-         Stripped FIRST, or the country code below is no longer at the front. */
-      const d = (v ?? '').replace(/\D/g, '').replace(/^00/, '');
-      /* Country code, then the trunk zero. In that order: `+9660540041059` is
-         both, and dropping the zeros first would leave `9660540041059`. */
-      return d.replace(/^966/, '').replace(/^0+/, '');
-    };
-    const matches = rows.filter((r) => nationalOf(r?.phoneNumber) === national);
+    const e164 = `966${national}`;
+    const digitsOf = (v: string | null | undefined) =>
+      (v ?? '').replace(/\D/g, '').replace(/^00/, '');
+    const matches = rows.filter((r) => digitsOf(r?.phoneNumber) === e164);
+
+    /*
+     * STILL REFUSES WHEN GENUINELY AMBIGUOUS. If two DIFFERENT accounts both
+     * hold the very same correct number, there is no way to tell which one the
+     * agent meant. Null leaves the coupon approved and undelivered, where a
+     * human can see it — a silent grant to the wrong person is neither visible
+     * nor reversible.
+     */
     const ids = [...new Set(matches.map((r) => r?.id?.trim()).filter(Boolean))];
     if (ids.length !== 1) return null;
     return ids[0] ?? null;

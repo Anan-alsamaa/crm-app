@@ -31,10 +31,18 @@ import { resolve } from 'node:path';
  * it is reproduced here against the EXACT rows production returned.
  */
 
-/** The same normalisation the lookup applies, kept in step with the source. */
-const nationalOf = (v: string | null | undefined) => {
-  const d = (v ?? '').replace(/\D/g, '').replace(/^00/, '');
-  return d.replace(/^966/, '').replace(/^0+/, '');
+/**
+ * The same conversion the lookup applies, kept in step with the source.
+ *
+ * The CRM holds `0540041059`; Yiji holds `+966540041059`. One number, two
+ * spellings, and converting between them IS the job.
+ */
+const digitsOf = (v: string | null | undefined) => (v ?? '').replace(/\D/g, '').replace(/^00/, '');
+
+/** The CRM's number in the form Yiji should be holding it. */
+const toYijiForm = (crm: string) => {
+  const national = digitsOf(crm).replace(/^966/, '').replace(/^0+/, '');
+  return `966${national}`;
 };
 
 /** The real rows Yiji returned for 0540041059 on 2026-10-03. */
@@ -47,79 +55,99 @@ const ROWS = [
 ];
 
 /** The lookup's decision, reproduced. */
-const pick = (rows: typeof ROWS, national: string): string | null => {
-  const matches = rows.filter((r) => nationalOf(r.phoneNumber) === national);
+const pick = (rows: typeof ROWS, crm: string): string | null => {
+  const want = toYijiForm(crm);
+  const matches = rows.filter((r) => digitsOf(r.phoneNumber) === want);
   const ids = [...new Set(matches.map((r) => r.id.trim()).filter(Boolean))];
   return ids.length === 1 ? (ids[0] ?? null) : null;
 };
 
-describe('normalising a Saudi number', () => {
-  /* Every spelling of ONE number reduces to the same national part. */
+describe('converting a CRM number to the form Yiji holds', () => {
+  /* Every spelling an agent might type becomes the one canonical answer. */
   it.each([
-    ['+966540041059', '540041059'],
-    ['0540041059', '540041059'],
-    ['540041059', '540041059'],
-    ['00966540041059', '540041059'],
-  ])('reduces %s to %s', (input, expected) => {
-    expect(nationalOf(input)).toBe(expected);
-  });
-
-  /*
-   * THE MALFORMED ONE THAT CAUSED THIS. `+9660540041059` is the country code
-   * followed by the trunk zero — not a valid number, but four accounts are
-   * stored that way. It must reduce to the SAME national part, or those
-   * accounts become unreachable instead of merely ambiguous.
-   */
-  it('reduces a country code followed by a trunk zero', () => {
-    expect(nationalOf('+9660540041059')).toBe('540041059');
-  });
-
-  /* A different, longer number must NOT reduce to this one — that is what
-     `endsWith` could not tell apart. */
-  it('keeps a longer number distinct', () => {
-    expect(nationalOf('+966555540041059')).not.toBe('540041059');
+    ['0540041059', '966540041059'],
+    ['+966540041059', '966540041059'],
+    ['540041059', '966540041059'],
+    ['00966540041059', '966540041059'],
+  ])('turns %s into %s', (input, expected) => {
+    expect(toYijiForm(input)).toBe(expected);
   });
 });
 
 describe('choosing between several accounts on one number', () => {
   /*
-   * THE REGRESSION ITSELF. Five accounts, two different people. The honest
-   * answer is "I cannot tell", and the coupon stays approved and undelivered —
-   * which a human can see and resolve. A silent grant to the wrong account is
-   * neither visible nor reversible.
+   * THE WHOLE POINT, and the owner's own words (2026-10-04): "if on crm the
+   * number is 0540041059, then on yiji it is +966540041059".
+   *
+   * `+9660540041059` — the country code followed by a trunk zero — is NOT that
+   * number. It is a malformed row, so it cannot win and cannot make the answer
+   * ambiguous. Ayman Hussien is the only account that actually holds the
+   * number asked for.
    */
-  it('refuses to guess when the number is ambiguous', () => {
-    expect(pick(ROWS, '540041059')).toBeNull();
+  it('picks the account whose number is exactly right', () => {
+    expect(pick(ROWS, '0540041059')).toBe('c2d49e8c');
   });
 
   it('would have picked a TEST account under the old endsWith rule', () => {
     const old = ROWS.find((r) => r.phoneNumber.replace(/\D/g, '').endsWith('540041059'));
     expect(old?.id).toBe('76fe9966');
-    /* Not Ayman Hussien, who is `c2d49e8c`. */
     expect(old?.id).not.toBe('c2d49e8c');
   });
 
-  /* The ordinary case still resolves: one account, one answer. */
+  /*
+   * AND IT WOULD HAVE REFUSED under the first attempt at a fix, which stripped
+   * the trunk zero AFTER the country code — making `+9660…` and `+966…`
+   * compare equal, so a perfectly good match sat behind an "ambiguous"
+   * refusal it should never have been part of.
+   */
+  it('is not blocked by the malformed rows beside it', () => {
+    expect(pick(ROWS, '0540041059')).not.toBeNull();
+  });
+
+  /* The ordinary case: one account, one answer. */
   it('resolves a number held by exactly one account', () => {
-    expect(pick([{ id: 'only', phoneNumber: '+966501234567' }], '501234567')).toBe('only');
+    expect(pick([{ id: 'only', phoneNumber: '+966501234567' }], '0501234567')).toBe('only');
   });
 
   /* Duplicate ROWS for the SAME account are not ambiguity — Yiji's search can
-     return a customer more than once, and one id is still one person. */
+     return one customer more than once, and one id is still one person. */
   it('accepts the same account listed twice', () => {
     expect(
       pick(
         [
           { id: 'same', phoneNumber: '+966501234567' },
-          { id: 'same', phoneNumber: '0501234567' },
+          { id: 'same', phoneNumber: '00966501234567' },
         ],
-        '501234567',
+        '0501234567',
       ),
     ).toBe('same');
   });
 
+  /*
+   * STILL REFUSES WHEN GENUINELY AMBIGUOUS. Two DIFFERENT accounts both
+   * holding the correct number is unresolvable, and guessing is what this
+   * function exists to prevent.
+   */
+  it('refuses when two real accounts share the number', () => {
+    expect(
+      pick(
+        [
+          { id: 'one', phoneNumber: '+966501234567' },
+          { id: 'two', phoneNumber: '+966501234567' },
+        ],
+        '0501234567',
+      ),
+    ).toBeNull();
+  });
+
   it('answers null when nothing matches', () => {
-    expect(pick([{ id: 'other', phoneNumber: '+966509999999' }], '501234567')).toBeNull();
+    expect(pick([{ id: 'other', phoneNumber: '+966509999999' }], '0501234567')).toBeNull();
+  });
+
+  /* A malformed row ALONE is still not the number asked for. Better no coupon
+     than a coupon to an account whose number is wrong. */
+  it('does not settle for a malformed row even when it is the only one', () => {
+    expect(pick([{ id: 'bad', phoneNumber: '+9660540041059' }], '0540041059')).toBeNull();
   });
 });
 
@@ -128,11 +156,21 @@ const SRC = readFileSync(resolve(import.meta.dirname, '../src/yiji-impl.ts'), 'u
 
 describe('the lookup source', () => {
   it('no longer matches on endsWith', () => {
-    expect(SRC).not.toMatch(/\.replace\(\/\\D\/g, ''\)\.endsWith\(national\)/);
+    expect(SRC).not.toMatch(/\.endsWith\(national\)/);
   });
 
-  it('compares the normalised national number', () => {
-    expect(SRC).toMatch(/nationalOf\(r\?\.phoneNumber\) === national/);
+  /* The CRM number is converted ONCE into the form Yiji should hold, and a row
+     matches only if it is that exact string. */
+  it('compares against the full Yiji number', () => {
+    expect(SRC).toContain('const e164 = `966${national}`');
+    expect(SRC).toMatch(/digitsOf\(r\?\.phoneNumber\) === e164/);
+  });
+
+  /* The trunk zero must NOT be stripped from the STORED side, or a malformed
+     `+9660…` row compares equal to the real number all over again. */
+  it('does not strip leading zeros from the stored number', () => {
+    const fn = SRC.slice(SRC.indexOf('const digitsOf'), SRC.indexOf('const matches'));
+    expect(fn).not.toMatch(/\^0\+/);
   });
 
   it('refuses an ambiguous answer', () => {
