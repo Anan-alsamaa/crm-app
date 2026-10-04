@@ -86,7 +86,12 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
           id: `conv-${c.id}`,
           label:
             c.contact?.name || c.contact?.phone || c.contact?.email || t('inbox.unknownContact'),
-          meta: c.contact?.email || c.contact?.phone || undefined,
+          /* The MOBILE under the name, not the email (ops, 2026-10-04). Every
+             Yiji account carries both — the app registers on an email and
+             stores the mobile beside it — and the mobile is what WeCare dial,
+             WhatsApp, address a coupon by and paste into Yiji to find an order.
+             The `label` above already prefers it; this line disagreed. */
+          meta: c.contact?.phone || c.contact?.email || undefined,
           icon: (
             <Avatar
               name={c.contact?.name}

@@ -124,7 +124,25 @@ export function ConversationToolbar({
         : t('conversation.offline', { defaultValue: 'Offline' })}
     </span>
   ) : (
-    (contact?.email ?? contact?.phone ?? null)
+    /*
+     * THE PHONE FIRST, not the email (ops, 2026-10-04: *"Customer Mobile
+     * currently shows the email. It should show the customer's mobile
+     * number."*).
+     *
+     * The order was `email ?? phone`, so a customer carrying both — which is
+     * every Yiji account, since the app registers on an email and stores the
+     * mobile beside it — showed `hasoos.als11@gmail.com` under their name while
+     * the agent needed `+966590785067`.
+     *
+     * The mobile is the identifier WeCare actually works with: it is what they
+     * dial, what they send a WhatsApp fallback to, what a coupon is addressed
+     * by, and what they paste into Yiji to find the order. The email is not
+     * used for any of those, so it belongs after the phone, not in front of it.
+     *
+     * `||` rather than `??`: Directus stores an unset field as an empty string,
+     * and `?? ` would have let `phone: ''` win over a real email.
+     */
+    contact?.phone || contact?.email || null
   );
 
   /**

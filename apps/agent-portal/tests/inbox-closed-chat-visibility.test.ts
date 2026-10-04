@@ -146,11 +146,30 @@ describe('the row-level permission', () => {
     expect(ROLES).toMatch(/\{ collection: 'conversations', action: 'update' \}/);
   });
 
-  /* THE LIVE SCOPE IS WHAT GATES IT. An unscoped update is only as wide as the
-     read that precedes it, so a colleague's OPEN chat stays unreadable and
-     therefore un-updatable. If the read ever loses its scope, this stops being
-     true — which is why the read is asserted above. */
-  it('still scopes the read, which is what bounds the update', () => {
+  /*
+   * THE READ IS STILL SCOPED — but be precise about what that does and does
+   * not buy, because the comment in `roles.ts` overstates it and so did I.
+   *
+   * MEASURED on staging, 2026-10-04, as a real WeCare Agent:
+   *
+   *   - a colleague's OPEN chat: `GET` 403, and `PATCH` by id **204 — it
+   *     applied**. The row's own revision trail shows the change.
+   *   - a colleague's SOLVED chat: `GET` 200, messages 200, `PATCH` 200.
+   *   - visibility: 91/91 solved, 51/159 open.
+   *
+   * So an unscoped update is NOT bounded by a scoped read: Directus checks them
+   * independently, and an agent who knows an id can blind-write a chat they
+   * cannot see. That predates this change — it has been true since the update
+   * grant was widened on 2026-09-30 — and today's widening does not worsen it,
+   * because the ids it newly exposes are exactly the closed chats the owner has
+   * asked to be fully workable.
+   *
+   * It is recorded here rather than silently relied upon, because "the scoped
+   * read keeps this narrow" is the stated justification for the unscoped grant
+   * and it is not true. Tightening it is a separate decision with a real cost:
+   * it is what stopped supervisors closing chats they did not own.
+   */
+  it('still scopes the read, which is what limits what an agent can SEE', () => {
     expect(ROLES).toMatch(/ASSIGNED_OR_UNASSIGNED = \{/);
     expect(ROLES).toMatch(/assigned_agent: \{ _eq: '\$CURRENT_USER' \}/);
   });

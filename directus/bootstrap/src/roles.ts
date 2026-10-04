@@ -475,9 +475,21 @@ export const roles: RoleSpec[] = [
        * keeps hitting — a visible chat with buttons that 403 for no stated
        * reason, as in [[supervisor-cannot-close-chat]].
        *
-       * What it does NOT do is widen the live scope: a colleague's OPEN chat is
-       * still unreadable, so it cannot be updated either — the read is what
-       * gates it.
+       * AND BE PRECISE ABOUT WHAT THE SCOPED READ BUYS, because the paragraph
+       * above overstates it. Measured on staging as a real WeCare Agent
+       * (2026-10-04): a colleague's OPEN chat answers `GET` with 403 but
+       * accepts a `PATCH` by id — 204, and it applied. Directus evaluates read
+       * and update independently, so an unscoped update is NOT bounded by a
+       * scoped read; an agent who knows an id can blind-write a chat they
+       * cannot see.
+       *
+       * That predates this change (it has been true since the update grant was
+       * widened on 2026-09-30) and today's widening does not worsen it: the ids
+       * it newly exposes are exactly the closed chats that are now meant to be
+       * fully workable. It is written down because "the scoped read keeps this
+       * narrow" is the stated justification for the unscoped grant, and it is
+       * not true. Tightening it is a separate decision with a real cost — it is
+       * what stopped supervisors closing chats they did not own.
        */
       { collection: 'conversations', action: 'update' },
       { collection: 'messages', action: 'create' },
@@ -669,6 +681,25 @@ export const roles: RoleSpec[] = [
       { collection: 'messages_files', action: 'read' },
       { collection: 'csat_responses', action: 'create' },
       { collection: 'csat_responses', action: 'read' },
+      /*
+       * THE WELCOME TEMPLATE (ops, 2026-10-04).
+       *
+       * The automatic greeting comes from the `رسالة ترحيب` row in
+       * `quick_replies`, so the gateway must be able to READ that library — it
+       * is what sends the wording to the widget on `ready`.
+       *
+       * READ ONLY. The library is operations' to edit in the admin portal; the
+       * gateway has no business writing a reply.
+       *
+       * This grant was MISSING when the feature was first written, and the
+       * symptom would have been invisible: `welcomeTemplates()` catches its own
+       * errors and returns "no template", so a 403 here is indistinguishable
+       * from nobody having created the row — the widget would have kept its
+       * built-in wording for ever and every test of the feature would have
+       * "passed". Found by querying the live permission rows rather than by
+       * trusting the code. See [[silent-empty-failures]].
+       */
+      { collection: 'quick_replies', action: 'read' },
       // READ-ONLY on tickets: POST /jobs/notify-assignment re-reads the assigned
       // entity server-side to derive the notification recipient (the caller's own
       // token can't — an agent loses ticket read access the moment they hand it
