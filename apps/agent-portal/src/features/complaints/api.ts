@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
-import { normaliseTicketStatus, type StoreSnapshot } from '@yiji/shared-types';
+import { displayContactName, normaliseTicketStatus, type StoreSnapshot } from '@yiji/shared-types';
 import { splitLocalDateTime, type ComplaintReportRow } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 
@@ -141,7 +141,24 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
     storeMapped: false,
     serviceType: t.service_type ?? '',
     complaintType: t.complaint_type ?? '',
-    customerName: t.contact?.name ?? '',
+    /*
+     * THROUGH `displayContactName`, like the status beside it (ops,
+     * 2026-10-05: *"the customer's name initially is the phone number but in a
+     * different format, currently +966. it should be 05."*).
+     *
+     * Most customers have no name, so what lands in the column is whatever the
+     * source sent — and the sources disagree. Measured on PRODUCTION:
+     * **100 of 296 contacts carry a `+966…` name** while the `phone` column
+     * beside them is correctly `05…`. One customer therefore reads two ways on
+     * one screen, and two customers with the same number look like different
+     * people.
+     *
+     * The helper already resolves this and already rejects a machine address;
+     * it simply was not reached from here. Fixing it at the QUERY rather than
+     * at each render site is the point — the render sites are how they drifted
+     * apart in the first place.
+     */
+    customerName: displayContactName(t.contact?.name, t.contact?.phone),
     customerMobile: t.contact?.phone ?? '',
     complaintDescription: t.description ?? '',
     responseDesc: t.response_desc ?? '',

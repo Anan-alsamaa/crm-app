@@ -98,6 +98,39 @@ describe('a machine address is not a name', () => {
   });
 });
 
+/**
+ * THE `+966` SHAPE, WHICH IS THE ONE PRODUCTION ACTUALLY HAS.
+ *
+ * Reported 2026-10-05: *"the customer's name initially is the phone number but
+ * in a different format, currently +966. it should be 05."*
+ *
+ * Measured on production the same day: **100 of 296 contacts carry a `+966…`
+ * name** while the `phone` column beside them is correctly `05…`. So one
+ * customer read two ways on one screen, and two customers with the same number
+ * looked like different people.
+ *
+ * The helper already handled it — these are the exact stored values — but
+ * several screens built their own name instead of calling it. The fix was at
+ * the QUERY, not the render sites: the render sites are how they drifted apart.
+ */
+describe('the +966 names production actually stores', () => {
+  it.each([
+    ['+966503709699', '0503709699'],
+    ['+966599200007', '0599200007'],
+    ['+966547883966', '0547883966'],
+    ['+966593932355', '0593932355'],
+    ['+966540399924', '0540399924'],
+  ])('%s renders as %s', (stored, expected) => {
+    expect(displayContactName(stored, expected)).toBe(expected);
+  });
+
+  /* And WITHOUT the phone column to fall back on — the name alone is enough,
+     because it IS the number. */
+  it('converts from the name alone', () => {
+    expect(displayContactName('+966503709699', null)).toBe('0503709699');
+  });
+});
+
 describe('no name at all', () => {
   it('falls back to the normalised phone', () => {
     expect(displayContactName(null, '+966564490993')).toBe('0564490993');

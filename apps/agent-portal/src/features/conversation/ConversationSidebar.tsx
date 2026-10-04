@@ -16,7 +16,7 @@ import {
   useResizable,
   LockIcon,
 } from '@yiji/ui';
-import type { YijiOrder } from '@yiji/shared-types';
+import { displayContactName, type YijiOrder } from '@yiji/shared-types';
 import {
   useConversation,
   useLinkedTickets,
@@ -180,8 +180,21 @@ export function ConversationSidebar({
     );
   if (!convo.data) return null;
   const c = convo.data;
+  /*
+   * THROUGH `displayContactName` (ops, 2026-10-05). 100 of 296 production
+   * contacts carry a `+966…` name while their `phone` column is correctly
+   * `05…`, so the same customer read two ways on one screen. The helper
+   * renders a phone-shaped name canonically and rejects a machine address.
+   *
+   * DISPLAY ONLY — the edit draft below deliberately keeps the RAW stored
+   * value, because an agent editing the name should see what is actually in
+   * the database, not a rendering of it.
+   */
   const contactName =
-    c.contact?.name ?? c.contact?.phone ?? c.contact?.email ?? t('inbox.unknownContact');
+    displayContactName(c.contact?.name, c.contact?.phone) ||
+    c.contact?.phone ||
+    c.contact?.email ||
+    t('inbox.unknownContact');
 
   const startEdit = () => {
     setDraft({
