@@ -1,29 +1,43 @@
-import type { JSX } from 'react';
+import { useCallback, useEffect, useRef, useState, type JSX } from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from './cn.js';
 
 /**
- * A truncated cell that shows the WHOLE value on hover or focus.
+ * A truncated cell that shows the WHOLE value, and lets you SELECT and COPY it.
  *
- * Asked for by operations against the late-orders Reason and Action columns
- * (2026-10-04): *"On hover, the Reason and Action should display the full
- * data."* Both already carried a `title`, and that was the problem — a native
- * tooltip is:
+ * Asked for against the late-orders Reason and Action columns (ops,
+ * 2026-10-04), then corrected twice — and the second correction is the reason
+ * this file looks the way it does.
  *
- *   - invisible on a touch screen, which is how half the floor reads these,
- *   - invisible to a keyboard user, who never generates a hover at all,
- *   - slow enough that an agent scanning a column gives up before it appears,
- *   - unable to wrap: a two-line reason renders as one clipped strip.
+ *   1. *"needs a modern design, looks boxy"* — a hard border and a flat fill
+ *      read as a dialog bolted onto a table cell rather than the value
+ *      expanding.
+ *   2. *"when trying to place cursor to the complete value it stops being
+ *      displayed"* — twice. The whole point of showing the full text is to be
+ *      able to copy it, and it was unreachable.
  *
- * The same objection the quick-replies panel answered by showing the text
- * rather than hiding it behind `title`.
+ * ## Why an absolutely-positioned panel could never work here
  *
- * So: a panel, on hover AND on focus-within, with `title` kept as the
- * plain-text fallback for anything that reads the DOM rather than renders it
- * (and for a browser-native tooltip while the pointer is still travelling).
+ * These cells live inside `TableSurface`, and its own comment spells out the
+ * trap: **CSS turns `overflow-y: visible` into `auto` the moment `overflow-x`
+ * is `auto`**, so a horizontally scrolling table is a VERTICAL scroll container
+ * too, whether or not anybody asked. An `absolute` panel is laid out inside
+ * that box and is therefore CLIPPED by it — reaching for the panel scrolls the
+ * table or hides it.
  *
- * CSS-only, deliberately. A column of these is one per row per column, and
- * hover state in React means a re-render per mouse move across a table that
- * already fetches order timings per page. `group-hover` costs nothing.
+ * No amount of `z-index` escapes an ancestor's overflow. So the panel is
+ * PORTALLED to `document.body` and positioned from the cell's measured rect.
+ *
+ * ## And it is driven by explicit open/close, not `:hover`
+ *
+ * A CSS `group-hover` cannot span a portal — the panel is no longer a DOM
+ * descendant of the cell, so moving into it ends the hover and closes it. The
+ * open state is therefore real state, held open while the pointer is over
+ * EITHER the cell or the panel, with a short grace period for the gap between
+ * them.
+ *
+ * `title` is gone too: a native tooltip renders over the panel and covers the
+ * very text you are trying to select.
  */
 export interface LongTextProps {
   /** The full value. Null, undefined and blank all render as the dash. */
@@ -34,14 +48,75 @@ export interface LongTextProps {
   className?: string;
 }
 
+/** How long the panel survives the pointer leaving, so the gap is crossable. */
+const GRACE_MS = 120;
+
 export function LongText({ value, empty = '-', className }: LongTextProps): JSX.Element {
   const text = value?.trim() ?? '';
+  const cellRef = useRef<HTMLSpanElement>(null);
+  const [rect, setRect] = useState<{ top: number; left: number; width: number } | null>(null);
+  /* Cleared on open, set on leave — so re-entering the panel cancels the close
+     that the cell's own `mouseleave` just scheduled. */
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const open = useCallback(() => {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+    const el = cellRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    /* Viewport coordinates + `position: fixed`, so the panel needs no scroll
+       maths and cannot drift when an ancestor scrolls — it is simply closed on
+       scroll instead, below. */
+    setRect({ top: r.bottom, left: r.left, width: r.width });
+  }, []);
+
+  const close = useCallback(() => {
+    if (closeTimer.current) clearTimeout(closeTimer.current);
+    closeTimer.current = setTimeout(() => setRect(null), GRACE_MS);
+  }, []);
+
+  /*
+   * CLOSE ON SCROLL, RESIZE AND ESCAPE.
+   *
+   * The panel is positioned from a rect measured once. Anything that moves the
+   * cell underneath it would leave the panel floating over unrelated rows, and
+   * a stale panel is worse than no panel. `capture: true` so a scroll inside
+   * the table's own scrollport is heard, not just one on the window.
+   */
+  useEffect(() => {
+    if (!rect) return;
+    const shut = () => setRect(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') shut();
+    };
+    window.addEventListener('scroll', shut, true);
+    window.addEventListener('resize', shut);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', shut, true);
+      window.removeEventListener('resize', shut);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [rect]);
+
+  /* Never leave a timer running past unmount — a report renders hundreds of
+     these and every one of them can be scrolled out of existence mid-grace. */
+  useEffect(
+    () => () => {
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    },
+    [],
+  );
+
   /* NOTHING TO EXPAND. A dash must not sprout a panel — and must not be
      focusable, or tabbing through a report stops on every blank cell. */
   if (!text) return <span className="text-muted-foreground">{empty}</span>;
 
   return (
-    <span className="group/longtext relative inline-block max-w-full align-top">
+    <>
       {/*
        * FOCUSABLE, so the keyboard reaches it. `tabIndex={0}` on a span is
        * right here: it is not a control, it performs no action, and making it a
@@ -49,8 +124,12 @@ export function LongText({ value, empty = '-', className }: LongTextProps): JSX.
        * target in every cell of a report.
        */}
       <span
+        ref={cellRef}
         tabIndex={0}
-        title={text}
+        onMouseEnter={open}
+        onMouseLeave={close}
+        onFocus={open}
+        onBlur={close}
         className={cn(
           'block truncate rounded outline-none',
           /* A HINT THAT THERE IS MORE, rather than a hard edge. The underline
@@ -58,64 +137,44 @@ export function LongText({ value, empty = '-', className }: LongTextProps): JSX.
              reach for one — a permanent affordance on every cell would make a
              report look like a wall of links. */
           'decoration-border decoration-dotted underline-offset-[3px]',
-          'transition-colors duration-fast group-hover/longtext:underline',
+          'transition-colors duration-fast hover:underline',
           'focus-visible:ring-2 focus-visible:ring-ring/50',
           className,
         )}
       >
         {text}
       </span>
-      {/*
-       * THE PANEL — and you can put the cursor IN it and select the text.
-       *
-       * Redesigned twice. The first cut was "boxy" (owner, 2026-10-04): a hard
-       * border, square corners and a flat fill, reading as a dialog bolted onto
-       * a table cell rather than the value expanding. The second was worse in
-       * the way that matters: *"when trying to place cursor to the complete
-       * value it stops being displayed"* — the whole point of showing the full
-       * text is to be able to COPY it, and it was unreachable.
-       *
-       * Two things made it unreachable, and both had to go:
-       *
-       *  1. `pointer-events-none`. It was there so the panel could never
-       *     swallow a click meant for the row beneath — but it also means the
-       *     cursor passes straight through, so the panel never counts as
-       *     hovered and the moment the pointer leaves the CELL it closes. A
-       *     panel you cannot point at is a panel you cannot select text in.
-       *     The hover now lives on the wrapper, which contains both, so moving
-       *     into the panel keeps it open.
-       *
-       *  2. THE GAP. A visible margin between the cell and the panel is dead
-       *     space: the pointer crosses it, is over neither, and the panel
-       *     closes mid-journey. The margin is replaced by transparent top
-       *     padding INSIDE the panel, so the gap is part of the hover target
-       *     and the crossing is unbroken. `pt-1.5` + `-mt-0` rather than
-       *     `mt-1.5`.
-       *
-       * `select-text` and `cursor-text` say it is selectable; `z-20` keeps it
-       * over the following rows rather than clipped by them.
-       */}
-      <span
-        role="tooltip"
-        className={cn(
-          'absolute start-0 top-full z-20 w-max max-w-sm pt-1.5',
-          'invisible -translate-y-1 opacity-0',
-          'transition-[opacity,transform,visibility] duration-base ease-out',
-          'group-hover/longtext:visible group-hover/longtext:translate-y-0 group-hover/longtext:opacity-100',
-          'group-focus-within/longtext:visible group-focus-within/longtext:translate-y-0 group-focus-within/longtext:opacity-100',
+      {rect &&
+        createPortal(
+          <div
+            role="tooltip"
+            /* The panel keeps ITSELF open: entering it cancels the close the
+               cell scheduled, and leaving it schedules a new one. This is the
+               half a CSS-only solution cannot express across a portal. */
+            onMouseEnter={open}
+            onMouseLeave={close}
+            style={{
+              top: rect.top + 6,
+              left: rect.left,
+              /* At least as wide as the cell so it reads as the same value
+                 expanding, and free to grow past it — a long reason in an 18rem
+                 column needs more room than the column has, which is the entire
+                 point. */
+              minWidth: rect.width,
+            }}
+            className={cn(
+              'fixed z-50 w-max max-w-sm',
+              'cursor-text select-text whitespace-pre-wrap break-words',
+              'rounded-xl bg-popover px-3.5 py-2.5',
+              'text-start text-xs font-normal normal-case leading-relaxed text-foreground',
+              'shadow-float ring-1 ring-border/60',
+              'animate-fade-in',
+            )}
+          >
+            {text}
+          </div>,
+          document.body,
         )}
-      >
-        <span
-          className={cn(
-            'block cursor-text select-text whitespace-pre-wrap break-words',
-            'rounded-xl bg-popover px-3.5 py-2.5',
-            'text-start text-xs font-normal normal-case leading-relaxed text-foreground',
-            'shadow-float ring-1 ring-border/60',
-          )}
-        >
-          {text}
-        </span>
-      </span>
-    </span>
+    </>
   );
 }

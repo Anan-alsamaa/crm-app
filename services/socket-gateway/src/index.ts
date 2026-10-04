@@ -457,8 +457,45 @@ async function main(): Promise<void> {
      calls — so CORS must cover both or the new path is blocked in a browser
      while working perfectly from curl. */
   const isWidgetPath = (url: string) => url.startsWith('/walk-in/') || url.startsWith('/chat/');
+  /*
+   * A STAFF ENDPOINT THAT HAPPENS TO LIVE UNDER `/chat/`.
+   *
+   * `/chat/agent-initiate` is here only because that is what the ALB routes to
+   * this service — a path outside `/chat/*` would be answered by Directus with
+   * "Route doesn't exist". But unlike every other `/chat/` route it is called by
+   * the AGENT PORTAL with a Directus bearer token, not by the customer widget.
+   *
+   * Two consequences, and both were wrong until 2026-10-04:
+   *
+   *  - the allowed REQUEST HEADERS must include `authorization`. The widget's
+   *    endpoints are unauthenticated, so the block below allows `content-type`
+   *    alone; a browser asked to send `authorization` is refused at the
+   *    PREFLIGHT and reports "Failed to fetch" with no response at all. curl
+   *    ignores CORS entirely, which is why every command-line test of this
+   *    endpoint passed while the button did not work.
+   *  - the allowed ORIGIN is the STAFF portal's, not the widget's.
+   *
+   * Matched by exact path rather than a prefix: this is the one staff route in
+   * the namespace, and a prefix would quietly widen the next widget endpoint
+   * somebody adds beside it.
+   */
+  const isStaffChatPath = (url: string) => url.split('?')[0] === '/chat/agent-initiate';
   app.addHook('onRequest', async (req, reply) => {
-    if (!isWidgetPath(req.url)) return;
+    if (!isStaffChatPath(req.url)) return;
+    const allow = allowCorsOrigin(req.headers.origin);
+    if (allow) {
+      reply.header('Access-Control-Allow-Origin', allow);
+      reply.header('Vary', 'Origin');
+      reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      reply.header('Access-Control-Allow-Headers', 'content-type, authorization');
+      reply.header('Access-Control-Max-Age', '600');
+    }
+    if (req.method === 'OPTIONS') return reply.code(204).send();
+  });
+  app.addHook('onRequest', async (req, reply) => {
+    /* The staff route above has already answered for itself — falling through
+       would overwrite its headers with the widget's narrower set. */
+    if (!isWidgetPath(req.url) || isStaffChatPath(req.url)) return;
     const allow = allowWidgetOrigin(req.headers.origin);
     if (allow) {
       reply.header('Access-Control-Allow-Origin', allow);
