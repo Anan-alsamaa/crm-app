@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority, YijiOrder } from '@yiji/shared-types';
+import { readChunked } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { jobProducer, notifyAssignmentBestEffort } from '../../lib/job-producer.js';
@@ -504,28 +505,38 @@ export function useConversationPreviews(conversationIds: string[]) {
     staleTime: 10_000,
     queryFn: async (): Promise<Record<string, ConversationPreview>> => {
       try {
-        const rows = (await directus.request(
-          readItems('messages', {
-            filter: {
-              conversation: { _in: conversationIds },
-              is_internal_note: { _eq: false },
-            },
-            fields: ['conversation', 'content', 'sender_type'],
-            sort: ['-date_created'],
-            /*
-             * Generous cap over ALL the listed conversations at once, newest
-             * first, reduced to one preview each below.
-             *
-             * The budget is SHARED, so it starves rather than truncates: a
-             * quiet chat whose last message falls outside the newest 1000
-             * across the whole set gets no preview and the inbox prints "No
-             * messages yet" for a conversation that plainly has some. Measured
-             * on staging: 511 messages across 241 conversations, so the whole
-             * corpus fits twice over — but the failure is silent and looks like
-             * data, not a cap, so it is worth knowing where it comes from.
-             */
-            limit: 1000,
-          }),
+        /*
+         * IN SMALL BATCHES (owner, 2026-10-05: every row read "No messages
+         * yet" while the messages were plainly arriving).
+         *
+         * This was ONE request filtering on every listed conversation id.
+         * Measured on production: 233 conversations make a 10,704-character
+         * URL, which CloudFront refuses with HTTP 414 before Directus sees it;
+         * the catch below turned that into an empty map, so the whole inbox
+         * said "No messages yet". And under the limit the single shared
+         * 1,000-message cap starved quiet chats: at 120 conversations only
+         * 103 got a preview.
+         *
+         * 25 conversations per request keeps each URL ~1.2k characters and
+         * each batch's newest-1000 far above what 25 threads hold, so no chat
+         * is starved; four run at once so the list does not wait in series.
+         */
+        const rows = (await readChunked(
+          conversationIds,
+          (ids) =>
+            directus.request(
+              readItems('messages', {
+                filter: {
+                  conversation: { _in: ids },
+                  is_internal_note: { _eq: false },
+                },
+                fields: ['conversation', 'content', 'sender_type'],
+                sort: ['-date_created'],
+                limit: 1000,
+              }),
+            ) as Promise<unknown[]>,
+          25,
+          4,
         )) as Array<{
           conversation: string;
           content: string | null;
