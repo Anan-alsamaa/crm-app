@@ -349,7 +349,31 @@ export function LateOrdersPage() {
     }, 60_000);
     return () => clearInterval(id);
   }, []);
-  const todayRange = useMemo(() => (dayTick ? businessDayRange(dayTick) : null), [dayTick]);
+  /*
+   * ONE CONTRACT FOR `range`: `to` is the LAST DAY WANTED, INCLUSIVE.
+   *
+   * That is what the From/To pickers produce and what `getLateOrders`
+   * documents ("the caller passes the last day they WANT; one day is added
+   * here"). `businessDayRange` instead returns an EXCLUSIVE end — the day
+   * after — so today was the odd one out, and every consumer had to guess
+   * which kind of `to` it had been handed.
+   *
+   * That guess is what broke the decision query: it trusted the exclusive
+   * form, which made a typed single-day search a zero-width window matching
+   * nothing. Normalising here means a range means one thing everywhere.
+   *
+   * The business day still spans two CALENDAR dates — `businessDayRange` is
+   * what knows that — so the inclusive last day is simply its exclusive end
+   * minus one, which is the first of the two dates when the day has not yet
+   * crossed midnight.
+   */
+  const todayRange = useMemo(() => {
+    if (!dayTick) return null;
+    const r = businessDayRange(dayTick);
+    const at = Date.parse(`${r.to}T00:00:00Z`);
+    if (!Number.isFinite(at)) return r;
+    return { from: r.from, to: new Date(at - 24 * 60 * 60 * 1000).toISOString().slice(0, 10) };
+  }, [dayTick]);
 
   const [draftFrom, setDraftFrom] = useState(() => isoDaysAgo(0));
   const [draftTo, setDraftTo] = useState(() => isoDaysAgo(0));

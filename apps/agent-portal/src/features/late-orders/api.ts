@@ -92,10 +92,43 @@ export function useLateOrders(
  * altogether (ops, 2026-10-03). The admin register bounds the same query by the
  * selected range; now both do.
  *
- * `to` is EXCLUSIVE of the next day's start, which is what `businessDayRange`
- * already returns, so a decision taken at 03:00 belongs to the night that is
- * still running rather than to the morning after.
+ * `to` is EXCLUSIVE of the next day's start, so a decision taken at 03:00
+ * belongs to the night that is still running rather than to the morning after.
+ *
+ * `range.to` IS THE LAST DAY THE CALLER WANTS, INCLUSIVE — the same contract
+ * `getLateOrders` already documents ("the caller passes the last day they
+ * WANT; one day is added here"). This query is the one that disagreed, and
+ * `dayAfter` brings it into line.
  */
+
+/**
+ * The day after `day`, so an inclusive end becomes an exclusive bound.
+ *
+ * Reported 2026-10-05: searching a single day showed `-` in Creation time,
+ * Business day, Agent, Reason and Action taken, and the Comment box opened
+ * blank — on an order the ADMIN register showed fully decided, by name. It
+ * read as five faults and a sixth in the comment box.
+ *
+ * It was one. `From 04/10 To 04/10` sent
+ * `_between ['2026-10-04T00:00:00', '2026-10-04T00:00:00']` — a ZERO-WIDTH
+ * window matching nothing. Measured against production: **0 rows for that
+ * filter, 8 with the end moved to the 5th.** Every one of those columns reads
+ * from this single query, so one empty answer blanked them all at once.
+ *
+ * WHY IT HID: the default view passes `businessDayRange`, whose `to` is
+ * already the next day, so today's queue was always right. Only a typed range
+ * was broken — and only for the columns that come from the DECISION rather
+ * than from Yiji, which is why the row itself still appeared.
+ *
+ * An unparseable date is returned untouched: inventing one would turn a
+ * visible empty result into a silently wrong one.
+ */
+function dayAfter(day: string): string {
+  const at = Date.parse(`${day}T00:00:00Z`);
+  if (!Number.isFinite(at)) return day;
+  return new Date(at + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 export function useLateOrderDecisions(range?: { from: string; to: string }) {
   return useQuery({
     /* The range is IN THE KEY. Without it a search for last week would be
@@ -108,7 +141,32 @@ export function useLateOrderDecisions(range?: { from: string; to: string }) {
           'late_order_decisions' as never,
           {
             filter: range
-              ? { date_created: { _between: [`${range.from}T00:00:00`, `${range.to}T00:00:00`] } }
+              ? {
+                  date_created: {
+                    /*
+                     * THE END IS EXCLUSIVE, so it must be the day AFTER the one
+                     * the agent typed.
+                     *
+                     * Reported 2026-10-05: searching a single day showed `-` in
+                     * Creation time, Business day, Agent, Reason and Action
+                     * taken, and the Comment box opened blank — on an order the
+                     * ADMIN register showed fully decided, by name.
+                     *
+                     * Searching From 04/10 To 04/10 sent
+                     * `_between [04/10T00:00, 04/10T00:00]` — a ZERO-WIDTH
+                     * window that matches nothing. Measured on production: 0
+                     * rows for that filter, 8 once the end moved to 05/10. Every
+                     * one of those columns reads from this query, so one empty
+                     * answer blanked them all and looked like five separate
+                     * faults.
+                     *
+                     * It hid behind the default view: `businessDayRange` already
+                     * returns an exclusive `to` (the next day), so today's queue
+                     * was always right and only a TYPED range was broken.
+                     */
+                    _between: [`${range.from}T00:00:00`, `${dayAfter(range.to)}T00:00:00`],
+                  },
+                }
               : /* No range means "today", which the caller resolves; a bare 30
                    days is kept only as the floor for that case so the first
                    paint is not unbounded. */
