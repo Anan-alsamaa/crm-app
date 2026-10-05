@@ -1147,8 +1147,19 @@ export function LateOrdersPage() {
             </label>
             {/* Applied on click, not per keystroke: a range walks upstream pages,
             so typing a date would fire a query per character. */}
+            {/*
+              BRAND FILL, NOT GREY (owner, 2026-10-05: "the search button being
+              gray is not very visible").
+
+              It was `secondary`, which is the same muted grey as the row of
+              filter labels it sits among — so the one control that actually
+              RUNS the query looked like another piece of chrome. This is the
+              page's primary action: nothing on screen changes until it is
+              pressed, because a date range deliberately does not query per
+              keystroke. It has to look like the thing to press.
+            */}
             <Button
-              variant="secondary"
+              variant="brand"
               disabled={!draftFrom || !draftTo || draftFrom > draftTo}
               onClick={() => setRange({ from: draftFrom, to: draftTo })}
             >

@@ -43,11 +43,25 @@ const variants: Record<Variant, string> = {
     'bg-display text-background border border-transparent ' +
     'shadow-[0_8px_24px_-12px_oklch(var(--primary)/0.45)] hover:bg-primary-strong ' +
     'hover:shadow-[0_10px_28px_-12px_oklch(var(--primary)/0.6)]',
-  // Solid brand fill for secondary brand moments — same jade glow as default.
+  /*
+   * Solid brand fill for secondary brand moments.
+   *
+   * HOVER AND PRESS GO DARKER, NOT LIGHTER (owner, 2026-10-05: "on selection
+   * should be 1 shade dark on hover and click"). This used `bg-primary/90`,
+   * which drops opacity and therefore blends toward the page — on a light
+   * background that reads as the button FADING when you reach for it, the
+   * opposite of the feedback a press should give.
+   *
+   * `--primary-strong` is the same hue at lower lightness (0.4 against 0.457),
+   * so it is a real shade of the brand rather than a transparency trick, and
+   * the dark theme defines its own pair so the gesture survives the flip.
+   * `active:` darkens once more on the press itself.
+   */
   brand:
     'bg-primary text-primary-foreground border border-transparent ' +
-    'shadow-[0_8px_24px_-12px_oklch(var(--primary)/0.5)] hover:bg-primary/90 ' +
-    'hover:shadow-[0_10px_28px_-12px_oklch(var(--primary)/0.6)]',
+    'shadow-[0_8px_24px_-12px_oklch(var(--primary)/0.5)] ' +
+    'hover:bg-primary-strong hover:shadow-[0_10px_28px_-12px_oklch(var(--primary)/0.6)] ' +
+    'active:bg-primary-strong active:shadow-[0_4px_12px_-8px_oklch(var(--primary)/0.7)]',
   secondary:
     'bg-secondary text-foreground border border-transparent ' +
     'ring-1 ring-foreground/[0.06] hover:ring-foreground/[0.12]',
