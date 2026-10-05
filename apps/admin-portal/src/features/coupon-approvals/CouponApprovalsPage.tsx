@@ -496,6 +496,16 @@ function Row({
               #{row.ticket.order_id}
             </span>
           )}
+          {/* WHETHER IT GOES TO THE YIJI APP, on every row (owner, 2026-10-05).
+              It was readable only by opening the card and finding the
+              checkbox, so a supervisor approving from the row could not see
+              that a coupon was set to be withheld. "No" is the exception worth
+              noticing, so it carries the warning tone and "Yes" stays quiet. */}
+          <Pill tone={row.delivery_excluded ? 'warning' : 'muted'} size="sm">
+            {row.delivery_excluded
+              ? t('couponApprovals.sendOnAppNo', { defaultValue: 'Send on app: No' })
+              : t('couponApprovals.sendOnAppYes', { defaultValue: 'Send on app: Yes' })}
+          </Pill>
           {branch && (
             <span className="min-w-0 max-w-[14rem] truncate text-2xs text-muted-foreground">
               {branch}

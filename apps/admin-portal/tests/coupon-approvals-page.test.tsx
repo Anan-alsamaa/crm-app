@@ -117,6 +117,20 @@ describe('CouponApprovalsPage', () => {
     expect(screen.queryByText('SORRY10')).toBeNull();
   });
 
+  it('says on the collapsed row whether the coupon goes to the Yiji app', () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [
+        pending,
+        { ...pending, id: 'ca2', ticket: { ...pending.ticket, id: 't2' }, delivery_excluded: true },
+      ],
+      isLoading: false,
+    });
+    renderPage();
+    // Readable without opening either card.
+    expect(screen.getByText('Send on app: Yes')).toBeInTheDocument();
+    expect(screen.getByText('Send on app: No')).toBeInTheDocument();
+  });
+
   it('shows everything needed to decide once the row is opened', async () => {
     const user = userEvent.setup();
     renderPage();

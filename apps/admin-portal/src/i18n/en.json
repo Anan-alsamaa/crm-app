@@ -1046,7 +1046,9 @@
     "retryDelivery": "Try again",
     "noOrder": "No order number on this ticket, so Yiji cannot attach a coupon — their coupon is created FROM an order. Approving still records the decision, but the customer will not receive it in the app. Add the order number to the ticket if they have one.",
     "deliveryExcluded": "Not sent to Yiji — {{why}}",
-    "deliveryExcludedDefault": "marked never-send"
+    "deliveryExcludedDefault": "marked never-send",
+    "sendOnAppYes": "Send on app: Yes",
+    "sendOnAppNo": "Send on app: No"
   },
   "complaintReport": {
     "any": "Any",
