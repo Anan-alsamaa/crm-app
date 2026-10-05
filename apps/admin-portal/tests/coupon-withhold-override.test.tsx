@@ -139,8 +139,16 @@ describe('supervisor override on Yiji delivery', () => {
     renderPage();
     await expandFirst(user);
     expect(withholdBox()).toBeChecked();
-    // And the agent's reason, so the supervisor decides knowing why.
-    expect(screen.getByText(/customer wanted a refund/i)).toBeInTheDocument();
+    /*
+     * And the agent's reason, so the supervisor decides knowing why.
+     *
+     * Read from the INPUT's value rather than as page text (2026-10-05): the
+     * reason used to be a read-only line, which meant nothing could ever write
+     * one — measured on production, all 4 withheld coupons carried a blank
+     * reason. It is an editable field now, so the supervisor can correct or
+     * supply it rather than only being shown it.
+     */
+    expect(screen.getByDisplayValue(/customer wanted a refund/i)).toBeInTheDocument();
   });
 
   /* A "why it was withheld" left on a coupon that IS being sent reads as a

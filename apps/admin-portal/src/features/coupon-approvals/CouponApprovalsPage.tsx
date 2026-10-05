@@ -328,6 +328,17 @@ function Row({
   /** Why the terms are being changed. Required before Save will commit. */
   const [editReason, setEditReason] = useState('');
   const [edits, setEdits] = useState<TermEdits>(() => seedEdits(row));
+  /**
+   * WHY THIS COUPON IS BEING WITHHELD, typed here and committed on blur.
+   *
+   * Local rather than saved per keystroke: this is a text field on a card that
+   * writes straight through, and a mutation per character would be a write
+   * storm on a money record.
+   *
+   * Seeded from the row and re-seeded when the row changes identity, so a
+   * reason saved earlier is shown for editing rather than appearing blank.
+   */
+  const [withholdReason, setWithholdReason] = useState(row.delivery_excluded_reason ?? '');
   const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
   const saveTerms = useSaveCouponTerms();
   const retry = useRetryCouponDelivery();
@@ -758,7 +769,12 @@ function Row({
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
                   checked={row.delivery_excluded === true}
-                  onChange={(e) =>
+                  onChange={(e) => {
+                    /* The LOCAL draft follows the server value, or unchecking
+                       would clear the stored reason while leaving the old text
+                       in the box — and re-checking would show a reason that is
+                       no longer recorded anywhere. */
+                    if (!e.target.checked) setWithholdReason('');
                     saveTerms.mutate({
                       id: row.id,
                       edits: {
@@ -768,8 +784,8 @@ function Row({
                            a contradiction on this very card. */
                         ...(e.target.checked ? {} : { delivery_excluded_reason: null }),
                       },
-                    })
-                  }
+                    });
+                  }}
                 />
                 <span className="min-w-0">
                   <span className="block text-xs font-medium text-foreground">
@@ -785,13 +801,44 @@ function Row({
                   </span>
                 </span>
               </label>
-              {row.delivery_excluded && row.delivery_excluded_reason?.trim() && (
-                <p className="mt-1.5 ps-7 text-2xs leading-relaxed text-muted-foreground">
-                  {t('couponApprovals.withholdReason', {
-                    defaultValue: 'Reason: {{why}}',
-                    why: row.delivery_excluded_reason.trim(),
-                  })}
-                </p>
+              {/*
+                WHY IT WAS WITHHELD — AN INPUT, NOT JUST A READOUT.
+                
+                The field existed and the card could DISPLAY a reason, but
+                nothing ever wrote one: there was no input. Measured on
+                production 2026-10-05 — all 4 withheld coupons carry a blank
+                reason. Money is being held back from a customer with nothing on
+                record saying why, and the person who decided is not the person
+                who answers for it three weeks later.
+
+                Committed on BLUR rather than per keystroke: this card writes
+                straight through, and a mutation per character on a money record
+                is a write storm. An unchanged value saves nothing.
+              */}
+              {row.delivery_excluded && (
+                <label className="mt-2 block ps-7">
+                  <span className="block text-2xs font-medium text-muted-foreground">
+                    {t('couponApprovals.withholdReasonLabel', {
+                      defaultValue: 'Why it is being withheld',
+                    })}
+                  </span>
+                  <Input
+                    className="mt-1 h-8 text-xs"
+                    value={withholdReason}
+                    onChange={(e) => setWithholdReason(e.target.value)}
+                    onBlur={() => {
+                      const next = withholdReason.trim();
+                      if (next === (row.delivery_excluded_reason ?? '').trim()) return;
+                      saveTerms.mutate({
+                        id: row.id,
+                        edits: { delivery_excluded_reason: next || null },
+                      });
+                    }}
+                    placeholder={t('couponApprovals.withholdReasonPlaceholder', {
+                      defaultValue: 'e.g. customer asked for a refund instead',
+                    })}
+                  />
+                </label>
               )}
             </div>
           )}
