@@ -1870,6 +1870,7 @@ export function LateOrdersPage() {
                     <QuickReplies
                       className="pt-1"
                       kind="late_order_reason"
+                      dismissSearchOnOutside
                       customerText=""
                       query={reasonSlash}
                       searching={reasonSearching}
@@ -1927,6 +1928,7 @@ export function LateOrdersPage() {
                       <QuickReplies
                         className="pt-1"
                         kind="late_order_action"
+                        dismissSearchOnOutside
                         customerText=""
                         query={actionSlash}
                         searching={actionSearching}

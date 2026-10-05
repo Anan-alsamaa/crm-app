@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
-import { cn } from '@yiji/ui';
+import { cn, DISMISS_FIRST_ATTR } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -212,6 +212,7 @@ export function QuickReplies({
   onPick,
   kind = 'chat',
   className,
+  dismissSearchOnOutside = false,
 }: {
   /** What the customer has written, for language ranking. */
   customerText: string;
@@ -239,6 +240,16 @@ export function QuickReplies({
    */
   kind?: QuickReplyKind;
   className?: string;
+  /**
+   * Let an outside press close the list EVEN WHILE a "/" search holds it open.
+   *
+   * Off in the inbox, where the composer owns a search and the list must stay
+   * up as the agent types beside it. On in the late-order decision box (owner,
+   * 2026-10-05): the first press anywhere but the list puts the list away, and
+   * the dialog around it closes only on a second — see `DISMISS_FIRST_ATTR`.
+   * Typing again reopens it.
+   */
+  dismissSearchOnOutside?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const replies = useQuickReplies(kind);
@@ -266,7 +277,15 @@ export function QuickReplies({
    * `searching` rather than `!!query`: a bare `/` is an empty query and must
    * still open the list with everything in it (ops, 2026-10-04).
    */
-  const listOpen = open || !!searching || !!query;
+  /*
+   * A SEARCH THE AGENT PUT AWAY stays away until they type again: the key is
+   * the search as it stood when dismissed, so the next keystroke differs from
+   * it and reopens the list without any extra state to reset.
+   */
+  const searchKey = `${searching ? 1 : 0}|${query}`;
+  const [dismissedSearch, setDismissedSearch] = useState<string | null>(null);
+  const searchOpen = (!!searching || !!query) && dismissedSearch !== searchKey;
+  const listOpen = open || searchOpen;
 
   /*
    * CLICKING AWAY CLOSES IT (ops, 2026-10-04).
@@ -285,14 +304,19 @@ export function QuickReplies({
    * A `/` search is NOT dismissed this way — the composer owns that, and the
    * list must stay up while the agent types into the box next to it.
    */
+  const dismissable = open || (dismissSearchOnOutside && searchOpen);
   useEffect(() => {
-    if (!open) return;
+    if (!dismissable) return;
+    const close = () => {
+      setOpen(false);
+      if (dismissSearchOnOutside) setDismissedSearch(searchKey);
+    };
     const onDown = (e: PointerEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) setOpen(false);
+      if (!wrap.current?.contains(e.target as Node)) close();
     };
     /* Escape too — the panel is a listbox and that is the expected key. */
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
+      if (e.key === 'Escape') close();
     };
     document.addEventListener('pointerdown', onDown);
     document.addEventListener('keydown', onKey);
@@ -300,7 +324,7 @@ export function QuickReplies({
       document.removeEventListener('pointerdown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [open]);
+  }, [dismissable, dismissSearchOnOutside, searchKey]);
 
   /* How many exist at all, so the toggle can say when a language is empty
      rather than looking broken. */
@@ -327,7 +351,10 @@ export function QuickReplies({
       <div className="flex items-center gap-1.5">
         <button
           type="button"
-          onClick={() => setOpen((v) => !v)}
+          onClick={() => {
+            setDismissedSearch(null);
+            setOpen((v) => !v);
+          }}
           aria-expanded={listOpen}
           aria-haspopup="listbox"
           className="shrink-0 rounded-full border border-dashed border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-solid hover:border-primary/40 hover:bg-primary/[0.06] hover:text-foreground"
@@ -378,6 +405,8 @@ export function QuickReplies({
         <div
           role="listbox"
           aria-label={openLabel}
+          /* Tells a dialog around it that the next outside press is ours. */
+          {...{ [DISMISS_FIRST_ATTR]: '' }}
           /* ABOVE the composer, not below: the composer is already at the
              bottom of the window, so a menu that opens downward opens
              off-screen. Capped and scrollable so a long list is reachable

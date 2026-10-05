@@ -52,7 +52,27 @@ export interface ConfirmDialogProps {
   onConfirm: () => void;
   /** Invoked when the user cancels (button, Esc, or backdrop click). */
   onCancel: () => void;
+  /**
+   * Whether a click on the backdrop cancels. Defaults to true.
+   *
+   * False for a dialog holding work that is expensive to lose — the ticket
+   * import, where a stray click threw away a chosen file and its preview
+   * (owner, 2026-10-05). Cancel and Esc still close it.
+   */
+  dismissOnBackdrop?: boolean;
 }
+
+/**
+ * MARKS A NESTED POPOVER THAT ABSORBS THE FIRST DISMISS.
+ *
+ * A suggestion list open inside the dialog (the quick replies on a late-order
+ * decision) must close on the first outside click or Esc, and only a SECOND
+ * one may close the dialog (owner, 2026-10-05). Before, one click threw away
+ * the whole half-written decision when the agent only meant to put the list
+ * away. Any element carrying this attribute, while it is in the panel, makes
+ * the dialog stand still for that press.
+ */
+export const DISMISS_FIRST_ATTR = 'data-dismiss-first';
 
 /** Elements that can receive keyboard focus, for the Tab trap. */
 const FOCUSABLE =
@@ -70,11 +90,23 @@ export function ConfirmDialog({
   confirmHint,
   onConfirm,
   onCancel,
+  dismissOnBackdrop = true,
 }: ConfirmDialogProps): JSX.Element | null {
   const titleId = useId();
   const descId = useId();
   const panelRef = useRef<HTMLDivElement | null>(null);
   const confirmRef = useRef<HTMLButtonElement | null>(null);
+  /*
+   * WHERE THE PRESS STARTED, decided at pointerdown.
+   *
+   * A `click` lands on the nearest common ancestor of press and release, so a
+   * drag that started INSIDE the panel (selecting text, nudging a slider) and
+   * ended over the backdrop arrived here as a backdrop click and closed the
+   * dialog (owner, 2026-10-05: "if I drag and go out of the popup, it
+   * closes"). Only a press that both starts and ends on the backdrop counts.
+   */
+  const backdropPress = useRef(false);
+  const nestedPopoverOpen = () => !!panelRef.current?.querySelector(`[${DISMISS_FIRST_ATTR}]`);
 
   // Move focus to the primary action when the dialog opens.
   useEffect(() => {
@@ -86,12 +118,16 @@ export function ConfirmDialog({
     if (!open) return;
     const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === 'Escape') {
+        /* An open popover inside takes this Esc for itself. */
+        if (nestedPopoverOpen()) return;
         e.preventDefault();
         onCancel();
       }
     };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    /* CAPTURE phase, so this sees an open popover before the popover's own
+       Esc handler removes it — otherwise one Esc would close both. */
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
   }, [open, onCancel]);
 
   // Portalled to <body>: `position: fixed` is only viewport-relative while no
@@ -124,8 +160,15 @@ export function ConfirmDialog({
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm animate-fade-in"
+      onPointerDown={(e) => {
+        /* Read BEFORE the popover's own outside-press handler re-renders it
+           away, so a press that closes the list does not also close this. */
+        backdropPress.current = e.target === e.currentTarget && !nestedPopoverOpen();
+      }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onCancel();
+        const armed = backdropPress.current;
+        backdropPress.current = false;
+        if (dismissOnBackdrop && armed && e.target === e.currentTarget) onCancel();
       }}
     >
       <div

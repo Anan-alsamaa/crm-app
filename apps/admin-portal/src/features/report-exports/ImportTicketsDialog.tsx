@@ -197,6 +197,9 @@ export function ImportTicketsButton({ storeIndex, onImported, label }: Props): J
       <ConfirmDialog
         open={!!loaded}
         loading={running}
+        /* RIGID (owner, 2026-10-05): a chosen file and its preview are too
+           expensive to lose to a stray click. Cancel and Esc still close it. */
+        dismissOnBackdrop={false}
         onCancel={() => setLoaded(null)}
         onConfirm={() => void confirm()}
         title={t('complaintReport.importTitle', {

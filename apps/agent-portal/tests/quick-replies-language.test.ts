@@ -191,7 +191,8 @@ describe('opening on a bare slash', () => {
      what has been typed, or the empty-string case is unrecoverable. */
   it('takes a searching flag distinct from the query', () => {
     expect(SRC).toMatch(/searching\?: boolean/);
-    expect(SRC).toMatch(/const listOpen = open \|\| !!searching/);
+    expect(SRC).toMatch(/const searchOpen = \(!!searching \|\| !!query\)/);
+    expect(SRC).toMatch(/const listOpen = open \|\| searchOpen;/);
   });
 
   /* THE REGRESSION: opening on the query alone. */
@@ -241,6 +242,13 @@ describe('closing when the agent clicks away', () => {
      a panel nobody opened is pure cost. */
   it('arms the listener only while open', () => {
     const fx = SRC.slice(SRC.indexOf('useEffect(() => {'), SRC.indexOf('const total ='));
-    expect(fx).toMatch(/if \(!open\) return;/);
+    expect(fx).toMatch(/if \(!dismissable\) return;/);
+  });
+
+  /* The late-order box: a "/" search is dismissable too, and the list marks
+     itself so the dialog around it waits for a second press (owner, 2026-10-05). */
+  it('can dismiss a search, and tells the dialog the first press is its own', () => {
+    expect(SRC).toMatch(/const dismissable = open \|\| \(dismissSearchOnOutside && searchOpen\);/);
+    expect(SRC).toMatch(/\[DISMISS_FIRST_ATTR\]: ''/);
   });
 });
