@@ -28,7 +28,7 @@ import {
   UsersIcon,
   ZapIcon,
 } from '@yiji/ui';
-import { normaliseConversationStatus } from '@yiji/shared-types';
+import { normaliseConversationStatus, displayContactName } from '@yiji/shared-types';
 import {
   agentPerformance,
   chatHandoffs,
@@ -277,7 +277,10 @@ function useChatTimings(filters: Filters) {
         // Carried so a chat nobody ever wrote in still lands on a day in the
         // trend instead of vanishing from it.
         startedAt: c.date_created,
-        customer: c.contact?.name ?? c.contact?.phone ?? null,
+        /* THROUGH `displayContactName` (owner, 2026-10-05): a `+966…` name
+           renders as `05…`. It already falls back to the phone, so the old
+           `?? phone` chain folds into it — null only when nothing is known. */
+        customer: displayContactName(c.contact?.name, c.contact?.phone) || null,
         subject: subjectOf.get(c.id) ?? null,
         passedOn: handoffs.get(c.id)?.passedOn ?? false,
         takenBy: handoffs.get(c.id)?.takenBy ?? null,

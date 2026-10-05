@@ -1,3 +1,4 @@
+import { displayContactName } from '@yiji/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
@@ -91,6 +92,7 @@ interface RawTicket {
   resolved_at: string | null;
   closed_at: string | null;
   contact: {
+    phone?: string | null;
     id: string;
     name: string | null;
     external_customer_id: string | null;
@@ -139,7 +141,15 @@ export function useTicketOps(days: number) {
               'resolution_due_at',
               'resolved_at',
               'closed_at',
-              { contact: ['id', 'name', 'external_customer_id', { vendor: ['yiji_vendor_id'] }] },
+              {
+                contact: [
+                  'id',
+                  'name',
+                  'phone',
+                  'external_customer_id',
+                  { vendor: ['yiji_vendor_id'] },
+                ],
+              },
             ],
             limit: -1,
             sort: ['-date_created'],
@@ -191,7 +201,9 @@ export function useTicketOps(days: number) {
             !isDone && t.date_created
               ? (now - new Date(t.date_created).getTime()) / 3_600_000
               : null,
-          contactName: t.contact?.name ?? '—',
+          /* THROUGH `displayContactName` (owner, 2026-10-05): a stored
+             `+966…` name renders as the canonical `05…`. */
+          contactName: displayContactName(t.contact?.name, t.contact?.phone) || '—',
           customerId: t.contact?.external_customer_id ?? null,
           yijiVendorId: t.contact?.vendor?.yiji_vendor_id ?? null,
         };

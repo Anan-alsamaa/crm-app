@@ -15,6 +15,14 @@ import {
  * attached anything. A chat whose last message is the customer's is never closed
  * here; that one is waiting on us.
  *
+ * AND NOT A CHAT THE AGENT STARTED THAT THE CUSTOMER HAS NOT OPENED YET
+ * (owner, 2026-10-05). That case matched every condition — open, last message
+ * the agent's, untouched for five minutes — so the sweep closed it while the
+ * customer was still looking at the notification, and they tapped through into
+ * a chat that had already said goodbye. The five minutes apply to *"an ongoing
+ * conversation ignored by the customer"*, which means the customer must have
+ * had a turn first.
+ *
  * WHY THE GATEWAY, not the workers. Two reasons, and both are load-bearing:
  * only the gateway can write a message AND broadcast it to a widget that is
  * still open, and only the gateway holds the socket rooms the customer is
@@ -25,9 +33,15 @@ import {
 export interface IdleCloseDeps {
   directus: {
     /** Conversations that might be idle, newest activity first. */
-    findIdleCandidates(
-      sinceIso: string,
-    ): Promise<Array<{ id: string; status: string | null; last_message_at: string | null }>>;
+    findIdleCandidates(sinceIso: string): Promise<
+      Array<{
+        id: string;
+        status: string | null;
+        last_message_at: string | null;
+        /** `'agent'` when an agent opened the chat; see `shouldCloseForIdle`. */
+        initiated_by?: string | null;
+      }>
+    >;
     /** Who sent the most recent message in this conversation. */
     lastSenderType(conversationId: string): Promise<'customer' | 'agent' | 'system' | null>;
     /** Read one `app_settings` value. */
@@ -79,9 +93,32 @@ export async function runIdleCloseSweep(deps: IdleCloseDeps): Promise<number> {
   for (const c of candidates) {
     try {
       const lastSenderType = await deps.directus.lastSenderType(c.id);
+
+      /*
+       * THE CUSTOMER'S OWN WORDS, FETCHED BEFORE THE DECISION.
+       *
+       * This query already existed, to read their language from what they
+       * wrote. It is simply moved ahead of `shouldCloseForIdle`, because the
+       * same answer settles a second question: whether the customer has ever
+       * spoken here at all.
+       *
+       * An agent-initiated chat the customer has not answered must stay open
+       * (owner, 2026-10-05) — they received a notification and have not opened
+       * it yet, which is not an abandoned conversation. Reusing this read
+       * means that rule costs nothing: no extra round trip, and the cheap
+       * `lastSenderType` check above still rejects most candidates first.
+       */
+      const customerTexts = await deps.directus.recentCustomerTexts(c.id);
+
       if (
         !shouldCloseForIdle(
-          { status: c.status, lastSenderType, lastMessageAt: c.last_message_at },
+          {
+            status: c.status,
+            lastSenderType,
+            lastMessageAt: c.last_message_at,
+            initiatedBy: c.initiated_by,
+            customerHasReplied: customerTexts.length > 0,
+          },
           minutes,
           now,
         )
@@ -91,7 +128,7 @@ export async function runIdleCloseSweep(deps: IdleCloseDeps): Promise<number> {
 
       /* Their language, from their own words — there is no locale column, and
          this is better evidence than one anyway. */
-      const content = idleCloseMessage(detectLocale(await deps.directus.recentCustomerTexts(c.id)));
+      const content = idleCloseMessage(detectLocale(customerTexts));
       /*
        * THE MESSAGE FIRST, then the status.
        *

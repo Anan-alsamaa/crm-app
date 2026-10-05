@@ -367,18 +367,35 @@ export class GatewayDirectus {
    * returning customer's history WITHOUT writing a row for someone who only
    * opened the widget and never typed. See the note in connection.ts.
    */
-  async findLiveConversation(_vendorUuid: string, contactId: string): Promise<string | null> {
+  async findLiveConversation(
+    _vendorUuid: string,
+    contactId: string,
+  ): Promise<{ id: string; initiatedBy: string | null } | null> {
     const live = (await this.client.request(
       readItems('conversations', {
         // Solved included — see RESUMABLE_STATUSES. A closed chat is resumed
         // and reopened by the first new message, never forked.
         filter: { contact: { _eq: contactId }, status: { _in: RESUMABLE_STATUSES } },
-        fields: ['id'],
+        /*
+         * `initiated_by` TRAVELS WITH THE ID, because the widget must not
+         * greet a customer an agent has already written to (owner,
+         * 2026-10-05). The greeting is inserted on `ready`, which fires
+         * BEFORE history arrives, so without this the agent's real message
+         * appears underneath an automated "how can we help?" — the chat
+         * answering itself.
+         *
+         * SELECTED, not merely filtered on: a field the gateway reads but
+         * never requests comes back `undefined`, which here would read as
+         * "customer-initiated" and silently restore the bug it fixes. That
+         * exact shape has cost this codebase three separate faults.
+         */
+        fields: ['id', 'initiated_by'],
         sort: ['-last_message_at'],
         limit: 1,
       }),
-    )) as Array<{ id: string }>;
-    return live[0]?.id ?? null;
+    )) as Array<{ id: string; initiated_by?: string | null }>;
+    const row = live[0];
+    return row ? { id: row.id, initiatedBy: row.initiated_by ?? null } : null;
   }
 
   /**
@@ -509,7 +526,7 @@ export class GatewayDirectus {
   ): Promise<{ id: string; created: boolean }> {
     if (known) {
       const live = await this.findLiveConversation(vendorUuid, contactId);
-      if (live) return { id: live, created: false };
+      if (live) return { id: live.id, created: false };
     }
     const created = (await this.client.request(
       createItem('conversations', {
@@ -718,9 +735,14 @@ export class GatewayDirectus {
    * goodbye. The last-sender check stays in code, where `shouldCloseForIdle`
    * can be tested.
    */
-  async findIdleCandidates(
-    sinceIso: string,
-  ): Promise<Array<{ id: string; status: string | null; last_message_at: string | null }>> {
+  async findIdleCandidates(sinceIso: string): Promise<
+    Array<{
+      id: string;
+      status: string | null;
+      last_message_at: string | null;
+      initiated_by: string | null;
+    }>
+  > {
     return (await this.client.request(
       readItems(
         'conversations' as never,
@@ -729,7 +751,12 @@ export class GatewayDirectus {
             status: { _in: ['open', 'pending'] },
             last_message_at: { _lte: sinceIso, _nnull: true },
           },
-          fields: ['id', 'status', 'last_message_at'],
+          /* `initiated_by` is SELECTED, not merely filtered on: an
+             agent-initiated chat the customer has not answered must not be
+             closed (owner, 2026-10-05), and a field the sweep reads but never
+             requests comes back `undefined` — which would read as
+             customer-initiated and silently restore the bug. */
+          fields: ['id', 'status', 'last_message_at', 'initiated_by'],
           sort: ['last_message_at'],
           // A bound, not a page: if hundreds are somehow idle at once, close the
           // oldest and let the next sweep take the rest rather than holding one
@@ -737,7 +764,12 @@ export class GatewayDirectus {
           limit: 100,
         } as never,
       ),
-    )) as Array<{ id: string; status: string | null; last_message_at: string | null }>;
+    )) as Array<{
+      id: string;
+      status: string | null;
+      last_message_at: string | null;
+      initiated_by: string | null;
+    }>;
   }
 
   /** Who sent the most recent message, or null when nobody has spoken. */

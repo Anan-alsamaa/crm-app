@@ -45,6 +45,34 @@ export interface IdleCandidate {
   lastSenderType?: 'customer' | 'agent' | 'system' | null;
   /** When that message landed, as an ISO string. */
   lastMessageAt?: string | null;
+  /**
+   * `'agent'` when an agent opened this chat rather than the customer.
+   *
+   * THE EDGE CASE (owner, 2026-10-05): *"the chat should not be closed in 5
+   * minutes, as the agent sent a message and the customer received the
+   * notification but did not open the chat. it should be open. the close
+   * applies for an ongoing conversation ignored by the customer."*
+   *
+   * An agent-initiated chat matches every other condition perfectly — it is
+   * open, its last message IS the agent's, and it sits untouched — so the
+   * sweep closed it five minutes after the agent wrote, often before the
+   * customer's phone had even buzzed. The customer then opened a notification
+   * into a conversation that had already said goodbye.
+   *
+   * Idleness is only meaningful once BOTH sides have spoken. Until the
+   * customer answers, the agent is waiting on them, and waiting is not
+   * abandonment.
+   */
+  initiatedBy?: string | null;
+  /**
+   * Has the customer ever said anything in this chat?
+   *
+   * This is what turns an agent-initiated chat into "an ongoing conversation
+   * ignored by the customer" — the owner's own distinction. Once the customer
+   * has replied, the five minutes apply exactly as before, because now there
+   * is a conversation to go quiet on.
+   */
+  customerHasReplied?: boolean | null;
 }
 
 /**
@@ -62,7 +90,9 @@ export interface IdleCandidate {
  *     means the ball is with us;
  *  3. there IS a last message — a chat nobody has spoken in has no idleness to
  *     measure, and `null` must never read as "infinitely idle";
- *  4. enough time has passed.
+ *  4. the customer has had a turn — an agent-initiated chat they have not
+ *     opened yet is waiting on them, not abandoned by them (owner, 2026-10-05);
+ *  5. enough time has passed.
  */
 export function shouldCloseForIdle(
   c: IdleCandidate,
@@ -73,6 +103,26 @@ export function shouldCloseForIdle(
   if (status !== 'open' && status !== 'pending') return false;
   if (c.lastSenderType !== 'agent') return false;
   if (!c.lastMessageAt) return false;
+
+  /*
+   * AN AGENT-INITIATED CHAT THE CUSTOMER HAS NOT ANSWERED YET STAYS OPEN.
+   *
+   * This is condition 5, and it is the one that was missing. The other four
+   * are all satisfied by a chat an agent just started — open, last message the
+   * agent's, timestamped, five minutes old — so it was closed while the
+   * customer was still looking at the notification. The customer then tapped
+   * through into a chat that had already said goodbye, which reads as the
+   * business hanging up on someone it approached.
+   *
+   * `customerHasReplied` is what distinguishes the owner's two cases: before
+   * the first customer message there is no conversation to abandon, and
+   * afterwards the ordinary rule resumes with no exception at all.
+   *
+   * BOTH are required. `initiatedBy` alone would keep an agent-started chat
+   * open for ever once the customer had replied and gone quiet — the very
+   * thing the sweep exists for.
+   */
+  if (c.initiatedBy === 'agent' && !c.customerHasReplied) return false;
 
   const at = Date.parse(c.lastMessageAt);
   // An unparseable date is not "very old" — it is unknown, and closing on it

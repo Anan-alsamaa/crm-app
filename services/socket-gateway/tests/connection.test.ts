@@ -44,7 +44,12 @@ function makeStubs(over: Partial<Record<keyof GatewayDirectus, unknown>> = {}): 
     // Default: the customer already HAS a live thread, which most tests assume
     // (they emit into 'conv-1' straight after connecting). A test that wants the
     // brand-new-visitor path overrides this to return null.
-    findLiveConversation: vi.fn(async () => 'conv-1'),
+    /* The real method returns the id AND `initiated_by`, because the widget
+       must not greet a customer an agent has already written to. A stub
+       returning a bare string made `existing.id` undefined and the
+       handshake never completed — seven timeouts, no error naming the
+       cause. */
+    findLiveConversation: vi.fn(async () => ({ id: 'conv-1', initiatedBy: null })),
     findOrCreateConversation: vi.fn(async () => ({ id: 'conv-1', created: true })),
     createWalkInConversation: vi.fn(async () => ({ id: 'conv-walkin', created: true })),
     findResumableConversation: vi.fn(async () => null),

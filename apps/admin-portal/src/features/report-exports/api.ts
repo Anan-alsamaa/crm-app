@@ -3,7 +3,7 @@ import { readItems, readRevisions, readUsers } from '@directus/sdk';
 import { formatDateTime } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
-import type { StoreSnapshot } from '@yiji/shared-types';
+import { displayContactName, type StoreSnapshot } from '@yiji/shared-types';
 // The complaints row shape is shared with the agent portal — see @yiji/reports.
 // The chat arithmetic (timestamps, handoffs, per-agent rollup) is the SAME
 // shared code the two Agent-performance pages use, so this report can never
@@ -612,7 +612,12 @@ async function loadAgentReport(
         status: t.status,
         priority: t.priority,
         contactId: t.contact?.id ?? null,
-        contactName: t.contact?.name ?? '',
+        /* THROUGH `displayContactName` (owner, 2026-10-05: "the customer name
+           by default is +966508315325... i need it to be with 05"). The agent
+           portal was fixed on 10-05 and the ADMIN portal was missed — eight
+           raw `contact?.name` reads here, so the same customer read `+966…` in
+           one portal and `05…` in the other. */
+        contactName: displayContactName(t.contact?.name, t.contact?.phone),
         contactEmail: t.contact?.email ?? '',
         contactPhone: t.contact?.phone ?? '',
         agentName: agentOf(t.assigned_agent),
@@ -776,7 +781,7 @@ async function loadAgentReport(
           storeMapped: false,
           serviceType: t.service_type ?? '',
           complaintType: t.complaint_type ?? '',
-          customerName: t.contact?.name ?? '',
+          customerName: displayContactName(t.contact?.name, t.contact?.phone),
           customerMobile: t.contact?.phone ?? '',
           complaintDescription: t.description ?? '',
           responseDesc: t.response_desc ?? '',
@@ -1036,7 +1041,10 @@ async function loadAgentReport(
           agentName: agentOf(c.assigned_agent),
           createdAt: c.date_created,
           lastMessageAt: c.last_message_at,
-          customerName: c.contact?.name?.trim() || c.contact?.phone?.trim() || '',
+          /* `displayContactName` already falls back to the phone when there is
+             no usable name, so the old `|| phone` chain is folded into it —
+             two fallback rules in two places is how they drift apart. */
+          customerName: displayContactName(c.contact?.name, c.contact?.phone),
           customerPhone: c.contact?.phone ?? '',
           customerEmail: c.contact?.email ?? '',
           orderId: c.last_order_id ?? '',

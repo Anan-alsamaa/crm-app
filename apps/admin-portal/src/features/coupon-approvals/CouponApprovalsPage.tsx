@@ -23,6 +23,7 @@ import {
   isPercentageCategory,
   type CouponApprovalStatus,
   couponDecision,
+  displayContactName,
   normalizePhone,
   type StoreIndex,
 } from '@yiji/shared-types';
@@ -588,14 +589,26 @@ function Row({
                   missing; the query simply did not ask for the column that
                   holds it.
                 */}
-                {[
-                  row.contact?.name,
-                  normalizePhone(row.contact?.phone ?? row.customer_phone ?? '') ||
+                {(() => {
+                  const phone =
+                    normalizePhone(row.contact?.phone ?? row.customer_phone ?? '') ||
                     row.contact?.phone ||
-                    row.customer_phone,
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || '—'}
+                    row.customer_phone ||
+                    '';
+                  /*
+                   * THROUGH `displayContactName` (owner, 2026-10-05), so a
+                   * stored `+966…` name renders as `05…`.
+                   *
+                   * AND DEDUPED against the phone beside it. Most customers
+                   * have no real name, so the "name" IS the number — once
+                   * normalised it becomes character-for-character the phone on
+                   * its right, and joining them printed `0508315325 ·
+                   * 0508315325`. The pair exists to show two different facts;
+                   * when there is only one fact, show it once.
+                   */
+                  const name = displayContactName(row.contact?.name, phone);
+                  return [name === phone ? '' : name, phone].filter(Boolean).join(' · ') || '—';
+                })()}
               </dd>
             </div>
             <div className="flex items-baseline gap-2">

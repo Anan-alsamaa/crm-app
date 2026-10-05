@@ -75,6 +75,16 @@ interface SocketData {
    */
   conversationId?: string;
   conversationCreated?: boolean;
+  /**
+   * `'agent'` when an agent opened this conversation rather than the customer.
+   *
+   * Sent to the widget on `ready` so it can SUPPRESS its automatic greeting
+   * (owner, 2026-10-05). The greeting is inserted on `ready`, which fires
+   * before `messages:history`, so without this a customer tapping an agent's
+   * notification sees "Hey there, how can we help?" sitting above the real
+   * message a person wrote them — the chat answering itself.
+   */
+  conversationInitiatedBy?: string | null;
   /** Session came from the store QR code; the phone was typed, not proven. */
   walkIn?: boolean;
   /**
@@ -471,8 +481,11 @@ export function registerConnection(deps: ConnectionDeps): void {
           // act on, and a returning customer saw an empty panel.
           const existing = await directus.findLiveConversation(vendor.id, contact.id);
           if (existing) {
-            data.conversationId = existing;
+            data.conversationId = existing.id;
             data.conversationCreated = false;
+            /* Carried so `ready` can tell the widget NOT to greet a customer an
+               agent has already written to (owner, 2026-10-05). */
+            data.conversationInitiatedBy = existing.initiatedBy;
           }
         } else {
           /*
@@ -816,6 +829,19 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
      * this costs nothing per handshake.
      */
     welcome: await cachedWelcome(deps),
+    /*
+     * DO NOT GREET A CUSTOMER AN AGENT HAS ALREADY WRITTEN TO (owner,
+     * 2026-10-05).
+     *
+     * Sent as a fact about the conversation rather than as an instruction,
+     * because the widget already owns every other decision about which
+     * greeting a customer gets; moving this one into the gateway would split
+     * that rule across two services.
+     *
+     * Undefined on a fresh session — there is no conversation yet, so nobody
+     * has written anything, and the greeting is exactly right.
+     */
+    agentInitiated: data.conversationInitiatedBy === 'agent',
   });
 
   /*

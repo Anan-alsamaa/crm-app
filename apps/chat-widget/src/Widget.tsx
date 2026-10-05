@@ -561,6 +561,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
           contact,
           isNew,
           welcome,
+          agentInitiated,
         }) => {
           // null on a fresh session; `onConversationReady` fills it in when the
           // customer's first message creates the conversation.
@@ -593,6 +594,20 @@ export function Widget({ config }: { config: WidgetConfig }) {
           );
           setMessages((prev) => {
             if (prev.some((m) => m.id === GREETING_ID)) return prev;
+            /*
+             * NO GREETING WHEN AN AGENT STARTED THIS CHAT (owner, 2026-10-05).
+             *
+             * A person has already written to this customer. `ready` fires
+             * BEFORE `messages:history`, so the greeting would be inserted
+             * first and the agent's real message would arrive beneath it —
+             * the customer taps a notification from a human and reads an
+             * automated "how can we help?" above it.
+             *
+             * Returned unchanged rather than inserting an empty bubble: an
+             * empty message is still a message, and it would occupy the thread
+             * and push the agent's words down for no reason.
+             */
+            if (agentInitiated) return prev;
             return [
               ...prev,
               {

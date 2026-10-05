@@ -26,7 +26,7 @@ import {
 import { exportFileName } from '@yiji/shared-config';
 import { couponDecision } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
-import { normalizePhone } from '@yiji/shared-types';
+import { displayContactName, normalizePhone } from '@yiji/shared-types';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { ColumnScroller } from '../../components/ColumnScroller.js';
 import {
@@ -432,7 +432,11 @@ export function AllCompensationPage() {
     {
       key: 'customer',
       label: t('compensationAll.customer', { defaultValue: 'Customer' }),
-      get: (r) => r.contact?.name ?? '',
+      /* THROUGH `displayContactName` (owner, 2026-10-05): a stored name that
+         is really a `+966…` number renders as `05…`, the one canonical form.
+         The search haystack above deliberately keeps the RAW value too, so
+         pasting either shape still finds the row. */
+      get: (r) => displayContactName(r.contact?.name, r.contact?.phone ?? r.customer_phone),
     },
     {
       key: 'phone',

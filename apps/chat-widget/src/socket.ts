@@ -69,6 +69,8 @@ export interface SocketCallbacks {
      * created the row, behaves exactly as before.
      */
     welcome?: { ar: string | null; en: string | null } | null;
+    /** True when an AGENT opened this chat — suppresses the auto greeting. */
+    agentInitiated?: boolean;
   }) => void;
   onMessage: (msg: WidgetMessage) => void;
   /** Existing thread pushed by the gateway on (re)connect, so a returning
@@ -350,6 +352,8 @@ export function connectWidget(
       contact?: { name: string | null; phone: string | null };
       isNew?: boolean;
       welcome?: { ar: string | null; en: string | null } | null;
+      /** True when an AGENT opened this chat — suppresses the auto greeting. */
+      agentInitiated?: boolean;
     }) => cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),
   );
   socket.on('conversation:ready', (info: { conversationId: string }) =>
