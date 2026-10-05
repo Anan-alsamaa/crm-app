@@ -81,48 +81,55 @@ describe('how many times a coupon may be used', () => {
   });
 });
 
-describe('the name the customer reads in their wallet', () => {
+describe("the coupon's name on Yiji", () => {
   /*
-   * THE PRIVACY LEAK. `title` is pre-filled with the customer's phone — a
-   * useful handle inside the CRM, where an agent scans a list of
-   * compensations. Yiji prints the coupon's NAME in the wallet, so that number
-   * was being shown to whoever held the coupon.
+   * OPERATIONS' OWN CONVENTION (owner, 2026-10-05): Title = the customer's
+   * number as `+9665XXXXXXXX`, the reason in the separate compensation field.
+   * We were sending the reason as the name. This reverses 2026-10-03, which
+   * took the phone out — see `customerFacingCouponName` for why that no longer
+   * holds: the number is always the RECEIVING customer's own.
    */
-  it.each(['0501234567', '+966501234567', '966 50 123 4567', '050-123-4567'])(
-    'never sends %s as the name',
+  it.each(['0501234567', '+966501234567', '966501234567', '050-123-4567'])(
+    'names the coupon after %s in +966 form',
     (phone) => {
-      expect(customerFacingCouponName(phone, 'Late delivery')).toBe('Late delivery');
+      expect(customerFacingCouponName(phone, 'anything')).toBe('+966501234567');
     },
   );
 
-  /* A title an agent actually typed is theirs — they wrote it to be read. */
-  it('keeps a real title', () => {
-    expect(customerFacingCouponName('Sorry for the wait', 'Late delivery')).toBe(
-      'Sorry for the wait',
-    );
+  /* The number wins over a typed title: every coupon reads the same way. */
+  it('prefers the number to a typed title', () => {
+    expect(customerFacingCouponName('0501234567', 'Sorry for the wait')).toBe('+966501234567');
   });
 
-  /* A name with letters in it is a name, however many digits it also has. */
-  it('keeps a title that merely contains numbers', () => {
-    expect(customerFacingCouponName('Order 1328524 compensation', 'x')).toBe(
-      'Order 1328524 compensation',
-    );
+  /* No number at all: a phone-shaped title is the same fact, converted. */
+  it('falls back to a phone-shaped title, converted', () => {
+    expect(customerFacingCouponName(null, '0501234567')).toBe('+966501234567');
   });
 
-  /* Never blank: an unnamed coupon in a wallet is worse than a plain one. */
-  it('falls back to a plain label when there is no reason either', () => {
-    expect(customerFacingCouponName('0501234567', null)).toBe('Compensation');
+  /* Never blank, and never the reason. */
+  it('falls back to a typed title, then a plain label', () => {
+    expect(customerFacingCouponName(null, 'Sorry for the wait')).toBe('Sorry for the wait');
     expect(customerFacingCouponName('', '')).toBe('Compensation');
     expect(customerFacingCouponName(null, undefined)).toBe('Compensation');
   });
 
-  /* A short number is a label, not a phone — "25" or "2024" must survive. */
-  it('does not mistake a short number for a phone', () => {
-    expect(customerFacingCouponName('25', 'Late delivery')).toBe('25');
+  /* In the payload: the number as the name, the reason where the console shows it. */
+  it('sends the number as the name and the reason as the compensation', () => {
+    expect(coupon()).toMatchObject({
+      name: '+966501234567',
+      compensation: 'Late delivery',
+      compensationReason: 'Late delivery',
+    });
   });
 
-  /* And it reaches the payload, not just the helper. */
-  it('is what the coupon actually carries', () => {
-    expect(coupon()).toMatchObject({ name: 'Late delivery' });
+  /* Named after whoever RECEIVES it: on staging the test handset, never the
+     real customer whose coupon was redirected away from them. */
+  it('follows the staging redirect, so name and recipient agree', () => {
+    const body = yijiCouponPayload(row(), null, { redirectCouponsTo: '0559999999' }) as {
+      couponUser: { couponName: string; customerPhone: string; coupon: { name: string } };
+    };
+    expect(body.couponUser.customerPhone).toBe('+966559999999');
+    expect(body.couponUser.couponName).toBe('+966559999999');
+    expect(body.couponUser.coupon.name).toBe('+966559999999');
   });
 });

@@ -314,38 +314,38 @@ function num(v: number | string | null | undefined): number | null {
 }
 
 /**
- * THE NAME THE CUSTOMER READS IN THEIR YIJI WALLET.
+ * THE COUPON'S NAME ON YIJI: THE CUSTOMER'S OWN NUMBER, `+9665XXXXXXXX`.
  *
- * `coupon_approvals.title` defaults to the customer's PHONE NUMBER — the
- * Assign-coupon dialog pre-fills it that way, and its placeholder says so. That
- * is a useful handle inside the CRM, where an agent is scanning a list of
- * compensations and the number is the fastest way to tell them apart.
+ * Operations name every compensation coupon this way in Yiji's own console —
+ * Title `+966546888669`, the reason in the separate "compensation" field — and
+ * asked for ours to match (owner, 2026-10-05). We were sending the REASON as
+ * the name, so their coupon list read as a column of complaint sentences
+ * instead of the customer each one belongs to, and could not be searched by
+ * number the way their own coupons are.
  *
- * It must not leave the building. We send that title on to Yiji as the coupon's
- * NAME, and their app prints the name in the customer's wallet — so a customer
- * opening their coupons saw entries labelled `(0596190599)`, `(0550640444)`,
- * `(0564118118)`: other people's phone numbers, inside their app (owner,
- * 2026-10-03). All 102 coupons on production carried one.
+ * The reason is NOT lost: it travels in `compensationReason` and
+ * `compensation`, which is where their console shows it.
  *
- * It read as "these coupons belong to somebody else", which is how it was
- * first reported, and it is a privacy leak in its own right.
+ * THIS REVERSES 2026-10-03, deliberately. That change took the phone OUT of
+ * the name after customers saw bare `(05…)` numbers in their wallet and read
+ * them as somebody else's coupons. The number is now always the RECEIVING
+ * customer's own — the same one Yiji is sent as `customerPhone` — and in the
+ * `+966` form their console uses, never a stranger's.
  *
- * So a title that is ONLY a phone number is replaced with the reason the
- * compensation was given — which is what a customer would want to see anyway —
- * and failing that a plain, honest label. A title an agent actually typed is
- * left alone: they wrote it for the customer to read.
+ * With no number at all (rare: a coupon with neither an order nor a phone), a
+ * title the agent typed is kept, else a plain label. Never the reason: that is
+ * the field this exists to stop overloading.
  */
 export function customerFacingCouponName(
+  phone: string | null | undefined,
   title: string | null | undefined,
-  reason: string | null | undefined,
 ): string {
+  const p = (phone ?? '').trim();
+  if (p) return internationalPhone(p) ?? p;
   const t = (title ?? '').trim();
-  /* Digits, spaces, dashes and an optional +, and enough of them to be a phone
-     rather than a short word. Anything with a letter in it is a real name. */
-  const looksLikePhone = /^\+?[\d\s()-]{8,}$/.test(t);
-  if (t && !looksLikePhone) return t;
-  const r = (reason ?? '').trim();
-  return r || 'Compensation';
+  /* A title that is itself a number is the same fact in our `05…` shape. */
+  if (/^\+?[\d\s()-]{8,}$/.test(t)) return internationalPhone(t) ?? t;
+  return t || 'Compensation';
 }
 
 /**
@@ -464,6 +464,12 @@ export function yijiCouponPayload(
    */
   const yijiUserId = opts?.compensationUserId ?? (redirect ? undefined : realUserId);
   const phone = redirect ? (internationalPhone(redirect) ?? redirect) : realPhone;
+  /* Named after whoever RECEIVES it — on staging that is the test handset, so
+     the name and the recipient can never disagree. */
+  const couponName = customerFacingCouponName(
+    phone ?? (redirect ? undefined : row.customer_phone),
+    row.title,
+  );
 
   /*
    * ONE `CouponUserVM`, TWO ENVELOPES.
@@ -481,7 +487,7 @@ export function yijiCouponPayload(
     status: 0,
     // OUR code, so the two systems can be matched from either side later.
     couponCode: row.coupon_code ?? '',
-    couponName: customerFacingCouponName(row.title, row.reason),
+    couponName,
     compensationReason: row.reason ?? '',
     ...(yijiUserId ? { userId: yijiUserId } : {}),
     ...(phone ? { customerPhone: phone } : {}),
@@ -495,7 +501,7 @@ export function yijiCouponPayload(
     // off rather than sent as zero, which would read as "no discount".
     coupon: {
       id: 0,
-      name: customerFacingCouponName(row.title, row.reason),
+      name: couponName,
       code: row.coupon_code ?? '',
       compensationReason: row.reason ?? '',
       /*
@@ -1424,7 +1430,13 @@ export async function processCouponPushJob(
           couponId,
           userId: compensationUserId,
           couponCode: row.coupon_code ?? '',
-          couponName: customerFacingCouponName(row.title, row.reason),
+          couponName: customerFacingCouponName(
+            redirectCouponsTo?.trim() ||
+              order?.customerPhone ||
+              row.customer_phone ||
+              row.contact?.phone,
+            row.title,
+          ),
           compensationReason: row.reason ?? '',
           status: 0,
           totalCount: 0,
