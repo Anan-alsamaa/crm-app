@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { readItems, readRevisions, readUsers } from '@directus/sdk';
+import { aggregate, readItems, readRevisions, readUsers } from '@directus/sdk';
 import { formatDateTime } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
@@ -194,12 +194,14 @@ export interface TicketOrderInfo {
 export interface AgentKpiRow {
   agentId: string | null;
   agentName: string;
+  /*
+   * Tickets in range, and nothing else about tickets. `responded`,
+   * `avgFirstResponseMin` and `firstResponsePct` used to sit here; no screen or
+   * file ever showed them, and they were the only reason the Agent summary
+   * fetched every ticket row in full (2026-10-05). The count now comes from a
+   * server-side aggregate.
+   */
   tickets: number;
-  /** Tickets that have a first response recorded. */
-  responded: number;
-  avgFirstResponseMin: number | null;
-  /** First-response SLA compliance % over decided (met+breached) tickets. */
-  firstResponsePct: number | null;
   csatCount: number;
   /** Mean CSAT score 1–5 over the agent's rated conversations. */
   csatAvg: number | null;
@@ -350,6 +352,8 @@ function readByIdsChunked<T>(
   collection: string,
   ids: string[],
   build: (idChunk: string[]) => Record<string, unknown>,
+  /** Chunks in flight at once; 1 (strictly in series) unless a caller asks. */
+  concurrency = 1,
 ): Promise<T[]> {
   return readChunked(
     ids,
@@ -357,6 +361,8 @@ function readByIdsChunked<T>(
       directus.request(readItems(collection as never, build(chunk) as never) as never) as Promise<
         T[]
       >,
+    undefined,
+    concurrency,
   );
 }
 
@@ -407,6 +413,34 @@ const COMPLAINT_FIELDS = [
   'store_snapshot',
 ] as const;
 
+/**
+ * What the ticket BREAKDOWN renders and exports, and nothing more (2026-10-05).
+ *
+ * It used to read the base set as well — subject, priority, four SLA stamps,
+ * the audit stamps, contact id and email — none of which any of its columns
+ * shows. On the full history that was 11.2 MB, past the 10 MB above which
+ * CloudFront stops compressing, so the whole payload crossed the wire raw:
+ * 8.8 s. This list is 9.3 MB and 3.3 s on the same rows.
+ *
+ * The snapshots stay WHOLE. `store_snapshot` is the frozen branch attribution
+ * and is read in full by the store join. `order_snapshot` supplies brand,
+ * branch, total and order number; asking for just those four paths with
+ * `json(order_snapshot, …)` was measured too and saved 0.4 MB while costing
+ * the database the extraction (no faster), and it needs a Directus new enough
+ * to have `json()` — an older one would reject the whole query.
+ */
+const BREAKDOWN_TICKET_FIELDS = [
+  'id',
+  'status',
+  'assigned_agent',
+  'date_created',
+  { contact: ['name', 'phone'] },
+  ...COMPLAINT_FIELDS,
+] as const;
+
+/** The four reports this loader serves — see `useAgentReportData`. */
+export type AgentReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
+
 /** Numeric cell that tolerates the sheet's `-`, `""` and `"102.85 SR"`. */
 function toNumber(v: unknown): number | null {
   if (typeof v === 'number') return Number.isFinite(v) ? v : null;
@@ -427,17 +461,34 @@ export function useAgentReportData(
   days: number,
   labels: { unassigned: string; noSubject: string },
   range?: { from?: string; to?: string },
+  /**
+   * Which report is ASKING, so only its data is fetched (2026-10-05).
+   *
+   * One loader served every report and fetched everything for each: the Agent
+   * summary pulled every ticket row in full to count them per agent, and the
+   * ticket breakdown pulled every chat and message it never shows. Measured on
+   * production after the 7,912-ticket import, that was 5.1 s on the default
+   * range and 17.8 s on the full history. Omitted = everything, as before.
+   */
+  kind?: AgentReportKind,
 ) {
   const from = range?.from?.trim() || '';
   const to = range?.to?.trim() || '';
   return useQuery({
     // The key carries everything the data resolved against — a range missing
-    // from here serves the previous range's rows under the new dates.
-    queryKey: ['agent-reports', days, from, to, labels.unassigned, labels.noSubject],
-    staleTime: 60_000,
+    // from here serves the previous range's rows under the new dates. The kind
+    // too: an Agent summary result has no ticket rows to lend a breakdown.
+    queryKey: ['agent-reports', kind ?? 'all', days, from, to, labels.unassigned, labels.noSubject],
+    /* Five minutes, not one (2026-10-05). These are reports over weeks or
+       months of history, not a live queue; refetching all of it every time a
+       tab regained focus was a large share of the waiting. The changes made
+       from THIS portal (a coupon decision, a ticket delete, an import)
+       invalidate 'agent-reports' explicitly, so those show at once; work done
+       by agents elsewhere shows within five minutes. */
+    staleTime: 5 * 60_000,
     queryFn: async (): Promise<AgentReportData> => {
       try {
-        return await loadAgentReport(days, labels, { from, to });
+        return await loadAgentReport(days, labels, { from, to }, kind);
       } catch (err) {
         // Report the cause. A generic "could not load" on a page that made
         // twenty successful requests sends whoever is looking hunting through
@@ -449,10 +500,45 @@ export function useAgentReportData(
   });
 }
 
+type RawCoupon = {
+  id: string;
+  ticket: string | null;
+  order_id: string | null;
+  status: string | null;
+  compensation: string | null;
+};
+
+type RawRevision = {
+  item: string;
+  activity: { action: string; timestamp: string; user: string | null } | null;
+};
+
+type RawRoutingEvent = {
+  conversation: string;
+  agent: string | null;
+  outcome: string;
+  stage: string;
+};
+
+/**
+ * An optional read: its fallback stands in for ANY failure, including one
+ * thrown synchronously while the request is being built, so a single missing
+ * column or collection can never reject the batch it runs in.
+ */
+const attempt = <T>(read: () => Promise<T>, fallback: (err: unknown) => T): Promise<T> =>
+  Promise.resolve().then(read).catch(fallback);
+
+/** Directus returns an aggregate count as a STRING (Postgres bigint). */
+const countOf = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : 0;
+};
+
 async function loadAgentReport(
   days: number,
   labels: { unassigned: string; noSubject: string },
   range?: { from?: string; to?: string },
+  kind?: AgentReportKind,
 ): Promise<AgentReportData> {
   {
     {
@@ -465,6 +551,26 @@ async function loadAgentReport(
         [field]: until ? { _gte: since, _lte: until } : { _gte: since },
       });
       const now = Date.now();
+
+      /*
+       * WHAT THIS REPORT ACTUALLY SHOWS, so only that is fetched (2026-10-05).
+       *
+       *   ticketRows    the ticket rows themselves (Tickets, ticket breakdown)
+       *   ticketCounts  only how many per agent (Agent summary) — one aggregate
+       *   chats         conversations + their messages (Agent summary, Conversations)
+       *   agentKpi      CSAT + routing history (Agent summary)
+       *   breakdown     coupons, last editor, logged-outside-window (breakdown)
+       *
+       * No kind = every part, exactly as before.
+       */
+      const all = !kind;
+      const needs = {
+        ticketRows: all || kind === 'tickets' || kind === 'complaints',
+        ticketCounts: kind === 'agents',
+        chats: all || kind === 'agents' || kind === 'conversations',
+        agentKpi: all || kind === 'agents',
+        breakdown: all || kind === 'complaints',
+      };
 
       // Attempt the richer field list first; fall back to the base one if this
       // Directus has no complaint schema (see COMPLAINT_FIELDS).
@@ -491,6 +597,7 @@ async function loadAgentReport(
         ],
       };
       const readTickets = async (): Promise<RawTicket[]> => {
+        if (!needs.ticketRows) return [];
         const query = (fields: readonly unknown[], filter: unknown) =>
           directus.request(
             readItems('tickets', {
@@ -501,7 +608,13 @@ async function loadAgentReport(
             }),
           ) as Promise<RawTicket[]>;
         try {
-          return await query([...BASE_TICKET_FIELDS, ...COMPLAINT_FIELDS], ticketWindow);
+          // The breakdown reads only its own columns — see BREAKDOWN_TICKET_FIELDS.
+          return await query(
+            kind === 'complaints'
+              ? BREAKDOWN_TICKET_FIELDS
+              : [...BASE_TICKET_FIELDS, ...COMPLAINT_FIELDS],
+            ticketWindow,
+          );
         } catch {
           // No complaint schema here: neither the fields nor the window that
           // reads `complaint_date` can work, so both fall back together.
@@ -509,37 +622,97 @@ async function loadAgentReport(
           return await query(BASE_TICKET_FIELDS, inRange('date_created'));
         }
       };
+      /*
+       * TICKETS PER AGENT, COUNTED BY THE SERVER (2026-10-05).
+       *
+       * The Agent summary shows one ticket number per agent. It used to get it
+       * by downloading every ticket in range — order and store snapshots and
+       * all, 10.9 MB on the full history — and counting in the browser. A
+       * grouped count is one request of about half a kilobyte (0.26 s measured
+       * on production). Same window and same fallback as the rows.
+       */
+      const readTicketCounts = async (): Promise<Map<string | null, number>> => {
+        const out = new Map<string | null, number>();
+        if (!needs.ticketCounts) return out;
+        const query = (filter: unknown) =>
+          directus.request(
+            aggregate(
+              'tickets' as never,
+              {
+                aggregate: { count: '*' },
+                groupBy: ['assigned_agent'],
+                query: { filter },
+              } as never,
+            ),
+          ) as unknown as Promise<Array<{ assigned_agent?: string | null; count?: unknown }>>;
+        let rows: Array<{ assigned_agent?: string | null; count?: unknown }>;
+        try {
+          rows = await query(ticketWindow);
+        } catch {
+          rows = await query(inRange('date_created'));
+        }
+        for (const r of rows) {
+          const id = r.assigned_agent ?? null;
+          out.set(id, (out.get(id) ?? 0) + countOf(r.count));
+        }
+        return out;
+      };
 
-      const [tickets, conversations, csat, users, coupons] = await Promise.all([
+      /*
+       * EVERY INDEPENDENT READ IN ONE BATCH (2026-10-05).
+       *
+       * Routing events, the last-editor lookup and the outside-window count
+       * used to run one after another AFTER this batch and after the messages,
+       * so the report waited for the sum of them rather than the slowest. None
+       * of them needs anything this batch returns. Each optional read carries
+       * its own catch, as it did before: a missing collection or a refused
+       * permission costs that one column, never the report.
+       */
+      const [
+        tickets,
+        ticketCounts,
+        conversations,
+        csat,
+        users,
+        coupons,
+        routingEvents,
+        revisions,
+        outside,
+      ] = await Promise.all([
         readTickets(),
-        directus.request(
-          readItems('conversations', {
-            filter: inRange('date_created'),
-            fields: [
-              'id',
-              'status',
-              'priority',
-              'assigned_agent',
-              'date_created',
-              'solved_at',
-              'last_message_at',
-              // Expanded, not a bare id: the status report names and PHONES the
-              // customers behind each count. "20 open" is a number; twenty
-              // phone numbers is a morning's work.
-              { contact: ['id', 'name', 'phone', 'email'] },
-              'last_order_id',
-            ],
-            limit: -1,
-            sort: ['-date_created'],
-          }),
-        ) as Promise<RawConversation[]>,
-        directus.request(
-          readItems('csat_responses', {
-            filter: inRange('submitted_at'),
-            fields: ['id', 'score', 'comment', 'submitted_at', 'conversation'],
-            limit: -1,
-          }),
-        ) as Promise<RawCsat[]>,
+        readTicketCounts(),
+        needs.chats
+          ? (directus.request(
+              readItems('conversations', {
+                filter: inRange('date_created'),
+                fields: [
+                  'id',
+                  'status',
+                  'priority',
+                  'assigned_agent',
+                  'date_created',
+                  'solved_at',
+                  'last_message_at',
+                  // Expanded, not a bare id: the status report names and PHONES the
+                  // customers behind each count. "20 open" is a number; twenty
+                  // phone numbers is a morning's work.
+                  { contact: ['id', 'name', 'phone', 'email'] },
+                  'last_order_id',
+                ],
+                limit: -1,
+                sort: ['-date_created'],
+              }),
+            ) as Promise<RawConversation[]>)
+          : Promise.resolve([] as RawConversation[]),
+        needs.agentKpi
+          ? (directus.request(
+              readItems('csat_responses', {
+                filter: inRange('submitted_at'),
+                fields: ['id', 'score', 'comment', 'submitted_at', 'conversation'],
+                limit: -1,
+              }),
+            ) as Promise<RawCsat[]>)
+          : Promise.resolve([] as RawCsat[]),
         directus.request(
           readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 }),
         ) as Promise<RawUser[]>,
@@ -557,23 +730,137 @@ async function loadAgentReport(
          * raised yesterday, and a window on the coupon would drop exactly the
          * rows this is here to find. It is a small collection.
          */
-        directus.request(
-          readItems(
-            'coupon_approvals' as never,
-            {
-              fields: ['id', 'ticket', 'order_id', 'status', 'compensation'],
-              limit: -1,
-            } as never,
-          ),
-        ) as Promise<
-          Array<{
-            id: string;
-            ticket: string | null;
-            order_id: string | null;
-            status: string | null;
-            compensation: string | null;
-          }>
-        >,
+        needs.breakdown
+          ? (directus.request(
+              readItems(
+                'coupon_approvals' as never,
+                {
+                  fields: ['id', 'ticket', 'order_id', 'status', 'compensation'],
+                  limit: -1,
+                } as never,
+              ),
+            ) as Promise<RawCoupon[]>)
+          : Promise.resolve([] as RawCoupon[]),
+        // Auto-assignment outcomes + handoffs — see where they are tallied.
+        needs.agentKpi
+          ? attempt(
+              () =>
+                directus.request(
+                  readItems('routing_events' as never, {
+                    filter: inRange('date_created'),
+                    fields: ['conversation', 'agent', 'outcome', 'stage'],
+                    limit: -1,
+                  }) as never,
+                ) as Promise<RawRoutingEvent[]>,
+              // Collection not provisioned yet (bootstrap not re-run) — report
+              // zeroes rather than failing the whole KPI over one metric.
+              () => [] as RawRoutingEvent[],
+            )
+          : Promise.resolve([] as RawRoutingEvent[]),
+        /*
+         * Who last edited each ticket, from the AUDIT TRAIL — see `lastEditBy`
+         * below for why not `user_updated`.
+         *
+         * `readRevisions`, NOT `readItems('directus_revisions')`.
+         *
+         * A Directus SYSTEM collection is not served from `/items/...`:
+         * `readItems('directus_revisions')` builds `/items/directus_revisions`,
+         * which answers 403 FORBIDDEN however complete the role's permissions
+         * are — and this role HAS `directus_revisions.read`. The 403 landed in
+         * the catch, `lastEditBy` stayed empty, and both columns rendered blank
+         * for every ticket, on a report whose whole job is to say who touched
+         * it last. The agent portal's own history panel was right all along
+         * because it used `readRevisions` (owner, 2026-09-24).
+         *
+         * ONE QUERY, filtered to what the lookup keeps (2026-10-05). It used
+         * to ask for EVERY revision of the tickets in range, by id, 120 ids at
+         * a time: 67 requests on the full history, 7.5 s, for rows that were
+         * then thrown away unless they were a human's update. Asking for human
+         * updates of tickets directly is 314 rows in under a second. Bounded
+         * by the window's start, less a day of slack: a ticket in the window
+         * was created at or after its complaint, so it cannot have been edited
+         * before the window opened — and the bound keeps this query from
+         * growing with every edit ever made.
+         */
+        needs.breakdown
+          ? attempt(
+              () =>
+                directus.request(
+                  readRevisions({
+                    limit: -1,
+                    filter: {
+                      collection: { _eq: 'tickets' },
+                      activity: {
+                        action: { _eq: 'update' },
+                        user: { _nnull: true },
+                        timestamp: {
+                          _gte: new Date(new Date(since).getTime() - DAY_MS).toISOString(),
+                        },
+                      },
+                    },
+                    fields: ['item', 'activity.action', 'activity.timestamp', 'activity.user'],
+                    // Newest first, so the first row seen for a ticket wins.
+                    sort: ['-id'],
+                  } as never),
+                ) as Promise<RawRevision[]>,
+              (err: unknown) => {
+                /*
+                 * Still best-effort — no audit read may empty the whole report —
+                 * but NOT silent. This catch once swallowed a 403 for weeks and
+                 * the only symptom was two permanently blank columns, which reads
+                 * as "nobody edited these tickets" rather than as a failure.
+                 */
+                console.warn('[report] last-modified lookup failed; columns will be blank:', err);
+                return [] as RawRevision[];
+              },
+            )
+          : Promise.resolve([] as RawRevision[]),
+        /*
+         * What this window is LEAVING OUT — tickets logged in it, dated
+         * outside. A COUNT with its first and last date, asked of the server:
+         * it used to download every such row (7,646 on the import day) to
+         * count them in the browser. Best-effort: a count that fails must not
+         * cost anyone their rows.
+         */
+        needs.breakdown
+          ? attempt(
+              () =>
+                directus.request(
+                  aggregate(
+                    'tickets' as never,
+                    {
+                      aggregate: { count: '*', min: 'complaint_date', max: 'complaint_date' },
+                      query: {
+                        filter: {
+                          _and: [
+                            inRange('date_created'),
+                            { complaint_date: { _nnull: true } },
+                            {
+                              // "Outside" needs both edges to mean anything. With
+                              // no end date the window runs to now, so only the
+                              // earlier edge can exclude a ticket.
+                              _or: until
+                                ? [
+                                    { complaint_date: { _lt: since } },
+                                    { complaint_date: { _gt: until } },
+                                  ]
+                                : [{ complaint_date: { _lt: since } }],
+                            },
+                          ],
+                        },
+                      },
+                    } as never,
+                  ),
+                ) as unknown as Promise<
+                  Array<{
+                    count?: unknown;
+                    min?: { complaint_date?: string | null };
+                    max?: { complaint_date?: string | null };
+                  }>
+                >,
+              () => null,
+            )
+          : Promise.resolve(null),
       ]);
 
       // Service accounts (…@svc.…) aren't people — exclude them so they never
@@ -600,21 +887,58 @@ async function loadAgentReport(
           csat.map((r) => r.conversation).filter((id): id is string => !!id && !convAgent.has(id)),
         ),
       );
-      if (missingConvIds.length > 0) {
-        const extraConvs = await readByIdsChunked<{ id: string; assigned_agent: string | null }>(
-          'conversations',
-          missingConvIds,
+      /*
+       * The second and last batch: both need the conversations above, and
+       * neither needs the other, so they run side by side — and the message
+       * chunks four at a time. A month of chats is a handful of chunks; in
+       * series each one was a full round trip of waiting (2026-10-05).
+       */
+      const [extraConvs, chatMsgs] = await Promise.all([
+        missingConvIds.length > 0
+          ? readByIdsChunked<{ id: string; assigned_agent: string | null }>(
+              'conversations',
+              missingConvIds,
+              (ids) => ({
+                filter: { id: { _in: ids } },
+                fields: ['id', 'assigned_agent'],
+                limit: -1,
+              }),
+            )
+          : Promise.resolve([] as Array<{ id: string; assigned_agent: string | null }>),
+        // The operational half the owner evaluates agents BY — chats handled,
+        // no-reply, in-time %, first response, time to solve, common chats —
+        // computed with the exact shared arithmetic of the performance pages.
+        // Chunked: one `_in` carrying every conversation id overflows the URL and
+        // CloudFront answers 414 before Directus sees it. See IN_FILTER_CHUNK.
+        readByIdsChunked<{
+          conversation: string;
+          sender_type: string;
+          date_created: string | null;
+          sender_user: string | null;
+        }>(
+          'messages',
+          conversations.map((c) => c.id),
           (ids) => ({
-            filter: { id: { _in: ids } },
-            fields: ['id', 'assigned_agent'],
             limit: -1,
+            filter: {
+              conversation: { _in: ids },
+              is_internal_note: { _eq: false },
+            },
+            /* `sender_user` so a reply is credited to the agent who SENT it. The
+               ladder moves chats, so `assigned_agent` is who holds it now, which is
+               frequently not who answered. */
+            fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
+            sort: ['date_created'],
           }),
-        );
-        for (const c of extraConvs) convAgent.set(c.id, c.assigned_agent);
-      }
+          4,
+        ),
+      ]);
+      for (const c of extraConvs) convAgent.set(c.id, c.assigned_agent);
 
       /* Report 1: tickets + SLA timings (order enrichment added later). */
-      const ticketRows: TicketReportRow[] = tickets.map((t) => ({
+      // Not for the breakdown: it never shows these, and its leaner field list
+      // does not carry the SLA stamps they are built from.
+      const ticketRows: TicketReportRow[] = (kind === 'complaints' ? [] : tickets).map((t) => ({
         id: t.id,
         subject: t.subject || labels.noSubject,
         status: t.status,
@@ -669,9 +993,8 @@ async function loadAgentReport(
        * "nobody edited this" when somebody had.
        *
        * Revisions keep every write with its actor, so the last revision whose
-       * activity has a real user IS the last human edit. Bounded to the
-       * tickets in range and best-effort: no audit read must ever empty the
-       * report.
+       * activity has a real user IS the last human edit. Read in the first
+       * batch above, best-effort: no audit read must ever empty the report.
        */
       /*
        * COMPENSATION, RESOLVED FROM THE COUPON.
@@ -716,60 +1039,15 @@ async function loadAgentReport(
       };
 
       const lastEditBy = new Map<string, { name: string; at: string }>();
-      if (tickets.length > 0) {
-        try {
-          /*
-           * `readRevisions`, NOT `readItems('directus_revisions')`.
-           *
-           * A Directus SYSTEM collection is not served from `/items/...`:
-           * `readItems('directus_revisions')` builds `/items/directus_revisions`,
-           * which answers 403 FORBIDDEN however complete the role's permissions
-           * are — and this role HAS `directus_revisions.read`. The 403 landed in
-           * the catch below, `lastEditBy` stayed empty, and both columns rendered
-           * blank for every ticket, on a report whose whole job is to say who
-           * touched it last. The agent portal's own history panel was right all
-           * along because it used `readRevisions` (owner, 2026-09-24).
-           */
-          const revs = (await readChunked(
-            tickets.map((t) => t.id),
-            (ids) =>
-              directus.request(
-                readRevisions({
-                  limit: -1,
-                  filter: {
-                    collection: { _eq: 'tickets' },
-                    item: { _in: ids },
-                  },
-                  fields: ['item', 'activity.action', 'activity.timestamp', 'activity.user'],
-                  // Newest first, so the first row seen for a ticket wins.
-                  sort: ['-id'],
-                } as never),
-              ) as Promise<unknown[]>,
-            undefined,
-            /* Four at a time: a multi-year window is dozens of chunks, and in
-               series they kept the report blank for ~20 s. */
-            4,
-          )) as Array<{
-            item: string;
-            activity: { action: string; timestamp: string; user: string | null } | null;
-          }>;
-          for (const r of revs) {
-            if (!r.activity?.user || r.activity.action !== 'update') continue;
-            if (lastEditBy.has(r.item)) continue;
-            const name = userName.get(r.activity.user);
-            if (!name) continue; // service accounts are not people
-            lastEditBy.set(r.item, { name, at: fmtStamp(r.activity.timestamp) });
-          }
-        } catch (err) {
-          /*
-           * Still best-effort — no audit read may empty the whole report — but
-           * NOT silent any more. This catch swallowed a 403 for weeks and the
-           * only symptom was two permanently blank columns, which reads as
-           * "nobody edited these tickets" rather than as a failure. If it fires
-           * again, the reason is in the console instead of nowhere.
-           */
-          console.warn('[report] last-modified lookup failed; columns will be blank:', err);
-        }
+      for (const r of revisions) {
+        // The query already asked for human updates only; kept as a guard so a
+        // looser server-side filter can never credit a system write.
+        if (!r.activity?.user || r.activity.action !== 'update') continue;
+        const item = String(r.item);
+        if (lastEditBy.has(item)) continue;
+        const name = userName.get(r.activity.user);
+        if (!name) continue; // service accounts are not people
+        lastEditBy.set(item, { name, at: fmtStamp(r.activity.timestamp) });
       }
 
       const complaintRows: ComplaintReportRow[] = byWhen.map((t) => {
@@ -829,15 +1107,11 @@ async function loadAgentReport(
         };
       });
 
-      /* Report 2: agent KPI — first response + CSAT. */
+      /* Report 2: agent KPI — tickets per agent + CSAT. */
       interface Acc {
         agentId: string | null;
         agentName: string;
         tickets: number;
-        responded: number;
-        respSum: number;
-        frMet: number;
-        frBreached: number;
         csatSum: number;
         csatCount: number;
       }
@@ -846,34 +1120,21 @@ async function loadAgentReport(
         const key = id ?? '__unassigned__';
         let a = accs.get(key);
         if (!a) {
-          a = {
-            agentId: id,
-            agentName: name,
-            tickets: 0,
-            responded: 0,
-            respSum: 0,
-            frMet: 0,
-            frBreached: 0,
-            csatSum: 0,
-            csatCount: 0,
-          };
+          a = { agentId: id, agentName: name, tickets: 0, csatSum: 0, csatCount: 0 };
           accs.set(key, a);
         }
         return a;
       };
 
+      /* From the rows when they were fetched anyway, from the server's grouped
+         count when they were not — never both (one or the other is empty). */
       for (const t of tickets) {
         const agentId = realAgentId(t.assigned_agent);
-        const a = ensure(agentId, agentOf(agentId));
-        a.tickets += 1;
-        const rm = minutesBetween(t.date_created, t.first_responded_at);
-        if (rm != null) {
-          a.responded += 1;
-          a.respSum += rm;
-        }
-        const fr = slaOutcome(t.first_response_due_at, t.first_responded_at, now);
-        if (fr === 'met') a.frMet += 1;
-        else if (fr === 'breached') a.frBreached += 1;
+        ensure(agentId, agentOf(agentId)).tickets += 1;
+      }
+      for (const [assigned, n] of ticketCounts) {
+        const agentId = realAgentId(assigned);
+        ensure(agentId, agentOf(agentId)).tickets += n;
       }
 
       let csatOverallSum = 0;
@@ -899,52 +1160,13 @@ async function loadAgentReport(
       // wait" verdict that the performance pages use.
       const missedBy = new Map<string, number>();
       const offeredBy = new Map<string, number>();
-      let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
-      try {
-        const events = (await directus.request(
-          readItems('routing_events' as never, {
-            filter: inRange('date_created'),
-            fields: ['conversation', 'agent', 'outcome', 'stage'],
-            limit: -1,
-          }) as never,
-        )) as Array<{ conversation: string; agent: string | null; outcome: string; stage: string }>;
-        for (const e of events) {
-          if (!e.agent) continue;
-          offeredBy.set(e.agent, (offeredBy.get(e.agent) ?? 0) + 1);
-          if (e.outcome === 'missed') missedBy.set(e.agent, (missedBy.get(e.agent) ?? 0) + 1);
-        }
-        handoffs = chatHandoffs(events);
-      } catch {
-        // Collection not provisioned yet (bootstrap not re-run) — report zeroes
-        // rather than failing the whole KPI query over one optional metric.
+      for (const e of routingEvents) {
+        if (!e.agent) continue;
+        offeredBy.set(e.agent, (offeredBy.get(e.agent) ?? 0) + 1);
+        if (e.outcome === 'missed') missedBy.set(e.agent, (missedBy.get(e.agent) ?? 0) + 1);
       }
+      const handoffs = chatHandoffs(routingEvents);
 
-      // The operational half the owner evaluates agents BY — chats handled,
-      // no-reply, in-time %, first response, time to solve, common chats —
-      // computed with the exact shared arithmetic of the performance pages.
-      // Chunked: one `_in` carrying every conversation id overflows the URL and
-      // CloudFront answers 414 before Directus sees it. See IN_FILTER_CHUNK.
-      const chatMsgs = await readByIdsChunked<{
-        conversation: string;
-        sender_type: string;
-        date_created: string | null;
-        sender_user: string | null;
-      }>(
-        'messages',
-        conversations.map((c) => c.id),
-        (ids) => ({
-          limit: -1,
-          filter: {
-            conversation: { _in: ids },
-            is_internal_note: { _eq: false },
-          },
-          /* `sender_user` so a reply is credited to the agent who SENT it. The
-             ladder moves chats, so `assigned_agent` is who holds it now, which is
-             frequently not who answered. */
-          fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
-          sort: ['date_created'],
-        }),
-      );
       const chatTimes = conversationTimestamps(chatMsgs);
       const timings = conversations.map((c) => {
         const agentId = realAgentId(c.assigned_agent);
@@ -1008,16 +1230,12 @@ async function loadAgentReport(
 
       const agents: AgentKpiRow[] = Array.from(accs.values())
         .map((a) => {
-          const decided = a.frMet + a.frBreached;
           const perf = perfRows.get(a.agentId ?? '');
           const it = inTime.get(a.agentId ?? '');
           return {
             agentId: a.agentId,
             agentName: a.agentName,
             tickets: a.tickets,
-            responded: a.responded,
-            avgFirstResponseMin: a.responded ? a.respSum / a.responded : null,
-            firstResponsePct: decided ? (a.frMet / decided) * 100 : null,
             csatCount: a.csatCount,
             csatAvg: a.csatCount ? a.csatSum / a.csatCount : null,
             missed: missedBy.get(a.agentId ?? '') ?? 0,
@@ -1093,47 +1311,19 @@ async function loadAgentReport(
         total: conversations.length,
       };
 
-      /*
-       * What this window is LEAVING OUT — tickets logged in it, dated outside.
-       *
-       * Best-effort and last: the report is already complete without it, and a
-       * count that fails must not cost anyone their rows. Fields are kept to
-       * the two dates so this stays cheap next to the main read.
-       */
-      let loggedOutsideWindow: AgentReportData['loggedOutsideWindow'] = null;
-      try {
-        /* "Outside" needs both edges to mean anything. With no end date the
-           window runs to now, so only the earlier edge can exclude a ticket. */
-        const outsideEdges = until
-          ? [{ complaint_date: { _lt: since } }, { complaint_date: { _gt: until } }]
-          : [{ complaint_date: { _lt: since } }];
-        const outside = (await directus.request(
-          readItems('tickets', {
-            limit: -1,
-            fields: ['complaint_date'] as never,
-            filter: {
-              _and: [
-                inRange('date_created'),
-                { complaint_date: { _nnull: true } },
-                { _or: outsideEdges },
-              ],
-            } as never,
-          }),
-        )) as Array<{ complaint_date: string | null }>;
-        const dates = outside
-          .map((r) => String(r.complaint_date ?? ''))
-          .filter(Boolean)
-          .sort();
-        if (dates.length > 0) {
-          loggedOutsideWindow = {
-            count: dates.length,
-            earliest: dates[0]!.slice(0, 10),
-            latest: dates[dates.length - 1]!.slice(0, 10),
-          };
-        }
-      } catch {
-        // Left null: the report stands on its own rows.
-      }
+      /* What this window is LEAVING OUT — counted in the first batch. Null
+         when the count failed or found nothing: the report stands on its own
+         rows. */
+      const outsideRow = outside?.[0];
+      const outsideCount = countOf(outsideRow?.count);
+      const loggedOutsideWindow: AgentReportData['loggedOutsideWindow'] =
+        outsideCount > 0
+          ? {
+              count: outsideCount,
+              earliest: String(outsideRow?.min?.complaint_date ?? '').slice(0, 10),
+              latest: String(outsideRow?.max?.complaint_date ?? '').slice(0, 10),
+            }
+          : null;
 
       return {
         tickets: ticketRows,

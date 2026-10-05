@@ -199,9 +199,6 @@ const agents = [
     agentId: 'u1',
     agentName: 'Ann Lee',
     tickets: 2,
-    responded: 2,
-    avgFirstResponseMin: 12.4,
-    firstResponsePct: 66.6,
     csatCount: 3,
     csatAvg: 4.26,
     missed: 0,
@@ -217,9 +214,6 @@ const agents = [
     agentId: null,
     agentName: 'Unassigned',
     tickets: 1,
-    responded: 0,
-    avgFirstResponseMin: null,
-    firstResponsePct: null,
     csatCount: 0,
     csatAvg: null,
     missed: 0,
@@ -541,10 +535,13 @@ describe('AgentReportsPage — shell', () => {
     );
     api.useAgentReportData.mockReturnValue(ok);
     renderPage();
-    expect(api.useAgentReportData).toHaveBeenLastCalledWith(expect.any(Number), expect.anything(), {
-      from: '2026-01-05',
-      to: '2026-02-05',
-    });
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      expect.anything(),
+      { from: '2026-01-05', to: '2026-02-05' },
+      // The report asks only for its own data (2026-10-05).
+      'tickets',
+    );
   });
 
   it('lets a quick range WRITE the two dates rather than compete with them', async () => {
@@ -891,10 +888,12 @@ describe('AgentReportsPage — ticket breakdown: typed dates fetch', () => {
     await user.type(from!, '05/01/2021');
     await user.type(to!, '05/10/2026');
     await apply(user);
-    expect(api.useAgentReportData).toHaveBeenLastCalledWith(expect.any(Number), expect.anything(), {
-      from: '2021-01-05',
-      to: '2026-10-05',
-    });
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      expect.anything(),
+      { from: '2021-01-05', to: '2026-10-05' },
+      'complaints',
+    );
   });
 
   it('does not refetch for dates inside the loaded window', async () => {
@@ -908,10 +907,12 @@ describe('AgentReportsPage — ticket breakdown: typed dates fetch', () => {
     const [from] = screen.getAllByPlaceholderText('dd/mm/yyyy');
     await user.type(from!, '20/09/2026');
     await apply(user);
-    expect(api.useAgentReportData).toHaveBeenLastCalledWith(expect.any(Number), expect.anything(), {
-      from: '2026-09-05',
-      to: '2026-10-05',
-    });
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      expect.anything(),
+      { from: '2026-09-05', to: '2026-10-05' },
+      'complaints',
+    );
   });
 });
 

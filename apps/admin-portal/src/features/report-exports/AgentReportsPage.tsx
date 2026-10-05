@@ -2789,6 +2789,8 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
       noSubject: t('agentReports.noSubject', { defaultValue: '(no subject)' }),
     },
     { from, to },
+    // Only what THIS report shows is fetched — see useAgentReportData.
+    which,
   );
   /** Days the range actually covers — the export file name says the period. */
   const days = useMemo(() => {

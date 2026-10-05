@@ -26,7 +26,25 @@ function wrapper() {
 
 interface Captured {
   collection: string;
-  opts: { filter?: Record<string, unknown> };
+  aggregate?: boolean;
+  opts: {
+    filter?: Record<string, unknown>;
+    query?: { filter?: Record<string, unknown> };
+    aggregate?: Record<string, unknown>;
+  };
+}
+
+/**
+ * The outside-the-window COUNT: a server-side aggregate over tickets since
+ * 2026-10-05 — it used to download every such row (7,646 on the import day)
+ * to count them in the browser.
+ */
+function outsideCount(): Captured {
+  const found = request.mock.calls
+    .map(([arg]) => arg as Captured)
+    .find((c) => c?.collection === 'tickets' && c.aggregate);
+  expect(found, 'no outside-window count was asked for').toBeTruthy();
+  return found!;
 }
 
 beforeEach(() => {
@@ -123,10 +141,8 @@ describe('the ticket window', () => {
     });
 
     await waitFor(() => expect(request).toHaveBeenCalled());
-    const calls = request.mock.calls.map(([arg]) => arg as Captured);
-    // The LAST tickets read is the outside-the-window count.
-    const outside = calls.filter((c) => c?.collection === 'tickets').at(-1);
-    const asText = JSON.stringify(outside!.opts.filter);
+    const outside = outsideCount();
+    const asText = JSON.stringify(outside.opts.query?.filter);
 
     // Logged in the window...
     expect(asText).toContain('date_created');
@@ -143,9 +159,7 @@ describe('the ticket window', () => {
     renderHook(() => useAgentReportData(30, labels), { wrapper: wrapper() });
 
     await waitFor(() => expect(request).toHaveBeenCalled());
-    const calls = request.mock.calls.map(([arg]) => arg as Captured);
-    const outside = calls.filter((c) => c?.collection === 'tickets').at(-1);
-    const asText = JSON.stringify(outside!.opts.filter);
+    const asText = JSON.stringify(outsideCount().opts.query?.filter);
 
     // `"_gt"` with its quotes: a bare `_gt` also matches `_gte`, which the
     // window's own lower bound always carries.
