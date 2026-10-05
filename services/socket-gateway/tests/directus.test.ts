@@ -583,6 +583,88 @@ describe('GatewayDirectus.loadConversationMessages', () => {
     // The newest message is present, and it is the one the customer came back for.
     expect(msgs.at(-1)?.content).toBe('the reply');
   });
+
+  /*
+   * EMA-33 (owner, 2026-10-05): a customer reconnecting must see the same thing
+   * as one who was watching live — "edited" on a corrected reply, and a bare
+   * placeholder (no words, no files) for a withdrawn one.
+   */
+  it('marks edited replies and seeds deleted ones with NO content or attachments', async () => {
+    request
+      .mockResolvedValueOnce([
+        {
+          id: 'm2',
+          sender_type: 'agent',
+          content: 'stale text that must not leak',
+          date_created: '2026-01-01T00:01:00.000Z',
+          deleted_at: '2026-01-01T00:02:00.000Z',
+        },
+        {
+          id: 'm1',
+          sender_type: 'agent',
+          content: 'fixed',
+          date_created: '2026-01-01T00:00:00.000Z',
+          edited_at: '2026-01-01T00:03:00.000Z',
+        },
+      ])
+      .mockResolvedValueOnce([{ messages_id: 'm2', directus_files_id: 'f9' }]);
+    const msgs = await makeGateway().loadConversationMessages('conv-1');
+    expect(msgs[0]).toMatchObject({
+      id: 'm1',
+      content: 'fixed',
+      editedAt: '2026-01-01T00:03:00.000Z',
+    });
+    expect(msgs[1]).toEqual({
+      id: 'm2',
+      senderType: 'agent',
+      content: '',
+      createdAt: '2026-01-01T00:01:00.000Z',
+      attachments: [],
+      deletedAt: '2026-01-01T00:02:00.000Z',
+    });
+  });
+
+  it('never selects the audit copy (original_content) for the customer', async () => {
+    request.mockResolvedValueOnce([]);
+    await makeGateway().loadConversationMessages('conv-1');
+    const query = JSON.stringify((await sentAt(0)).params);
+    expect(query).toContain('deleted_at');
+    expect(query).not.toContain('original_content');
+  });
+});
+
+describe('GatewayDirectus agent message edit (EMA-33)', () => {
+  it('reads the row scoped to the named conversation', async () => {
+    request.mockResolvedValueOnce([{ id: 'm1', sender_type: 'agent' }]);
+    const row = await makeGateway().getMessageForEdit('conv-1', 'm1');
+    expect(row?.id).toBe('m1');
+    const query = JSON.stringify((await sentAt(0)).params);
+    expect(query).toContain('conv-1');
+    expect(query).toContain('original_content');
+  });
+
+  it('answers null for a message outside the conversation', async () => {
+    request.mockResolvedValueOnce([]);
+    expect(await makeGateway().getMessageForEdit('conv-1', 'other')).toBeNull();
+  });
+
+  it('writes original_content only when given', async () => {
+    request.mockResolvedValue({});
+    await makeGateway().updateAgentMessage('m1', { content: '', deletedAt: 'T' });
+    const body = JSON.stringify((await sentAt(0)).body);
+    expect(body).toContain('deleted_at');
+    expect(body).not.toContain('original_content');
+    await makeGateway().updateAgentMessage('m1', {
+      content: 'new',
+      editedAt: 'T',
+      originalContent: 'old',
+    });
+    expect((await sentAt(1)).body).toEqual({
+      content: 'new',
+      edited_at: 'T',
+      original_content: 'old',
+    });
+  });
 });
 
 describe('GatewayDirectus.getConversationAttachment', () => {

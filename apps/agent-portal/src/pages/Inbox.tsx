@@ -294,6 +294,8 @@ export function Inbox() {
       return previews.isLoading
         ? ''
         : t('inbox.noMessagesYet', { defaultValue: 'No messages yet' });
+    // A withdrawn last reply (EMA-33) says so, with no "You:" — nothing was said.
+    if (pv.deleted) return t('inbox.messageDeleted', { defaultValue: 'This message was deleted' });
     const body = pv.hasAttachment
       ? t('inbox.attachmentPreview', { defaultValue: 'Attachment' })
       : (pv.content ?? '');

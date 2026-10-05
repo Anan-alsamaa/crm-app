@@ -241,6 +241,7 @@
     "loadError": "Could not load chats",
     "loadErrorHint": "Check your connection and try again.",
     "attachmentPreview": "Attachment",
+    "messageDeleted": "This message was deleted",
     "youPrefix": "You:",
     "noMessagesYet": "No messages yet",
     "sort": "Sort",
@@ -289,6 +290,12 @@
     "today": "Today",
     "yesterday": "Yesterday",
     "copyMessage": "Copy message",
+    "editMessage": "Edit message",
+    "deleteMessage": "Delete message",
+    "messageEdited": "edited",
+    "messageDeleted": "This message was deleted",
+    "deleteMessageConfirm": "Delete this message?",
+    "deleteMessageWarning": "The customer will see “This message was deleted” instead. A notification already sent to their phone cannot be recalled.",
     "copied": "Copied",
     "sending": "Sending…",
     "tab": {
@@ -312,7 +319,13 @@
       "bad_payload": "That message couldn't be sent — please try again.",
       "persist_failed": "Couldn't save that message. Please retry.",
       "note_delete_rejected": "That note can't be deleted.",
-      "note_delete_failed": "Couldn't delete the note. Please retry."
+      "note_delete_failed": "Couldn't delete the note. Please retry.",
+      "not_found": "That message no longer exists.",
+      "not_own_message": "You can only change your own replies.",
+      "edit_window_closed": "Messages can only be edited or deleted within 15 minutes of sending.",
+      "already_deleted": "That message was already deleted.",
+      "edit_failed": "Couldn't edit the message. Please retry.",
+      "delete_failed": "Couldn't delete the message. Please retry."
     }
   },
   "sidebar": {

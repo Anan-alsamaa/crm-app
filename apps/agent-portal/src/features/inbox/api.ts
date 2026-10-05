@@ -82,6 +82,12 @@ export interface ConversationMessage {
   content: string | null;
   is_internal_note: boolean;
   date_created: string | null;
+  /** The sending agent (EMA-33: only they may edit or delete it). */
+  sender_user?: string | null;
+  /** Set when the sending agent corrected it; rendered as a small "edited". */
+  edited_at?: string | null;
+  /** Set when the sending agent withdrew it; content is '' and it renders as a placeholder. */
+  deleted_at?: string | null;
   attachments?: MessageAttachment[];
   /** Client-only: an optimistic message awaiting the server echo. */
   pending?: boolean;
@@ -488,6 +494,8 @@ export interface ConversationPreview {
   content: string;
   sender_type: 'customer' | 'agent' | 'system';
   hasAttachment: boolean;
+  /** The last message was withdrawn by its agent (EMA-33) — "This message was deleted". */
+  deleted?: boolean;
 }
 
 /**
@@ -530,7 +538,7 @@ export function useConversationPreviews(conversationIds: string[]) {
                   conversation: { _in: ids },
                   is_internal_note: { _eq: false },
                 },
-                fields: ['conversation', 'content', 'sender_type'],
+                fields: ['conversation', 'content', 'sender_type', 'deleted_at'],
                 sort: ['-date_created'],
                 limit: 1000,
               }),
@@ -541,11 +549,26 @@ export function useConversationPreviews(conversationIds: string[]) {
           conversation: string;
           content: string | null;
           sender_type: ConversationPreview['sender_type'];
+          deleted_at?: string | null;
         }>;
         const byConv: Record<string, ConversationPreview> = {};
         for (const r of rows) {
           if (!r.conversation || byConv[r.conversation]) continue; // first = latest
           const content = (r.content ?? '').trim();
+          /*
+           * A withdrawn reply has empty content, which would otherwise read as
+           * an attachment-only message ("Photo"). Say what happened instead
+           * (owner, 2026-10-05 (EMA-33)).
+           */
+          if (r.deleted_at) {
+            byConv[r.conversation] = {
+              content: '',
+              sender_type: r.sender_type,
+              hasAttachment: false,
+              deleted: true,
+            };
+            continue;
+          }
           byConv[r.conversation] = {
             content,
             sender_type: r.sender_type,
@@ -568,7 +591,18 @@ export function useMessages(conversationId: string | null) {
       const msgs = (await directus.request(
         readItems('messages', {
           filter: { conversation: { _eq: conversationId } },
-          fields: ['id', 'sender_type', 'content', 'is_internal_note', 'date_created'],
+          fields: [
+            'id',
+            'sender_type',
+            'content',
+            'is_internal_note',
+            'date_created',
+            // EMA-33: who may edit it, and how to render it. `original_content`
+            // (the audit copy) is deliberately not read into the thread.
+            'sender_user',
+            'edited_at',
+            'deleted_at',
+          ],
           /*
            * NEWEST 500, put back in reading order.
            *

@@ -6,7 +6,7 @@ import type { SocketCallbacks, WidgetMessage } from '../src/socket.js';
 const { ioMock } = vi.hoisted(() => ({ ioMock: vi.fn() }));
 vi.mock('socket.io-client', () => ({ io: ioMock }));
 
-import { connectWidget } from '../src/socket.js';
+import { applyWidgetDelete, applyWidgetEdit, connectWidget } from '../src/socket.js';
 
 type Handler = (...args: unknown[]) => void;
 
@@ -311,6 +311,82 @@ describe('connectWidget — incoming event dispatch', () => {
         createdAt: 't2',
       },
     ]);
+  });
+
+  // EMA-33 (owner, 2026-10-05): a reconnecting customer sees the same markers
+  // as one who watched live, and never the words of a withdrawn reply.
+  it('carries edited/deleted markers through history and blanks a deleted reply', () => {
+    const cb = makeCallbacks();
+    connectWidget('u', 't', cb);
+    sock.fire('messages:history', {
+      conversationId: 'c9',
+      messages: [
+        { id: 'a', senderType: 'agent', content: 'fixed', createdAt: 't1', editedAt: 'e1' },
+        {
+          id: 'b',
+          senderType: 'agent',
+          content: 'leaked by an old gateway',
+          createdAt: 't2',
+          attachments: ['f1'],
+          deletedAt: 'd1',
+        },
+      ],
+    });
+    const [list] = cb.onHistory.mock.calls[0] as [WidgetMessage[]];
+    expect(list[0]).toMatchObject({ id: 'a', content: 'fixed', editedAt: 'e1' });
+    expect(list[1]).toMatchObject({ id: 'b', content: '', attachments: [], deletedAt: 'd1' });
+  });
+
+  it('forwards message:edited and message:deleted', () => {
+    const cb = makeCallbacks();
+    const onMessageEdited = vi.fn();
+    const onMessageDeleted = vi.fn();
+    connectWidget('u', 't', { ...cb, onMessageEdited, onMessageDeleted });
+    const edited = { conversationId: 'c', messageId: 'm', content: 'x', editedAt: 'e' };
+    const deleted = { conversationId: 'c', messageId: 'm', deletedAt: 'd' };
+    sock.fire('message:edited', edited);
+    sock.fire('message:deleted', deleted);
+    expect(onMessageEdited).toHaveBeenCalledWith(edited);
+    expect(onMessageDeleted).toHaveBeenCalledWith(deleted);
+  });
+
+  it('the reducers patch only the named message and never revive a deleted one', () => {
+    const base: WidgetMessage[] = [
+      {
+        id: 'm',
+        conversationId: 'c',
+        senderType: 'agent',
+        content: 'a',
+        attachments: ['f'],
+        createdAt: 't',
+      },
+    ];
+    const edited = applyWidgetEdit(base, {
+      conversationId: 'c',
+      messageId: 'm',
+      content: 'b',
+      editedAt: 'e',
+    });
+    expect(edited[0]).toMatchObject({ content: 'b', editedAt: 'e' });
+    const deleted = applyWidgetDelete(edited, {
+      conversationId: 'c',
+      messageId: 'm',
+      deletedAt: 'd',
+    });
+    expect(deleted[0]).toMatchObject({ content: '', attachments: [], deletedAt: 'd' });
+    const revived = applyWidgetEdit(deleted, {
+      conversationId: 'c',
+      messageId: 'm',
+      content: 'z',
+      editedAt: 'e2',
+    });
+    expect(revived[0]!.content).toBe('');
+    expect(
+      applyWidgetEdit(base, { conversationId: 'c', messageId: 'x', content: 'y', editedAt: 'e' }),
+    ).toBe(base);
+    expect(applyWidgetDelete(base, { conversationId: 'c', messageId: 'x', deletedAt: 'd' })).toBe(
+      base,
+    );
   });
 
   it('does not throw on messages:history when onHistory is not provided', () => {

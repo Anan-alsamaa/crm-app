@@ -24,8 +24,8 @@ function makeSocket() {
     off: vi.fn((event: string) => {
       handlers.delete(event);
     }),
-    emit(event: string) {
-      handlers.get(event)?.();
+    emit(event: string, payload?: unknown) {
+      handlers.get(event)?.(payload);
     },
     handlers,
   };
@@ -53,6 +53,19 @@ describe('NewMessageSound', () => {
     socket.emit('inbox:activity');
     socket.emit('inbox:activity');
     expect(sound.playMessageBeep).toHaveBeenCalledTimes(2);
+  });
+
+  // EMA-33 (owner, 2026-10-05): an edited/deleted reply refreshes the inbox
+  // but is not a new message, so it must not beep.
+  it('stays silent for a `silent` activity (an edit or delete)', async () => {
+    const socket = makeSocket();
+    socketApi.getSocket.mockResolvedValue(socket);
+    render(<NewMessageSound />);
+    await waitFor(() => expect(socket.on).toHaveBeenCalled());
+    socket.emit('inbox:activity', { conversationId: 'c1', silent: true });
+    expect(sound.playMessageBeep).not.toHaveBeenCalled();
+    socket.emit('inbox:activity', { conversationId: 'c1' });
+    expect(sound.playMessageBeep).toHaveBeenCalledTimes(1);
   });
 
   it('unsubscribes on unmount', async () => {

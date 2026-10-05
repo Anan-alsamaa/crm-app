@@ -9,6 +9,7 @@ import {
   Avatar,
   ChevronDownIcon,
   CloseIcon,
+  ConfirmDialog,
   cn,
   formatRelative,
   Skeleton,
@@ -21,8 +22,11 @@ import {
   SOCKET_EVENTS,
   isDialablePhone,
   displayContactName,
+  type MessageDeleted,
+  type MessageEdited,
   type MessageNew,
 } from '@yiji/shared-types';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useUpdateContact } from '../contacts/api.js';
 import { getSocket, uploadAttachment } from '../../lib/socket.js';
 import { noteSelfSend } from '../../lib/sound.js';
@@ -43,6 +47,12 @@ import { QuickReplies } from './QuickReplies.js';
 import { EnhanceButton } from './EnhanceButton.js';
 import { PushUnreachableNotice } from './PushUnreachableNotice.js';
 import { resolveMentions } from './mentions.js';
+import { InlineMessageEditor, OwnMessageActions } from './MessageEditControls.js';
+import {
+  applyMessageDeleted,
+  applyMessageEdited,
+  canOfferMessageActions,
+} from './message-edits.js';
 
 let seq = 0;
 const clientId = () => `a${Date.now()}_${seq++}`;
@@ -99,6 +109,20 @@ export function ConversationView({
   const [aiOpen, setAiOpen] = useState(false);
   const agents = useAgents();
   const [live, setLive] = useState<ConversationMessage[]>([]);
+  /*
+   * EDIT / DELETE AN OWN REPLY (owner, 2026-10-05 (EMA-33)). `now` ticks so the
+   * actions disappear once the 15-minute window closes without a reload; the
+   * gateway refuses a late attempt regardless.
+   */
+  const { user } = useAuth();
+  const myId = user?.id ?? null;
+  const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [customerTyping, setCustomerTyping] = useState(false);
   // Live customer presence for this conversation (gateway `customer:presence`):
   // null until the first event, then drives the header's online / "New customer"
@@ -128,6 +152,8 @@ export function ConversationView({
 
   useEffect(() => {
     setLive([]);
+    setEditing(null);
+    setConfirmDeleteId(null);
     setCustomerTyping(false);
     setCustomerPresence(null);
     lastReadRef.current = null;
@@ -239,6 +265,8 @@ export function ConversationView({
           is_internal_note: false,
           date_created: msg.createdAt,
           conversation_id: msg.conversationId,
+          // Who sent it, so an agent's own live reply can be edited (EMA-33).
+          sender_user: msg.senderUserId ?? null,
           // message:new only carries attachment ids (no type/size). For our own
           // optimistic echo we keep the richer local metadata below; for inbound
           // messages we refetch to resolve filename/type/size into thumbnails.
@@ -326,6 +354,25 @@ export function ConversationView({
         setLive((prev) => prev.filter((m) => m.id !== e.noteId));
         void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
       };
+      /*
+       * An agent corrected or withdrew a reply (EMA-33) — possibly a colleague,
+       * possibly this agent in another tab. Patch BOTH lists the thread merges,
+       * or the cached copy would put the old wording back.
+       */
+      const onMessageEdited = (e: MessageEdited) => {
+        if (e.conversationId !== conversationId) return;
+        setLive((prev) => applyMessageEdited(prev, e));
+        qc.setQueryData<ConversationMessage[]>(['messages', conversationId], (prev) =>
+          prev ? applyMessageEdited(prev, e) : prev,
+        );
+      };
+      const onMessageDeleted = (e: MessageDeleted) => {
+        if (e.conversationId !== conversationId) return;
+        setLive((prev) => applyMessageDeleted(prev, e));
+        qc.setQueryData<ConversationMessage[]>(['messages', conversationId], (prev) =>
+          prev ? applyMessageDeleted(prev, e) : prev,
+        );
+      };
       // The gateway rejects work by emitting `error` (rate_limited,
       // attachment_rejected, forbidden, bad_payload, persist_failed,
       // note_delete_*). Without a listener those failures were SILENT — a
@@ -342,6 +389,8 @@ export function ConversationView({
       socket.on(SOCKET_EVENTS.messageNew, onNew);
       socket.on(SOCKET_EVENTS.noteNew, onNoteNew);
       socket.on(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
+      socket.on(SOCKET_EVENTS.messageEdited, onMessageEdited);
+      socket.on(SOCKET_EVENTS.messageDeleted, onMessageDeleted);
       socket.on(SOCKET_EVENTS.typingUpdate, onTyping);
       socket.on(SOCKET_EVENTS.customerPresence, onCustomerPresence);
       socket.on(SOCKET_EVENTS.conversationChanged, onChanged);
@@ -359,6 +408,8 @@ export function ConversationView({
         socket.off(SOCKET_EVENTS.messageNew, onNew);
         socket.off(SOCKET_EVENTS.noteNew, onNoteNew);
         socket.off(SOCKET_EVENTS.noteDeleted, onNoteDeleted);
+        socket.off(SOCKET_EVENTS.messageEdited, onMessageEdited);
+        socket.off(SOCKET_EVENTS.messageDeleted, onMessageDeleted);
         socket.off(SOCKET_EVENTS.typingUpdate, onTyping);
         socket.off(SOCKET_EVENTS.customerPresence, onCustomerPresence);
         socket.off(SOCKET_EVENTS.conversationChanged, onChanged);
@@ -987,6 +1038,24 @@ export function ConversationView({
     navigate(`/new-ticket?conversation=${encodeURIComponent(conversationId)}`);
   };
 
+  /*
+   * Send the edit / delete and let the broadcast update the screen. Not
+   * optimistic: a refusal (window closed, not yours) comes back as a socket
+   * error toast, and showing the change first would mean silently undoing it.
+   * A push notification already delivered to the customer's phone cannot be
+   * recalled — this only changes the thread.
+   */
+  const saveEdit = (messageId: string, content: string) => {
+    setEditing(null);
+    socketRef.current?.emit(SOCKET_EVENTS.messageEdit, { conversationId, messageId, content });
+  };
+  const confirmDeleteMessage = () => {
+    const messageId = confirmDeleteId;
+    setConfirmDeleteId(null);
+    if (!messageId) return;
+    socketRef.current?.emit(SOCKET_EVENTS.messageDelete, { conversationId, messageId });
+  };
+
   const copyMessage = (text: string) => {
     void navigator.clipboard?.writeText(text).then(
       () => toast.success(t('conversation.copied', { defaultValue: 'Copied' })),
@@ -1205,7 +1274,10 @@ export function ConversationView({
                       >
                         {run.map((m, i) => {
                           const isLast = i === run.length - 1;
-                          const hasContent = (m.content ?? '').trim().length > 0;
+                          const isDeleted = !!m.deleted_at;
+                          const hasContent = !isDeleted && (m.content ?? '').trim().length > 0;
+                          const ownActions = !isDeleted && canOfferMessageActions(m, myId, now);
+                          const isEditing = ownActions && editing?.id === m.id;
                           return (
                             <div
                               key={m.id}
@@ -1214,7 +1286,22 @@ export function ConversationView({
                                 isSystem ? 'items-center' : isAgent ? 'items-end' : 'items-start',
                               )}
                             >
-                              {hasContent && (
+                              {/* A withdrawn reply (EMA-33): a placeholder, never its words or files. */}
+                              {isDeleted && (
+                                <div className="rounded-2xl px-4 py-2 text-sm italic text-muted-foreground ring-1 ring-foreground/[0.06]">
+                                  {t('conversation.messageDeleted', {
+                                    defaultValue: 'This message was deleted',
+                                  })}
+                                </div>
+                              )}
+                              {isEditing && editing && (
+                                <InlineMessageEditor
+                                  initial={editing.text}
+                                  onSave={(content) => saveEdit(m.id, content)}
+                                  onCancel={() => setEditing(null)}
+                                />
+                              )}
+                              {hasContent && !isEditing && (
                                 <div
                                   className={cn(
                                     'group/msg flex items-center gap-1.5',
@@ -1255,6 +1342,13 @@ export function ConversationView({
                                           this text is whatever a customer typed. */}
                                       <Linkify text={m.content} />
                                     </p>
+                                    {m.edited_at && (
+                                      <span className="mt-0.5 block text-2xs opacity-70">
+                                        {t('conversation.messageEdited', {
+                                          defaultValue: 'edited',
+                                        })}
+                                      </span>
+                                    )}
                                   </div>
                                   {/* Signature touch: copy a message on hover. */}
                                   <button
@@ -1279,12 +1373,38 @@ export function ConversationView({
                                       <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
                                     </svg>
                                   </button>
+                                  {ownActions && (
+                                    <OwnMessageActions
+                                      canEdit
+                                      onEdit={() => setEditing({ id: m.id, text: m.content ?? '' })}
+                                      onDelete={() => setConfirmDeleteId(m.id)}
+                                    />
+                                  )}
                                 </div>
                               )}
-                              <AttachmentChips
-                                attachments={m.attachments}
-                                align={isAgent ? 'end' : 'start'}
-                              />
+                              {/* Only rendered when there ARE files, so an empty
+                                  wrapper adds no gap under a text bubble. */}
+                              {!isDeleted && !!m.attachments?.length && (
+                                <div
+                                  className={cn(
+                                    'group/msg flex items-center gap-1.5',
+                                    isAgent ? 'flex-row-reverse' : 'flex-row',
+                                  )}
+                                >
+                                  <AttachmentChips
+                                    attachments={m.attachments}
+                                    align={isAgent ? 'end' : 'start'}
+                                  />
+                                  {/* An attachment-only reply can still be withdrawn. */}
+                                  {ownActions && !hasContent && (
+                                    <OwnMessageActions
+                                      canEdit={false}
+                                      onEdit={() => undefined}
+                                      onDelete={() => setConfirmDeleteId(m.id)}
+                                    />
+                                  )}
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -1711,6 +1831,23 @@ export function ConversationView({
           </div>
         )
       )}
+
+      {/* Withdrawing a reply the customer may already have read (EMA-33). */}
+      <ConfirmDialog
+        open={!!confirmDeleteId}
+        destructive
+        title={t('conversation.deleteMessageConfirm', {
+          defaultValue: 'Delete this message?',
+        })}
+        description={t('conversation.deleteMessageWarning', {
+          defaultValue:
+            'The customer will see “This message was deleted” instead. A notification already sent to their phone cannot be recalled.',
+        })}
+        confirmLabel={t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+        cancelLabel={t('actions.cancel', { ns: 'common' })}
+        onConfirm={confirmDeleteMessage}
+        onCancel={() => setConfirmDeleteId(null)}
+      />
     </div>
   );
 }

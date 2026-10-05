@@ -507,6 +507,12 @@ export const roles: RoleSpec[] = [
       // content (tampering), and the app never PATCHes a message via the agent
       // token — the gateway is the sole writer (service token).
       //
+      // Editing/deleting an agent's own reply (owner, 2026-10-05 (EMA-33)) does
+      // NOT change this: it goes through the gateway's `message:edit` /
+      // `message:delete`, which enforce own-message + 15-minute window and keep
+      // the original wording in `original_content`. A direct PATCH grant would
+      // bypass every one of those rules.
+      //
       // FOLLOW-UP (tenant isolation): `contacts.read` is still unfiltered
       // (all-vendor), matching the current shared-inbox design. Scoping it per
       // vendor is a product decision that must be integration-tested first.

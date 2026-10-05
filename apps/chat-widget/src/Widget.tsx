@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Socket } from 'socket.io-client';
-import { connectWidget, type WidgetMessage } from './socket.js';
+import { applyWidgetDelete, applyWidgetEdit, connectWidget, type WidgetMessage } from './socket.js';
 import { forgetConversation, recallConversation, rememberConversation } from './resume.js';
 import { t, isRtl, type WidgetLocale } from './i18n.js';
 
@@ -726,6 +726,21 @@ export function Widget({ config }: { config: WidgetConfig }) {
             ];
           });
         },
+        /*
+         * The agent corrected or withdrew a reply (owner, 2026-10-05 (EMA-33)).
+         * Applied in place — the bubble keeps its position in the thread and
+         * shows "edited" or the deleted placeholder. Only messages in THIS
+         * conversation: the room is per conversation, but a stale event after
+         * a thread switch must not touch anything else.
+         */
+        onMessageEdited: (e) => {
+          if (convoRef.current && e.conversationId !== convoRef.current) return;
+          setMessages((prev) => applyWidgetEdit(prev, e));
+        },
+        onMessageDeleted: (e) => {
+          if (convoRef.current && e.conversationId !== convoRef.current) return;
+          setMessages((prev) => applyWidgetDelete(prev, e));
+        },
         onTyping: setAgentTyping,
         onClosed: () => {
           // Remember which thread this rating belongs to before the resume id
@@ -1431,8 +1446,17 @@ export function Widget({ config }: { config: WidgetConfig }) {
                       ? bubbleGesture(m.id)
                       : {})}
                   >
-                    {m.content}
-                    {m.attachments && m.attachments.length > 0 && (
+                    {/* A withdrawn agent reply (EMA-33): placeholder only —
+                        its words and files were cleared when it was deleted. */}
+                    {m.deletedAt ? (
+                      <span className="yiji-msg-deleted">{tr.msgDeleted}</span>
+                    ) : (
+                      m.content
+                    )}
+                    {!m.deletedAt && m.editedAt && (
+                      <span className="yiji-msg-edited">{tr.msgEdited}</span>
+                    )}
+                    {!m.deletedAt && m.attachments && m.attachments.length > 0 && (
                       <div className="yiji-msg-files">
                         {m.attachments.map((id) => {
                           const meta = attachMetaRef.current[id];

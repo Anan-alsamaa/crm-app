@@ -6,6 +6,12 @@ import {
   MessageSend,
   NoteAdd,
   NoteDelete,
+  MessageEdit,
+  MessageDelete,
+  messageEditRefusal,
+  originalContentPatch,
+  type MessageEdited,
+  type MessageDeleted,
   TypingSignal,
   ReadAck,
   CsatSubmit,
@@ -1136,6 +1142,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         attachments: attachments ?? [],
         createdAt: saved.createdAt,
         clientMsgId,
+        // Lets the portal offer Edit/Delete on the agent's OWN live replies (EMA-33).
+        ...(data.kind === 'agent' && data.agentId ? { senderUserId: data.agentId } : {}),
       };
       io.to(rooms.conversation(convId)).emit(SOCKET_EVENTS.messageNew, payload);
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
@@ -1374,6 +1382,94 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         code: 'note_delete_failed',
         message: 'could not delete note',
       });
+    }
+  });
+
+  /*
+   * EDIT OR DELETE A REPLY THE AGENT ALREADY SENT (owner, 2026-10-05 (EMA-33)).
+   *
+   * Agents only, their OWN non-note reply, within 15 minutes of sending. The
+   * portal hides the buttons outside those rules, but the portal is not the
+   * guard: the row is re-read here with the service token and judged by
+   * `messageEditRefusal`, so a crafted payload cannot rewrite a colleague's
+   * words, a customer's message, or something said an hour ago.
+   *
+   * The Agent role still has no `messages.update` — this handler is the only
+   * way to change a sent message, which is what keeps the rules enforceable.
+   *
+   * WHAT CANNOT BE UNDONE: if the customer was not watching when the reply was
+   * sent, a push notification carrying its first line already went to their
+   * phone (see the customer-push enqueue in `message:send`). That cannot be
+   * recalled, and nothing here tries to.
+   */
+  const refuseEdit = (code: string, message: string) =>
+    socket.emit(SOCKET_EVENTS.error, { code, message });
+  const EDIT_REFUSAL_TEXT: Record<string, string> = {
+    not_found: 'message not found',
+    not_own_message: 'you can only change your own replies',
+    edit_window_closed: 'messages can only be changed for 15 minutes after sending',
+    already_deleted: 'that message was already deleted',
+  };
+
+  socket.on(SOCKET_EVENTS.messageEdit, async (raw: unknown) => {
+    if (data.kind !== 'agent') return;
+    if (!writeBucket.tryRemove()) return refuseEdit('rate_limited', 'too many edits, slow down');
+    const parsed = MessageEdit.safeParse(raw);
+    if (!parsed.success) return refuseEdit('bad_payload', 'invalid message:edit');
+    const { conversationId, messageId, content } = parsed.data;
+    try {
+      const row = await directus.getMessageForEdit(conversationId, messageId);
+      const refusal = messageEditRefusal(row, data.agentId, Date.now());
+      if (refusal || !row) {
+        const code = refusal ?? 'not_found';
+        return refuseEdit(code, EDIT_REFUSAL_TEXT[code] ?? code);
+      }
+      const editedAt = new Date().toISOString();
+      await directus.updateAgentMessage(messageId, {
+        content,
+        editedAt,
+        originalContent: originalContentPatch(row),
+      });
+      const payload: MessageEdited = { conversationId, messageId, content, editedAt };
+      // The conversation room holds the agents viewing it AND the customer.
+      io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.messageEdited, payload);
+      // `silent`: refresh every inbox preview, but nothing NEW arrived, so no beep.
+      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId, silent: true });
+    } catch (err) {
+      logger.error({ err, conversationId, messageId }, 'message:edit failed');
+      refuseEdit('edit_failed', 'could not edit message');
+    }
+  });
+
+  socket.on(SOCKET_EVENTS.messageDelete, async (raw: unknown) => {
+    if (data.kind !== 'agent') return;
+    if (!writeBucket.tryRemove()) return refuseEdit('rate_limited', 'too many deletes, slow down');
+    const parsed = MessageDelete.safeParse(raw);
+    if (!parsed.success) return refuseEdit('bad_payload', 'invalid message:delete');
+    const { conversationId, messageId } = parsed.data;
+    try {
+      const row = await directus.getMessageForEdit(conversationId, messageId);
+      const refusal = messageEditRefusal(row, data.agentId, Date.now());
+      if (refusal || !row) {
+        const code = refusal ?? 'not_found';
+        return refuseEdit(code, EDIT_REFUSAL_TEXT[code] ?? code);
+      }
+      const deletedAt = new Date().toISOString();
+      // Soft delete: the row stays (thread order, audit, attachments junction),
+      // but `content` is blanked so no reader downstream can re-show it. The
+      // wording survives only in `original_content`, which no customer read selects.
+      await directus.updateAgentMessage(messageId, {
+        content: '',
+        deletedAt,
+        originalContent: originalContentPatch(row),
+      });
+      const payload: MessageDeleted = { conversationId, messageId, deletedAt };
+      io.to(rooms.conversation(conversationId)).emit(SOCKET_EVENTS.messageDeleted, payload);
+      // `silent`: refresh every inbox preview, but nothing NEW arrived, so no beep.
+      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId, silent: true });
+    } catch (err) {
+      logger.error({ err, conversationId, messageId }, 'message:delete failed');
+      refuseEdit('delete_failed', 'could not delete message');
     }
   });
 

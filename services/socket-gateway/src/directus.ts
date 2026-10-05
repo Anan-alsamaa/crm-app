@@ -1047,6 +1047,75 @@ export class GatewayDirectus {
   }
 
   /**
+   * The row an edit/delete is judged on (owner, 2026-10-05 (EMA-33)).
+   *
+   * Read with the service token and scoped to the conversation the agent named,
+   * so a crafted message id from another thread answers "not found" rather than
+   * being judged at all. The rules themselves live in `messageEditRefusal`.
+   */
+  async getMessageForEdit(
+    conversationId: string,
+    messageId: string,
+  ): Promise<{
+    id: string;
+    sender_type: string | null;
+    sender_user: string | null;
+    is_internal_note: boolean | null;
+    date_created: string | null;
+    deleted_at: string | null;
+    content: string | null;
+    original_content: string | null;
+  } | null> {
+    const rows = (await this.client.request(
+      readItems('messages', {
+        filter: { id: { _eq: messageId }, conversation: { _eq: conversationId } },
+        fields: [
+          'id',
+          'sender_type',
+          'sender_user',
+          'is_internal_note',
+          'date_created',
+          'deleted_at',
+          'content',
+          'original_content',
+        ],
+        limit: 1,
+      }),
+    )) as Array<{
+      id: string;
+      sender_type: string | null;
+      sender_user: string | null;
+      is_internal_note: boolean | null;
+      date_created: string | null;
+      deleted_at: string | null;
+      content: string | null;
+      original_content: string | null;
+    }>;
+    return rows[0] ?? null;
+  }
+
+  /**
+   * Write an agent's edit or soft delete. The caller has already applied the
+   * rules; this only writes. `originalContent` is omitted once it has been set,
+   * so the audit keeps the wording the customer first received.
+   */
+  async updateAgentMessage(
+    messageId: string,
+    patch: {
+      content: string;
+      editedAt?: string;
+      deletedAt?: string;
+      originalContent?: string;
+    },
+  ): Promise<void> {
+    const body: Record<string, unknown> = { content: patch.content };
+    if (patch.editedAt) body.edited_at = patch.editedAt;
+    if (patch.deletedAt) body.deleted_at = patch.deletedAt;
+    if (patch.originalContent !== undefined) body.original_content = patch.originalContent;
+    await this.client.request(updateItem('messages', messageId, body as never));
+  }
+
+  /**
    * Resolve metadata for the given Directus file UUIDs (for attachment
    * MIME/size validation). Missing ids simply aren't returned, so the caller
    * treats "not found" as a rejection.
@@ -1168,6 +1237,8 @@ export class GatewayDirectus {
       content: string;
       createdAt: string;
       attachments: string[];
+      editedAt?: string;
+      deletedAt?: string;
     }>
   > {
     const msgs = (await this.client.request(
@@ -1177,13 +1248,22 @@ export class GatewayDirectus {
           is_internal_note: { _eq: false },
           ...(opts.since ? { date_created: { _gte: opts.since } } : {}),
         },
-        fields: ['id', 'sender_type', 'content', 'date_created'],
+        // `original_content` is deliberately NOT read: it is the audit copy of
+        // a withdrawn or corrected reply and must never reach the customer.
+        fields: ['id', 'sender_type', 'content', 'date_created', 'edited_at', 'deleted_at'],
         // NEWEST first so the cap keeps the recent end of a long thread; put
         // back in reading order below.
         sort: ['-date_created'],
         limit: 200,
       }),
-    )) as Array<{ id: string; sender_type: SenderType; content: string; date_created: string }>;
+    )) as Array<{
+      id: string;
+      sender_type: SenderType;
+      content: string;
+      date_created: string;
+      edited_at?: string | null;
+      deleted_at?: string | null;
+    }>;
     if (msgs.length === 0) return [];
     msgs.reverse();
 
@@ -1206,13 +1286,28 @@ export class GatewayDirectus {
       // Junction read denied (older permission set) — thread still loads, sans attachments.
     }
 
-    return msgs.map((m) => ({
-      id: m.id,
-      senderType: m.sender_type,
-      content: m.content,
-      createdAt: m.date_created,
-      attachments: byMessage.get(m.id) ?? [],
-    }));
+    return msgs.map((m) => {
+      // A withdrawn reply (EMA-33) seeds as a placeholder: no words, no files,
+      // even if a row predating the blanking still held some.
+      if (m.deleted_at) {
+        return {
+          id: m.id,
+          senderType: m.sender_type,
+          content: '',
+          createdAt: m.date_created,
+          attachments: [],
+          deletedAt: m.deleted_at,
+        };
+      }
+      return {
+        id: m.id,
+        senderType: m.sender_type,
+        content: m.content,
+        createdAt: m.date_created,
+        attachments: byMessage.get(m.id) ?? [],
+        ...(m.edited_at ? { editedAt: m.edited_at } : {}),
+      };
+    });
   }
 
   /**
@@ -1331,7 +1426,8 @@ export class GatewayDirectus {
       readItems('messages_files', {
         filter: {
           directus_files_id: { _eq: fileId },
-          messages_id: { conversation: { _eq: conversationId } },
+          // A file on a reply the agent deleted (EMA-33) is withdrawn with it.
+          messages_id: { conversation: { _eq: conversationId }, deleted_at: { _null: true } },
         },
         fields: ['messages_id'],
         limit: 1,

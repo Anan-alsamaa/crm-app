@@ -49,6 +49,26 @@ export const NoteDelete = z.object({
 });
 export type NoteDelete = z.infer<typeof NoteDelete>;
 
+/**
+ * Agent → server: correct a reply they sent (owner, 2026-10-05 (EMA-33)).
+ * The gateway re-reads the row and enforces own-message + the 15-minute window
+ * (see message-edit.ts); this schema only shapes the request. Trimmed and
+ * non-empty, because an edit to nothing is a delete and has its own event.
+ */
+export const MessageEdit = z.object({
+  conversationId: idSchema,
+  messageId: idSchema,
+  content: z.string().trim().min(1),
+});
+export type MessageEdit = z.infer<typeof MessageEdit>;
+
+/** Agent → server: withdraw a reply they sent (soft delete). */
+export const MessageDelete = z.object({
+  conversationId: idSchema,
+  messageId: idSchema,
+});
+export type MessageDelete = z.infer<typeof MessageDelete>;
+
 export const TypingSignal = z.object({ conversationId: z.string() });
 export type TypingSignal = z.infer<typeof TypingSignal>;
 
@@ -74,8 +94,33 @@ export const MessageNew = z.object({
   attachments: z.array(z.string()).default([]),
   createdAt: z.string(),
   clientMsgId: z.string().optional(),
+  /**
+   * The sending agent's user id, so the portal can tell its OWN live replies
+   * apart and offer Edit/Delete on them (EMA-33). Absent for customer messages.
+   */
+  senderUserId: z.string().optional(),
 });
 export type MessageNew = z.infer<typeof MessageNew>;
+
+/** Server → conversation room (agents AND the customer): a reply was edited. */
+export const MessageEdited = z.object({
+  conversationId: idSchema,
+  messageId: idSchema,
+  content: z.string(),
+  editedAt: z.string(),
+});
+export type MessageEdited = z.infer<typeof MessageEdited>;
+
+/**
+ * Server → conversation room: a reply was withdrawn. Carries no content on
+ * purpose — every surface renders a "This message was deleted" placeholder.
+ */
+export const MessageDeleted = z.object({
+  conversationId: idSchema,
+  messageId: idSchema,
+  deletedAt: z.string(),
+});
+export type MessageDeleted = z.infer<typeof MessageDeleted>;
 
 export const TypingUpdate = z.object({
   conversationId: idSchema,
@@ -123,6 +168,9 @@ export const SOCKET_EVENTS = {
   messageSend: 'message:send',
   noteAdd: 'note:add',
   noteDelete: 'note:delete',
+  /** Agent → server. Edit / soft-delete their own reply within 15 minutes (EMA-33). */
+  messageEdit: 'message:edit',
+  messageDelete: 'message:delete',
   /** Client → server. Explicit "I'm logging out" signal from an agent so the
    * gateway can drop their presence record before the transport closes. */
   agentLogout: 'agent:logout',
@@ -136,6 +184,9 @@ export const SOCKET_EVENTS = {
   inboxActivity: 'inbox:activity',
   conversationChanged: 'conversation:changed',
   messageNew: 'message:new',
+  /** Server → conversation room (agents + the customer widget). */
+  messageEdited: 'message:edited',
+  messageDeleted: 'message:deleted',
   noteNew: 'note:new',
   noteDeleted: 'note:deleted',
   typingUpdate: 'typing:update',

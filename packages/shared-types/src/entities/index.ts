@@ -108,6 +108,10 @@ export const Message = z.object({
   content: z.string(),
   is_internal_note: z.boolean().default(false),
   read_by: z.array(ReadReceipt).nullable().optional(),
+  // Agent edit / soft delete of their own reply (EMA-33). Written by the gateway only.
+  edited_at: z.string().datetime().nullable().optional(),
+  deleted_at: z.string().datetime().nullable().optional(),
+  original_content: z.string().nullable().optional(),
 });
 export type Message = z.infer<typeof Message>;
 

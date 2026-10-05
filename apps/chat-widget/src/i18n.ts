@@ -50,6 +50,10 @@ export interface WidgetStrings {
   msgFailed: string;
   msgRetry: string;
   msgDelete: string;
+  /** An agent corrected this reply after sending it (EMA-33). */
+  msgEdited: string;
+  /** Placeholder for a reply the agent withdrew (EMA-33). */
+  msgDeleted: string;
   offlineCallLabel: string;
   offlineWhatsappLabel: string;
   /** The language switch: names the OTHER language, in that language. */
@@ -108,6 +112,8 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     msgFailed: 'Not sent',
     msgRetry: 'Try again',
     msgDelete: 'Delete',
+    msgEdited: 'edited',
+    msgDeleted: 'This message was deleted',
     offlineCallLabel: 'Call us',
     offlineWhatsappLabel: 'WhatsApp',
     switchLanguage: 'العربية',
@@ -152,6 +158,8 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     msgFailed: 'لم يتم الإرسال',
     msgRetry: 'إعادة المحاولة',
     msgDelete: 'حذف',
+    msgEdited: 'معدّلة',
+    msgDeleted: 'تم حذف هذه الرسالة',
     offlineCallLabel: 'اتصل بنا',
     offlineWhatsappLabel: 'واتساب',
     switchLanguage: 'English',

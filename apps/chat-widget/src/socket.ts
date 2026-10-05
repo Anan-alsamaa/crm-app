@@ -43,6 +43,54 @@ export interface WidgetMessage {
    * be shown to the customer as though an agent wrote it.
    */
   localNotice?: 'agents-offline' | 'send-failed' | 'attach-failed';
+  /**
+   * The agent corrected this reply after sending it (owner, 2026-10-05
+   * (EMA-33)) — shown as a small "edited" label so the customer knows the
+   * wording changed under them.
+   */
+  editedAt?: string;
+  /**
+   * The agent withdrew this reply. Its content and attachments are already
+   * empty; it renders as an italic "This message was deleted" placeholder.
+   */
+  deletedAt?: string;
+}
+
+/** An agent's correction, as the gateway broadcasts it (EMA-33). */
+export interface WidgetMessageEdited {
+  conversationId: string;
+  messageId: string;
+  content: string;
+  editedAt: string;
+}
+
+/** An agent's withdrawal, as the gateway broadcasts it (EMA-33). */
+export interface WidgetMessageDeleted {
+  conversationId: string;
+  messageId: string;
+  deletedAt: string;
+}
+
+/** Apply a live edit to the thread. A deleted message stays deleted. */
+export function applyWidgetEdit(list: WidgetMessage[], e: WidgetMessageEdited): WidgetMessage[] {
+  let changed = false;
+  const next = list.map((m) => {
+    if (m.id !== e.messageId || m.deletedAt) return m;
+    changed = true;
+    return { ...m, content: e.content, editedAt: e.editedAt };
+  });
+  return changed ? next : list;
+}
+
+/** Apply a live delete: the bubble stays, its words and files go. */
+export function applyWidgetDelete(list: WidgetMessage[], e: WidgetMessageDeleted): WidgetMessage[] {
+  let changed = false;
+  const next = list.map((m) => {
+    if (m.id !== e.messageId) return m;
+    changed = true;
+    return { ...m, content: '', attachments: [], deletedAt: e.deletedAt };
+  });
+  return changed ? next : list;
 }
 
 export interface SocketCallbacks {
@@ -73,6 +121,10 @@ export interface SocketCallbacks {
     agentInitiated?: boolean;
   }) => void;
   onMessage: (msg: WidgetMessage) => void;
+  /** An agent edited one of their replies (EMA-33). */
+  onMessageEdited?: (e: WidgetMessageEdited) => void;
+  /** An agent deleted one of their replies (EMA-33). */
+  onMessageDeleted?: (e: WidgetMessageDeleted) => void;
   /** Existing thread pushed by the gateway on (re)connect, so a returning
    *  customer sees their history instead of a blank panel. */
   onHistory?: (messages: WidgetMessage[]) => void;
@@ -391,6 +443,8 @@ export function connectWidget(
         content: string;
         createdAt: string;
         attachments?: string[];
+        editedAt?: string;
+        deletedAt?: string;
       }>;
     }) =>
       cb.onHistory?.(
@@ -398,12 +452,19 @@ export function connectWidget(
           id: m.id,
           conversationId: info.conversationId,
           senderType: m.senderType,
-          content: m.content,
-          attachments: m.attachments ?? [],
+          // A withdrawn reply never shows its words or files, even if an
+          // older gateway still sent them (EMA-33).
+          content: m.deletedAt ? '' : m.content,
+          attachments: m.deletedAt ? [] : (m.attachments ?? []),
           createdAt: m.createdAt,
+          ...(m.editedAt ? { editedAt: m.editedAt } : {}),
+          ...(m.deletedAt ? { deletedAt: m.deletedAt } : {}),
         })),
       ),
   );
+  // An agent corrected or withdrew a reply (owner, 2026-10-05 (EMA-33)).
+  socket.on('message:edited', (e: WidgetMessageEdited) => cb.onMessageEdited?.(e));
+  socket.on('message:deleted', (e: WidgetMessageDeleted) => cb.onMessageDeleted?.(e));
   socket.on('typing:update', (e: { isTyping: boolean; who: string }) => {
     if (e.who === 'agent') cb.onTyping(e.isTyping);
   });

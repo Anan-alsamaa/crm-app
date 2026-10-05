@@ -418,6 +418,27 @@ export const collections: CollectionSpec[] = [
       { field: 'content', type: 'text' },
       { field: 'is_internal_note', type: 'boolean', defaultValue: false },
       { field: 'read_by', type: 'json' },
+      /**
+       * Agents may correct or withdraw their own reply for 15 minutes (owner,
+       * 2026-10-05 (EMA-33)). Only the socket gateway writes these — the Agent
+       * role still holds no update on messages.
+       */
+      { field: 'edited_at', type: 'dateTime', note: 'Last edit by the sending agent.' },
+      {
+        field: 'deleted_at',
+        type: 'dateTime',
+        note: 'Soft delete by the sending agent; content is blanked.',
+      },
+      /**
+       * The wording before the FIRST edit or delete, kept for audit. Set once
+       * and never overwritten, so a second edit cannot launder the first.
+       * Never selected by a customer-facing read.
+       */
+      {
+        field: 'original_content',
+        type: 'text',
+        note: 'Pre-edit/pre-delete wording, set once (audit).',
+      },
     ],
   },
   {

@@ -32,7 +32,9 @@ function makeFakeSocket() {
   };
 }
 
-vi.mock('../src/socket.js', () => ({
+vi.mock('../src/socket.js', async (importOriginal) => ({
+  // The pure edit/delete reducers (EMA-33) are real; only the network is faked.
+  ...(await importOriginal<typeof import('../src/socket.js')>()),
   connectWidget: vi.fn((_url: string, _token: string, cb: SocketCallbacks) => {
     lastCallbacks = cb;
     // Mirror the real socket layer: it announces "connecting" synchronously.
@@ -215,6 +217,77 @@ describe('Widget — ready + greeting', () => {
     renderWidget({ autoOpen: true });
     driveReady({ agentsOnline: 2 });
     expect(screen.getByText('We are online')).toBeInTheDocument();
+  });
+});
+
+/*
+ * AN AGENT EDITS OR DELETES A REPLY (owner, 2026-10-05 (EMA-33)). The customer
+ * sees it change live, and the same thing after a reconnect.
+ */
+describe('Widget — edited and deleted agent replies', () => {
+  it('replaces the wording live and labels it "edited"', () => {
+    renderWidget({ autoOpen: true });
+    driveReady();
+    drive(() => lastCallbacks!.onMessage(agentMessage({ id: 'a1', content: 'Refund is 50 SAR' })));
+    drive(() =>
+      lastCallbacks!.onMessageEdited!({
+        conversationId: 'convo-1',
+        messageId: 'a1',
+        content: 'Refund is 60 SAR',
+        editedAt: '2026-10-05T10:01:00Z',
+      }),
+    );
+    expect(screen.queryByText('Refund is 50 SAR')).not.toBeInTheDocument();
+    expect(screen.getByText('Refund is 60 SAR')).toBeInTheDocument();
+    expect(screen.getByText('edited')).toBeInTheDocument();
+  });
+
+  it('replaces a deleted reply with a placeholder — no words, no files', () => {
+    renderWidget({ autoOpen: true });
+    driveReady();
+    drive(() =>
+      lastCallbacks!.onMessage(
+        agentMessage({ id: 'a2', content: 'Wrong customer details', attachments: ['f1'] }),
+      ),
+    );
+    drive(() =>
+      lastCallbacks!.onMessageDeleted!({
+        conversationId: 'convo-1',
+        messageId: 'a2',
+        deletedAt: '2026-10-05T10:02:00Z',
+      }),
+    );
+    expect(screen.queryByText('Wrong customer details')).not.toBeInTheDocument();
+    expect(screen.getByText('This message was deleted')).toBeInTheDocument();
+    expect(document.querySelector('.yiji-msg-files')).toBeNull();
+  });
+
+  it('ignores an event for another conversation', () => {
+    renderWidget({ autoOpen: true });
+    driveReady();
+    drive(() => lastCallbacks!.onMessage(agentMessage({ id: 'a3', content: 'Keep me' })));
+    drive(() =>
+      lastCallbacks!.onMessageDeleted!({
+        conversationId: 'other',
+        messageId: 'a3',
+        deletedAt: 'T',
+      }),
+    );
+    expect(screen.getByText('Keep me')).toBeInTheDocument();
+  });
+
+  it('shows the same markers from history after a reconnect', () => {
+    renderWidget({ autoOpen: true });
+    driveReady();
+    drive(() =>
+      lastCallbacks!.onHistory!([
+        { ...agentMessage({ id: 'h1', content: 'Fixed text' }), editedAt: 'T1' },
+        { ...agentMessage({ id: 'h2', content: '' }), deletedAt: 'T2' },
+      ]),
+    );
+    expect(screen.getByText('Fixed text')).toBeInTheDocument();
+    expect(screen.getByText('edited')).toBeInTheDocument();
+    expect(screen.getByText('This message was deleted')).toBeInTheDocument();
   });
 });
 

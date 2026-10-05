@@ -15,7 +15,12 @@ export function NewMessageSound() {
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
-      const onActivity = () => playMessageBeep();
+      /* An edit or delete of a reply (EMA-33) refreshes every inbox too, but
+         nothing new arrived — the gateway marks it `silent` so it never beeps. */
+      const onActivity = (e?: { silent?: boolean }) => {
+        if (e?.silent) return;
+        playMessageBeep();
+      };
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
       /*
        * A CHAT HANDED TO YOU MAKES A SOUND TOO.

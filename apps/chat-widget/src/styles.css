@@ -1220,6 +1220,18 @@
   }
 }
 
+/* --- An agent's edited / withdrawn reply (owner, 2026-10-05, EMA-33) --- */
+.yiji-msg-edited {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  opacity: 0.6;
+}
+.yiji-msg-deleted {
+  font-style: italic;
+  opacity: 0.65;
+}
+
 /* --- Message status, revealed by holding or dragging a bubble left --- */
 .yiji-msg-status {
   display: flex;
