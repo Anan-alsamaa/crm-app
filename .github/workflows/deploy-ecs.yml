@@ -815,4 +815,29 @@ jobs:
               *)          echo "FAIL ${API}${probe} ($code)"; fail=1 ;;
             esac
           done
+
+          # CAN A BROWSER SEND A CUSTOMER PHOTO?
+          #
+          # Customers could not send photos, twice (2026-09-30, 2026-10-05): the
+          # upload sends `Authorization`, the gateway's CORS preflight allowed
+          # `content-type` only, and the browser refused before sending a byte.
+          # Every check had used plain curl, which ignores CORS. So this asks
+          # EXACTLY what a browser asks — an OPTIONS preflight from the widget's
+          # origin requesting the widget's headers — and fails the release if
+          # the answer would make a browser refuse.
+          if [ "$ENVIRONMENT" = "prod" ]; then WIDGET_ORIGIN="https://crm.anan.sa"; else WIDGET_ORIGIN="https://crm-staging.anan.sa"; fi
+          pre=$(curl -s -i -X OPTIONS --max-time 15 \
+            "https://${API}/chat/attachment?filename=smoke.jpg&type=image%2Fjpeg" \
+            -H "Origin: ${WIDGET_ORIGIN}" \
+            -H "Access-Control-Request-Method: POST" \
+            -H "Access-Control-Request-Headers: authorization,content-type" | tr -d '\r')
+          allow_headers=$(echo "$pre" | grep -i '^access-control-allow-headers:' | tr 'A-Z' 'a-z')
+          allow_origin=$(echo "$pre" | grep -i '^access-control-allow-origin:')
+          if [ -n "$allow_origin" ] && echo "$allow_headers" | grep -q 'authorization' && echo "$allow_headers" | grep -q 'content-type'; then
+            echo "ok   browser preflight for /chat/attachment ($allow_headers)"
+          else
+            echo "FAIL browser preflight for /chat/attachment: customers cannot upload photos"
+            echo "$pre" | grep -i '^\(http\|access-control\)'
+            fail=1
+          fi
           exit $fail

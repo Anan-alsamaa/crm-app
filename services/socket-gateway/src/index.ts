@@ -457,6 +457,10 @@ async function main(): Promise<void> {
      calls — so CORS must cover both or the new path is blocked in a browser
      while working perfectly from curl. */
   const isWidgetPath = (url: string) => url.startsWith('/walk-in/') || url.startsWith('/chat/');
+  /** Request headers a browser may send to the widget's `/chat/*` and
+      `/walk-in/*` routes. Must cover every header the widget's own `fetch`
+      calls set — `widget-cors-matches-widget.test.ts` enforces that. */
+  const WIDGET_CORS_ALLOW_HEADERS = 'content-type, authorization';
   /*
    * A STAFF ENDPOINT THAT HAPPENS TO LIVE UNDER `/chat/`.
    *
@@ -501,7 +505,29 @@ async function main(): Promise<void> {
       reply.header('Access-Control-Allow-Origin', allow);
       reply.header('Vary', 'Origin');
       reply.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
-      reply.header('Access-Control-Allow-Headers', 'content-type');
+      /*
+       * `authorization` IS REQUIRED HERE — the photo upload sends it.
+       *
+       * `POST /chat/attachment` (2026-10-01) carries the customer's widget
+       * token as `Authorization: Bearer …`. This block allowed `content-type`
+       * ALONE, so every browser refused the upload at the PREFLIGHT and the
+       * POST was never sent: production logged only OPTIONS for every attempt
+       * (7 in 24 h, 2026-10-05). The upload then fell back to the socket path,
+       * which inside the Yiji app (polling, two tasks, no usable stickiness
+       * cookie) succeeds about half the time — "customers cannot send a photo",
+       * reported twice.
+       *
+       * It hid because every check of the endpoint was made from the command
+       * line, and curl ignores CORS entirely. Kept from recurring three ways:
+       * `widget-cors-matches-widget.test.ts` derives the headers the widget
+       * actually sends and fails the build if this list lacks one; the deploy's
+       * smoke job runs a real browser-style preflight against the live API; and
+       * this comment.
+       *
+       * Allowing the header grants nothing — the endpoint still verifies the
+       * token itself; CORS only decides whether a browser may ask.
+       */
+      reply.header('Access-Control-Allow-Headers', WIDGET_CORS_ALLOW_HEADERS);
       reply.header('Access-Control-Max-Age', '600');
     }
     if (req.method === 'OPTIONS') return reply.code(204).send();

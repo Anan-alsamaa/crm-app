@@ -68,12 +68,19 @@ describe('CORS for the agent-initiate endpoint', () => {
     );
   });
 
-  /* The widget routes keep the narrow set — this fix must not widen them. */
-  it('leaves the widget routes allowing content-type only', () => {
+  /*
+   * The widget routes use their OWN list, derived from what the widget sends.
+   *
+   * This used to assert the widget routes allowed `content-type` ONLY — which
+   * locked in the bug that stopped customers sending photos: the widget's
+   * `POST /chat/attachment` sends `authorization` (owner, 2026-10-05). What
+   * the widget may send is now guarded by `widget-cors-matches-widget.test.ts`,
+   * which derives it from the widget's own fetch calls instead of restating it.
+   */
+  it('gives the widget routes their own header list', () => {
     const widget = SOURCE.slice(SOURCE.indexOf('if (!isWidgetPath(req.url) || isStaffChatPath'));
     const block = widget.slice(0, widget.indexOf("if (req.method === 'OPTIONS')"));
-    expect(block).toMatch(/'Access-Control-Allow-Headers', 'content-type'/);
-    expect(block).not.toMatch(/authorization/);
+    expect(block).toMatch(/'Access-Control-Allow-Headers', WIDGET_CORS_ALLOW_HEADERS\)/);
   });
 
   /* The response must also be READABLE cross-origin — the global security
