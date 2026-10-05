@@ -407,14 +407,22 @@ export function QuickReplies({
           aria-label={openLabel}
           /* Tells a dialog around it that the next outside press is ours. */
           {...{ [DISMISS_FIRST_ATTR]: '' }}
-          /* ABOVE the composer, not below: the composer is already at the
-             bottom of the window, so a menu that opens downward opens
-             off-screen. Capped and scrollable so a long list is reachable
-             instead of being cut to the first five. */
-          /* A CARD, not a strip. More room to breathe and a softer shadow, so
-             the panel reads as a surface floating over the thread rather than
-             as part of the composer. */
-          className="absolute bottom-full z-30 mb-2 max-h-80 w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-popover p-1.5 shadow-float ring-1 ring-foreground/[0.04]"
+          /*
+           * IN THE FLOW, NEVER FLOATING OVER THE INPUT (owner, 2026-10-05).
+           *
+           * It was an overlay (`absolute bottom-full`) opening upward. Where
+           * the buttons sit BELOW a text box — a late-order reason or action,
+           * the first message of an agent-started chat — that put the list
+           * squarely over the box, so the agent could not see what they were
+           * typing; inside the start-chat dialog the overlay was also clipped
+           * by the dialog's edge, hiding replies.
+           *
+           * Now it takes its own space directly under its buttons and pushes
+           * what follows down. In the inbox composer the buttons sit above the
+           * text box, so the list lands between them — above the input, not on
+           * it. Capped and scrollable so a long library stays reachable.
+           */
+          className="mt-2 max-h-64 w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-popover p-1.5 shadow-sm ring-1 ring-foreground/[0.04]"
         >
           {ranked.length === 0 ? (
             <p className="px-2 py-3 text-2xs text-muted-foreground">

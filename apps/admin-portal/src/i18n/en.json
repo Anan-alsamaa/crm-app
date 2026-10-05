@@ -1163,7 +1163,20 @@
     "edit": "Edit",
     "editTitle": "Rename this value?",
     "editPrompt": "Reports group by the EXACT text, so renaming one that tickets already use splits its history in two — add a new value instead if it is already in use.",
-    "editLabel": "Value"
+    "editLabel": "Value",
+    "section": {
+      "complaintType": "Tickets: Ticket type",
+      "serviceType": "Tickets: Service type",
+      "complaintSource": "Tickets: Ticket source",
+      "communicationMethod": "Tickets: Communication method",
+      "compensation": "Tickets: Compensation",
+      "issuingSide": "Coupons: Issuing side",
+      "deliveryType": "Coupons: Delivery type",
+      "couponType": "Coupons: Coupon type",
+      "discountCategory": "Coupons: Discount category",
+      "aiAction": "Inbox: AI assistance",
+      "lateOrderCause": "Late orders: Source of delay"
+    }
   },
   "roles": {
     "title": "Roles & privileges",
@@ -1322,6 +1335,11 @@
   "replies": {
     "editTitle": "Edit this ready reply",
     "deleteTitle": "Delete “{{label}}”?",
-    "deleteConfirm": "Retiring stops offering it without losing the wording."
+    "deleteConfirm": "Retiring stops offering it without losing the wording.",
+    "kind": {
+      "late_order_reason": "Late orders: Reason",
+      "late_order_action": "Late orders: Action taken",
+      "chat": "Inbox: Quick replies"
+    }
   }
 }

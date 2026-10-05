@@ -327,10 +327,10 @@ export function QuickRepliesSection() {
    */
   const kindLabel = (k: ReplyKind) =>
     k === 'late_order_reason'
-      ? t('replies.kind.late_order_reason', { defaultValue: 'Late order: reasons' })
+      ? t('replies.kind.late_order_reason', { defaultValue: 'Late orders: Reason' })
       : k === 'late_order_action'
-        ? t('replies.kind.late_order_action', { defaultValue: 'Late order: actions taken' })
-        : t('replies.kind.chat', { defaultValue: 'Inbox: ready replies' });
+        ? t('replies.kind.late_order_action', { defaultValue: 'Late orders: Action taken' })
+        : t('replies.kind.chat', { defaultValue: 'Inbox: Quick replies' });
 
   const kindHint =
     kind === 'late_order_reason'

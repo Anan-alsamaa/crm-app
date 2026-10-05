@@ -214,19 +214,35 @@ export function OptionListsPage() {
     [rows.data, listKey],
   );
 
+  /*
+   * "PAGE: FIELD" (owner, 2026-10-05). Each list is named after the page an
+   * agent meets it on, then the field it fills — "Late orders: Source of
+   * delay", "Tickets: Ticket type" — so an operator editing a value knows
+   * exactly where the change will show up.
+   *
+   * Their OWN keys (`lists.section.*`), not the bare field keys: those double
+   * as field captions elsewhere (Coupon approvals prints `lists.issuingSide` as
+   * "Issuing side"), and prefixing them would put "Coupons:" on every card.
+   */
   const LIST_LABELS: Record<ListKey, string> = {
-    complaint_type: t('lists.complaintType', { defaultValue: 'Ticket type' }),
-    service_type: t('lists.serviceType', { defaultValue: 'Service type' }),
-    complaint_source: t('lists.complaintSource', { defaultValue: 'Ticket source' }),
-    communication_method: t('lists.communicationMethod', { defaultValue: 'Communication method' }),
-    compensation: t('lists.compensation', { defaultValue: 'Compensation' }),
-    issuing_side: t('lists.issuingSide', { defaultValue: 'Issuing side' }),
-    delivery_type: t('lists.deliveryType', { defaultValue: 'Delivery type' }),
-    coupon_type: t('lists.couponType', { defaultValue: 'Coupon type' }),
-    discount_category: t('lists.discountCategory', { defaultValue: 'Discount category' }),
-    ai_action: t('lists.aiAction', { defaultValue: 'Inbox: AI assistance' }),
-    [LATE_ORDER_CAUSE_LIST]: t('lists.lateOrderCause', {
-      defaultValue: 'Late orders: source of delay',
+    complaint_type: t('lists.section.complaintType', { defaultValue: 'Tickets: Ticket type' }),
+    service_type: t('lists.section.serviceType', { defaultValue: 'Tickets: Service type' }),
+    complaint_source: t('lists.section.complaintSource', {
+      defaultValue: 'Tickets: Ticket source',
+    }),
+    communication_method: t('lists.section.communicationMethod', {
+      defaultValue: 'Tickets: Communication method',
+    }),
+    compensation: t('lists.section.compensation', { defaultValue: 'Tickets: Compensation' }),
+    issuing_side: t('lists.section.issuingSide', { defaultValue: 'Coupons: Issuing side' }),
+    delivery_type: t('lists.section.deliveryType', { defaultValue: 'Coupons: Delivery type' }),
+    coupon_type: t('lists.section.couponType', { defaultValue: 'Coupons: Coupon type' }),
+    discount_category: t('lists.section.discountCategory', {
+      defaultValue: 'Coupons: Discount category',
+    }),
+    ai_action: t('lists.section.aiAction', { defaultValue: 'Inbox: AI assistance' }),
+    [LATE_ORDER_CAUSE_LIST]: t('lists.section.lateOrderCause', {
+      defaultValue: 'Late orders: Source of delay',
     }),
   };
 

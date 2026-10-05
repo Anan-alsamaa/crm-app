@@ -122,8 +122,14 @@ describe('the quick-reply chooser', () => {
 
   /* The composer sits at the bottom of the window, so a menu opening downward
      opens off-screen. */
-  it('opens upward from the composer', () => {
-    expect(SRC).toContain('bottom-full');
+  /* Owner, 2026-10-05: the list must never cover the text box being typed in.
+     It is laid out in the flow under its buttons — never an overlay — so it
+     cannot sit on the input or be clipped by a dialog's edge. */
+  it('takes its own space instead of floating over the input', () => {
+    const list = SRC.slice(SRC.indexOf('role="listbox"'), SRC.indexOf('{ranked.length === 0'));
+    expect(list).not.toMatch(/className="[^"]*\babsolute\b/);
+    expect(list).not.toMatch(/className="[^"]*bottom-full/);
+    expect(list).toMatch(/className="mt-2 /);
   });
 
   /* An agent should never send something they have not read, and `title` is
