@@ -5,6 +5,7 @@ import { Button, Input, Modal, Spinner, Textarea, cn } from '@yiji/ui';
 import { isDialablePhone, normalizePhone } from '@yiji/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import { lookupContactByPhone, soleYijiVendorId, startChatWithCustomer } from './start-chat.js';
+import { QuickReplies } from '../conversation/QuickReplies.js';
 
 /**
  * AN AGENT OPENS A CHAT WITH A CUSTOMER WHO HAS NOT WRITTEN TO US (EMA-10).
@@ -125,6 +126,10 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
 
   const ready = phoneValid && !!message.trim() && !!vendorId && !start.isPending;
 
+  /* The inbox's "/" gesture, so the first message can start from a ready
+     reply exactly as every later one can (owner, 2026-10-05). */
+  const slashMatch = /^\/(.*)$/s.exec(message);
+
   return (
     <Modal
       open={open}
@@ -176,6 +181,25 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
             placeholder={t('inbox.startChat.messagePlaceholder', {
               defaultValue: 'What you want to say to them.',
             })}
+          />
+          {/*
+            QUICK REPLIES, from the same library as the inbox composer (owner,
+            2026-10-05: the first message of an agent-started chat had none).
+            Typing `/` searches it, or the button opens it. A pick REPLACES the
+            box — the inbox's own rule since 2026-09-09. `{name}` fills from
+            the customer found for this number, when there is one.
+          */}
+          <QuickReplies
+            className="pt-1"
+            dismissSearchOnOutside
+            customerText=""
+            query={slashMatch?.[1] ?? ''}
+            searching={slashMatch !== null}
+            vars={{ name: lookup.state === 'known' ? lookup.name : null }}
+            onPick={(text) => {
+              setMessage(text);
+              setError(null);
+            }}
           />
         </label>
 

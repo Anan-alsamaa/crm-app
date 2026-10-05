@@ -177,3 +177,30 @@ describe('the inbox entry point', () => {
     expect(mount).toMatch(/invalidateQueries\(\{ queryKey: \['conversations'\] \}\)/);
   });
 });
+
+/*
+ * Owner, 2026-10-05: the first message of an agent-started chat had no quick
+ * replies. It now offers the inbox's own library, with the same "/" search, and
+ * a pick replaces the box as it does in the composer.
+ */
+describe('quick replies in the first message', () => {
+  it('renders the shared QuickReplies against the inbox library', () => {
+    expect(DIALOG).toMatch(/import \{ QuickReplies \} from '\.\.\/conversation\/QuickReplies\.js'/);
+    expect(DIALOG).toMatch(/<QuickReplies/);
+    // No `kind` prop = the inbox's 'chat' library, the same one the composer uses.
+    const block = DIALOG.slice(
+      DIALOG.indexOf('<QuickReplies'),
+      DIALOG.indexOf('/>', DIALOG.indexOf('<QuickReplies')),
+    );
+    expect(block).not.toMatch(/kind=/);
+  });
+
+  it('searches on "/" in the message box', () => {
+    expect(DIALOG).toContain('const slashMatch = /^\\/(.*)$/s.exec(message);');
+    expect(DIALOG).toMatch(/searching=\{slashMatch !== null\}/);
+  });
+
+  it('replaces the box with the pick', () => {
+    expect(DIALOG).toMatch(/onPick=\{\(text\) => \{\s*setMessage\(text\);/);
+  });
+});

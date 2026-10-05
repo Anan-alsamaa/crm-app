@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from './cn.js';
 import { useFocusTrap } from './useFocusTrap.js';
+import { DISMISS_FIRST_ATTR } from './ConfirmDialog.js';
 
 /*
  * A CENTRED modal — for LOOKING AT something, not for filling a form in.
@@ -63,24 +64,29 @@ export function Modal({
   panelClassName,
   hideChrome = false,
 }: ModalProps): JSX.Element | null {
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        /* An open popover inside (a quick-reply list) takes this Esc for
+           itself — the same rule as ConfirmDialog. */
+        if (panelRef.current?.querySelector(`[${DISMISS_FIRST_ATTR}]`)) return;
         e.preventDefault();
         onClose();
       }
     };
-    window.addEventListener('keydown', onKey);
+    /* Capture phase, so the popover is still in the DOM when this looks. */
+    window.addEventListener('keydown', onKey, true);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keydown', onKey, true);
     };
   }, [open, onClose]);
 
-  const panelRef = useRef<HTMLDivElement | null>(null);
   useFocusTrap(panelRef, open);
 
   if (!open || typeof document === 'undefined') return null;
