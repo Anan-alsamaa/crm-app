@@ -288,3 +288,43 @@ describe('headers that are known but unused', () => {
     expect(unmappedHeaders).toEqual(['custmer_mobil']);
   });
 });
+
+/*
+ * EMA-43: the CSV export of the operations history is MONTH-first (`9/27/2026`),
+ * writes Time as an Excel serial, and sometimes puts the time in the date cell.
+ * Read day-first, ~2,060 of 7,914 rows landed in 2027–2028 and every row at
+ * midnight. Checked against the real file: 7,893 rows now match the .xlsx
+ * exactly; the rest differ by a minute (seconds rounded differently).
+ */
+describe('the month-first CSV export', () => {
+  const HEAD = 'Date,Time,Complaint Description';
+  const day = (iso: string | null) => iso && new Date(iso).getDate();
+  const month = (iso: string | null) => iso && new Date(iso).getMonth() + 1;
+
+  it('reads the whole file month-first when a date proves it', () => {
+    const { rows } = parseTicketsCsv(`${HEAD}\n9/27/2026,10:00,a\n9/5/2026,10:00,b`);
+    const a = toComplaintDate(rows[0]!.date, rows[0]!.time);
+    const b = toComplaintDate(rows[1]!.date, rows[1]!.time);
+    expect([month(a), day(a)]).toEqual([9, 27]);
+    // Ambiguous on its own — decided by the file, not guessed per row.
+    expect([month(b), day(b)]).toEqual([9, 5]);
+  });
+
+  it('keeps a day-first file day-first', () => {
+    const { rows } = parseTicketsCsv(`${HEAD}\n27/09/2026,10:00,a\n05/09/2026,10:00,b`);
+    const b = toComplaintDate(rows[1]!.date, rows[1]!.time);
+    expect([month(b), day(b)]).toEqual([9, 5]);
+  });
+
+  it('reads an Excel time serial as the time of day', () => {
+    // 0.75 of a day = 18:00.
+    const d = new Date(toComplaintDate('2026-09-27', '46292.75')!);
+    expect([d.getHours(), d.getMinutes()]).toEqual([18, 0]);
+  });
+
+  it('takes the time from the date cell when the Time column is empty', () => {
+    const { rows } = parseTicketsCsv(`${HEAD}\n2/16/2026 16:53,,a\n9/27/2026,,b`);
+    const d = new Date(toComplaintDate(rows[0]!.date, rows[0]!.time)!);
+    expect([d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]).toEqual([2, 16, 16, 53]);
+  });
+});

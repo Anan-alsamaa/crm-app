@@ -32,6 +32,8 @@ import { matchStore, normalizePhone, type StoreIndex, type StoreMatch } from '@y
 export interface PlannedTicket {
   /** Stable identity for the row, so a re-import does not duplicate it. */
   ref: string;
+  /** The sheet line it came from, so a failure can name the row to fix. */
+  line: number;
   /** Canonical `05XXXXXXXX`, or null when the sheet's number is unusable. */
   phone: string | null;
   /** How the branch was resolved — surfaced so gaps are visible, not guessed. */
@@ -46,6 +48,14 @@ export interface ImportPlan {
   create: PlannedTicket[];
   /** Already in the database (or repeated within the sheet). */
   duplicates: number;
+  /** Of those, rows already in the DATABASE — a re-import, safely skipped. */
+  alreadyLoaded: number;
+  /**
+   * Of those, rows the SHEET itself repeats exactly, each with the line of its
+   * first copy — a different thing from "already loaded", and named apart so
+   * nobody reads a sheet's own repetition as an earlier import.
+   */
+  repeatedInSheet: Array<{ line: number; firstLine: number }>;
   /** Rows dropped, with the reason, so nothing disappears silently. */
   skipped: Array<{ line: number; reason: string }>;
   /** Headers the parser could not place — usually a typo in the sheet. */
@@ -57,20 +67,73 @@ export interface ImportPlan {
 }
 
 /**
- * A row's identity.
+ * A row's identity, built from what a ticket STORES.
  *
- * Tickets carry no import reference column, so identity has to come from what
- * IS stored. Complaint instant + order number + the opening of the description
- * is what distinguishes two complaints in a sheet, and it can be rebuilt from
- * rows already in the database — which is what makes a re-import safe rather
- * than a way to double everything.
+ * Tickets carry no import reference column, so identity has to come from the
+ * stored fields — which is what lets a re-import recognise its own rows rather
+ * than doubling them.
+ *
+ * It used to be complaint instant + order number + the first 60 characters of
+ * the description. The 2026-10-05 history import showed that is too little:
+ * 9 pairs of DIFFERENT complaints shared all three and differed only in the
+ * coupon, its value, the agent, the compensation or how the customer got in
+ * touch — and the second of each pair was dropped as a "duplicate" (EMA-43).
+ * So every stored field that can tell two complaints apart is in it now.
+ *
+ * NORMALISED so a value read back from the database matches the one about to
+ * be written: the instant to its first 19 characters (the database and the
+ * parser disagree about `Z` and milliseconds, not about the moment), numbers
+ * as numbers (`"9.00000"` and `9` are the same coupon), text trimmed.
  */
-export function ticketIdentity(
-  complaintDate: string | null,
-  orderId: string,
-  description: string,
-): string {
-  return `${complaintDate ?? ''}|${orderId}|${description.slice(0, 60)}`;
+export interface TicketIdentityFields {
+  complaint_date: string | null;
+  order_id?: string | null;
+  description?: string | null;
+  coupon_code?: string | null;
+  coupon_value?: number | string | null;
+  coupon_percent?: number | string | null;
+  compensation?: string | null;
+  communication_method?: string | null;
+  response_desc?: string | null;
+  assigned_agent?: string | null;
+}
+
+/** The stored fields `ticketIdentity` reads — the import's own query asks for exactly these. */
+export const TICKET_IDENTITY_FIELDS = [
+  'complaint_date',
+  'order_id',
+  'description',
+  'coupon_code',
+  'coupon_value',
+  'coupon_percent',
+  'compensation',
+  'communication_method',
+  'response_desc',
+  'assigned_agent',
+] as const;
+
+function idText(v: unknown): string {
+  return v == null ? '' : String(v).trim();
+}
+function idNumber(v: unknown): string {
+  if (v == null || v === '') return '';
+  const n = Number(v);
+  return Number.isFinite(n) ? String(n) : idText(v);
+}
+
+export function ticketIdentity(t: TicketIdentityFields): string {
+  return [
+    idText(t.complaint_date).slice(0, 19),
+    idText(t.order_id),
+    idText(t.description),
+    idText(t.coupon_code),
+    idNumber(t.coupon_value),
+    idNumber(t.coupon_percent),
+    idText(t.compensation),
+    idText(t.communication_method),
+    idText(t.response_desc),
+    idText(t.assigned_agent),
+  ].join('|');
 }
 
 /** Read whichever of the two formats the file actually is. */
@@ -100,11 +163,13 @@ export interface PlanContext {
 const SAUDI_MOBILE = /^05\d{8}$/;
 
 export function planImport(rows: readonly TicketCsvRow[], ctx: PlanContext): ImportPlan {
-  const seen = new Set(ctx.existing);
   const create: PlannedTicket[] = [];
   const skipped: ImportPlan['skipped'] = [];
   const capturedAt = new Date().toISOString();
-  let duplicates = 0;
+  let alreadyLoaded = 0;
+  const repeatedInSheet: ImportPlan['repeatedInSheet'] = [];
+  /** identity -> the sheet line that first carried it. */
+  const firstLineOf = new Map<string, number>();
   let unmatchedStores = 0;
 
   rows.forEach((row, i) => {
@@ -121,23 +186,12 @@ export function planImport(rows: readonly TicketCsvRow[], ctx: PlanContext): Imp
       return;
     }
 
-    const ref = ticketIdentity(
-      complaintDate,
-      String(row.orderNumber ?? ''),
-      String(row.complaintDescription ?? ''),
-    );
-    // Catches both rows already in the database and rows repeated in the sheet.
-    if (seen.has(ref)) {
-      duplicates += 1;
-      return;
-    }
-    seen.add(ref);
-
     const match = matchStore(ctx.index, {
       restaurantName: row.restaurantName ?? null,
       brandName: row.brand ?? null,
     });
-    if (!match.store) unmatchedStores += 1;
+    /* Counted only once the row is known to be new — see below. */
+    const unmatched = !match.store;
 
     const raw = row.customerMobile ? normalizePhone(row.customerMobile) : null;
     const phone = raw && SAUDI_MOBILE.test(raw) ? raw : null;
@@ -158,7 +212,24 @@ export function planImport(rows: readonly TicketCsvRow[], ctx: PlanContext): Imp
     // Persist the order number so this row's identity can be rebuilt later.
     if (row.orderNumber) payload.order_id = String(row.orderNumber).trim();
 
-    create.push({ ref, phone, via: match.via, payload });
+    /*
+     * Identity from the PAYLOAD — exactly what will be stored — so it is built
+     * the same way as the identities read back from the database.
+     */
+    const ref = ticketIdentity(payload as unknown as TicketIdentityFields);
+    if (ctx.existing.has(ref)) {
+      alreadyLoaded += 1;
+      return;
+    }
+    const first = firstLineOf.get(ref);
+    if (first !== undefined) {
+      repeatedInSheet.push({ line, firstLine: first });
+      return;
+    }
+    firstLineOf.set(ref, line);
+    if (unmatched) unmatchedStores += 1;
+
+    create.push({ ref, line, phone, via: match.via, payload });
   });
 
   const newContacts = new Set(
@@ -168,7 +239,9 @@ export function planImport(rows: readonly TicketCsvRow[], ctx: PlanContext): Imp
   return {
     parsed: rows.length,
     create,
-    duplicates,
+    duplicates: alreadyLoaded + repeatedInSheet.length,
+    alreadyLoaded,
+    repeatedInSheet,
     skipped,
     unmappedHeaders: [],
     unmatchedStores,
@@ -180,6 +253,21 @@ export interface ImportResult {
   created: number;
   contactsCreated: number;
   failed: number;
+  /**
+   * EVERY refused row, by sheet line, with the server's own reason.
+   *
+   * Only a count used to come back, so a partial import said "12 refused" and
+   * left nobody able to find or fix the twelve (EMA-43).
+   */
+  failures: Array<{ line: number; reason: string }>;
+  /** Customers that could not be created; their tickets import without the link. */
+  contactsFailed: number;
+}
+
+/** A Directus rejection is a plain object with an `errors` array, not an Error. */
+export function describeImportError(err: unknown): string {
+  const e = err as { errors?: Array<{ message?: string }>; message?: string } | null;
+  return e?.errors?.[0]?.message ?? e?.message ?? String(err);
 }
 
 export interface RunImportDeps {
@@ -206,11 +294,32 @@ export async function runImport(
     ),
   ];
   let contactsCreated = 0;
-  for (let i = 0; i < missing.length; i += BATCH) {
-    const made = await deps.createContacts(missing.slice(i, i + BATCH));
+  let contactsFailed = 0;
+  const keep = (made: Map<string, string>) => {
     for (const [phone, id] of made) {
       contactByPhone.set(phone, id);
       contactsCreated += 1;
+    }
+  };
+  for (let i = 0; i < missing.length; i += BATCH) {
+    const chunk = missing.slice(i, i + BATCH);
+    try {
+      keep(await deps.createContacts(chunk));
+    } catch {
+      /*
+       * One bad number must not abort the import. It used to: a failed
+       * contacts batch threw out of here AFTER earlier batches were written,
+       * leaving a half-loaded import and no tickets at all. Retry singly; a
+       * customer that still cannot be created costs only that ticket's
+       * customer link, never the ticket.
+       */
+      for (const phone of chunk) {
+        try {
+          keep(await deps.createContacts([phone]));
+        } catch {
+          contactsFailed += 1;
+        }
+      }
     }
   }
 
@@ -221,6 +330,7 @@ export async function runImport(
 
   let created = 0;
   let failed = 0;
+  const failures: ImportResult['failures'] = [];
   for (let i = 0; i < plan.create.length; i += BATCH) {
     const batch = plan.create.slice(i, i + BATCH);
     try {
@@ -236,13 +346,14 @@ export async function runImport(
         try {
           await deps.createTickets([p.payload]);
           created += 1;
-        } catch {
+        } catch (err) {
           failed += 1;
+          failures.push({ line: p.line, reason: describeImportError(err) });
         }
       }
     }
     deps.onProgress?.(created + failed, plan.create.length);
   }
 
-  return { created, contactsCreated, failed };
+  return { created, contactsCreated, failed, failures, contactsFailed };
 }

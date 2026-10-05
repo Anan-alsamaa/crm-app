@@ -632,7 +632,9 @@
     "unknownUser": "مستخدم غير معروف",
     "unmappedStores": "{{count}} صفوف بمتجر غير مرتبط",
     "kpiUnmappedRows": "صفوف غير مرتبطة",
-    "hiddenIncomplete": "{{count}} تذكرة مخفية — لا يوجد فرع عليها بعد"
+    "hiddenIncomplete": "{{count}} تذكرة مخفية — لا يوجد فرع عليها بعد",
+    "importRepeated": "مكرر بالكامل في هذا الملف — تم تخطيه (الأسطر {{lines}})",
+    "importPartialLines": "تم استيراد {{created}}؛ ورُفض {{failed}} سطرًا — {{first}}. تم تنزيل القائمة الكاملة في الملف import-errors.csv."
   },
   "couponApprovals": {
     "agent": "طلبها",

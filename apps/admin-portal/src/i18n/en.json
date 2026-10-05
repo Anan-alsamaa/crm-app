@@ -1132,7 +1132,9 @@
     "incompleteHidden": "{{count}} tickets are hidden because fields are missing — no branch, service type, channel or order.",
     "incompleteShown": "Including {{count}} tickets with fields missing — they carry no branch, service type, channel or order.",
     "showIncomplete": "Show them",
-    "hideIncomplete": "Hide them"
+    "hideIncomplete": "Hide them",
+    "importRepeated": "repeated exactly in this sheet — skipped (lines {{lines}})",
+    "importPartialLines": "Imported {{created}}; {{failed}} rows were refused — {{first}}. The full list was downloaded as import-errors.csv."
   },
   "lists": {
     "title": "Dropdown values",

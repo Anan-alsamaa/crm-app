@@ -19,7 +19,9 @@ import {
   planImport,
   runImport,
   ticketIdentity,
+  TICKET_IDENTITY_FIELDS,
   type ImportPlan,
+  type TicketIdentityFields,
 } from './import-tickets.js';
 
 interface Props {
@@ -55,16 +57,12 @@ export function ImportTicketsButton({ storeIndex, onImported, label }: Props): J
           'tickets' as never,
           {
             limit: -1,
-            fields: ['complaint_date', 'order_id', 'description'],
+            /* Exactly the fields a row's identity is built from, so an
+               existing ticket and the same row in the sheet compare equal. */
+            fields: [...TICKET_IDENTITY_FIELDS],
           } as never,
         ),
-      ) as unknown as Promise<
-        Array<{
-          complaint_date: string | null;
-          order_id: string | null;
-          description: string | null;
-        }>
-      >,
+      ) as unknown as Promise<TicketIdentityFields[]>,
       directus.request(
         readItems('contacts' as never, { limit: -1, fields: ['id', 'phone'] } as never),
       ) as unknown as Promise<Array<{ id: string; phone: string | null }>>,
@@ -76,11 +74,7 @@ export function ImportTicketsButton({ storeIndex, onImported, label }: Props): J
       ) as unknown as Promise<Array<{ id: string }>>,
     ]);
 
-    const existing = new Set(
-      tickets.map((x) =>
-        ticketIdentity(x.complaint_date, String(x.order_id ?? ''), String(x.description ?? '')),
-      ),
-    );
+    const existing = new Set(tickets.map((x) => ticketIdentity(x)));
     const contactByPhone = new Map<string, string>();
     for (const c of contacts) if (c.phone) contactByPhone.set(String(c.phone), c.id);
     const agentByName = new Map<string, string>();
@@ -135,13 +129,33 @@ export function ImportTicketsButton({ storeIndex, onImported, label }: Props): J
       );
 
       if (res.failed > 0) {
+        /*
+         * WHICH rows, and WHY — not just how many (EMA-43). The first few go in
+         * the message; all of them download as a CSV to fix and re-import
+         * (a re-import skips what already landed).
+         */
         toast.error(
-          t('complaintReport.importPartial', {
-            defaultValue: 'Imported {{created}}; {{failed}} rows were refused.',
+          t('complaintReport.importPartialLines', {
+            defaultValue:
+              'Imported {{created}}; {{failed}} rows were refused — {{first}}. The full list was downloaded as import-errors.csv.',
             created: res.created,
             failed: res.failed,
+            first: res.failures
+              .slice(0, 3)
+              .map((f) => `line ${f.line}: ${f.reason}`)
+              .join('; '),
           }),
         );
+        const csv = [
+          'line,reason',
+          ...res.failures.map((f) => `${f.line},"${f.reason.replace(/"/g, '""')}"`),
+        ].join('\n');
+        const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'import-errors.csv';
+        a.click();
+        URL.revokeObjectURL(url);
       } else {
         toast.success(
           t('complaintReport.importDone', {
@@ -219,11 +233,26 @@ export function ImportTicketsButton({ storeIndex, onImported, label }: Props): J
                   <strong>{p.newContacts}</strong>{' '}
                   {t('complaintReport.importContacts', { defaultValue: 'new customers' })}
                 </li>
-                {p.duplicates > 0 && (
+                {p.alreadyLoaded > 0 && (
                   <li className="text-muted-foreground">
-                    <strong>{p.duplicates}</strong>{' '}
+                    <strong>{p.alreadyLoaded}</strong>{' '}
                     {t('complaintReport.importDupes', {
                       defaultValue: 'already loaded — skipped',
+                    })}
+                  </li>
+                )}
+                {/* The sheet repeating ITSELF is not an earlier import, and
+                    says which lines, so operations can check the copy really
+                    is identical (EMA-43). */}
+                {p.repeatedInSheet.length > 0 && (
+                  <li className="text-muted-foreground">
+                    <strong>{p.repeatedInSheet.length}</strong>{' '}
+                    {t('complaintReport.importRepeated', {
+                      defaultValue: 'repeated exactly in this sheet — skipped (lines {{lines}})',
+                      lines: p.repeatedInSheet
+                        .slice(0, 10)
+                        .map((r) => `${r.firstLine}/${r.line}`)
+                        .join(', '),
                     })}
                   </li>
                 )}

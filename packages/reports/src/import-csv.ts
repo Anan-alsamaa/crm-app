@@ -210,7 +210,44 @@ export function parseTicketsCells(
     rows.push(row);
   });
 
+  normaliseDateOrder(rows);
   return { rows, skipped, unmappedHeaders };
+}
+
+/**
+ * MONTH-FIRST OR DAY-FIRST, decided ONCE for the whole file.
+ *
+ * The CSV export of the operations history writes `9/27/2026` (month first),
+ * while every other sheet here is day-first. Read day-first, 9/27/2026 rolls
+ * over into March 2028 — a dry run put ~2,060 of 7,914 rows in 2027–2028
+ * (EMA-43). A per-row guess cannot fix it: `9/5/2026` is valid both ways, so
+ * the FILE has to decide. If some date's second number is over 12 and no date's
+ * first number is, the file is month-first and every slashed date in it is
+ * rewritten to ISO here. Anything mixed is left alone for the day-first default.
+ */
+function normaliseDateOrder(rows: TicketCsvRow[]): void {
+  /* A date cell that carries its own time (`2/16/2026 16:53` — 5 rows of the
+     history CSV) is split, the time used when the Time column has none. */
+  for (const r of rows) {
+    const withTime = /^(\S+)\s+(\d{1,2}:\d{2}(?::\d{2})?)$/.exec((r.date ?? '').trim());
+    if (!withTime) continue;
+    r.date = withTime[1]!;
+    if (!r.time?.trim()) r.time = withTime[2]!;
+  }
+  const slashed = /^(\d{1,2})[/.](\d{1,2})[/.](\d{4})$/;
+  let firstOver12 = false;
+  let secondOver12 = false;
+  for (const r of rows) {
+    const m = slashed.exec((r.date ?? '').trim());
+    if (!m) continue;
+    if (+m[1]! > 12) firstOver12 = true;
+    if (+m[2]! > 12) secondOver12 = true;
+  }
+  if (!secondOver12 || firstOver12) return;
+  for (const r of rows) {
+    const m = slashed.exec((r.date ?? '').trim());
+    if (m) r.date = `${m[3]}-${m[1]!.padStart(2, '0')}-${m[2]!.padStart(2, '0')}`;
+  }
 }
 
 /** An .xlsx file straight from disk → the same result the CSV path produces. */
@@ -232,9 +269,17 @@ export function toComplaintDate(date?: string, time?: string): string | null {
 
   // Times arrive as H:MM and HH:MM:SS; anything else is treated as midnight
   // rather than rejecting an otherwise good row over a broken clock value.
-  const tm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec((time ?? '').trim());
-  const hh = tm ? +tm[1]! : 0;
-  const mm = tm ? +tm[2]! : 0;
+  const t = (time ?? '').trim();
+  const tm = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(t);
+  /*
+   * OR AN EXCEL SERIAL — `46293.1309027778` — which is how the CSV export
+   * writes the Time column. The FRACTION is the time of day; the whole part is
+   * a date the Date column already gives. Without this every CSV row landed at
+   * midnight (EMA-43).
+   */
+  const serial = !tm && /^\d+(\.\d+)?$/.test(t) ? Math.round((Number(t) % 1) * 1440) : null;
+  const hh = tm ? +tm[1]! : serial !== null ? Math.floor(serial / 60) % 24 : 0;
+  const mm = tm ? +tm[2]! : serial !== null ? serial % 60 : 0;
   const dt = new Date(y, m - 1, day, hh, mm);
   return Number.isNaN(dt.getTime()) ? null : dt.toISOString();
 }
