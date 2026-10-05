@@ -1075,6 +1075,19 @@ function ComplaintsReport({
   /** Push the draft through. A filtered set is a different set, so page 7 of it
    *  means nothing — every apply lands on page 1. */
   const applyFilters = () => {
+    /*
+     * TYPED DATES BEYOND THE LOADED WINDOW GO AND FETCH IT (owner, 2026-10-05).
+     *
+     * From/To used to filter only the rows already loaded — the last 30 days
+     * by default — so asking for 05/01/2021–05/10/2026 after importing 7,903
+     * historic tickets changed nothing, and Apply read as a dead button. Now a
+     * typed date outside the window WIDENS the fetched range to cover it; the
+     * same dates then filter as before. Narrowing never refetches: the rows are
+     * already here, and a smaller window is a filter, not a query.
+     */
+    const from = draft.from && draft.from < range.from ? draft.from : range.from;
+    const to = draft.to && draft.to > range.to ? draft.to : range.to;
+    if (from !== range.from || to !== range.to) range.setRange({ from, to });
     setCriteria(draft);
     setPage(1);
   };

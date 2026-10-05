@@ -41,9 +41,29 @@ export async function readChunked<T>(
   ids: readonly string[],
   read: (idChunk: string[]) => Promise<T[]>,
   size: number = IN_FILTER_CHUNK,
+  /**
+   * How many chunks may be in flight at once. Default 1 — strictly one after
+   * another, as every existing caller expects.
+   *
+   * Raised by the ticket breakdown's revision lookup: a full-history window
+   * after the 7,903-ticket import is ~67 chunks, ~20 s in series, during which
+   * the report sat blank (2026-10-05). Results still come back IN CHUNK ORDER,
+   * so a caller relying on "first row seen wins" behaves exactly as before.
+   */
+  concurrency = 1,
 ): Promise<T[]> {
   if (ids.length === 0) return [];
-  const out: T[] = [];
-  for (const chunk of chunkIds(ids, size)) out.push(...(await read(chunk)));
-  return out;
+  const chunks = chunkIds(ids, size);
+  const results: T[][] = new Array(chunks.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < chunks.length) {
+      const i = next++;
+      results[i] = await read(chunks[i]!);
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.max(1, Math.min(concurrency, chunks.length)) }, worker),
+  );
+  return results.flat();
 }

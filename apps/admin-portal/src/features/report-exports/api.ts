@@ -737,6 +737,10 @@ async function loadAgentReport(
                   sort: ['-id'],
                 } as never),
               ) as Promise<unknown[]>,
+            undefined,
+            /* Four at a time: a multi-year window is dozens of chunks, and in
+               series they kept the report blank for ~20 s. */
+            4,
           )) as Array<{
             item: string;
             activity: { action: string; timestamp: string; user: string | null } | null;

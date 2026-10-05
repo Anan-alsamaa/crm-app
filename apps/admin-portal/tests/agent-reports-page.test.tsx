@@ -873,6 +873,48 @@ describe('AgentReportsPage — conversation status report', () => {
   });
 });
 
+describe('AgentReportsPage — ticket breakdown: typed dates fetch', () => {
+  /*
+   * Owner, 2026-10-05: after importing 7,903 historic tickets, From 05/01/2021
+   * To 05/10/2026 + Apply did nothing — the dates only filtered the 30 days
+   * already loaded. A typed range beyond the window must fetch it.
+   */
+  it('widens the fetched range when the typed dates go beyond it', async () => {
+    window.localStorage.setItem(
+      'sara.reports.range',
+      JSON.stringify({ from: '2026-09-05', to: '2026-10-05' }),
+    );
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup();
+    renderPage('complaints');
+    const [from, to] = screen.getAllByPlaceholderText('dd/mm/yyyy');
+    await user.type(from!, '05/01/2021');
+    await user.type(to!, '05/10/2026');
+    await apply(user);
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(expect.any(Number), expect.anything(), {
+      from: '2021-01-05',
+      to: '2026-10-05',
+    });
+  });
+
+  it('does not refetch for dates inside the loaded window', async () => {
+    window.localStorage.setItem(
+      'sara.reports.range',
+      JSON.stringify({ from: '2026-09-05', to: '2026-10-05' }),
+    );
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup();
+    renderPage('complaints');
+    const [from] = screen.getAllByPlaceholderText('dd/mm/yyyy');
+    await user.type(from!, '20/09/2026');
+    await apply(user);
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(expect.any(Number), expect.anything(), {
+      from: '2026-09-05',
+      to: '2026-10-05',
+    });
+  });
+});
+
 describe('AgentReportsPage — ticket breakdown', () => {
   it("renders the operations manager's report under the Tickets heading", () => {
     // One report, named Tickets: a ticket IS a ticket, and two pages over
