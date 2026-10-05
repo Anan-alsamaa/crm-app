@@ -209,7 +209,7 @@ const agents = [
     chats: 4,
     noReply: 1,
     commonTaken: 2,
-    avgFirstResponseSec: 125,
+    medianFirstResponseSec: 125,
     avgTimeToSolveSec: 7300,
     inTimePct: 85.4,
   },
@@ -227,7 +227,7 @@ const agents = [
     chats: 0,
     noReply: 0,
     commonTaken: 0,
-    avgFirstResponseSec: null,
+    medianFirstResponseSec: null,
     avgTimeToSolveSec: null,
     inTimePct: null,
   },
@@ -732,7 +732,7 @@ describe('AgentReportsPage — agent KPI report', () => {
     // sort the reader just applied is the order the rows come out in.
     const lines = await csvText(dl.blobs[0]!);
     expect(lines[0]).toBe(
-      'Agent,Chats,Not replied,Replied within 5 min,First response (avg),Time to solve (avg),Common chats taken,Tickets,Customer rating (1-5)',
+      'Agent,Chats,Not replied,Replied within 5 min,First response (median),Time to solve (avg),Common chats taken,Tickets,Customer rating (1-5)',
     );
     expect(lines[1]!.startsWith('Unassigned,')).toBe(true);
     expect(lines[2]!.startsWith('Ann Lee,')).toBe(true);

@@ -12,6 +12,7 @@ import {
   agentPerformance,
   chatHandoffs,
   conversationTimestamps,
+  firstResponseSec,
   readChunked,
   splitLocalDateTime,
   type ComplaintReportRow,
@@ -215,8 +216,15 @@ export interface AgentKpiRow {
   noReply: number;
   /** Chats picked up after somebody else let them go. */
   commonTaken: number;
-  /** Mean seconds to first reply over the agent's own answered chats. */
-  avgFirstResponseSec: number | null;
+  /**
+   * MEDIAN seconds to first reply over the chats the agent answered.
+   *
+   * The median, not the mean (owner decision, 2026-10-05). One chat answered
+   * the next morning is worth hundreds of quick replies in a mean, so a single
+   * overnight wait could make a fast agent read as the slowest on the team. The
+   * median is what a typical customer of theirs waited.
+   */
+  medianFirstResponseSec: number | null;
   /** Mean seconds from first message to solved. */
   avgTimeToSolveSec: number | null;
   /** % of own answered chats answered within the 5-minute target. */
@@ -966,16 +974,28 @@ async function loadAgentReport(
        * columns describe the same population — a percentage beside an average of
        * a different set of chats is worse than no percentage.
        */
+      /*
+       * ONE POPULATION WITH THE FIRST-RESPONSE COLUMN (2026-10-05).
+       *
+       * Two drifts from `agentPerformance` remained. This tally credited
+       * `firstAgentBy ?? agentId` while the timing credited
+       * `firstAgentBy ?? takenBy ?? agentId`, so a chat picked up off the ladder
+       * by an agent whose reply had no `sender_user` counted toward its
+       * ASSIGNEE's percentage and its TAKER's time. And a negative wait (clock
+       * skew, a repaired row) stayed in the denominator as a miss here while
+       * the timing discarded it as no measurement. Both now follow the shared
+       * rule: `firstResponseSec` drops the unmeasurable, and the key is the
+       * same responder chain.
+       */
       const TARGET_SEC = 5 * 60;
       const inTime = new Map<string, { answered: number; inTime: number }>();
       for (const c of timings) {
-        if (!c.firstCustomerAt || !c.firstAgentAt) continue;
-        const key = c.firstAgentBy ?? c.agentId ?? '';
+        const sec = firstResponseSec(c);
+        if (sec === null) continue;
+        const key = c.firstAgentBy ?? c.takenBy ?? c.agentId ?? '';
         const t = inTime.get(key) ?? { answered: 0, inTime: 0 };
         t.answered += 1;
-        const sec =
-          (new Date(c.firstAgentAt).getTime() - new Date(c.firstCustomerAt).getTime()) / 1000;
-        if (sec >= 0 && sec <= TARGET_SEC) t.inTime += 1;
+        if (sec <= TARGET_SEC) t.inTime += 1;
         inTime.set(key, t);
       }
 
@@ -1005,7 +1025,7 @@ async function loadAgentReport(
             chats: perf?.chats ?? 0,
             noReply: perf?.unanswered ?? 0,
             commonTaken: perf?.commonChats ?? 0,
-            avgFirstResponseSec: perf?.avgFirstResponseSec ?? null,
+            medianFirstResponseSec: perf?.medianFirstResponseSec ?? null,
             avgTimeToSolveSec: perf?.avgTimeToSolveSec ?? null,
             inTimePct: it && it.answered > 0 ? (it.inTime / it.answered) * 100 : null,
           };

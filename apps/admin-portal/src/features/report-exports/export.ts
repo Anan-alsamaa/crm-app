@@ -229,7 +229,9 @@ export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[
     { header: t('agentReports.col.noReply', { defaultValue: 'No reply yet' }), width: 13 },
     { header: t('agentReports.col.inTime', { defaultValue: 'Answered in time' }), width: 17 },
     {
-      header: t('agentReports.col.firstResponseAvg', { defaultValue: 'First response (avg)' }),
+      header: t('agentReports.col.firstResponseMedian', {
+        defaultValue: 'First response (median)',
+      }),
       width: 19,
     },
     {
@@ -249,7 +251,7 @@ export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[
     a.chats,
     a.noReply,
     a.inTimePct == null ? '' : `${Math.round(a.inTimePct)}%`,
-    formatDuration(a.avgFirstResponseSec) ?? '',
+    formatDuration(a.medianFirstResponseSec) ?? '',
     formatDuration(a.avgTimeToSolveSec) ?? '',
     a.commonTaken,
     a.tickets,

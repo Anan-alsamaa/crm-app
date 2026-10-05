@@ -639,7 +639,7 @@
     "col.chats": "Chats",
     "col.noReply": "No reply yet",
     "col.inTime": "Answered in time",
-    "col.firstResponseAvg": "First response (avg)",
+    "col.firstResponseMedian": "First response (median)",
     "col.timeToSolve": "Time to solve (avg)",
     "col.commonTaken": "Common chats taken",
     "byDay": "By day",

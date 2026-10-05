@@ -106,7 +106,7 @@
     "col.chats": "المحادثات",
     "col.noReply": "بلا رد بعد",
     "col.inTime": "الرد في الوقت",
-    "col.firstResponseAvg": "متوسط أول رد",
+    "col.firstResponseMedian": "وسيط زمن أول رد",
     "col.timeToSolve": "متوسط زمن الحل",
     "col.commonTaken": "محادثات مشتركة تم تولّيها",
     "statusAll": "الكل",

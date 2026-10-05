@@ -303,7 +303,7 @@ const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | un
   chats: (r) => r.chats,
   noReply: (r) => r.noReply,
   inTimePct: (r) => r.inTimePct,
-  avgFirstResponseSec: (r) => r.avgFirstResponseSec,
+  medianFirstResponseSec: (r) => r.medianFirstResponseSec,
   avgTimeToSolveSec: (r) => r.avgTimeToSolveSec,
   commonTaken: (r) => r.commonTaken,
   tickets: (r) => r.tickets,
@@ -1951,8 +1951,10 @@ function AgentKpiReport({
       value: (a) => (a.inTimePct == null ? null : Math.round(a.inTimePct)),
     },
     {
-      header: tr('agentReports.col.firstResponseAvg', { defaultValue: 'First response (avg)' }),
-      value: (a) => formatDuration(a.avgFirstResponseSec),
+      header: tr('agentReports.col.firstResponseMedian', {
+        defaultValue: 'First response (median)',
+      }),
+      value: (a) => formatDuration(a.medianFirstResponseSec),
     },
     {
       header: tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
@@ -2077,8 +2079,12 @@ function AgentKpiReport({
               <SortTh {...sp('inTimePct', 'end')}>
                 {tr('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' })}
               </SortTh>
-              <SortTh {...sp('avgFirstResponseSec', 'end')}>
-                {tr('agentReports.col.firstResponseAvg', { defaultValue: 'First response (avg)' })}
+              {/* The MEDIAN (owner, 2026-10-05): one chat answered the next
+                  morning outweighed hundreds of quick replies in the mean. */}
+              <SortTh {...sp('medianFirstResponseSec', 'end')}>
+                {tr('agentReports.col.firstResponseMedian', {
+                  defaultValue: 'First response (median)',
+                })}
               </SortTh>
               <SortTh {...sp('avgTimeToSolveSec', 'end')}>
                 {tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' })}
@@ -2129,7 +2135,7 @@ function AgentKpiReport({
                   )}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">
-                  {formatDuration(a.avgFirstResponseSec) ?? '—'}
+                  {formatDuration(a.medianFirstResponseSec) ?? '—'}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">
                   {formatDuration(a.avgTimeToSolveSec) ?? '—'}
