@@ -326,7 +326,9 @@
       "already_deleted": "That message was already deleted.",
       "edit_failed": "Couldn't edit the message. Please retry.",
       "delete_failed": "Couldn't delete the message. Please retry."
-    }
+    },
+    "editShort": "Edit",
+    "deleteShort": "Delete"
   },
   "sidebar": {
     "contact": "Contact",

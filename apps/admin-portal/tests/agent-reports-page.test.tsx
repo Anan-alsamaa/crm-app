@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -871,6 +871,20 @@ describe('AgentReportsPage — conversation status report', () => {
 });
 
 describe('AgentReportsPage — ticket breakdown: typed dates fetch', () => {
+  /*
+   * PINNED CLOCK. The remembered range below ends on 2026-10-05, and the page
+   * deliberately rolls a range that ended "today" forward to the new today —
+   * so on 2026-10-06 these tests failed with a correct page. Only `Date` is
+   * faked; timers stay real so userEvent is unaffected.
+   */
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-05T12:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   /*
    * Owner, 2026-10-05: after importing 7,903 historic tickets, From 05/01/2021
    * To 05/10/2026 + Apply did nothing — the dates only filtered the 30 days

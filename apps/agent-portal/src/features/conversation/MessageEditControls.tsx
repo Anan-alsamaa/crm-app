@@ -11,8 +11,15 @@ import { cn } from '@yiji/ui';
  * (`canOfferMessageActions`); the gateway enforces it either way.
  */
 
+/*
+ * ALWAYS VISIBLE, WITH WORDS (owner, 2026-10-06: "I don't see EMA-33 on
+ * staging"). They were icon-only and `opacity-0` until the bubble was hovered —
+ * a faint pencil beside Copy that nobody found, and invisible on a touch
+ * screen. Like WhatsApp's message menu, the options now sit plainly under every
+ * reply that can still be changed, and disappear when the 15 minutes run out.
+ */
 const ICON_BUTTON =
-  'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/msg:opacity-100';
+  'inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-2xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50';
 
 /** Hover actions beside an own reply: Edit (only when it has text) and Delete. */
 export function OwnMessageActions({
@@ -47,6 +54,7 @@ export function OwnMessageActions({
           >
             <path d="M11 2.5l2.5 2.5L6 12.5H3.5V10z" />
           </svg>
+          <span aria-hidden>{t('conversation.editShort', { defaultValue: 'Edit' })}</span>
         </button>
       )}
       <button
@@ -67,6 +75,7 @@ export function OwnMessageActions({
         >
           <path d="M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6" />
         </svg>
+        <span aria-hidden>{t('conversation.deleteShort', { defaultValue: 'Delete' })}</span>
       </button>
     </>
   );
