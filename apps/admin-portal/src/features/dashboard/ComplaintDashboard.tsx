@@ -36,6 +36,7 @@ import {
 import { CouponSpend, useCouponSpend } from './CouponSpend.js';
 import { couponWorth } from '@yiji/reports';
 import { CustomerReach } from './CustomerReach.js';
+import { lastMonth } from '../../lib/date-range.js';
 
 /**
  * The operations manager's Dashboard, rebuilt on our data.
@@ -784,8 +785,21 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
   const { t, i18n } = useTranslation();
   // Draft vs applied: his bar only re-runs the dashboard on Apply, which matters
   // when a filter change means refetching every ticket.
-  const [draft, setDraft] = useState<ComplaintFilters>(emptyComplaintFilters);
-  const [applied, setApplied] = useState<ComplaintFilters>(emptyComplaintFilters);
+  /*
+   * OPENS ON THE LAST 30 DAYS, not on everything (owner, 2026-10-05).
+   *
+   * Empty filters meant "every ticket ever", fetched in full on every open.
+   * That was tolerable at 75 tickets and is not at 7,987 after the history
+   * import. The reports already open on the last month (`lastMonth`, see
+   * lib/date-range.ts); the dashboard now does the same, and "All" is still one
+   * click away on the year pills for anyone who wants the whole history.
+   */
+  const [opening] = useState<ComplaintFilters>(() => ({
+    ...emptyComplaintFilters,
+    ...lastMonth(),
+  }));
+  const [draft, setDraft] = useState<ComplaintFilters>(opening);
+  const [applied, setApplied] = useState<ComplaintFilters>(opening);
   const m = useComplaintMetrics(applied);
   const d = m.data;
   const years = useComplaintYears();
@@ -895,7 +909,10 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
       return next;
     });
   };
-  const anyFilter = Object.values(applied).some(Boolean);
+  /* "Anything to clear" now means "anything other than how the page opened":
+     the opening window is itself a filter, and Clear returning to it must not
+     count as having something to clear. */
+  const anyFilter = JSON.stringify(applied) !== JSON.stringify(opening);
 
   // The two footer-total memos that lived here went with the agent tables
   // they summed — see the note further down.
@@ -1120,8 +1137,10 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             variant="ghost"
             disabled={!anyFilter && !dirty}
             onClick={() => {
-              setDraft(emptyComplaintFilters);
-              setApplied(emptyComplaintFilters);
+              // Back to how the page opened — the last 30 days — not to "every
+              // ticket ever", which is what an empty filter set fetches.
+              setDraft(opening);
+              setApplied(opening);
             }}
           >
             {t('complaintDash.clear', { defaultValue: 'Clear' })}

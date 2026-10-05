@@ -128,10 +128,10 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
       const dateFilter: Record<string, unknown> = { _gte: since };
       if (to) dateFilter._lte = `${to}T23:59:59`;
 
-      const [tickets, chats, users] = await Promise.all([
+      const readTickets = (filter: unknown) =>
         directus.request(
           readItems('tickets', {
-            filter: { date_created: dateFilter },
+            filter: filter as never,
             fields: [
               'id',
               'subject',
@@ -147,7 +147,30 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
             limit: -1,
             sort: ['-date_created'],
           }),
-        ) as Promise<RawTicket[]>,
+        ) as Promise<RawTicket[]>;
+
+      const [tickets, chats, users] = await Promise.all([
+        /*
+         * WHEN THE COMPLAINT HAPPENED, falling back to creation — the same
+         * window the ticket breakdown uses (owner, 2026-10-05).
+         *
+         * This filtered `date_created` alone, and on 2026-10-05 7,912 historical
+         * tickets were imported in one go, every one stamped with that day. The
+         * default 30-day window then returned all 7,987 tickets: nine months of
+         * history counted as "this month". `complaint_date` is when the ticket
+         * is about; tickets raised before that field existed have none, and the
+         * `_and` branch keeps them dated from creation instead of dropping them.
+         *
+         * A Directus without the complaint schema rejects the whole query for
+         * the unknown field, so it falls back to the old creation-date window
+         * rather than taking the SLA page down.
+         */
+        readTickets({
+          _or: [
+            { complaint_date: dateFilter },
+            { _and: [{ complaint_date: { _null: true } }, { date_created: dateFilter }] },
+          ],
+        }).catch(() => readTickets({ date_created: dateFilter })),
         /*
          * The chats whose first-response promise falls in this window.
          *

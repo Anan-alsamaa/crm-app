@@ -318,14 +318,45 @@ describe('ticket dashboard — filters', () => {
     const ticketsQuery = request.mock.calls
       .map((c) => c[0] as { collection: string; opts: { filter?: Record<string, unknown> } })
       .find((q) => q.collection === 'tickets');
+    const window = {
+      _gte: '2026-01-01T08:00:00',
+      // 04:00 the NEXT morning — a ticket raised at 01:00 on 01/08 belongs to
+      // 31/07's night and must still be inside the range.
+      _lte: '2026-08-01T04:00:00',
+    };
     expect(ticketsQuery?.opts.filter).toEqual({
-      date_created: {
-        _gte: '2026-01-01T08:00:00',
-        // 04:00 the NEXT morning — a ticket raised at 01:00 on 01/08 belongs to
-        // 31/07's night and must still be inside the range.
-        _lte: '2026-08-01T04:00:00',
-      },
+      _or: [
+        { complaint_date: window },
+        { _and: [{ complaint_date: { _null: true } }, { date_created: window }] },
+      ],
     });
+  });
+
+  /*
+   * THE IMPORT DAY (owner, 2026-10-05). 7,912 historical tickets were imported
+   * with one creation stamp, so a `date_created` window counted nine months of
+   * history as "today" and showed none of it on the months it describes. The
+   * dashboard asks when the complaint HAPPENED, and dates its trend by it too.
+   */
+  it('windows and dates tickets by complaint_date, not by when they were imported', async () => {
+    mockData({
+      tickets: [
+        ticket({
+          id: 'imported',
+          date_created: '2026-10-05T09:00:00Z',
+          complaint_date: '2026-02-14T19:00:00Z',
+        }),
+      ],
+      stores: STORES,
+      users: USERS,
+    });
+    const d = await run({ ...emptyComplaintFilters, from: '2026-02-01', to: '2026-02-28' });
+    const ticketsQuery = request.mock.calls
+      .map((c) => c[0] as { collection: string; opts: { filter?: Record<string, unknown> } })
+      .find((q) => q.collection === 'tickets');
+    expect(ticketsQuery?.opts.filter).not.toHaveProperty('date_created');
+    expect(JSON.stringify(ticketsQuery?.opts.filter)).toContain('complaint_date');
+    expect(d.rows[0]?.date).toBe('2026-02-14');
   });
 
   it('sends no date filter at all when the range is left open', async () => {

@@ -283,3 +283,64 @@ describe('sla-reports api', () => {
     expect(data.tickets.find((t) => t.id === 't2')!.agentName).toBe('—');
   });
 });
+
+/**
+ * THE IMPORT DAY (owner, 2026-10-05).
+ *
+ * 7,912 historical tickets were imported on 2026-10-05, every one stamped with
+ * that day's `date_created`. A window on `date_created` alone therefore put
+ * nine months of history into "the last 30 days" — the default view counted
+ * all 7,987 tickets. The window must ask when the complaint HAPPENED.
+ */
+describe('sla-reports ticket window', () => {
+  const ticketQueries = () =>
+    request.mock.calls
+      .map(([arg]) => arg as { collection: string; opts: { filter?: unknown } })
+      .filter((c) => c?.collection === 'tickets');
+
+  it('filters tickets by complaint_date, falling back to date_created when it is null', async () => {
+    mockData([]);
+    const { result } = renderHook(
+      () => useSlaReports(30, { from: '2026-09-01', to: '2026-09-30' }),
+      { wrapper: wrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const [q] = ticketQueries();
+    const filter = q!.opts.filter as { _or?: unknown[]; date_created?: unknown };
+    // Not a bare creation-date window — that is the bug.
+    expect(filter.date_created).toBeUndefined();
+    const window = { _gte: '2026-09-01T00:00:00', _lte: '2026-09-30T23:59:59' };
+    expect(filter._or).toEqual([
+      { complaint_date: window },
+      { _and: [{ complaint_date: { _null: true } }, { date_created: window }] },
+    ]);
+  });
+
+  it('falls back to the creation-date window on a Directus without complaint_date', async () => {
+    request.mockImplementation(async (arg: unknown) => {
+      const c = arg as { collection?: string; opts?: { filter?: unknown } };
+      if (c.collection !== 'tickets') return [];
+      if (JSON.stringify(c.opts?.filter).includes('complaint_date')) {
+        throw new Error('field complaint_date does not exist');
+      }
+      return [
+        {
+          id: 't1',
+          subject: 'x',
+          status: 'open',
+          priority: 'normal',
+          assigned_agent: null,
+          date_created: past(1),
+          first_response_due_at: null,
+          first_responded_at: null,
+          resolution_due_at: null,
+          resolved_at: null,
+        },
+      ];
+    });
+    const { result } = renderHook(() => useSlaReports(7), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data!.tickets.map((t) => t.id)).toEqual(['t1']);
+    expect(ticketQueries().at(-1)!.opts.filter).toHaveProperty('date_created');
+  });
+});

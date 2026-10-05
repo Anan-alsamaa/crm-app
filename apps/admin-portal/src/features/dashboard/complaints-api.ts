@@ -324,6 +324,8 @@ interface TicketRecord {
   subject: string | null;
   status: string;
   date_created: string | null;
+  /** When the complaint happened; null on tickets older than the field. */
+  complaint_date?: string | null;
   resolved_at: string | null;
   closed_at: string | null;
   first_responded_at: string | null;
@@ -444,17 +446,37 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       const w = businessDayWindow(filters.from || '0000-01-01', filters.to || '9999-12-31');
       if (filters.from) dateFilter._gte = w.fromIso;
       if (filters.to) dateFilter._lte = w.toIso;
+      /*
+       * WHEN THE COMPLAINT HAPPENED, falling back to creation (owner,
+       * 2026-10-05) — the ticket breakdown's window, so the two agree.
+       *
+       * This filtered `date_created`, and on 2026-10-05 7,912 historical tickets
+       * were imported in one go, every one created that day: any range touching
+       * today counted nine months of history, and any range before today showed
+       * none of it. Tickets raised before `complaint_date` existed have none,
+       * so the `_and` branch keeps them, dated from creation.
+       */
+      const ticketWindow =
+        filters.from || filters.to
+          ? {
+              _or: [
+                { complaint_date: dateFilter },
+                { _and: [{ complaint_date: { _null: true } }, { date_created: dateFilter }] },
+              ],
+            }
+          : null;
 
       const [tickets, storeRows, users, csat, conversations, routing, messageCounts] =
         await Promise.all([
           directus.request(
             readItems('tickets', {
-              ...(filters.from || filters.to ? { filter: { date_created: dateFilter } } : {}),
+              ...(ticketWindow ? { filter: ticketWindow } : {}),
               fields: [
                 'id',
                 'subject',
                 'status',
                 'date_created',
+                'complaint_date',
                 'resolved_at',
                 'closed_at',
                 'first_responded_at',
@@ -755,7 +777,10 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         // two questions ("was it settled" / "what did it cost") are different.
         if (r.compensation === 'Compensated') compensated += 1;
 
-        const day = (r.date_created ?? '').slice(0, 10);
+        /* Dated by when it HAPPENED, like the window above: an imported ticket
+           is about the month it describes, not the day it was typed in. */
+        const when = r.complaint_date ?? r.date_created ?? '';
+        const day = when.slice(0, 10);
         if (day) {
           if (!firstDate || day < firstDate) firstDate = day;
           if (!lastDate || day > lastDate) lastDate = day;
@@ -787,7 +812,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           }
         }
 
-        const month = (r.date_created ?? '').slice(0, 7);
+        const month = when.slice(0, 7);
         if (month) {
           const cur = monthMap.get(month) ?? { month, count: 0 };
           cur.count += 1;
@@ -807,7 +832,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         flat.push({
           id: r.id,
           subject: r.subject ?? '',
-          date: (r.date_created ?? '').slice(0, 10),
+          date: day,
           status: r.status,
           agentId,
           agentName: nameOf(agentId),

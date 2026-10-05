@@ -465,3 +465,22 @@ describe('ComplaintDashboard — Operations is about the estate, not the queue',
     }
   });
 });
+
+/*
+ * THE OPENING WINDOW (owner, 2026-10-05).
+ *
+ * Empty filters fetch every ticket ever, and after the 7,912-row history import
+ * that is what opening the dashboard did. It opens on the last 30 days now —
+ * the same `lastMonth` the reports open on — and Clear goes back there.
+ */
+describe('ComplaintDashboard — default range', () => {
+  it('asks for the last 30 days on open, not for every ticket', async () => {
+    const { lastMonth } = await import('../src/lib/date-range.js');
+    api.useComplaintMetrics.mockClear();
+    render(<ComplaintDashboard />);
+    const first = api.useComplaintMetrics.mock.calls[0]?.[0] as { from: string; to: string };
+    expect(first.from).toBe(lastMonth().from);
+    expect(first.to).toBe(lastMonth().to);
+    expect(first.from).not.toBe('');
+  });
+});
