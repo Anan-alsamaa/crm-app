@@ -329,6 +329,43 @@ hit exactly that on 2026-09-16.
 
 **Staging is never gated**: it exists to be looked at immediately.
 
+### "4/4 digest-verified" does NOT mean the UI shipped
+
+The services and the gated surfaces ship by different mechanisms, and only one
+of them is verifiable by digest. A release can be entirely successful — four
+services deployed, digests matching ECR, zero downtime — while **no
+agent-facing change reaches anybody**.
+
+That is not hypothetical. On 2026-10-05 the owner reported a fix missing from
+production that had been built, tagged and parked for **three** releases
+(`v1.35.0`, `v1.36.0`, `v1.37.0`), because every release report said "live on
+production, 4/4 digest-verified" — true of the services, quietly false of the
+portal. Diagnosing it took downloading 31 JavaScript chunks and grepping them,
+since the component lived in a shared chunk rather than the one named after the
+feature.
+
+So, after any production release:
+
+```bash
+node scripts/check-portal-promoted.mjs           # prod
+node scripts/check-portal-promoted.mjs --staging
+```
+
+It compares the live entry hash against the parked one and says, in words,
+whether the owner still has a button to press. Two requests per surface instead
+of thirty-one.
+
+**Report the portal's promotion status as its own line.** Never let a service
+digest count stand in for "the UI is live" — they are separate claims and only
+one of them is proven by `aws ecs describe-tasks`.
+
+A differing hash is the signal, not the mere existence of `pending/`: the
+directory survives a promotion, so an identical hash means the parked build is
+already serving. On staging, a 404 **or 403** for `pending/index.html` is the
+correct answer — nothing is ever parked there, and S3 answers `AccessDenied`
+rather than `NoSuchKey` for a missing object when the bucket policy withholds
+`s3:ListBucket`.
+
 ### What makes it work
 
 | Piece        | Where                                                                                 |
