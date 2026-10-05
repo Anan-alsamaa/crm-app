@@ -113,6 +113,25 @@ const STAT_FILTERS = ['open', 'pending', 'overdue'] as const satisfies readonly 
 /** The rest, as quiet text below the tiles, so nothing becomes unreachable. */
 const REST_FILTERS = ['all', 'solved'] as const satisfies readonly TicketFilter[];
 
+/**
+ * Every status the TOOLBAR dropdown offers, in the order an agent thinks about
+ * them: the work, then what is late.
+ *
+ * Deliberately NOT `STAT_FILTERS` — that set exists to decide which three
+ * deserve a counted tile, and `solved` is excluded from it because a tile for
+ * finished work is not what somebody scans a queue for. A dropdown has no such
+ * budget, and a status menu missing "Solved" is a menu that cannot answer
+ * "show me what we closed", which is most of what a supervisor asks it.
+ *
+ * `all` is not here: it is the menu's placeholder row, not a status.
+ */
+const STATUS_FILTERS = [
+  'open',
+  'pending',
+  'solved',
+  'overdue',
+] as const satisfies readonly TicketFilter[];
+
 /** Late is alarming, in-hand is not. `default` is the calm green dot. */
 const STAT_TONE: Record<(typeof STAT_FILTERS)[number], 'default' | 'primary' | 'destructive'> = {
   open: 'default',
@@ -405,6 +424,45 @@ export function TicketsPage() {
                     // From the data in range, not the full vocabulary: a menu of
                     // types this agent has never handled is a list to read past.
                     ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
+                  ]}
+                />
+                {/*
+                  STATUS BELONGS HERE TOO (owner, 2026-10-05): "along with the
+                  filters for agent, ticket type, we also need a status filter".
+                  It already existed as counted tiles in the rail below, which is
+                  a different gesture in a different place — an agent narrowing
+                  by agent and type looks for status in the same row and finds
+                  nothing. Reported twice as missing while technically present.
+
+                  The two stay in sync rather than competing: this writes the
+                  SAME `filter` state the tiles set, so picking "Open" here
+                  lights the Open tile and vice versa. Two controls disagreeing
+                  about one question is worse than having only one.
+
+                  Unlike the type menu above, the options are the full enum, not
+                  the values in range: status is a fixed vocabulary of three that
+                  an agent reasons about as a set, and a "Solved" option missing
+                  because today happens to have none reads as the filter being
+                  broken.
+                */}
+                <SelectMenu
+                  size="sm"
+                  className="w-full"
+                  value={filter}
+                  onChange={(v) => setFilter(v as TicketFilter)}
+                  aria-label={t('tickets.statusLabel', { defaultValue: 'Status' })}
+                  options={[
+                    { value: 'all', label: t('tickets.anyStatus', { defaultValue: 'Any status' }) },
+                    // The SAME translation keys the tiles use, so one status
+                    // never reads two ways on one screen — in Arabic too.
+                    ...STATUS_FILTERS.map((f) => ({
+                      value: f,
+                      label: `${
+                        f === 'overdue'
+                          ? t('tickets.overdue', { defaultValue: 'Overdue' })
+                          : t(`status.${f}`, { ns: 'common' })
+                      } (${filterCount(f)})`,
+                    })),
                   ]}
                 />
                 {/* The dates carry visible micro-labels: two bare date boxes side

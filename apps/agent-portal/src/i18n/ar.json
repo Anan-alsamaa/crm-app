@@ -543,6 +543,8 @@
     "searchPlaceholder": "رقم الطلب، الجوال، الفرع…",
     "searchLabel": "بحث في التذاكر",
     "anyType": "أي نوع تذكرة",
+    "anyStatus": "أي حالة",
+    "statusLabel": "الحالة",
     "clearSearch": "مسح",
     "searchCount": "{{shown}} من {{total}} تذكرة",
     "orderToggle": "تفاصيل الطلب {{orderId}}",

@@ -438,6 +438,8 @@
     "searchPlaceholder": "Order number, phone, branch…",
     "searchLabel": "Search tickets",
     "anyType": "Any ticket type",
+    "anyStatus": "Any status",
+    "statusLabel": "Status",
     "clearSearch": "Clear",
     "searchCount": "{{shown}} of {{total}} tickets",
     "orderToggle": "Order {{orderId}} details",
