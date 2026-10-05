@@ -19,6 +19,7 @@ import {
   yijiDeliveryTypes,
   yijiIssuingSideId,
   YIJI_ORDER_MAXIMUM,
+  YIJI_REACH_LIMIT,
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
@@ -605,7 +606,9 @@ export function yijiCouponPayload(
        * goes to somebody over WhatsApp and anyone who learns it can spend it.
        * The pool is the ONLY bound there, so it is exactly the allowance.
        */
-      reachLimit: opts?.unassigned ? limit : Math.max(limit * 100, 1000),
+      /* Assigned: the owner's fixed 10000 (2026-10-05), never below the
+         customer's own allowance so the pool cannot bind first. */
+      reachLimit: opts?.unassigned ? limit : Math.max(YIJI_REACH_LIMIT, limit),
       limitForUser: limit,
       monthlyReachLimit: limit,
       /*

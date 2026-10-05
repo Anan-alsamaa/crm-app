@@ -182,9 +182,10 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
      * meaning, and only one of them silently nullifies the coupon.
      */
     const c = coupon();
-    // The exact figure is the owner's call (100000); what this test guards is
-    // that it is SENT and is not 0 — a ceiling of zero is the failing case.
-    expect(c.orderMaximum).toBe(100000);
+    // The exact figure is the owner's call (1000000 since 2026-10-05); what this
+    // test guards is that it is SENT and is not 0 — a ceiling of zero is the
+    // failing case.
+    expect(c.orderMaximum).toBe(1000000);
     expect(c.orderMaximum).not.toBe(0);
     // Both ends stated rather than left to a default, so neither can drift.
     expect(c.orderMinimum).toBe(0);
@@ -211,7 +212,8 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
     /* Yiji's own console sends `reachLimit: 1002` beside `monthlyReachLimit: 3`
        — the pool is deliberately far above the allowance so it never binds. */
     expect(c.reachLimit).not.toBe(1);
-    expect(Number(c.reachLimit)).toBeGreaterThanOrEqual(1000);
+    // The owner's fixed CRM value (2026-10-05).
+    expect(c.reachLimit).toBe(10000);
     expect(c.limitForUser).toBe(1);
     expect(c.monthlyReachLimit).toBe(1);
   });

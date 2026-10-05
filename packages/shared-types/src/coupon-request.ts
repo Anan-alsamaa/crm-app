@@ -621,7 +621,15 @@ export function yijiDeliveryTypes(stored: string | null | undefined): number[] |
  * headroom, and headroom is the safe direction — a ceiling that is too high
  * does nothing, while one that is too low silently caps a legitimate order.
  */
-export const YIJI_ORDER_MAXIMUM = 100000;
+export const YIJI_ORDER_MAXIMUM = 1000000;
+
+/**
+ * Yiji's `reachLimit` — the TOTAL redemptions across every holder — for a
+ * coupon granted to one named customer. A fixed CRM value set by the owner
+ * (2026-10-05: orderMaximum 1000000, reachLimit 10000), replacing the derived
+ * `max(uses × 100, 1000)`. What bounds the customer is `monthlyReachLimit`.
+ */
+export const YIJI_REACH_LIMIT = 10000;
 
 /**
  * Yiji's `type`: what audience the coupon is for.
