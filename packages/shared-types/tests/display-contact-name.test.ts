@@ -129,6 +129,32 @@ describe('the +966 names production actually stores', () => {
   it('converts from the name alone', () => {
     expect(displayContactName('+966503709699', null)).toBe('0503709699');
   });
+
+  /*
+   * ALL FOUR SHAPES PRODUCTION ACTUALLY HOLDS, surveyed across its 297
+   * contacts on 2026-10-05:
+   *
+   *     101  +966XXXXXXXXX
+   *      70  05XXXXXXXX     (already canonical)
+   *      49  9-digit, no leading zero
+   *      46  a real name
+   *      31  empty
+   *
+   * The report named only the `+966` shape, which is the largest — but the
+   * 49 nine-digit names are the same fault wearing different clothes, and a fix
+   * that covered one and not the other would have left a second population
+   * reading differently on the same screen. 220 of 297 names are phone-shaped;
+   * every one of them resolves.
+   */
+  it.each([
+    ['+966503709699', '0503709699'],
+    ['966547883966', '0547883966'],
+    ['549896288', '0549896288'],
+    ['504788770', '0504788770'],
+    ['0503709699', '0503709699'],
+  ])('%s resolves to %s', (stored, expected) => {
+    expect(displayContactName(stored, expected)).toBe(expected);
+  });
 });
 
 describe('no name at all', () => {
