@@ -14,6 +14,8 @@
  *   customer uploads a photo exactly as a browser does: CORS preflight first,
  *   then POST /chat/attachment, then sends it → agent receives it and can open
  *   the file (EMA-50 — photos were refused at the preflight, twice)
+ *   a new session's first message is followed by the automatic welcome, which
+ *   leaves the first-response clock running (owner, 2026-10-06)
  *
  * Usage:
  *   API=https://crm-api-staging.anan.sa ADMIN_EMAIL=… ADMIN_PASSWORD=… \
@@ -101,6 +103,34 @@ try {
      `ready` (one conversation per contact); a new one gets it on the first
      message via `conversation:ready`. Both are correct — accept either. */
   const readyP = waitFor(customer, 'conversation:ready', () => true, 15_000).catch(() => null);
+  /*
+   * THE AUTOMATIC WELCOME (owner, 2026-10-06): the first message of a NEW
+   * session — a fresh thread, or a closed one this message reopens (this check
+   * closes its thread at the end, so every run after the first is a reopen) —
+   * is followed by operations' "رسالة ترحيب" template as an agent-style
+   * message marked `automated`. Listened for BEFORE the send so it cannot be
+   * missed.
+   */
+  let priorStatus = null;
+  if (ready?.conversationId) {
+    const c = await fetch(
+      `${API}/items/conversations/${ready.conversationId}?fields=status,initiated_by`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    )
+      .then((r) => r.json())
+      .catch(() => null);
+    priorStatus = c?.data ?? null;
+  }
+  const newSession =
+    !ready?.conversationId ||
+    (['solved', 'resolved', 'closed'].includes(priorStatus?.status) &&
+      priorStatus?.initiated_by !== 'agent');
+  const welcomeP = waitFor(
+    customer,
+    'message:new',
+    (m) => m.senderType === 'agent' && m.automated === true,
+    10_000,
+  ).catch(() => null);
   customer.emit('message:send', {
     ...(ready?.conversationId ? { conversationId: ready.conversationId } : {}),
     content: `${stamp} — customer text`,
@@ -109,6 +139,30 @@ try {
   conversationId = String(ready?.conversationId ?? (await readyP)?.conversationId ?? '') || null;
   step('customer message lands in a conversation', !!conversationId, conversationId ?? 'none');
   if (!conversationId) throw new Error('no conversation');
+
+  if (newSession) {
+    const welcome = await welcomeP;
+    step(
+      'automatic welcome follows the first message of a new session',
+      !!welcome && !welcome.senderUserId,
+      welcome ? '' : 'none received (is the رسالة ترحيب row active?)',
+    );
+    /* THE WELCOME IS NOT AN ANSWER: the first-response clock must still be
+       running after it — it is stopped only by a person's reply. */
+    const conv = await fetch(
+      `${API}/items/conversations/${conversationId}?fields=first_responded_at`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    )
+      .then((r) => r.json())
+      .catch(() => null);
+    step(
+      'the automatic welcome does not count as a first response',
+      conv?.data?.first_responded_at === null,
+      `first_responded_at=${conv?.data?.first_responded_at}`,
+    );
+  } else {
+    console.log('info  conversation was already open — no new session, no welcome expected');
+  }
 
   agent.emit('conversation:subscribe', { conversationId });
   await new Promise((r) => setTimeout(r, 800));
@@ -127,7 +181,12 @@ try {
   step('agent receives the customer message live', seen.content.includes('customer second'));
 
   // ── agent → customer ────────────────────────────────────────────────────
-  const custGets = waitFor(customer, 'message:new', (m) => m.senderType === 'agent');
+  // A PERSON's reply — never the automatic welcome (owner, 2026-10-06).
+  const custGets = waitFor(
+    customer,
+    'message:new',
+    (m) => m.senderType === 'agent' && !m.automated && String(m.content).includes('agent reply'),
+  );
   agent.emit('message:send', {
     conversationId,
     content: `${stamp} — agent reply`,
