@@ -264,3 +264,96 @@ describe('supervisor override on Yiji delivery', () => {
     expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
   });
 });
+
+/*
+ * A WITHHELD COUPON IS CREATED ON YIJI, assigned to nobody (owner, 2026-10-06).
+ * The card says which of the three states it is in, with Yiji's coupon id once
+ * it exists so operations can find it in Yiji's portal.
+ */
+describe('withheld coupon: created on Yiji, not sent to the customer', () => {
+  const approvedWithheld = (over: Record<string, unknown> = {}) =>
+    row({
+      status: 'approved',
+      decided_at: '2026-10-06T12:00:00Z',
+      delivery_excluded: true,
+      delivery_excluded_reason: 'Customer wanted a refund',
+      ...over,
+    });
+
+  it('shows the Yiji coupon id once it has been created', async () => {
+    const user = userEvent.setup();
+    api.useCouponApprovals.mockReturnValue({
+      isLoading: false,
+      data: [approvedWithheld({ yiji_coupon_id: '73900' })],
+    });
+    renderPage();
+    await expandFirst(user);
+    expect(
+      screen.getByText('Created on Yiji, not sent to the customer — Yiji coupon #73900'),
+    ).toBeInTheDocument();
+    // The existing reason line stays.
+    expect(
+      screen.getByText(/Not sent to the customer — Customer wanted a refund/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Not created on Yiji yet')).not.toBeInTheDocument();
+  });
+
+  it('says it has not been created yet before the worker gets to it', async () => {
+    const user = userEvent.setup();
+    api.useCouponApprovals.mockReturnValue({
+      isLoading: false,
+      data: [approvedWithheld({ yiji_coupon_id: null })],
+    });
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText('Not created on Yiji yet')).toBeInTheDocument();
+  });
+
+  it("shows Yiji's refusal in its own words (a duplicate code, say)", async () => {
+    const user = userEvent.setup();
+    api.useCouponApprovals.mockReturnValue({
+      isLoading: false,
+      data: [
+        approvedWithheld({
+          yiji_coupon_id: null,
+          yiji_push_error: "Coupon with Code 'SORRY10' already exists!",
+        }),
+      ],
+    });
+    renderPage();
+    await expandFirst(user);
+    expect(
+      screen.getByText(/Not created on Yiji — Yiji said: .*already exists/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Not created on Yiji yet')).not.toBeInTheDocument();
+  });
+
+  /* Its code is taken on Yiji and it must never be assigned, so the withhold
+     box cannot be unticked once it exists. */
+  it('removes the withhold control once the withheld coupon exists on Yiji', async () => {
+    const user = userEvent.setup();
+    api.useCouponApprovals.mockReturnValue({
+      isLoading: false,
+      data: [approvedWithheld({ yiji_coupon_id: '73900' })],
+    });
+    renderPage();
+    await expandFirst(user);
+    expect(
+      screen.queryByRole('checkbox', {
+        name: /do not send this to the customer on the yiji app/i,
+      }),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows none of this on a coupon that is not withheld', async () => {
+    const user = userEvent.setup();
+    api.useCouponApprovals.mockReturnValue({
+      isLoading: false,
+      data: [row({ status: 'approved', decided_at: '2026-10-06T12:00:00Z' })],
+    });
+    renderPage();
+    await expandFirst(user);
+    expect(screen.queryByText(/Not created on Yiji/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Created on Yiji/)).not.toBeInTheDocument();
+  });
+});

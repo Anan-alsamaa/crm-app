@@ -1045,7 +1045,10 @@
     "notDelivered": "Not delivered — Yiji said: {{why}}",
     "retryDelivery": "Try again",
     "noOrder": "No order number on this ticket, so Yiji cannot attach a coupon — their coupon is created FROM an order. Approving still records the decision, but the customer will not receive it in the app. Add the order number to the ticket if they have one.",
-    "deliveryExcluded": "Not sent to Yiji — {{why}}",
+    "deliveryExcluded": "Not sent to the customer — {{why}}",
+    "withheldCreated": "Created on Yiji, not sent to the customer — Yiji coupon #{{id}}",
+    "withheldPending": "Not created on Yiji yet",
+    "withheldRefused": "Not created on Yiji — Yiji said: {{why}}",
     "deliveryExcludedDefault": "marked never-send",
     "sendOnAppYes": "Send on app: Yes",
     "sendOnAppNo": "Send on app: No"

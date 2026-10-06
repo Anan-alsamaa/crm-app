@@ -71,6 +71,11 @@ export interface CouponApprovalRow {
   /** Marked never-send — a test row, or honoured in the branch instead. */
   delivery_excluded: boolean | null;
   delivery_excluded_reason: string | null;
+  /**
+   * Yiji's coupon id for a WITHHELD coupon, created there unassigned (owner,
+   * 2026-10-06). Never a customer grant — that is `yiji_coupon_user_id`.
+   */
+  yiji_coupon_id?: string | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -143,6 +148,7 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'yiji_push_error',
               'delivery_excluded',
               'delivery_excluded_reason',
+              'yiji_coupon_id',
               'order_id',
               {
                 ticket: [

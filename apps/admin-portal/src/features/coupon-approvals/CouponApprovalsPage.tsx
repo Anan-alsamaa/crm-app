@@ -785,7 +785,10 @@ function Row({
             that appeared to un-send a delivered coupon would be a lie. After
             delivery this reads as a plain statement of fact instead.
           */}
-          {!row.yiji_coupon_user_id && (
+          {/* Also gone once a WITHHELD coupon exists on Yiji (owner,
+              2026-10-06): its code is taken there, and unticking would route
+              a coupon that must never be assigned into the assignment path. */}
+          {!row.yiji_coupon_user_id && !row.yiji_coupon_id && (
             <div className="mt-2.5 rounded-lg bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.04]">
               <label className="flex cursor-pointer items-start gap-2.5">
                 <input
@@ -935,7 +938,7 @@ function Row({
           {approvedNotPending && row.delivery_excluded && (
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
               {t('couponApprovals.deliveryExcluded', {
-                defaultValue: 'Not sent to Yiji — {{why}}',
+                defaultValue: 'Not sent to the customer — {{why}}',
                 why:
                   row.delivery_excluded_reason?.trim() ||
                   t('couponApprovals.deliveryExcludedDefault', {
@@ -944,6 +947,37 @@ function Row({
               })}
             </p>
           )}
+          {/*
+            A WITHHELD COUPON IS STILL CREATED ON YIJI, assigned to nobody
+            (owner, 2026-10-06) — so the card says whether that has happened,
+            with Yiji's coupon id to find it in their portal. A refusal (a
+            duplicate code, say) is shown in Yiji's own words.
+          */}
+          {approvedNotPending &&
+            row.delivery_excluded &&
+            (row.yiji_coupon_id ? (
+              <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <Pill tone="muted" size="sm" dot>
+                  {t('couponApprovals.withheldCreated', {
+                    defaultValue: 'Created on Yiji, not sent to the customer — Yiji coupon #{{id}}',
+                    id: row.yiji_coupon_id,
+                  })}
+                </Pill>
+              </p>
+            ) : row.yiji_push_error ? (
+              <p className="mt-1 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+                {t('couponApprovals.withheldRefused', {
+                  defaultValue: 'Not created on Yiji — Yiji said: {{why}}',
+                  why: row.yiji_push_error,
+                })}
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {t('couponApprovals.withheldPending', {
+                  defaultValue: 'Not created on Yiji yet',
+                })}
+              </p>
+            ))}
 
           {approvedNotPending &&
             !row.delivery_excluded &&
