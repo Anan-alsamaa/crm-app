@@ -321,17 +321,62 @@ await check(
   },
 );
 
+await check(
+  'EMA-23',
+  'recently delivered coupons are redeemable on Yiji (reachLimit >= 1000)',
+  async () => {
+    if (!yijiToken) return 'skip';
+    /* 88 coupons sat at reachLimit 1 — customers were refused "Coupon exceeds
+     usage limit" — until the 2026-10-06 repair. Sample the newest 15. */
+    const r = await items('coupon_approvals', {
+      filter: JSON.stringify({ yiji_coupon_user_id: { _nnull: true } }),
+      fields: 'coupon_code,order_id,ticket.order_id',
+      sort: '-yiji_pushed_at',
+      limit: '15',
+    });
+    const YH = { authorization: `Bearer ${yijiToken}` };
+    const low = [];
+    let seen = 0;
+    for (const row of r.data ?? []) {
+      const orderId = row.order_id ?? row.ticket?.order_id;
+      if (!orderId) continue;
+      const order = await (
+        await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, {
+          headers: YH,
+        })
+      )
+        .json()
+        .catch(() => null);
+      if (!order?.userId) continue;
+      const list = await (
+        await fetch(
+          `${Y}/api/CouponUser/GetCouponByUser/${order.userId}?PageNumber=1&PageSize=500`,
+          { headers: YH },
+        )
+      )
+        .json()
+        .catch(() => null);
+      const c = (list ?? []).find((x) => x.couponCode === row.coupon_code)?.coupon;
+      if (!c) continue;
+      seen += 1;
+      if (!(c.reachLimit >= 1000)) low.push(`${row.coupon_code}=${c.reachLimit}`);
+    }
+    return { ok: low.length === 0, detail: low.length ? low.join(', ') : `${seen} checked` };
+  },
+);
+
 // ── what agents see is the build that shipped ────────────────────────────────
 await check(
   'EMA-36',
   'agent portal / widget: parked build reported (press Update now)',
   async () => {
     if (ENV !== 'prod') return { ok: true, detail: 'staging is never gated' };
-    const r = await fetch(
-      `${API}/items/app_settings?${new URLSearchParams({ filter: JSON.stringify({ key: { _eq: 'release.pending' } }), fields: 'value' })}`,
-      { headers: H },
-    );
-    const pending = JSON.parse((await r.json())?.data?.[0]?.value ?? '[]');
+    /* What the admin Dashboard's "Update now" strip itself asks. NOT the
+       `app_settings` row — the parked version travels in the bucket, and that
+       row read "[]" while v1.38.7 was waiting (2026-10-06). */
+    const r = await fetch(`${API}/jobs/releases`, { headers: H });
+    if (!r.ok) return { ok: false, detail: `/jobs/releases HTTP ${r.status}` };
+    const pending = (await r.json())?.pending ?? [];
     return {
       ok: true,
       detail: pending.length

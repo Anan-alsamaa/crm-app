@@ -155,3 +155,6 @@ perm-backup-*.json
 
 # Generated architecture diagrams (archify output).
 .archify/
+
+# Yiji admin credentials for the one-off coupon limit repair (owner, 2026-10-06). Never commit.
+.env.yiji-admin
