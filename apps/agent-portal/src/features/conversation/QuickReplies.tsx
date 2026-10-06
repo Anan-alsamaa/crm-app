@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
@@ -213,6 +214,7 @@ export function QuickReplies({
   kind = 'chat',
   className,
   dismissSearchOnOutside = false,
+  floatAbove = false,
 }: {
   /** What the customer has written, for language ranking. */
   customerText: string;
@@ -250,12 +252,26 @@ export function QuickReplies({
    * Typing again reopens it.
    */
   dismissSearchOnOutside?: boolean;
+  /**
+   * Open the list UPWARD, floating above the control and free to extend past
+   * the dialog it sits in (owner, 2026-10-06, start-chat first message: "place
+   * it on top of the first message box… it could exceed the popup from the
+   * top… there is no rule for it to stay within the popup"). Rendered in a
+   * portal so the dialog's edge cannot clip it. Off everywhere else, where the
+   * list stays in the flow and never covers the input.
+   */
+  floatAbove?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const replies = useQuickReplies(kind);
   const [open, setOpen] = useState(false);
   /** The whole control — trigger, language toggle and panel — for click-outside. */
   const wrap = useRef<HTMLDivElement>(null);
+  /** The floating list lives in a portal, outside `wrap`, so it needs its own
+      ref for click-outside — otherwise a click on a reply would count as
+      "outside" and close the list before the pick lands. */
+  const floating = useRef<HTMLDivElement>(null);
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
   /*
    * THE LANGUAGE THE AGENT IS BROWSING — seeded from the customer, then theirs.
    *
@@ -312,7 +328,8 @@ export function QuickReplies({
       if (dismissSearchOnOutside) setDismissedSearch(searchKey);
     };
     const onDown = (e: PointerEvent) => {
-      if (!wrap.current?.contains(e.target as Node)) close();
+      const target = e.target as Node;
+      if (!wrap.current?.contains(target) && !floating.current?.contains(target)) close();
     };
     /* Escape too — the panel is a listbox and that is the expected key. */
     const onKey = (e: KeyboardEvent) => {
@@ -325,6 +342,20 @@ export function QuickReplies({
       document.removeEventListener('keydown', onKey);
     };
   }, [dismissable, dismissSearchOnOutside, searchKey]);
+
+  /* FLOATING: track where the control is, so the list sits just above it and
+     follows a scroll or resize instead of drifting away. */
+  useEffect(() => {
+    if (!floatAbove || !listOpen) return;
+    const measure = () => setAnchor(wrap.current?.getBoundingClientRect() ?? null);
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [floatAbove, listOpen]);
 
   /* How many exist at all, so the toggle can say when a language is empty
      rather than looking broken. */
@@ -345,6 +376,92 @@ export function QuickReplies({
       : kind === 'late_order_action'
         ? t('quickReplies.openActions', { defaultValue: 'Ready actions' })
         : t('quickReplies.open', { defaultValue: 'Quick replies' });
+
+  const list = (
+    <div
+      role="listbox"
+      aria-label={openLabel}
+      /* Tells a dialog around it that the next outside press is ours. */
+      {...{ [DISMISS_FIRST_ATTR]: '' }}
+      /*
+       * IN THE FLOW, NEVER FLOATING OVER THE INPUT (owner, 2026-10-05).
+       *
+       * It was an overlay (`absolute bottom-full`) opening upward. Where
+       * the buttons sit BELOW a text box — a late-order reason or action,
+       * the first message of an agent-started chat — that put the list
+       * squarely over the box, so the agent could not see what they were
+       * typing; inside the start-chat dialog the overlay was also clipped
+       * by the dialog's edge, hiding replies.
+       *
+       * Now it takes its own space directly under its buttons and pushes
+       * what follows down. In the inbox composer the buttons sit above the
+       * text box, so the list lands between them — above the input, not on
+       * it. Capped and scrollable so a long library stays reachable.
+       */
+      className={cn(
+        'w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-popover p-1.5 ring-1 ring-foreground/[0.04]',
+        floatAbove ? 'shadow-float' : 'mt-2 max-h-64 shadow-sm',
+      )}
+      /* Floating: as tall as the room above the control allows. */
+      style={floatAbove && anchor ? { maxHeight: Math.max(160, anchor.top - 16) } : undefined}
+    >
+      {ranked.length === 0 ? (
+        <p className="px-2 py-3 text-2xs text-muted-foreground">
+          {t('quickReplies.noneInLang', {
+            defaultValue: 'No replies in this language. Try Both.',
+          })}
+        </p>
+      ) : (
+        ranked.map((r) => (
+          <button
+            key={r.id}
+            type="button"
+            role="option"
+            aria-selected={false}
+            dir="auto"
+            onClick={() => pick(r)}
+            /*
+             * ONE REPLY = ONE CARD, and it has to LOOK like one.
+             *
+             * Every row used to be `text-2xs` on both lines with nothing
+             * between them, so a panel of replies read as a single slab of
+             * grey and an agent could not tell where one ended (owner,
+             * 2026-10-04). Three things separate them now: a hairline
+             * between siblings, real padding, and a hover state that lifts
+             * the whole card rather than tinting a line of text.
+             */
+            className={cn(
+              'group block w-full rounded-lg px-3 py-2.5 text-start',
+              'border border-transparent',
+              'transition-colors duration-fast ease-out',
+              'hover:border-primary/25 hover:bg-primary/[0.05]',
+              'focus:outline-none focus-visible:border-primary/40 focus-visible:bg-primary/[0.05]',
+              /* The divider lives on the row ABOVE, so the last card has no
+                     trailing line and the list ends cleanly. */
+              '[&:not(:last-child)]:mb-0.5',
+              'relative after:absolute after:inset-x-3 after:-bottom-px after:h-px',
+              'after:bg-border/60 last:after:hidden hover:after:opacity-0',
+            )}
+          >
+            {/* THE LABEL leads: bigger, darker, and the thing an agent
+                    scans for. It was the same size as the body, which is why
+                    nothing stood out. */}
+            <span className="block text-xs font-semibold leading-tight text-foreground">
+              {r.label}
+            </span>
+            {/* THE WHOLE TEXT, not a tooltip. An agent should never send
+                    something they have not read, and a `title` is invisible on
+                    a touch screen and to anyone using a keyboard. Clamped to
+                    three lines so one long reply cannot push the rest out of
+                    view — the full text still arrives in the composer. */}
+            <span className="mt-1 line-clamp-3 block whitespace-pre-wrap text-2xs leading-relaxed text-muted-foreground">
+              {fillPlaceholders(r.text, vars)}
+            </span>
+          </button>
+        ))
+      )}
+    </div>
+  );
 
   return (
     <div ref={wrap} className={cn('relative', className)}>
@@ -401,86 +518,27 @@ export function QuickReplies({
         )}
       </div>
 
-      {listOpen && (
-        <div
-          role="listbox"
-          aria-label={openLabel}
-          /* Tells a dialog around it that the next outside press is ours. */
-          {...{ [DISMISS_FIRST_ATTR]: '' }}
-          /*
-           * IN THE FLOW, NEVER FLOATING OVER THE INPUT (owner, 2026-10-05).
-           *
-           * It was an overlay (`absolute bottom-full`) opening upward. Where
-           * the buttons sit BELOW a text box — a late-order reason or action,
-           * the first message of an agent-started chat — that put the list
-           * squarely over the box, so the agent could not see what they were
-           * typing; inside the start-chat dialog the overlay was also clipped
-           * by the dialog's edge, hiding replies.
-           *
-           * Now it takes its own space directly under its buttons and pushes
-           * what follows down. In the inbox composer the buttons sit above the
-           * text box, so the list lands between them — above the input, not on
-           * it. Capped and scrollable so a long library stays reachable.
-           */
-          className="mt-2 max-h-64 w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-popover p-1.5 shadow-sm ring-1 ring-foreground/[0.04]"
-        >
-          {ranked.length === 0 ? (
-            <p className="px-2 py-3 text-2xs text-muted-foreground">
-              {t('quickReplies.noneInLang', {
-                defaultValue: 'No replies in this language. Try Both.',
-              })}
-            </p>
-          ) : (
-            ranked.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                role="option"
-                aria-selected={false}
-                dir="auto"
-                onClick={() => pick(r)}
-                /*
-                 * ONE REPLY = ONE CARD, and it has to LOOK like one.
-                 *
-                 * Every row used to be `text-2xs` on both lines with nothing
-                 * between them, so a panel of replies read as a single slab of
-                 * grey and an agent could not tell where one ended (owner,
-                 * 2026-10-04). Three things separate them now: a hairline
-                 * between siblings, real padding, and a hover state that lifts
-                 * the whole card rather than tinting a line of text.
-                 */
-                className={cn(
-                  'group block w-full rounded-lg px-3 py-2.5 text-start',
-                  'border border-transparent',
-                  'transition-colors duration-fast ease-out',
-                  'hover:border-primary/25 hover:bg-primary/[0.05]',
-                  'focus:outline-none focus-visible:border-primary/40 focus-visible:bg-primary/[0.05]',
-                  /* The divider lives on the row ABOVE, so the last card has no
-                     trailing line and the list ends cleanly. */
-                  '[&:not(:last-child)]:mb-0.5',
-                  'relative after:absolute after:inset-x-3 after:-bottom-px after:h-px',
-                  'after:bg-border/60 last:after:hidden hover:after:opacity-0',
-                )}
-              >
-                {/* THE LABEL leads: bigger, darker, and the thing an agent
-                    scans for. It was the same size as the body, which is why
-                    nothing stood out. */}
-                <span className="block text-xs font-semibold leading-tight text-foreground">
-                  {r.label}
-                </span>
-                {/* THE WHOLE TEXT, not a tooltip. An agent should never send
-                    something they have not read, and a `title` is invisible on
-                    a touch screen and to anyone using a keyboard. Clamped to
-                    three lines so one long reply cannot push the rest out of
-                    view — the full text still arrives in the composer. */}
-                <span className="mt-1 line-clamp-3 block whitespace-pre-wrap text-2xs leading-relaxed text-muted-foreground">
-                  {fillPlaceholders(r.text, vars)}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
-      )}
+      {listOpen && !floatAbove && list}
+      {listOpen &&
+        floatAbove &&
+        anchor &&
+        createPortal(
+          <div
+            ref={floating}
+            /* Above the dialog (z-50), anchored to the control's top edge and
+               growing upward, so it may cover the phone field and pass the
+               dialog's top — never the box being typed in, which is below. */
+            className="fixed z-[70]"
+            style={{
+              left: anchor.left,
+              width: Math.min(anchor.width, 512),
+              bottom: window.innerHeight - anchor.top + 8,
+            }}
+          >
+            {list}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

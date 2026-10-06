@@ -74,7 +74,7 @@ export function Modal({
       if (e.key === 'Escape') {
         /* An open popover inside (a quick-reply list) takes this Esc for
            itself — the same rule as ConfirmDialog. */
-        if (panelRef.current?.querySelector(`[${DISMISS_FIRST_ATTR}]`)) return;
+        if (document.querySelector(`[${DISMISS_FIRST_ATTR}]`)) return;
         e.preventDefault();
         onClose();
       }

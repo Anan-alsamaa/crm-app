@@ -241,19 +241,23 @@ describe('a coupon with no order', () => {
    * has no person yet; it is also the type the mobile app can actually list
    * (`GetAllGeneralCoupon` is its only coupon-listing endpoint).
    */
-  it('creates it as a General coupon', async () => {
+  /* Owner, 2026-10-06: the type is always the one the agent selected. */
+  it('creates it with the coupon type the agent selected', async () => {
     const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
     await processCouponPushJob(job(), d);
     const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.type).toBe(0);
+    expect(body.type).toBe(1); // the fixture row is Private
   });
 
   /* A code over WhatsApp is bearer-like, so the blast radius is one grant. */
-  it('caps the unassigned coupon at a single use', async () => {
+  /* Owner, 2026-10-06: reachLimit and orderMaximum are FIXED on every coupon;
+     the per-customer allowance stays the Number of uses. */
+  it('uses the fixed limits, with the allowance per customer', async () => {
     const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
     await processCouponPushJob(job(), d);
     const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.reachLimit).toBe(1);
+    expect(body.reachLimit).toBe(10000);
+    expect(body.orderMaximum).toBe(1000000);
     expect(body.limitForUser).toBe(1);
   });
 

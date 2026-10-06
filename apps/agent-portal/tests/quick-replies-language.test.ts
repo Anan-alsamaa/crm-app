@@ -127,9 +127,34 @@ describe('the quick-reply chooser', () => {
      cannot sit on the input or be clipped by a dialog's edge. */
   it('takes its own space instead of floating over the input', () => {
     const list = SRC.slice(SRC.indexOf('role="listbox"'), SRC.indexOf('{ranked.length === 0'));
-    expect(list).not.toMatch(/className="[^"]*\babsolute\b/);
-    expect(list).not.toMatch(/className="[^"]*bottom-full/);
-    expect(list).toMatch(/className="mt-2 /);
+    // Class strings only — the explanatory comment names the old overlay.
+    expect(list).not.toMatch(/'[^'\n]*\babsolute\b[^'\n]*'/);
+    expect(list).not.toMatch(/'[^'\n]*bottom-full[^'\n]*'/);
+    // In the flow by default; only the explicit floatAbove mode floats.
+    expect(list).toMatch(/floatAbove \? 'shadow-float' : 'mt-2 max-h-64 shadow-sm'/);
+    expect(SRC).toMatch(/\{listOpen && !floatAbove && list\}/);
+  });
+
+  /*
+   * Owner, 2026-10-06 (start-chat first message): the list sits ABOVE the box
+   * and may extend past the dialog's top. It is portaled so the dialog cannot
+   * clip it, and its own ref counts as "inside" so a click on a reply is not
+   * treated as an outside click that closes the list before the pick lands.
+   */
+  it('floats upward in a portal when asked, without losing clicks', () => {
+    expect(SRC).toMatch(/createPortal\(/);
+    expect(SRC).toMatch(/!floating\.current\?\.contains\(target\)/);
+    expect(SRC).toMatch(/bottom: window\.innerHeight - anchor\.top \+ 8/);
+  });
+
+  it('is used that way in the start-chat dialog, above the message box', () => {
+    const dialog = readFileSync(
+      resolve(import.meta.dirname, '../src/features/inbox/StartChatDialog.tsx'),
+      'utf8',
+    );
+    const qr = dialog.indexOf('<QuickReplies');
+    expect(dialog.slice(qr, dialog.indexOf('/>', qr))).toMatch(/floatAbove/);
+    expect(qr).toBeLessThan(dialog.indexOf('<Textarea'));
   });
 
   /* An agent should never send something they have not read, and `title` is
@@ -220,7 +245,7 @@ describe('opening on a bare slash', () => {
 describe('closing when the agent clicks away', () => {
   it('dismisses on a press outside the control', () => {
     expect(SRC).toMatch(/addEventListener\('pointerdown', onDown\)/);
-    expect(SRC).toMatch(/wrap\.current\?\.contains\(e\.target as Node\)/);
+    expect(SRC).toMatch(/!wrap\.current\?\.contains\(target\)/);
   });
 
   /* The listener is removed again, or every chat ever opened leaves one behind

@@ -166,7 +166,7 @@ describe('the withheld payload is the assigned coupon, minus its owner', () => {
       undefined,
     ],
     [
-      'a Public coupon (forced Private when withheld)',
+      'a Public coupon (kept Public — the agent chose it)',
       { ...ROW, coupon_type: 'Public' },
       undefined,
     ],
@@ -179,11 +179,13 @@ describe('the withheld payload is the assigned coupon, minus its owner', () => {
   ];
 
   for (const [name, row, redirect] of variants) {
-    it(`is identical except type and assignee — ${name}`, () => {
+    /* Owner, 2026-10-06: the type is ALWAYS the agent's choice, so the
+       withheld body equals the assigned coupon in every field, type included;
+       only the (empty) assignee is added. */
+    it(`is identical to the assigned coupon, plus an empty assignee — ${name}`, () => {
       const assigned = assignedCoupon(row, ORDER, redirect);
       const withheld = withheldBody(row, ORDER, redirect);
-      expect(without(withheld, 'type', 'assignee')).toEqual(without(assigned, 'type'));
-      expect(withheld.type).toBe(1);
+      expect(without(withheld, 'assignee')).toEqual(assigned);
       expect(withheld.assignee).toEqual([]);
     });
   }
@@ -214,11 +216,14 @@ describe('the withheld payload is the assigned coupon, minus its owner', () => {
     expect(withheldBody(ROW, ORDER, '0537301009').name).toBe('+966537301009');
   });
 
-  it('leaves the no-account (unassigned) path exactly as it was: General, tight pool', () => {
+  /* Owner, 2026-10-06: type = the agent's choice, reachLimit = the fixed
+     10000, on EVERY coupon — the no-account path included. */
+  it('gives the no-account (unassigned) coupon the agent type and the fixed limits', () => {
     const u = yijiCouponPayload(ROW, null, { unassigned: true });
-    expect(u.type).toBe(0);
-    expect(u.reachLimit).toBe(1);
-    expect(u).not.toHaveProperty('assignee');
+    expect(u.type).toBe(1); // ROW is Private
+    expect(u.reachLimit).toBe(10000);
+    expect(u.orderMaximum).toBe(1000000);
+    expect(u.assignee).toEqual([]);
   });
 });
 

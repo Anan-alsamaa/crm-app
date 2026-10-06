@@ -652,9 +652,13 @@ export function yijiCouponPayload(
        * goes to somebody over WhatsApp and anyone who learns it can spend it.
        * The pool is the ONLY bound there, so it is exactly the allowance.
        */
-      /* Assigned: the owner's fixed 10000 (2026-10-05), never below the
-         customer's own allowance so the pool cannot bind first. */
-      reachLimit: opts?.unassigned ? limit : Math.max(YIJI_REACH_LIMIT, limit),
+      /*
+       * FIXED, ON EVERY COUPON (owner, 2026-10-06): "orderMaximum and
+       * reachLimit are fixed and never change until I ask" — no exception for
+       * unassigned coupons, no deriving from the uses. A derived reachLimit is
+       * exactly what left 88 coupons unredeemable.
+       */
+      reachLimit: YIJI_REACH_LIMIT,
       limitForUser: limit,
       monthlyReachLimit: limit,
       /*
@@ -790,8 +794,9 @@ export function yijiCouponPayload(
    */
   if (opts?.withheld) {
     return {
+      /* The coupon type is the one the AGENT selected — never overridden
+         (owner, 2026-10-06). Only the assignee is empty. */
       ...(couponUser.coupon as Record<string, unknown>),
-      type: YIJI_COUPON_TYPE.private,
       assignee: [],
     };
   }
@@ -818,23 +823,11 @@ export function yijiCouponPayload(
    */
   if (opts?.unassigned) {
     return {
+      /* The coupon type is the one the AGENT selected — no longer forced to
+         General (owner, 2026-10-06: "the coupon type should always be the
+         value the agent selects"). */
       ...(couponUser.coupon as Record<string, unknown>),
-      /*
-       * FORCED TO GENERAL, overriding whatever the request asked for.
-       *
-       * The agent's choice of Private/Public describes who the coupon is FOR,
-       * and it is usually Private because a compensation is for one customer.
-       * But a Private coupon is bound to a person, and this one has no person —
-       * that is the entire reason it is being created unassigned. Leaving it
-       * Private would create a coupon addressed to nobody, which is the shape
-       * of failure this codebase keeps finding: it would exist, and be
-       * unusable.
-       *
-       * General is also the only type the mobile app can LIST
-       * (`GetAllGeneralCoupon`), so it is what the customer will actually see
-       * after redeeming the code.
-       */
-      type: YIJI_COUPON_TYPE.general,
+      assignee: [],
     };
   }
 

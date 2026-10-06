@@ -171,6 +171,30 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
           <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('inbox.startChat.message', { defaultValue: 'First message' })}
           </span>
+          {/*
+            QUICK REPLIES, from the same library as the inbox composer (owner,
+            2026-10-05: the first message of an agent-started chat had none).
+            Typing `/` searches it, or the button opens it. A pick REPLACES the
+            box — the inbox's own rule since 2026-09-09. `{name}` fills from
+            the customer found for this number, when there is one.
+
+            ABOVE the box, and the list opens UPWARD past the dialog's top
+            (owner, 2026-10-06): under the box it had too little room, and it
+            may freely cover the number field — never the message being typed.
+          */}
+          <QuickReplies
+            className="pb-1"
+            floatAbove
+            dismissSearchOnOutside
+            customerText=""
+            query={slashMatch?.[1] ?? ''}
+            searching={slashMatch !== null}
+            vars={{ name: lookup.state === 'known' ? lookup.name : null }}
+            onPick={(text) => {
+              setMessage(text);
+              setError(null);
+            }}
+          />
           <Textarea
             rows={4}
             value={message}
@@ -181,25 +205,6 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
             placeholder={t('inbox.startChat.messagePlaceholder', {
               defaultValue: 'What you want to say to them.',
             })}
-          />
-          {/*
-            QUICK REPLIES, from the same library as the inbox composer (owner,
-            2026-10-05: the first message of an agent-started chat had none).
-            Typing `/` searches it, or the button opens it. A pick REPLACES the
-            box — the inbox's own rule since 2026-09-09. `{name}` fills from
-            the customer found for this number, when there is one.
-          */}
-          <QuickReplies
-            className="pt-1"
-            dismissSearchOnOutside
-            customerText=""
-            query={slashMatch?.[1] ?? ''}
-            searching={slashMatch !== null}
-            vars={{ name: lookup.state === 'known' ? lookup.name : null }}
-            onPick={(text) => {
-              setMessage(text);
-              setError(null);
-            }}
           />
         </label>
 

@@ -106,7 +106,7 @@ export function ConfirmDialog({
    * closes"). Only a press that both starts and ends on the backdrop counts.
    */
   const backdropPress = useRef(false);
-  const nestedPopoverOpen = () => !!panelRef.current?.querySelector(`[${DISMISS_FIRST_ATTR}]`);
+  const nestedPopoverOpen = () => !!document.querySelector(`[${DISMISS_FIRST_ATTR}]`);
 
   // Move focus to the primary action when the dialog opens.
   useEffect(() => {
