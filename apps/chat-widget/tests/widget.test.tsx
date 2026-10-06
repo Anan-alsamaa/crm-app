@@ -94,6 +94,7 @@ function agentMessage(overrides: Partial<WidgetMessage> = {}): WidgetMessage {
     attachments: overrides.attachments ?? [],
     createdAt: overrides.createdAt ?? new Date().toISOString(),
     ...(overrides.clientMsgId ? { clientMsgId: overrides.clientMsgId } : {}),
+    ...(overrides.automated ? { automated: true } : {}),
   };
 }
 
@@ -853,6 +854,31 @@ describe('the agents-offline notice', () => {
     );
     expect(screen.queryByText(NOTICE)).not.toBeInTheDocument();
     expect(screen.getByText('sorry for the wait')).toBeInTheDocument();
+  });
+
+  /*
+   * THE AUTOMATIC WELCOME IS NOT AN AGENT (owner, 2026-10-06). The gateway
+   * sends operations' template a second after the customer's first message
+   * whether or not anybody is online, so it must not take the reassurance
+   * down — the customer would read a welcome and then wait in silence.
+   */
+  it('survives the automatic welcome, live and in history', () => {
+    renderWidget({ autoOpen: true });
+    sendWhileOffline();
+    drive(() =>
+      lastCallbacks!.onMessage(
+        agentMessage({ id: 'srv-w', content: 'Welcome to Yiji support', automated: true }),
+      ),
+    );
+    expect(screen.getByText('Welcome to Yiji support')).toBeInTheDocument();
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
+
+    drive(() =>
+      lastCallbacks!.onHistory!([
+        agentMessage({ id: 'srv-w', content: 'Welcome to Yiji support', automated: true }),
+      ]),
+    );
+    expect(screen.getByText(NOTICE)).toBeInTheDocument();
   });
 
   it('keeps the customer’s own message when the notice is removed', () => {

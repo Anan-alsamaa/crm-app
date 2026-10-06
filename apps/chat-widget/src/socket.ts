@@ -54,6 +54,13 @@ export interface WidgetMessage {
    * empty; it renders as an italic "This message was deleted" placeholder.
    */
   deletedAt?: string;
+  /**
+   * The automatic welcome the gateway sends after the customer's first message
+   * (owner, 2026-10-06). Shown as an ordinary agent bubble, but it is NOT a
+   * person: it must never count as proof an agent is present or has replied
+   * (the offline notice stays up until somebody real answers).
+   */
+  automated?: boolean;
 }
 
 /** An agent's correction, as the gateway broadcasts it (EMA-33). */
@@ -109,14 +116,10 @@ export interface SocketCallbacks {
      *  — lets the widget greet a returning customer by name. */
     contact?: { name: string | null; phone: string | null };
     isNew?: boolean;
-    /**
-     * The greeting operations maintain, per language (ops, 2026-10-04).
-     *
-     * Absent or null means no template exists, and the widget keeps its
-     * built-in wording — so an older gateway, or a CRM where nobody has
-     * created the row, behaves exactly as before.
-     */
-    welcome?: { ar: string | null; en: string | null } | null;
+    /* No `welcome` template any more (owner, 2026-10-06): the opening bubble
+       is the built-in greeting, and operations' template arrives as a real
+       message after the customer's first one. An older gateway may still send
+       the field; it is ignored. */
     /** True when an AGENT opened this chat — suppresses the auto greeting. */
     agentInitiated?: boolean;
   }) => void;
@@ -403,7 +406,6 @@ export function connectWidget(
       vendorName?: string | null;
       contact?: { name: string | null; phone: string | null };
       isNew?: boolean;
-      welcome?: { ar: string | null; en: string | null } | null;
       /** True when an AGENT opened this chat — suppresses the auto greeting. */
       agentInitiated?: boolean;
     }) => cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),
@@ -445,6 +447,7 @@ export function connectWidget(
         attachments?: string[];
         editedAt?: string;
         deletedAt?: string;
+        automated?: boolean;
       }>;
     }) =>
       cb.onHistory?.(
@@ -459,6 +462,8 @@ export function connectWidget(
           createdAt: m.createdAt,
           ...(m.editedAt ? { editedAt: m.editedAt } : {}),
           ...(m.deletedAt ? { deletedAt: m.deletedAt } : {}),
+          // The automatic welcome (owner, 2026-10-06) — not proof of an agent.
+          ...(m.automated ? { automated: true } : {}),
         })),
       ),
   );

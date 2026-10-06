@@ -9,7 +9,11 @@ import {
 } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
-import { isPhoneDerivedCustomerId, phoneCustomerId } from '@yiji/shared-types';
+import {
+  isAutomatedAgentMessage,
+  isPhoneDerivedCustomerId,
+  phoneCustomerId,
+} from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
 import type { AttachmentMeta } from './attachments.js';
 import type { AssignmentEntity, AssignmentEntityType } from './assignment-notify.js';
@@ -772,20 +776,32 @@ export class GatewayDirectus {
     }>;
   }
 
-  /** Who sent the most recent message, or null when nobody has spoken. */
+  /**
+   * Who sent the most recent message, or null when nobody has spoken.
+   *
+   * THE AUTOMATIC WELCOME IS SKIPPED (owner, 2026-10-06). It lands a second
+   * after the customer's first message, so read naively the "last word" of
+   * every new chat is an agent's — and idle-close would close it five minutes
+   * later with the customer still waiting for a person. The customer's
+   * message is the real last word until somebody answers it.
+   *
+   * A few rows rather than one so the skip has something to fall back to;
+   * `sender_user` is SELECTED, or the helper cannot tell the welcome apart.
+   */
   async lastSenderType(conversationId: string): Promise<SenderType | null> {
     const rows = (await this.client.request(
       readItems(
         'messages' as never,
         {
           filter: { conversation: { _eq: conversationId }, is_internal_note: { _eq: false } },
-          fields: ['sender_type'],
+          fields: ['sender_type', 'sender_user'],
           sort: ['-date_created'],
-          limit: 1,
+          limit: 5,
         } as never,
       ),
-    )) as Array<{ sender_type: SenderType | null }>;
-    return rows[0]?.sender_type ?? null;
+    )) as Array<{ sender_type: SenderType | null; sender_user?: string | null }>;
+    const real = rows.find((r) => !isAutomatedAgentMessage(r));
+    return real?.sender_type ?? null;
   }
 
   /**
@@ -827,7 +843,25 @@ export class GatewayDirectus {
     content: string;
     attachments?: string[];
     isInternalNote?: boolean;
-  }): Promise<{ id: string; createdAt: string }> {
+  }): Promise<{
+    id: string;
+    createdAt: string;
+    /**
+     * True when THIS customer message reopened a finished, customer-started
+     * chat — the start of a new session, which is owed the automatic welcome
+     * (owner, 2026-10-06). Decided here because this is the one place that
+     * sees the status flip; only the message that flips it gets `true`.
+     */
+    sessionStarted?: boolean;
+  }> {
+    /* The automatic welcome: agent-STYLE, but no person sent it (owner,
+       2026-10-06). It must not stop the first-response clock or clear the
+       agent's unread count — the customer is still waiting for a human. */
+    const automated = isAutomatedAgentMessage({
+      sender_type: input.senderType,
+      sender_user: input.senderUser ?? null,
+    });
+    let sessionStarted = false;
     const created = (await this.client.request(
       createItem('messages', {
         conversation: input.conversationId,
@@ -863,10 +897,16 @@ export class GatewayDirectus {
         const rows = (await this.client.request(
           readItems('conversations', {
             filter: { id: { _eq: input.conversationId } },
-            fields: ['unread_count_agent', 'status'],
+            /* `initiated_by` so a reopened AGENT-started chat is not greeted —
+               an agent-initiated chat is never greeted (owner, 2026-10-05). */
+            fields: ['unread_count_agent', 'status', 'initiated_by'],
             limit: 1,
           }),
-        )) as Array<{ unread_count_agent: number | null; status: string | null }>;
+        )) as Array<{
+          unread_count_agent: number | null;
+          status: string | null;
+          initiated_by?: string | null;
+        }>;
         patch.unread_count_agent = (rows[0]?.unread_count_agent ?? 0) + 1;
         // A customer writing into a solved thread is a NEW case — days later it
         // is usually a different order entirely. Reopen it so it returns to the
@@ -920,8 +960,9 @@ export class GatewayDirectus {
            * for being slow to a message that arrived seconds earlier.
            */
           patch.session_started_at = now;
+          sessionStarted = rows[0]?.initiated_by !== 'agent';
         }
-      } else if (input.senderType === 'agent') {
+      } else if (input.senderType === 'agent' && !automated) {
         patch.unread_count_agent = 0;
         /*
          * FIRST RESPONSE IS STAMPED HERE, AND ONLY HERE.
@@ -957,7 +998,7 @@ export class GatewayDirectus {
       }
     }
     await this.client.request(updateItem('conversations', input.conversationId, patch as never));
-    return { id: created.id, createdAt: now };
+    return { id: created.id, createdAt: now, ...(sessionStarted ? { sessionStarted: true } : {}) };
   }
 
   /**
@@ -1239,6 +1280,8 @@ export class GatewayDirectus {
       attachments: string[];
       editedAt?: string;
       deletedAt?: string;
+      /** The automatic welcome (owner, 2026-10-06) — see `isAutomatedAgentMessage`. */
+      automated?: boolean;
     }>
   > {
     const msgs = (await this.client.request(
@@ -1250,7 +1293,17 @@ export class GatewayDirectus {
         },
         // `original_content` is deliberately NOT read: it is the audit copy of
         // a withdrawn or corrected reply and must never reach the customer.
-        fields: ['id', 'sender_type', 'content', 'date_created', 'edited_at', 'deleted_at'],
+        /* `sender_user` only to tell the automatic welcome apart (it is not
+           proof an agent answered); the id itself is never sent on. */
+        fields: [
+          'id',
+          'sender_type',
+          'sender_user',
+          'content',
+          'date_created',
+          'edited_at',
+          'deleted_at',
+        ],
         // NEWEST first so the cap keeps the recent end of a long thread; put
         // back in reading order below.
         sort: ['-date_created'],
@@ -1259,6 +1312,7 @@ export class GatewayDirectus {
     )) as Array<{
       id: string;
       sender_type: SenderType;
+      sender_user?: string | null;
       content: string;
       date_created: string;
       edited_at?: string | null;
@@ -1306,6 +1360,7 @@ export class GatewayDirectus {
         createdAt: m.date_created,
         attachments: byMessage.get(m.id) ?? [],
         ...(m.edited_at ? { editedAt: m.edited_at } : {}),
+        ...(isAutomatedAgentMessage(m) ? { automated: true } : {}),
       };
     });
   }

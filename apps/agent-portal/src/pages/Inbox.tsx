@@ -299,7 +299,9 @@ export function Inbox() {
     const body = pv.hasAttachment
       ? t('inbox.attachmentPreview', { defaultValue: 'Attachment' })
       : (pv.content ?? '');
-    return pv.sender_type === 'agent'
+    /* No "You:" on the automatic welcome (owner, 2026-10-06): the agent did not
+       write it, and the prefix would read as though the chat were answered. */
+    return pv.sender_type === 'agent' && !pv.automated
       ? `${t('inbox.youPrefix', { defaultValue: 'You:' })} ${body}`
       : body;
   };

@@ -2,6 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority, YijiOrder } from '@yiji/shared-types';
+import { isAutomatedAgentMessage } from '@yiji/shared-types';
 import { readChunked } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
@@ -496,6 +497,12 @@ export interface ConversationPreview {
   hasAttachment: boolean;
   /** The last message was withdrawn by its agent (EMA-33) — "This message was deleted". */
   deleted?: boolean;
+  /**
+   * The last message is the automatic welcome (owner, 2026-10-06): shown
+   * without "You:", because the logged-in agent did not write it and nobody
+   * has answered the customer yet.
+   */
+  automated?: boolean;
 }
 
 /**
@@ -538,7 +545,9 @@ export function useConversationPreviews(conversationIds: string[]) {
                   conversation: { _in: ids },
                   is_internal_note: { _eq: false },
                 },
-                fields: ['conversation', 'content', 'sender_type', 'deleted_at'],
+                /* `sender_user` tells the automatic welcome apart (owner,
+                   2026-10-06); unselected it would read as a person's reply. */
+                fields: ['conversation', 'content', 'sender_type', 'sender_user', 'deleted_at'],
                 sort: ['-date_created'],
                 limit: 1000,
               }),
@@ -549,6 +558,7 @@ export function useConversationPreviews(conversationIds: string[]) {
           conversation: string;
           content: string | null;
           sender_type: ConversationPreview['sender_type'];
+          sender_user?: string | null;
           deleted_at?: string | null;
         }>;
         const byConv: Record<string, ConversationPreview> = {};
@@ -573,6 +583,7 @@ export function useConversationPreviews(conversationIds: string[]) {
             content,
             sender_type: r.sender_type,
             hasAttachment: content.length === 0,
+            ...(isAutomatedAgentMessage(r) ? { automated: true } : {}),
           };
         }
         return byConv;

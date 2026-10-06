@@ -16,6 +16,7 @@
  * customer's first message. An agent talking before the customer has said
  * anything is not responding to anything.
  */
+import { isAutomatedAgentMessage } from '@yiji/shared-types';
 
 export interface TimingMessage {
   conversation: string;
@@ -72,6 +73,15 @@ export function conversationTimestamps(
       const seen = firstCustomer.get(m.conversation);
       if (!seen || m.date_created < seen) firstCustomer.set(m.conversation, m.date_created);
     } else if (m.sender_type === 'agent') {
+      /*
+       * THE AUTOMATIC WELCOME IS NOT A REPLY (owner, 2026-10-06). It is sent a
+       * second after the customer's first message, so counted it would make
+       * every chat "answered within 5 minutes" by nobody. Recognised by the
+       * shared rule — agent, `sender_user` null — which only fires when the
+       * caller SELECTED `sender_user`; a caller that did not keeps the old
+       * behaviour rather than losing every reply.
+       */
+      if (isAutomatedAgentMessage(m)) continue;
       const entry = { at: m.date_created, by: m.sender_user ?? null };
       const list = agentMsgs.get(m.conversation);
       if (list) list.push(entry);

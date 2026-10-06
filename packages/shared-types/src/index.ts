@@ -19,6 +19,7 @@ export * from './queues.js';
 export * from './sla.js';
 export * from './chat-autoclose.js';
 export * from './message-edit.js';
+export * from './automated-message.js';
 export * from './late-delivery.js';
 export * from './privileges.js';
 export * from './releases.js';

@@ -177,7 +177,8 @@ describe('ConversationView wiring', () => {
   });
 
   it('maps senderUserId so own live replies are editable', () => {
-    expect(VIEW).toContain('sender_user: msg.senderUserId ?? null');
+    // Null only for the automatic welcome (owner, 2026-10-06); see auto-welcome-rendering.
+    expect(VIEW).toMatch(/sender_user:\s*msg\.senderUserId \?\?/);
   });
 
   it('shows the edited label and the deleted placeholder, and confirms a delete', () => {

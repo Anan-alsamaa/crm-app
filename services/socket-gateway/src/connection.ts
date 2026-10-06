@@ -20,6 +20,9 @@ import {
   type YijiLatestOrderReader,
   normalizePhone,
   displayContactName,
+  detectLocale,
+  pickWelcomeTemplate,
+  renderWelcomeTemplate,
 } from '@yiji/shared-types';
 import type { GatewayDirectus } from './directus.js';
 import type { CustomerVerifier } from './auth/customer-jwt.js';
@@ -91,6 +94,14 @@ interface SocketData {
    * message a person wrote them — the chat answering itself.
    */
   conversationInitiatedBy?: string | null;
+  /**
+   * This socket CREATED its conversation and has not yet sent the automatic
+   * welcome (owner, 2026-10-06). Consumed by the first customer message, so
+   * the welcome goes once — never per message. A reconnect is a new socket
+   * that resumes the thread rather than creating it, so it never sees this
+   * set and cannot greet twice.
+   */
+  welcomePending?: boolean;
   /** Session came from the store QR code; the phone was typed, not proven. */
   walkIn?: boolean;
   /**
@@ -534,6 +545,9 @@ export function registerConnection(deps: ConnectionDeps): void {
           : await directus.findOrCreateConversation(vendor.id, contact.id, claims.order_id ?? null);
         data.conversationId = conv.id;
         data.conversationCreated = conv.created;
+        /* A fresh thread made for an old widget is a new session too; the
+           welcome follows its first message (owner, 2026-10-06). */
+        if (conv.created) data.welcomePending = true;
       }
       return next();
     } catch (err) {
@@ -713,6 +727,11 @@ async function ensureConversation(socket: Socket, deps: ConnectionDeps): Promise
 
     data.conversationId = conv.id;
     data.conversationCreated = conv.created;
+    /* The customer's first message just CREATED this chat: a new session,
+       owed the automatic welcome once that message is in (owner, 2026-10-06).
+       A resumed thread (`created: false`) is not — unless the message reopens
+       a solved one, which `persistMessage` reports as `sessionStarted`. */
+    if (conv.created) data.welcomePending = true;
     await socket.join(rooms.conversation(conv.id));
     // The widget learns its id here rather than at handshake, because until
     // now there was nothing to name.
@@ -743,10 +762,11 @@ async function ensureConversation(socket: Socket, deps: ConnectionDeps): Promise
 /**
  * The welcome wording, read once and reused.
  *
- * EVERY customer handshake asks for this, and the answer changes only when
- * operations edit the row — so reading it per connection would add a Directus
- * round-trip to the one path that must stay fast, for a string that is the same
- * all day.
+ * EVERY new chat session asks for this (since 2026-10-06 the automatic welcome
+ * message, `sendAutoWelcome`; before that the `ready` handshake), and the
+ * answer changes only when operations edit the row — so reading it each time
+ * would add a Directus round-trip to the send path, for a string that is the
+ * same all day.
  *
  * TTL rather than forever: an edit has to reach customers without a deploy,
  * which is the whole reason the wording moved out of the widget. Five minutes
@@ -793,6 +813,70 @@ export function resetWelcomeCache(): void {
   welcomeCache = null;
 }
 
+/**
+ * SEND OPERATIONS' WELCOME AS A REAL MESSAGE (owner, 2026-10-06).
+ *
+ * After the customer's first message of a session, the "رسالة ترحيب" template
+ * goes into the thread looking exactly as if an agent had typed it: an agent
+ * bubble for the customer (live and in history) and in the agent portal.
+ *
+ * STORED AS `sender_type 'agent'` WITH NO `sender_user` — the shared
+ * convention (`isAutomatedAgentMessage`) that tells every consumer nobody
+ * actually answered: no first-response stamp, no unread reset, no ladder
+ * cancel, no idle-close "last word". No new column, so no manual schema step.
+ *
+ * Called AFTER the customer's message is persisted and broadcast, so the order
+ * on every screen is question, then welcome.
+ *
+ * Best-effort through and through: no template, an inactive row, a failed read
+ * or a failed write all end the same way — nothing is sent, the customer still
+ * has the widget's built-in opening greeting, and their own message (already
+ * delivered) is untouched. A welcome is never worth failing a send over.
+ */
+async function sendAutoWelcome(
+  deps: ConnectionDeps,
+  convId: string,
+  customer: { name: string | null; firstText: string },
+): Promise<void> {
+  const { io, directus, logger } = deps;
+  try {
+    /* The customer's language, from what they just wrote — the same evidence
+       idle-close uses. The production row is one bilingual `ar` row, which
+       `pickWelcomeTemplate` falls back to for an English writer. */
+    const template = pickWelcomeTemplate(
+      await cachedWelcome(deps),
+      detectLocale([customer.firstText]),
+    );
+    if (!template) return;
+    const content = renderWelcomeTemplate(template, customer.name);
+    if (!content) return;
+    const saved = await directus.persistMessage({
+      conversationId: convId,
+      senderType: 'agent',
+      // NO senderUser — that absence IS the "automated" marker.
+      content,
+    });
+    const payload: MessageNew = {
+      id: saved.id,
+      conversationId: convId,
+      senderType: 'agent',
+      content,
+      attachments: [],
+      createdAt: saved.createdAt,
+      automated: true,
+    };
+    io.to(rooms.conversation(convId)).emit(SOCKET_EVENTS.messageNew, payload);
+    /* `silent`: the customer's message already rang every inbox a moment ago;
+       the welcome is not news to an agent and must not beep a second time. */
+    io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, {
+      conversationId: convId,
+      silent: true,
+    });
+  } catch (err) {
+    logger.warn({ err, convId }, 'auto welcome not sent');
+  }
+}
+
 async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<void> {
   const { io, directus, logger } = deps;
   const data = socket.data as SocketData;
@@ -823,18 +907,15 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
     contact: { name: data.contactName ?? null, phone: data.contactPhone ?? null },
     isNew: data.contactIsNew ?? true,
     /*
-     * THE WELCOME WORDING operations maintain (ops, 2026-10-04).
+     * NO `welcome` TEMPLATE ON `ready` ANY MORE (owner, 2026-10-06).
      *
-     * Sent as DATA rather than rendered here, because the widget already
-     * decides which greeting a customer gets — named for a returning customer,
-     * generic for a new one — and moving that decision into the gateway would
-     * split one rule across two services.
-     *
-     * Null when no template exists, which is the normal case until operations
-     * create the row; the widget then keeps its built-in wording. Cached, so
-     * this costs nothing per handshake.
+     * The opening bubble is the widget's own built-in greeting again, "exactly
+     * as we had before". Operations' template is now SENT as a real message
+     * after the customer's first message (`sendAutoWelcome`). Leaving it here
+     * too would make a not-yet-updated widget bundle — it is hosted apart from
+     * this deploy — show the same template twice: once as its opening bubble,
+     * once as the message.
      */
-    welcome: await cachedWelcome(deps),
     /*
      * DO NOT GREET A CUSTOMER AN AGENT HAS ALREADY WRITTEN TO (owner,
      * 2026-10-05).
@@ -1148,6 +1229,28 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       io.to(rooms.conversation(convId)).emit(SOCKET_EVENTS.messageNew, payload);
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId: convId });
+
+      /*
+       * THE AUTOMATIC WELCOME, ONCE PER SESSION (owner, 2026-10-06).
+       *
+       * Two ways a session starts: this socket's first message CREATED the
+       * chat (`welcomePending`), or it reopened a solved one
+       * (`sessionStarted`, reported by `persistMessage`, which already
+       * excludes agent-initiated chats). Read and cleared in one synchronous
+       * step after the await, so two messages racing on one socket greet
+       * once. Awaited so the welcome lands after THIS message and before the
+       * customer's next one is handled further down the queue.
+       */
+      if (data.kind === 'customer') {
+        const greet = data.welcomePending === true || saved.sessionStarted === true;
+        data.welcomePending = false;
+        if (greet) {
+          await sendAutoWelcome(deps, convId, {
+            name: data.contactName ?? null,
+            firstText: content,
+          });
+        }
+      }
       /*
        * ANSWERING A CHAT NOBODY OWNS CLAIMS IT.
        *

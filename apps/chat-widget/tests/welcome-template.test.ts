@@ -1,107 +1,67 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { welcomeLine } from '../src/Widget.js';
 
 /**
- * THE WELCOME LINE COMES FROM OPERATIONS' OWN TEMPLATE.
+ * THE OPENING BUBBLE IS THE BUILT-IN GREETING AGAIN (owner, 2026-10-06).
  *
- * Asked for 2026-10-04: *"The automatic message shown once the customer sends
- * their first message should come from: رسالة ترحيب"* — a named row operations
- * maintain in the quick-replies library, not strings compiled into the widget.
- *
- * Pinned here rather than at the component, because the greeting is built in
- * TWO places — when `ready` arrives and again when the customer flips the
- * language — and the bug this replaces is exactly those two drifting apart.
+ * "Exactly as we had before": the widget opens with its own "Welcome {name},
+ * how can we help you?" (named for a returning customer, generic otherwise) in
+ * the brand-tinted greeting style. Operations' "رسالة ترحيب" template is no
+ * longer the opening bubble — the gateway SENDS it as a real agent-style
+ * message after the customer's first message, so showing it here too would
+ * make the customer read it twice.
  */
 
 const TR = { welcomeNamed: 'Welcome {name}, how can we help you?', welcomeNew: 'Hey there 👋' };
-const NEW = { name: null, isNew: true };
-const RETURNING = { name: 'Ayman', isNew: false };
+const widget = readFileSync(resolve(import.meta.dirname, '../src/Widget.tsx'), 'utf8');
+const socket = readFileSync(resolve(import.meta.dirname, '../src/socket.ts'), 'utf8');
 
-describe('with no template configured', () => {
-  /* UNCHANGED BEHAVIOUR, and that matters: until operations create the row,
-     and on any CRM where they never do, the widget must read exactly as it
-     did before. */
+describe('the opening greeting', () => {
   it('greets a new customer generically', () => {
-    expect(welcomeLine(TR, 'en', NEW)).toBe('Hey there 👋');
-    expect(welcomeLine(TR, 'en', NEW, null)).toBe('Hey there 👋');
-    expect(welcomeLine(TR, 'en', NEW, { ar: null, en: null })).toBe('Hey there 👋');
+    expect(welcomeLine(TR, { name: null, isNew: true })).toBe('Hey there 👋');
   });
 
   it('greets a returning customer by name', () => {
-    expect(welcomeLine(TR, 'en', RETURNING)).toBe('Welcome Ayman, how can we help you?');
+    expect(welcomeLine(TR, { name: 'Ayman', isNew: false })).toBe(
+      'Welcome Ayman, how can we help you?',
+    );
   });
 
-  /* A returning customer with no name on file is not a named greeting with a
-     hole in it. */
   it('falls back to the generic line when there is no name', () => {
-    expect(welcomeLine(TR, 'en', { name: null, isNew: false })).toBe('Hey there 👋');
-    expect(welcomeLine(TR, 'en', { name: '   ', isNew: false })).toBe('Hey there 👋');
+    expect(welcomeLine(TR, { name: null, isNew: false })).toBe('Hey there 👋');
+    expect(welcomeLine(TR, { name: '   ', isNew: false })).toBe('Hey there 👋');
+  });
+
+  /* The regression: the template must not come back as the opening bubble. */
+  it('takes no template at all', () => {
+    expect(welcomeLine.length).toBe(2);
+    expect(widget).not.toMatch(/setWelcome\(/);
+    expect(socket).not.toMatch(/welcome\?: \{ ar: string \| null; en: string \| null \}/);
+  });
+
+  /* "The automated/system-style bubble (green highlight)": the local greeting
+     keeps its own distinct style. */
+  it('keeps the greeting highlight style', () => {
+    expect(widget).toContain("m.id === GREETING_ID ? ' yiji-msg-greeting' : ''");
   });
 });
 
-describe('with a template configured', () => {
-  const W = { ar: 'أهلًا بك في يجي', en: 'Thanks for reaching out!' };
-
-  /* THE TEMPLATE WINS OUTRIGHT. It is operations' wording to choose. */
-  it('uses the template for the current language', () => {
-    expect(welcomeLine(TR, 'en', NEW, W)).toBe('Thanks for reaching out!');
-    expect(welcomeLine(TR, 'ar', NEW, W)).toBe('أهلًا بك في يجي');
+describe('the sent welcome message is not proof of an agent', () => {
+  /* It arrives whether anybody is online or not, so the "our team is offline"
+     reassurance must survive it. */
+  it('does not clear the offline notice or count as an answer', () => {
+    expect(widget).toContain("const fromPerson = msg.senderType === 'agent' && !msg.automated;");
+    expect(widget).toContain(
+      "if (msg.senderType === 'agent' && !msg.automated) offlineNoticedRef.current = false;",
+    );
+    expect(widget).toContain(
+      "const answered = history.some((m) => m.senderType === 'agent' && !m.automated);",
+    );
   });
 
-  /* Including for a returning customer: a template with no placeholder reads
-     the same for everybody, which is a legitimate choice, not a fault. */
-  it('uses the template for a returning customer too', () => {
-    expect(welcomeLine(TR, 'en', RETURNING, W)).toBe('Thanks for reaching out!');
-  });
-
-  /* One language configured, the other not: each falls back on its own. */
-  it('falls back per language', () => {
-    const arOnly = { ar: 'أهلًا', en: null };
-    expect(welcomeLine(TR, 'ar', NEW, arOnly)).toBe('أهلًا');
-    expect(welcomeLine(TR, 'en', NEW, arOnly)).toBe('Hey there 👋');
-  });
-
-  /* Whitespace is not a template. An operator who clears the field has
-     withdrawn it, and must get the built-in wording back rather than a blank
-     bubble. */
-  it('ignores a blank template', () => {
-    expect(welcomeLine(TR, 'en', NEW, { ar: null, en: '   ' })).toBe('Hey there 👋');
-  });
-});
-
-describe('the {name} placeholder inside a template', () => {
-  const W = { ar: 'مرحبًا {name}، كيف نساعدك؟', en: 'Welcome {name}, how can we help?' };
-
-  it('substitutes the name when there is one', () => {
-    expect(welcomeLine(TR, 'en', RETURNING, W)).toBe('Welcome Ayman, how can we help?');
-    expect(welcomeLine(TR, 'ar', RETURNING, W)).toBe('مرحبًا Ayman، كيف نساعدك؟');
-  });
-
-  it('substitutes every occurrence', () => {
-    const twice = { ar: null, en: 'Hi {name}. How can we help, {name}?' };
-    expect(welcomeLine(TR, 'en', RETURNING, twice)).toBe('Hi Ayman. How can we help, Ayman?');
-  });
-
-  /*
-   * AND NEVER SHOWS THE PLACEHOLDER ITSELF.
-   *
-   * "Welcome {name}, how can we help?" arriving at a customer is the kind of
-   * visible breakage that makes a team stop editing templates — so with no
-   * name on file the placeholder goes, and the punctuation left clinging to it
-   * goes with it rather than leaving "Welcome , how can we help?".
-   */
-  it('removes the placeholder and its trailing comma when there is no name', () => {
-    expect(welcomeLine(TR, 'en', NEW, W)).toBe('Welcome, how can we help?');
-  });
-
-  /* The ARABIC comma too — a different codepoint, and the one that would
-     actually be left behind in the Arabic template. */
-  it('removes the Arabic comma as well', () => {
-    expect(welcomeLine(TR, 'ar', NEW, W)).toBe('مرحبًا، كيف نساعدك؟');
-  });
-
-  it('leaves no double space behind', () => {
-    const mid = { ar: null, en: 'Hello {name} and welcome' };
-    expect(welcomeLine(TR, 'en', NEW, mid)).toBe('Hello and welcome');
+  it('carries the automated flag through history', () => {
+    expect(socket).toContain('...(m.automated ? { automated: true } : {})');
   });
 });

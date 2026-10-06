@@ -1,5 +1,6 @@
 import { readItems, updateItem, createItem, readUser, readUsers } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
+import { HUMAN_AGENT_MESSAGE_FILTER } from '@yiji/shared-types';
 import type {
   ConversationRepo,
   ConversationRow,
@@ -391,13 +392,19 @@ export function createRoutingRepo(client: YijiDirectusClient) {
      * Agent replies only. An inbound customer message must NOT cancel an
      * escalation — a customer chasing an unanswered chat would otherwise reset
      * the very timer meant to rescue them.
+     *
+     * HUMAN replies only (owner, 2026-10-06): the automatic welcome is an
+     * agent-style message with no `sender_user`, sent a second after the
+     * customer's first message. Counted, it would look like "an agent replied"
+     * and cancel the escalation of a chat no person has touched — the ladder
+     * standing down exactly when it is needed.
      */
     async countOutboundMessages(conversationId: string) {
       const rows = (await client.request(
         readItems('messages' as never, {
           filter: {
             conversation: { _eq: conversationId },
-            sender_type: { _eq: 'agent' },
+            ...HUMAN_AGENT_MESSAGE_FILTER,
           },
           aggregate: { count: 'id' },
         }) as never,

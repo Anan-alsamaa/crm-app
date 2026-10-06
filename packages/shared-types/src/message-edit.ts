@@ -1,3 +1,5 @@
+import { isAutomatedAgentMessage } from './automated-message.js';
+
 /**
  * Editing or deleting a chat message an agent already sent (owner, 2026-10-05
  * (EMA-33)).
@@ -61,6 +63,10 @@ export function messageEditRefusal(
 ): MessageEditRefusal | null {
   if (!row) return 'not_found';
   if (row.sender_type !== 'agent' || row.is_internal_note) return 'not_own_message';
+  /* The automatic welcome (owner, 2026-10-06) belongs to no agent, so it is
+     nobody's to rewrite. Already implied by the ownership check below; said
+     explicitly so a future "admins may edit anything" change cannot reach it. */
+  if (isAutomatedAgentMessage(row)) return 'not_own_message';
   if (!agentId || senderUserId(row) !== agentId) return 'not_own_message';
   if (row.deleted_at) return 'already_deleted';
   const sent = Date.parse(row.date_created ?? '');

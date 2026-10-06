@@ -42,11 +42,14 @@ const customer = (conversation: string, t: string) => ({
   date_created: at(t),
   sender_user: null,
 });
-const agentMsg = (conversation: string, t: string, by: string | null) => ({
+const agentMsg = (conversation: string, t: string, by: string | undefined) => ({
   conversation,
   sender_type: 'agent',
   date_created: at(t),
-  sender_user: by,
+  /* An unknown sender is an ABSENT field, not null: since 2026-10-06 an agent
+     message with an explicit null `sender_user` is the automatic welcome, which
+     is no reply at all (owner, 2026-10-06). */
+  ...(by === undefined ? {} : { sender_user: by }),
 });
 
 beforeEach(() => {
@@ -68,7 +71,7 @@ beforeEach(() => {
       // Still assigned to Ann, but the ladder passed it on and BOB picked it
       // up; the reply carries no sender_user, so only the routing says who.
       customer('c4', '10:00:00'),
-      agentMsg('c4', '10:00:30', null),
+      agentMsg('c4', '10:00:30', undefined),
     ],
     routing_events: [{ conversation: 'c4', agent: 'u2', outcome: 'answered', stage: 'broadcast' }],
   };
@@ -105,5 +108,34 @@ describe('Agent summary — first response (owner, 2026-10-05)', () => {
     expect(bob.medianFirstResponseSec).toBe(30);
     // Ann: two of her three replies inside five minutes.
     expect(ann.inTimePct).toBeCloseTo((2 / 3) * 100, 5);
+  });
+});
+
+describe('Agent summary — the automatic welcome is not a reply (owner, 2026-10-06)', () => {
+  /* Sent a second after the customer's first message with `sender_user` null.
+     Counted, every chat would be "replied within 5 min" by nobody. */
+  it('measures to the first HUMAN reply', async () => {
+    request.mockImplementation(async (q: unknown) => {
+      const c = q as { collection?: string };
+      const byCollection: Record<string, unknown[]> = {
+        directus_users: [{ id: 'u1', first_name: 'Ann', last_name: null, email: 'ann@x.com' }],
+        conversations: [conv('c1', 'u1')],
+        messages: [
+          customer('c1', '10:00:00'),
+          {
+            conversation: 'c1',
+            sender_type: 'agent',
+            date_created: at('10:00:01'),
+            sender_user: null,
+          },
+          agentMsg('c1', '10:20:00', 'u1'),
+        ],
+        routing_events: [],
+      };
+      return byCollection[c.collection ?? ''] ?? [];
+    });
+    const ann = (await agents()).find((a) => a.agentId === 'u1')!;
+    expect(ann.medianFirstResponseSec).toBe(20 * 60);
+    expect(ann.inTimePct).toBe(0);
   });
 });

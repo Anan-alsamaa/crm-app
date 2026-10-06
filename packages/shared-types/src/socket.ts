@@ -99,6 +99,12 @@ export const MessageNew = z.object({
    * apart and offer Edit/Delete on them (EMA-33). Absent for customer messages.
    */
   senderUserId: z.string().optional(),
+  /**
+   * True for the automatic welcome (owner, 2026-10-06): an agent-STYLE message
+   * no person sent. Rendered as an agent bubble, but never proof an agent is
+   * present or has answered — see `isAutomatedAgentMessage`.
+   */
+  automated: z.boolean().optional(),
 });
 export type MessageNew = z.infer<typeof MessageNew>;
 

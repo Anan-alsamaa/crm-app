@@ -22,6 +22,7 @@ import {
   SOCKET_EVENTS,
   isDialablePhone,
   displayContactName,
+  isAutomatedAgentMessage,
   type MessageDeleted,
   type MessageEdited,
   type MessageNew,
@@ -79,7 +80,11 @@ function groupRuns(msgs: ConversationMessage[]): ConversationMessage[][] {
     if (
       last &&
       last[0]!.sender_type === m.sender_type &&
-      last[0]!.is_internal_note === m.is_internal_note
+      last[0]!.is_internal_note === m.is_internal_note &&
+      /* The automatic welcome is its own run (owner, 2026-10-06), or a real
+         reply right after it would be labelled "Automatic welcome" — or the
+         welcome labelled as the agent's own words. */
+      isAutomatedAgentMessage(last[0]!) === isAutomatedAgentMessage(m)
     ) {
       last.push(m);
     } else {
@@ -266,7 +271,11 @@ export function ConversationView({
           date_created: msg.createdAt,
           conversation_id: msg.conversationId,
           // Who sent it, so an agent's own live reply can be edited (EMA-33).
-          sender_user: msg.senderUserId ?? null,
+          /* An agent message with no user id is the automatic welcome ONLY when
+             the gateway says so (owner, 2026-10-06); otherwise "unknown",
+             never null — null would relabel a person's reply as automated. */
+          sender_user:
+            msg.senderUserId ?? (msg.senderType === 'agent' && !msg.automated ? undefined : null),
           // message:new only carries attachment ids (no type/size). For our own
           // optimistic echo we keep the richer local metadata below; for inbound
           // messages we refetch to resolve filename/type/size into thumbnails.
@@ -1206,13 +1215,22 @@ export function ConversationView({
                */
               const isSystem = head.sender_type === 'system';
               const isNote = isAgent && head.is_internal_note;
+              /*
+               * THE AUTOMATIC WELCOME (owner, 2026-10-06): an ordinary agent
+               * bubble — the customer sees it as one — but labelled for what
+               * it is. "You" would tell the agent they had already answered a
+               * customer nobody has spoken to yet.
+               */
+              const isAutoWelcome = isAutomatedAgentMessage(head);
               const last = run[run.length - 1]!;
               const senderLabel = isSystem
                 ? t('conversation.system', { defaultValue: 'System' })
                 : isAgent
                   ? isNote
                     ? t('conversation.internalNote')
-                    : t('conversation.you', { defaultValue: 'You' })
+                    : isAutoWelcome
+                      ? t('conversation.autoWelcome', { defaultValue: 'Automatic welcome' })
+                      : t('conversation.you', { defaultValue: 'You' })
                   : contactName;
               const time = last.pending
                 ? t('conversation.sending', { defaultValue: 'Sending…' })
@@ -1247,7 +1265,7 @@ export function ConversationView({
                         farewell look like something they had written. */}
                     {!isSystem && (
                       <Avatar
-                        name={isAgent ? 'You' : c?.contact?.name}
+                        name={isAgent ? (isAutoWelcome ? senderLabel : 'You') : c?.contact?.name}
                         email={isAgent ? undefined : c?.contact?.email}
                         phone={isAgent ? undefined : c?.contact?.phone}
                         size="sm"

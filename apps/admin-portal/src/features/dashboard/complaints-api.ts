@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { aggregate, readItems, readUsers } from '@directus/sdk';
 import {
   buildStoreIndex,
+  HUMAN_AGENT_MESSAGE_FILTER,
   matchStore,
   normaliseConversationStatus,
   type StoreSnapshot,
@@ -566,7 +567,9 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
               aggregate('messages', {
                 aggregate: { count: '*' },
                 groupBy: ['sender_user'],
-                query: { filter: { sender_type: { _eq: 'agent' } } },
+                /* People only: the automatic welcome (owner, 2026-10-06) has no
+                   sender and is no agent's work. */
+                query: { filter: { ...HUMAN_AGENT_MESSAGE_FILTER } },
               }),
             )
             .catch(() => [] as unknown) as Promise<

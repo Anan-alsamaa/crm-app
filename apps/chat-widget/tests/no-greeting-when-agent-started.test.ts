@@ -30,7 +30,7 @@ const socket = readFileSync(resolve(import.meta.dirname, '../src/socket.ts'), 'u
 
 describe('the widget suppresses its greeting for an agent-initiated chat', () => {
   it('reads the flag off the ready payload', () => {
-    expect(widget).toMatch(/isNew,\s*\n\s*welcome,\s*\n\s*agentInitiated,/);
+    expect(widget).toMatch(/isNew,\s*\n\s*agentInitiated,/);
   });
 
   /*

@@ -174,53 +174,26 @@ const clientId = () => `c${Date.now()}_${msgSeq++}`;
 // deduped (never added twice) and can be styled distinctly in the thread.
 const GREETING_ID = '__yiji_welcome__';
 
-/** The greeting operations maintain, per language. Null = use the built-in. */
-export interface WelcomeTemplates {
-  ar: string | null;
-  en: string | null;
-}
-
 /**
- * THE WELCOME LINE a customer sees, from operations' own template when there is
- * one (ops, 2026-10-04: the automatic message *"should come from رسالة ترحيب"*).
+ * THE OPENING GREETING a customer sees: the widget's OWN built-in wording,
+ * "Welcome {name}, how can we help you?" for a returning customer with a name
+ * on file, the generic line otherwise.
+ *
+ * Back to exactly what it was before 2026-10-04 (owner, 2026-10-06). For two
+ * days this bubble showed operations' "رسالة ترحيب" template instead; that
+ * template is now SENT by the gateway as a real agent-style message AFTER the
+ * customer's first message, so it must not also be the opening bubble — the
+ * customer would read it twice.
  *
  * One function because the greeting is built in TWO places — when `ready`
  * arrives, and again when the customer flips the language — and they must not
  * drift into two different ideas of what the greeting is.
- *
- * PRECEDENCE, and each step is a deliberate choice:
- *
- *  1. The template for the CURRENT language, if operations wrote one. It is
- *     theirs to word, so it wins outright.
- *  2. `{name}` is still substituted inside it, so a template may greet a
- *     returning customer by name exactly as the built-in one does — and a
- *     template that omits the placeholder simply reads the same for everybody,
- *     which is a legitimate choice rather than a fault.
- *  3. A template with `{name}` but NO name on file has the placeholder removed
- *     rather than rendered literally. "Welcome {name}," reaching a customer is
- *     the kind of visible breakage that makes a team stop editing templates.
- *  4. No template: the built-in wording, named for a returning customer and
- *     generic for a new one — unchanged behaviour.
  */
 export function welcomeLine(
   tr: { welcomeNamed: string; welcomeNew: string },
-  locale: 'ar' | 'en',
   customer: { name: string | null; isNew: boolean },
-  welcome?: WelcomeTemplates | null,
 ): string {
   const name = customer.name?.trim() ?? '';
-  const template = (locale === 'ar' ? welcome?.ar : welcome?.en)?.trim();
-  if (template) {
-    return name
-      ? template.replace(/\{name\}/g, name)
-      : /* No name: drop the placeholder AND the space or comma left clinging to
-           it, so "Welcome {name}, how can we help?" reads as "Welcome, how can
-           we help?" rather than "Welcome , how can we help?". */
-        template
-          .replace(/\s*\{name\}\s*([,،])?/g, (_m, p) => (p ? `${p} ` : ' '))
-          .replace(/\s+/g, ' ')
-          .trim();
-  }
   return !customer.isNew && name ? tr.welcomeNamed.replace('{name}', name) : tr.welcomeNew;
 }
 
@@ -409,10 +382,6 @@ export function Widget({ config }: { config: WidgetConfig }) {
     name: null,
     isNew: true,
   });
-  /* The greeting operations maintain, as sent by the gateway on `ready`. Held
-     in state because the language switch rebuilds the bubble and needs it
-     again. Null until `ready`, and null for ever if nobody wrote one. */
-  const [welcome, setWelcome] = useState<WelcomeTemplates | null>(null);
   const [csat, setCsat] = useState<{ score: number; comment: string; submitted: boolean } | null>(
     null,
   );
@@ -507,7 +476,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
     // The greeting is a local bubble written in the language of the moment it
     // was added; say it again in the new one, or the first line of the chat
     // stays in the language the customer just left.
-    const greeting = welcomeLine(t(next), next, customer, welcome);
+    const greeting = welcomeLine(t(next), customer);
     setMessages((prev) =>
       prev.map((m) => (m.id === GREETING_ID ? { ...m, content: greeting } : m)),
     );
@@ -560,7 +529,6 @@ export function Widget({ config }: { config: WidgetConfig }) {
           vendorName,
           contact,
           isNew,
-          welcome,
           agentInitiated,
         }) => {
           // null on a fresh session; `onConversationReady` fills it in when the
@@ -582,16 +550,12 @@ export function Widget({ config }: { config: WidgetConfig }) {
           // (`[...history, ...prev]`), so the greeting lands AFTER the loaded
           // history — and any message sent afterwards appends below it (pushing the
           // greeting up), instead of being stuck at the bottom.
-          /* Operations' own template when there is one, else the built-in
-             wording — one function, shared with the language switch below so
-             the two can never disagree about what the greeting is. */
-          setWelcome(welcome ?? null);
-          const greeting = welcomeLine(
-            tr,
-            locale,
-            { name: contact?.name ?? null, isNew: isNew ?? true },
-            welcome ?? null,
-          );
+          /* The BUILT-IN greeting, never operations' template (owner,
+             2026-10-06) — that one is sent as a real message after the
+             customer's first. One function, shared with the language switch
+             so the two can never disagree about what the greeting is. Shown
+             with the brand-tinted `yiji-msg-greeting` style, as before. */
+          const greeting = welcomeLine(tr, { name: contact?.name ?? null, isNew: isNew ?? true });
           setMessages((prev) => {
             if (prev.some((m) => m.id === GREETING_ID)) return prev;
             /*
@@ -680,12 +644,14 @@ export function Widget({ config }: { config: WidgetConfig }) {
              * "our team is offline" directly above their answer is the exact
              * thing this is meant to prevent, so their message clears it too.
              */
-            const next = prev.filter(
-              (m) => !(msg.senderType === 'agent' && m.localNotice === 'agents-offline'),
-            );
+            /* EXCEPT the automatic welcome (owner, 2026-10-06): it arrives a
+               second after the customer's first message whether anybody is
+               online or not, so it proves nothing about presence. */
+            const fromPerson = msg.senderType === 'agent' && !msg.automated;
+            const next = prev.filter((m) => !(fromPerson && m.localNotice === 'agents-offline'));
             return [...next, msg];
           });
-          if (msg.senderType === 'agent') offlineNoticedRef.current = false;
+          if (msg.senderType === 'agent' && !msg.automated) offlineNoticedRef.current = false;
           if (msg.senderType !== 'customer' && !openRef.current) setUnread((u) => u + 1);
         },
         onHistory: (history) => {
@@ -712,7 +678,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
             /* An agent answered while this device was away: the offline notice
                is already false by the time history lands, so it must not be
                carried over alongside their reply. */
-            const answered = history.some((m) => m.senderType === 'agent');
+            /* The automatic welcome is not an answer (owner, 2026-10-06). */
+            const answered = history.some((m) => m.senderType === 'agent' && !m.automated);
             if (answered) offlineNoticedRef.current = false;
             return [
               ...history,

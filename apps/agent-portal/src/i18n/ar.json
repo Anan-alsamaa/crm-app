@@ -380,6 +380,7 @@
     "download": "تنزيل",
     "previewImage": "معاينة {{name}}",
     "you": "أنت",
+    "autoWelcome": "ترحيب تلقائي",
     "today": "اليوم",
     "yesterday": "أمس",
     "copyMessage": "نسخ الرسالة",
