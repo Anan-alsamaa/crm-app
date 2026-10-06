@@ -12,7 +12,6 @@ import {
   toast,
 } from '@yiji/ui';
 import {
-  compensationFlag,
   couponPrefix,
   CouponRequestDraftChecked,
   defaultCouponDates,
@@ -27,6 +26,7 @@ import {
 } from '@yiji/shared-types';
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useCouponCodeTaken, useRequestCouponApproval } from './api.js';
+import { couponTermsFromDraft } from './coupon-request-fields.js';
 
 /**
  * The coupon an agent asks a supervisor to approve.
@@ -497,36 +497,10 @@ export function CouponRequestDialog({
         requested_by: requestedBy,
         // The supervisor reads this, so it is the agent's own words.
         reason: d.compensation_reason,
-        // Requesting a coupon IS the compensation decision, so the flag follows
-        // from the request rather than being asked again.
-        compensation: compensationFlag(true),
-        coupon_code: d.code,
-        // Which of the two money fields carries the number depends on the
-        // category, and only one of them is ever set.
-        // As entered, not derived from the cap: they answer different questions.
-        coupon_value: d.discount_category === 'Percentage' ? null : (d.coupon_value ?? null),
-        coupon_percent: d.discount_category === 'Percentage' ? (d.coupon_percent ?? null) : null,
-        title: d.title,
-        issuing_side: d.issuing_side,
-        delivery_type: d.delivery_type,
-        coupon_type: d.coupon_type,
-        discount_category: d.discount_category,
-        valid_from: d.valid_from,
-        valid_to: d.valid_to,
-        max_discount: d.max_discount,
-        usage_limit: d.usage_limit,
-        brand_id: d.brand_id ?? null,
-        restaurant_id: d.restaurant_id ?? null,
-        item_name: d.item_name ?? null,
-        item_sku: d.item_sku ?? null,
-        no_other_discounts: d.no_other_discounts,
-        /* Whether it ever reaches the Yiji app. The reason rides along only when
-           it is actually being withheld — storing one on a coupon that IS being
-           delivered would read as a contradiction on the approval card. */
-        delivery_excluded: d.delivery_excluded,
-        delivery_excluded_reason: d.delivery_excluded
-          ? d.delivery_excluded_reason?.trim() || null
-          : null,
+        /* Every coupon term — including whether it is sent to Yiji — from the
+           ONE shared mapping, so the new-ticket path can never drop a field
+           this dialog sends (owner, 2026-10-06). */
+        ...couponTermsFromDraft(d),
       })
       .then(() => {
         toast.success(

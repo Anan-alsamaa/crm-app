@@ -1350,35 +1350,43 @@ export function ConversationView({
                                       </span>
                                     )}
                                   </div>
-                                  {/* Signature touch: copy a message on hover. */}
-                                  <button
-                                    type="button"
-                                    onClick={() => copyMessage(m.content ?? '')}
-                                    aria-label={t('conversation.copyMessage', {
-                                      defaultValue: 'Copy message',
-                                    })}
-                                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/msg:opacity-100"
-                                  >
-                                    <svg
-                                      viewBox="0 0 16 16"
-                                      fill="none"
-                                      stroke="currentColor"
-                                      strokeWidth="1.5"
-                                      strokeLinecap="round"
-                                      strokeLinejoin="round"
-                                      className="h-3.5 w-3.5"
-                                      aria-hidden
-                                    >
-                                      <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
-                                      <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
-                                    </svg>
-                                  </button>
-                                  {ownActions && (
+                                  {/*
+                                    COPY, OR EDIT — never both (owner, 2026-10-06).
+                                    On the agent's own reply that can still be
+                                    changed, the hover button IS Edit (with
+                                    Delete); on everything else it stays Copy.
+                                    Either way it appears only while that one
+                                    message is hovered.
+                                  */}
+                                  {ownActions ? (
                                     <OwnMessageActions
                                       canEdit
                                       onEdit={() => setEditing({ id: m.id, text: m.content ?? '' })}
                                       onDelete={() => setConfirmDeleteId(m.id)}
                                     />
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => copyMessage(m.content ?? '')}
+                                      aria-label={t('conversation.copyMessage', {
+                                        defaultValue: 'Copy message',
+                                      })}
+                                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/msg:opacity-100"
+                                    >
+                                      <svg
+                                        viewBox="0 0 16 16"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.5"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                        className="h-3.5 w-3.5"
+                                        aria-hidden
+                                      >
+                                        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
+                                        <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
+                                      </svg>
+                                    </button>
                                   )}
                                 </div>
                               )}

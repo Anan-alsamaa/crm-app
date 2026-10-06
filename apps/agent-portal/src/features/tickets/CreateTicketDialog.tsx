@@ -39,6 +39,7 @@ import {
 } from './ComplaintFields.js';
 import { useOrderStore, useStores, toStoreRecord } from './useStoreMatch.js';
 import { useRequestCouponApproval } from '../coupons/api.js';
+import { couponTermsFromDraft } from '../coupons/coupon-request-fields.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
@@ -427,36 +428,10 @@ export function CreateTicketDialog({
       // fails the ticket still stands and the agent is told the coupon did not
       // go anywhere — the alternative is a promise nobody is holding.
       let couponAsked = false;
-      const fullCoupon = collectedCoupon
-        ? {
-            coupon_code: collectedCoupon.code,
-            // The category decides WHICH money field carries the number, and it
-            // carries the value AS ENTERED — this used to send `max_discount`
-            // into both columns, so a 20% coupon was recorded as its cap and a
-            // percentage request read downstream as an amount.
-            coupon_value:
-              collectedCoupon.discount_category === 'Percentage'
-                ? null
-                : (collectedCoupon.coupon_value ?? null),
-            coupon_percent:
-              collectedCoupon.discount_category === 'Percentage'
-                ? (collectedCoupon.coupon_percent ?? null)
-                : null,
-            compensation: compensationFlag(true),
-            title: collectedCoupon.title,
-            issuing_side: collectedCoupon.issuing_side,
-            delivery_type: collectedCoupon.delivery_type,
-            coupon_type: collectedCoupon.coupon_type,
-            discount_category: collectedCoupon.discount_category,
-            valid_from: collectedCoupon.valid_from,
-            valid_to: collectedCoupon.valid_to,
-            max_discount: collectedCoupon.max_discount,
-            usage_limit: collectedCoupon.usage_limit,
-            brand_id: collectedCoupon.brand_id ?? null,
-            restaurant_id: collectedCoupon.restaurant_id ?? null,
-            item_name: collectedCoupon.item_name ?? null,
-          }
-        : null;
+      /* The SAME mapping the coupon dialog uses. This used to be its own
+         field-by-field copy that never learned `delivery_excluded`, so an
+         agent's "do not send to Yiji" was silently dropped (owner, 2026-10-06). */
+      const fullCoupon = collectedCoupon ? couponTermsFromDraft(collectedCoupon) : null;
       const request = fullCoupon ?? coupon.request;
       if (request && created?.id) {
         try {

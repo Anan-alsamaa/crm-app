@@ -12,14 +12,16 @@ import { cn } from '@yiji/ui';
  */
 
 /*
- * ALWAYS VISIBLE, WITH WORDS (owner, 2026-10-06: "I don't see EMA-33 on
- * staging"). They were icon-only and `opacity-0` until the bubble was hovered —
- * a faint pencil beside Copy that nobody found, and invisible on a touch
- * screen. Like WhatsApp's message menu, the options now sit plainly under every
- * reply that can still be changed, and disappear when the 15 minutes run out.
+ * ON HOVER OF THAT ONE MESSAGE, IN PLACE OF COPY (owner, 2026-10-06).
+ *
+ * First they were faint icons BESIDE Copy and nobody found them; then always
+ * visible under every recent reply. The owner's call: they replace the Copy
+ * button on the agent's own changeable reply and, like Copy, appear only while
+ * that specific message is hovered. Labelled, so the hover shows a word rather
+ * than an icon to guess at. Keyboard focus still reveals them.
  */
 const ICON_BUTTON =
-  'inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-2xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50';
+  'inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-2xs font-medium text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/msg:opacity-100';
 
 /** Hover actions beside an own reply: Edit (only when it has text) and Delete. */
 export function OwnMessageActions({
