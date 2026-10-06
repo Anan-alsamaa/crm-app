@@ -136,6 +136,8 @@ const FIELD_QUERIES = [
     'id,order_id,kind,action,reason,action_taken,date_created,order_snapshot,decided_by',
   ],
   ['EMA-46', 'tickets', 'id,complaint_date,date_created,assigned_agent,order_id,complaint_type'],
+  /* A manual apply:fields; without it the admin coupon list 403s whole. */
+  ['EMA-55', 'coupon_approvals', 'id,delivery_excluded,yiji_coupon_id'],
 ];
 for (const [id, col, fields] of FIELD_QUERIES)
   await check(id, `${col}: every field the code reads exists`, async () => {
@@ -336,6 +338,37 @@ await check(
         ],
       }),
       fields: 'coupon_code,date_created',
+      limit: '20',
+    });
+    return {
+      ok: r.status === 200 && r.data.length === 0,
+      detail: r.status !== 200 ? `HTTP ${r.status}` : r.data.map((c) => c.coupon_code).join(', '),
+    };
+  },
+);
+
+await check(
+  'EMA-55',
+  'withheld coupons approved since the deploy are created on Yiji (or refused) within 15 min',
+  async () => {
+    /* A coupon marked "do not send to the customer" is still CREATED on Yiji,
+     Private and assigned to nobody (owner, 2026-10-06); it used to be skipped
+     entirely. Every one approved since the deploy must carry yiji_coupon_id
+     or a recorded refusal 15 minutes later. EMA55_SINCE overrides the cutoff. */
+    const since = process.env.EMA55_SINCE ?? '2026-10-06T18:00:00Z';
+    const cutoff = new Date(Date.now() - 15 * 60_000).toISOString();
+    if (cutoff <= since) return { ok: true, detail: 'deploy is under 15 min old' };
+    const r = await items('coupon_approvals', {
+      filter: JSON.stringify({
+        _and: [
+          { status: { _eq: 'approved' } },
+          { delivery_excluded: { _eq: true } },
+          { decided_at: { _between: [since, cutoff] } },
+          { yiji_coupon_id: { _null: true } },
+          { yiji_push_error: { _null: true } },
+        ],
+      }),
+      fields: 'id,coupon_code,decided_at',
       limit: '20',
     });
     return {
