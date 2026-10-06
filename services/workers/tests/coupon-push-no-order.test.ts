@@ -167,6 +167,24 @@ describe('a coupon with no order', () => {
   });
 
   /*
+   * THE COUPON IT ATTACHES MUST BE REDEEMABLE (owner, 2026-10-06).
+   *
+   * This path created the coupon in the no-account shape — General, with the
+   * TOTAL pool equal to the uses (1) — and then attached it to a customer: the
+   * same reachLimit-1 fault that left 88 coupons unredeemable. No test looked
+   * at what was created, which is how it went unnoticed. It is created as the
+   * assigned coupon is: Private, pool 10000.
+   */
+  it('creates the coupon it attaches as Private with the full pool', async () => {
+    const { deps: d, postCoupon } = deps();
+    await processCouponPushJob(job(), d);
+    const created = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
+    expect(created.type).toBe(1);
+    expect(created.reachLimit).toBe(10000);
+    expect(created.orderMaximum).toBe(1000000);
+  });
+
+  /*
    * A WALK-IN WITH NO APP ACCOUNT IS AN ORDINARY OUTCOME — roughly a third of
    * this queue. It must be reported honestly and left visibly owed, never
    * resolved to the nearest customer.

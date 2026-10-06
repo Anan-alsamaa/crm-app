@@ -1706,9 +1706,20 @@ export async function processCouponPushJob(
        * the one set of rules below — a considered refusal is recorded, an
        * outage is rethrown and retried.
        */
+      /*
+       * CREATED AS THE ASSIGNED COUPON WILL BE: Private, reachLimit 10000, every
+       * term identical — the `withheld` shape, since it has no assignee for the
+       * instant between the two calls (owner, 2026-10-06).
+       *
+       * This used `unassigned: true`, the shape for a customer with NO account
+       * who redeems by code: General, with the TOTAL pool equal to the uses
+       * (usually 1). Attached to a customer, that is exactly the reachLimit-1
+       * fault that made 88 coupons unredeemable — this path would have made
+       * the next one too.
+       */
       const created = await postCoupon<YijiCouponResponse>(
         YIJI_UNASSIGNED_COUPON_PATH,
-        yijiCouponPayload(row, order, { redirectCouponsTo, unassigned: true }),
+        yijiCouponPayload(row, order, { redirectCouponsTo, withheld: true }),
         headers,
       );
       const couponId = readNewCouponId(created);
