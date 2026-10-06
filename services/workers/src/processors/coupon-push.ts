@@ -303,8 +303,21 @@ export interface CouponApprovalRow {
   yiji_coupon_user_id: string | null;
   /** Why the last delivery attempt did not land. Null once it does. */
   yiji_push_error?: string | null;
-  /** Never send this one — a test row, or honoured another way. */
+  /**
+   * Never ASSIGN this one to the customer — the refund customer who will not
+   * accept an app coupon. Since 2026-10-06 it is still CREATED on Yiji,
+   * unassigned (owner); see `createWithheldCoupon`.
+   */
   delivery_excluded?: boolean | null;
+  /**
+   * Yiji's COUPON id for a withheld coupon created unassigned.
+   *
+   * Its own column, deliberately not `yiji_coupon_user_id`: that one means
+   * "a customer holds this", and overloading it once already confused which
+   * coupons had actually reached somebody (owner, 2026-10-06). Also the
+   * idempotency evidence — set means never create again.
+   */
+  yiji_coupon_id?: string | null;
 }
 
 /** Postgres returns `numeric` as a string; Yiji is sent numbers. */
@@ -347,6 +360,31 @@ export function customerFacingCouponName(
   /* A title that is itself a number is the same fact in our `05…` shape. */
   if (/^\+?[\d\s()-]{8,}$/.test(t)) return internationalPhone(t) ?? t;
   return t || 'Compensation';
+}
+
+/** The marker every CRM-created coupon's description starts with. */
+export const CRM_COUPON_PREFIX = 'CRM - ';
+
+/**
+ * THE COUPON'S DESCRIPTION ON YIJI, MARKED AS OURS.
+ *
+ * Operations cannot tell a coupon the CRM created from one somebody built by
+ * hand in Yiji's admin portal — both carry a `+9665…` name and a free-text
+ * reason. So every coupon we create (assigned OR withheld) starts its
+ * description with "CRM - " (owner, 2026-10-06).
+ *
+ * The description, not the name: the name stays the customer's number, per
+ * the owner's 2026-10-05 rule, so their console can still be searched by it.
+ *
+ * Never doubled — a reason an agent already typed as "CRM - …" (or a retry
+ * that re-reads a prefixed value) keeps exactly one marker. An empty reason
+ * still says whose coupon it is rather than leaving a bare "CRM - ".
+ */
+export function crmCouponDescription(reason: string | null | undefined): string {
+  const r = (reason ?? '').trim();
+  if (!r) return `${CRM_COUPON_PREFIX}Compensation`;
+  if (/^crm\s*-\s*/i.test(r)) return r;
+  return `${CRM_COUPON_PREFIX}${r}`;
 }
 
 /**
@@ -408,6 +446,12 @@ export function yijiCouponPayload(
      * an order to attach to nor a user to grant to.
      */
     unassigned?: boolean;
+    /**
+     * Build the body for `AddCoupon` for a WITHHELD coupon: created on Yiji,
+     * Private, assigned to nobody (owner, 2026-10-06). Every term is the
+     * ASSIGNED coupon's — see the return below.
+     */
+    withheld?: boolean;
   },
 ): Record<string, unknown> {
   const orderId = num(couponOrderId(row));
@@ -471,6 +515,8 @@ export function yijiCouponPayload(
     phone ?? (redirect ? undefined : row.customer_phone),
     row.title,
   );
+  /* "CRM - <reason>" everywhere the reason travels (owner, 2026-10-06). */
+  const description = crmCouponDescription(row.reason);
 
   /*
    * ONE `CouponUserVM`, TWO ENVELOPES.
@@ -489,7 +535,7 @@ export function yijiCouponPayload(
     // OUR code, so the two systems can be matched from either side later.
     couponCode: row.coupon_code ?? '',
     couponName,
-    compensationReason: row.reason ?? '',
+    compensationReason: description,
     ...(yijiUserId ? { userId: yijiUserId } : {}),
     ...(phone ? { customerPhone: phone } : {}),
     // Ours is often blank and theirs is a generated address; prefer whichever
@@ -504,7 +550,7 @@ export function yijiCouponPayload(
       id: 0,
       name: couponName,
       code: row.coupon_code ?? '',
-      compensationReason: row.reason ?? '',
+      compensationReason: description,
       /*
        * The reason, AGAIN, under the name their console uses.
        *
@@ -515,7 +561,7 @@ export function yijiCouponPayload(
        * and the alternative is a field their reporting may read sitting
        * empty on every coupon we create.
        */
-      compensation: row.reason ?? '',
+      compensation: description,
       /*
        * WHAT KIND of coupon this is.
        *
@@ -724,6 +770,33 @@ export function yijiCouponPayload(
   if (opts?.compensationUserId) return couponUser;
 
   /*
+   * THE WITHHELD BODY: THE ASSIGNED COUPON, VERBATIM, MINUS ITS OWNER.
+   *
+   * A coupon the agent or supervisor marked "do not send to the customer on
+   * the Yiji app" — the refund customer — must still EXIST on Yiji, recorded
+   * and accounted for, but belong to nobody (owner, 2026-10-06).
+   *
+   * Private (1) with `assignee: []`, which is exactly that: Private means only
+   * an assignee may use it, and there is none. The opposite of the unassigned
+   * path below, which goes General precisely so a stranger CAN redeem it by
+   * code — this one must be redeemable by no one.
+   *
+   * Every OTHER field is the assigned coupon's own object, unmodified — the
+   * same reachLimit (10000, NOT the unassigned path's tight pool), the same
+   * orderMaximum, name, dates and flags. The owner's warning is why: "ensure
+   * all values are proper as we faced a big issue before" (reachLimit 1 made
+   * 88 coupons unusable). Building it from the same object is what makes a
+   * drift impossible, and a test pins the equality field by field.
+   */
+  if (opts?.withheld) {
+    return {
+      ...(couponUser.coupon as Record<string, unknown>),
+      type: YIJI_COUPON_TYPE.private,
+      assignee: [],
+    };
+  }
+
+  /*
    * THE UNASSIGNED BODY IS THE `coupon` OBJECT, ON ITS OWN.
    *
    * `AddCoupon` takes a `CouponVM` — the very object nested at
@@ -871,11 +944,13 @@ export type PushOutcome =
   | 'already-assigned'
   | 'no-order'
   /**
-   * Marked never-send. Not a failure and not a refusal — somebody decided this
-   * coupon must not reach Yiji, because it was a test or because the branch
-   * already honoured it in person.
+   * Withheld from the customer and CREATED on Yiji, Private and assigned to
+   * nobody (owner, 2026-10-06). Recorded in `yiji_coupon_id`; status stays
+   * `approved`, because no customer holds it.
    */
-  | 'excluded'
+  | 'withheld'
+  /** Already created as a withheld coupon — never created twice, never assigned. */
+  | 'already-withheld'
   /**
    * Yiji answered, and the answer was no — for a reason that will not change
    * by asking again ("User already have this coupon", an order it cannot see).
@@ -927,7 +1002,8 @@ export async function runCouponDeliverySweep(deps: {
             status: { _in: ['approved', 'edited'] },
             yiji_coupon_user_id: { _null: true },
             yiji_push_error: { _null: true },
-            // Never-send rows are not "owed" — see `delivery_excluded`.
+            // Withheld rows are never ASSIGNED — they are created unassigned by
+            // the separate query below (owner, 2026-10-06).
             delivery_excluded: { _neq: true },
           },
           fields: ['id', 'coupon_code'],
@@ -945,6 +1021,46 @@ export async function runCouponDeliverySweep(deps: {
       'could not read undelivered coupons — skipping this sweep',
     );
     return 0;
+  }
+
+  /*
+   * WITHHELD COUPONS STILL OWED A CREATION ON YIJI (owner, 2026-10-06).
+   *
+   * A `delivery_excluded` row is never ASSIGNED — the query above keeps it out
+   * of that path for good — but it is now created on Yiji once, Private and
+   * unassigned. Owed = approved, withheld, no `yiji_coupon_id` yet and no
+   * recorded refusal (a duplicate code is recorded there and not re-asked).
+   *
+   * A SEPARATE query, and a failure here never costs the one above. It names
+   * `yiji_coupon_id`, a column that needs a manual `apply:fields`; in Directus a
+   * filter on a missing field 403s the WHOLE query, and folding this into the
+   * delivery query would let one forgotten bootstrap stop every customer's
+   * coupon. Isolated, it costs only the withheld creations until it is applied.
+   */
+  try {
+    const withheld = (await directus.request(
+      readItems(
+        'coupon_approvals' as never,
+        {
+          filter: {
+            status: { _in: ['approved', 'edited'] },
+            delivery_excluded: { _eq: true },
+            yiji_coupon_id: { _null: true },
+            yiji_push_error: { _null: true },
+          },
+          fields: ['id', 'coupon_code'],
+          limit: -1,
+        } as never,
+      ),
+    )) as unknown as Array<{ id: string; coupon_code: string | null }>;
+    /* One job per row even if both queries named it. */
+    const seen = new Set(rows.map((r) => r.id));
+    rows = [...rows, ...(withheld ?? []).filter((r) => !seen.has(r.id))];
+  } catch (err) {
+    logger.error(
+      { err: describeError(err) },
+      'could not read withheld coupons owed a Yiji creation — is coupon_approvals.yiji_coupon_id applied?',
+    );
   }
 
   let queued = 0;
@@ -965,7 +1081,7 @@ export async function runCouponDeliverySweep(deps: {
          *
          * Duplicate work is not the risk worth guarding here anyway. The
          * processor re-reads the row and stops on a receipt, on a recorded
-         * refusal, on `delivery_excluded` and on a status that is not approved;
+         * refusal, on `yiji_coupon_id` and on a status that is not approved;
          * the selection above already excludes everything settled. The worst a
          * duplicate costs is one wasted read.
          */
@@ -1079,6 +1195,149 @@ async function createUnassignedCoupon(args: {
   return 'unassigned';
 }
 
+/**
+ * The withheld coupon's Yiji id, read on its own.
+ *
+ * Separate from the main row read on purpose: `yiji_coupon_id` needs a manual
+ * `apply:fields`, and a missing field 403s the WHOLE Directus read. Kept apart,
+ * a forgotten bootstrap stops only the withheld creations, never a customer's
+ * assigned coupon (owner, 2026-10-06).
+ */
+async function readYijiCouponId(directus: YijiDirectusClient, id: string): Promise<string | null> {
+  const r = (await directus.request(
+    readItem('coupon_approvals' as never, id, { fields: ['yiji_coupon_id'] } as never),
+  )) as unknown as { yiji_coupon_id?: string | number | null } | null;
+  const v = r?.yiji_coupon_id;
+  return v == null || String(v).trim() === '' ? null : String(v).trim();
+}
+
+/**
+ * Create a WITHHELD coupon on Yiji: Private, `assignee: []`, held by nobody.
+ *
+ * THE CASE (owner, 2026-10-06): the agent or supervisor ticked "do not send
+ * this to the customer on the Yiji app" — typically a customer who wanted a
+ * refund, not an app coupon. The compensation must still be RECORDED on Yiji,
+ * so their portal accounts for every coupon the CRM issued, yet nobody may be
+ * able to spend it. Until now such a row was skipped entirely and Yiji never
+ * heard of it.
+ *
+ * ONCE. The id Yiji returns lands in `yiji_coupon_id` (never in
+ * `yiji_coupon_user_id`, which means "a customer holds it"), and the push
+ * checks that column before anything else. A "Coupon with Code … already
+ * exists" answer is a settled refusal: recorded in `yiji_push_error`, never
+ * retried — asking again cannot change it.
+ *
+ * The status stays `approved`. `assigned` means a customer holds the coupon,
+ * and the entire point here is that none does.
+ */
+async function createWithheldCoupon(args: {
+  row: CouponApprovalRow;
+  id: string;
+  directus: YijiDirectusClient;
+  logger: Logger;
+  postCoupon?: YijiAdminPoster;
+  readOrder?: YijiOrderReader;
+  yijiTenantId: string;
+  redirectCouponsTo?: string;
+}): Promise<PushOutcome> {
+  const { row, id, directus, logger, postCoupon, readOrder, yijiTenantId, redirectCouponsTo } =
+    args;
+
+  if (!postCoupon) {
+    logger.info(
+      { id, code: row.coupon_code },
+      'no Yiji service credential configured — withheld coupon not created, staying approved',
+    );
+    return 'disabled';
+  }
+  /* Same vendor rule as the assigned path: an unknown platform is skipped,
+     never guessed. */
+  if (!couponEndpointFor(yijiTenantId)) {
+    logger.warn(
+      { id, code: row.coupon_code, vendorId: yijiTenantId },
+      'no coupon endpoint for this vendor — withheld coupon not created',
+    );
+    return 'disabled';
+  }
+
+  /*
+   * The order, read for the SAME enrichment the assigned coupon gets — Yiji's
+   * own brandId/restaurantId and the phone in their format — so the two bodies
+   * stay identical. Best-effort, exactly as there: a failed read costs those
+   * fields, not the coupon. Read-only (a GET); nothing about the order changes.
+   */
+  const orderId = couponOrderId(row);
+  let order: CouponOrderContext | null = null;
+  if (readOrder && orderId) {
+    try {
+      order = await readOrder(orderId);
+    } catch (err) {
+      logger.warn(
+        { id, orderId, err: describeError(err) },
+        'could not read the order for the withheld coupon — creating it without enrichment',
+      );
+    }
+  }
+
+  /* The staging redirect still applies: nothing is assigned, but the NAME is a
+     phone number, and on staging that is the test handset's, as it is for an
+     assigned coupon. */
+  const payload = yijiCouponPayload(row, order, { redirectCouponsTo, withheld: true });
+  if (redirectCouponsTo?.trim()) {
+    logger.warn(
+      { id, code: row.coupon_code, redirectedTo: redirectCouponsTo },
+      'STAGING: withheld coupon named after the test handset, NOT the real customer',
+    );
+  }
+
+  let body: YijiCouponResponse;
+  try {
+    body = await postCoupon<YijiCouponResponse>(YIJI_UNASSIGNED_COUPON_PATH, payload, {
+      ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
+      /* Stable across retries, so a timeout that in fact succeeded cannot mint
+         a second coupon with the same code. */
+      'idempotency-key': `withheld:${row.coupon_code ?? id}`,
+    });
+  } catch (err) {
+    /* A considered refusal (HTTP 400 with a body — a duplicate code included)
+       is recorded and settled; an outage throws so BullMQ backs off. */
+    if (isYijiRefused(err)) {
+      const detail = describeRefusal(err.body);
+      await recordFailure(directus, id, `yiji would not create the withheld coupon: ${detail}`);
+      logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused the withheld coupon');
+      return 'refused';
+    }
+    throw new Error(
+      `${isYijiUnavailable(err) ? 'yiji unavailable' : 'withheld coupon create failed'}: ${describeError(err)}`,
+    );
+  }
+
+  /* A 200 is not a yes: `AddCoupon` puts the verdict in `result` and the id in
+     `exceptionMessage` ("couponId 73900"). `result: 2` "Coupon with Code …
+     already exists!" lands here too — settled, so recorded, not retried. */
+  const couponId = readNewCouponId(body);
+  if (couponId == null) {
+    const detail = describeRefusal(body);
+    await recordFailure(directus, id, `yiji would not create the withheld coupon: ${detail}`);
+    logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused the withheld coupon');
+    return 'refused';
+  }
+
+  await directus.request(
+    updateItem('coupon_approvals' as never, id, {
+      /* No `status` here on purpose — it stays `approved`; nobody holds it. */
+      yiji_coupon_id: String(couponId),
+      yiji_pushed_at: new Date().toISOString(),
+      yiji_push_error: null,
+    } as never),
+  );
+  logger.info(
+    { id, code: row.coupon_code, couponId },
+    'withheld coupon created on Yiji — Private, assigned to nobody',
+  );
+  return 'withheld';
+}
+
 export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
@@ -1139,17 +1398,56 @@ export async function processCouponPushJob(
     return 'already-assigned';
   }
   /*
-   * Checked BEFORE anything else that could send it, and before the
-   * not-approved check, because an excluded row must be inert no matter what
-   * state it is in or how the job was queued — including a Retry click.
+   * ALREADY CREATED AS A WITHHELD COUPON: never again, and never assigned.
+   *
+   * Checked for EVERY row, not only withheld ones. A supervisor who unticks
+   * "do not send" after the withheld coupon exists would otherwise route the
+   * row into the assignment path and try to create the same code a second
+   * time — and the owner's rule is that a withheld coupon is never assigned
+   * (2026-10-06).
    */
-  if (row.delivery_excluded) {
-    logger.info({ id, code: row.coupon_code }, 'coupon is marked never-send — not pushing');
-    return 'excluded';
+  let withheldCouponId: string | null = null;
+  try {
+    withheldCouponId = await readYijiCouponId(directus, id);
+  } catch (err) {
+    /* For a withheld row this read IS the idempotency check, so an outage (or
+       the column not yet applied) must retry rather than risk a second
+       creation. For any other row it is only a guard, and failing it must not
+       stop a coupon the customer is owed. */
+    if (row.delivery_excluded) {
+      throw new Error(`could not read yiji_coupon_id: ${describeError(err)}`);
+    }
+    logger.warn({ id, err: describeError(err) }, 'could not read yiji_coupon_id — continuing');
+  }
+  if (withheldCouponId) {
+    logger.info(
+      { id, code: row.coupon_code, couponId: withheldCouponId },
+      'withheld coupon already created on Yiji — nothing to do, and never assigned',
+    );
+    return 'already-withheld';
   }
   if (row.status !== 'approved' && row.status !== 'edited') {
     logger.warn({ id, status: row.status }, 'coupon is not approved — refusing to push');
     return 'not-approved';
+  }
+  /*
+   * WITHHELD: CREATED ON YIJI, ASSIGNED TO NOBODY (owner, 2026-10-06).
+   *
+   * Branches off BEFORE every assignment step — the order/user resolution, the
+   * contact write-back, both grant endpoints — so a `delivery_excluded` row can
+   * never reach a customer however the job was queued, a Retry click included.
+   */
+  if (row.delivery_excluded) {
+    return await createWithheldCoupon({
+      row,
+      id,
+      directus,
+      logger,
+      postCoupon,
+      readOrder,
+      yijiTenantId,
+      redirectCouponsTo,
+    });
   }
 
   /*
@@ -1440,7 +1738,7 @@ export async function processCouponPushJob(
               row.contact?.phone,
             row.title,
           ),
-          compensationReason: row.reason ?? '',
+          compensationReason: crmCouponDescription(row.reason),
           status: 0,
           totalCount: 0,
         },

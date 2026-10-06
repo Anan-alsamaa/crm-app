@@ -773,6 +773,26 @@ export const collections: CollectionSpec[] = [
         type: 'string',
         note: 'Why it is excluded, so the decision is answerable later.',
       },
+      /*
+       * THE WITHHELD COUPON'S ID ON YIJI (owner, 2026-10-06).
+       *
+       * A withheld coupon is created on Yiji — Private, assigned to nobody — so
+       * their portal accounts for every coupon the CRM issued. `AddCoupon`
+       * answers with a COUPON id, which lands here.
+       *
+       * Its own column, NOT `yiji_coupon_user_id`: that one means "a customer
+       * holds this coupon", and borrowing it for an unassigned coupon is what
+       * confused the two states before. Also the idempotency evidence: set
+       * means the worker never creates it again.
+       *
+       * Needs a manual `apply:fields` on staging and prod BEFORE the deploy
+       * that reads it — a missing field 403s the whole Directus query.
+       */
+      {
+        field: 'yiji_coupon_id',
+        type: 'string',
+        note: 'Yiji coupon id of a WITHHELD coupon, created on Yiji unassigned (Private, no assignee). Never a customer grant — see yiji_coupon_user_id for those.',
+      },
       {
         field: 'yiji_push_error',
         type: 'text',

@@ -318,9 +318,10 @@ describe('a coupon with no order', () => {
     expect(patches[0]).toMatchObject({ status: 'assigned', yiji_coupon_user_id: '21500' });
   });
 
-  /* The withhold flag outranks this path too: it is checked before anything
-     that could send, so an excluded row never even looks a customer up. */
-  it('never looks anybody up for a withheld coupon', async () => {
+  /* The withhold flag outranks this path too: a withheld coupon is CREATED
+     unassigned (owner, 2026-10-06) but never looks a customer up and never
+     reaches the grant endpoint. */
+  it('never looks anybody up for a withheld coupon, and never grants it', async () => {
     const {
       deps: d,
       findCustomer,
@@ -329,9 +330,9 @@ describe('a coupon with no order', () => {
       ...NO_ORDER_ROW,
       delivery_excluded: true,
     } as unknown as CouponApprovalRow);
-    await expect(processCouponPushJob(job(), d)).resolves.toBe('excluded');
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('withheld');
     expect(findCustomer).not.toHaveBeenCalled();
-    expect(postCoupon).not.toHaveBeenCalled();
+    expect(postCoupon.mock.calls.map((c) => c[0])).toEqual([YIJI_UNASSIGNED_COUPON_PATH]);
   });
 });
 

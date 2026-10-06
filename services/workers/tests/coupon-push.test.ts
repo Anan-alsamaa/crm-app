@@ -262,8 +262,8 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
     const legacy = coupon({ ...ROW, no_other_discounts: null });
     expect(legacy.dontApplyLoyality).toBe(false);
     // The reason under the name their own UI uses, alongside the documented one.
-    expect(c.compensation).toBe(ROW.reason);
-    expect(c.compensationReason).toBe(ROW.reason);
+    expect(c.compensation).toBe(`CRM - ${ROW.reason}`);
+    expect(c.compensationReason).toBe(`CRM - ${ROW.reason}`);
   });
 
   it('maps a specific channel selection onto their codes', () => {
@@ -338,7 +338,7 @@ describe('yijiCouponPayload', () => {
 
   it('sends the reason under the field Yiji named for it', () => {
     const p = yijiCouponPayload(ROW) as { couponUser: Record<string, unknown> };
-    expect(p.couponUser.compensationReason).toBe('Order arrived cold.');
+    expect(p.couponUser.compensationReason).toBe('CRM - Order arrived cold.');
   });
 
   it('identifies the customer for a Yiji-side reader too', () => {
@@ -801,7 +801,7 @@ describe('the customer id must be one YIJI issued', () => {
   });
 });
 
-describe('a coupon marked never-send is inert', () => {
+describe('a coupon marked never-send is never assigned', () => {
   /*
    * Two real reasons, both permanent decisions rather than failures: a coupon
    * that was only ever a TEST (approved while the integration was being built,
@@ -810,25 +810,18 @@ describe('a coupon marked never-send is inert', () => {
    * compensate twice.
    *
    * Distinct from `yiji_push_error`, which means "we tried and Yiji said no"
-   * and can be cleared to try again. This means "do not try".
+   * and can be cleared to try again. This means "never give it to the customer".
    */
-  it('is not pushed, even when everything else about it is deliverable', async () => {
-    const { deps: d, postCoupon, patches } = deps({}, { ...ROW, delivery_excluded: true });
-    await expect(processCouponPushJob(job(), d)).resolves.toBe('excluded');
-    expect(postCoupon).not.toHaveBeenCalled();
-    expect(patches).toHaveLength(0);
-  });
-
-  it('stays inert even if the job is queued by hand', async () => {
-    // The Retry action clears `yiji_push_error` and re-enqueues; an excluded
-    // row must ignore that too, which is why the check runs before every other
-    // gate rather than beside them.
-    const { deps: d, postCoupon } = deps(
-      {},
-      { ...ROW, delivery_excluded: true, yiji_push_error: null, status: 'edited' },
-    );
-    await expect(processCouponPushJob(job(), d)).resolves.toBe('excluded');
-    expect(postCoupon).not.toHaveBeenCalled();
+  /*
+   * Since 2026-10-06 a withheld coupon is CREATED on Yiji, unassigned (owner) —
+   * see coupon-push-withheld.test.ts. What stays true here: it is never
+   * ASSIGNED, so it never reaches the grant endpoints.
+   */
+  it('never reaches an assignment endpoint, even when everything else is deliverable', async () => {
+    const { deps: d, postCoupon } = deps({}, { ...ROW, delivery_excluded: true });
+    postCoupon.mockResolvedValue({ result: 1, exceptionMessage: 'couponId 73900' } as never);
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('withheld');
+    expect(postCoupon.mock.calls.map((c) => (c as unknown[])[0])).not.toContain(YIJI_COUPON_PATH);
   });
 
   it('is left out of the delivery sweep entirely', async () => {

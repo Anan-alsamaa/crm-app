@@ -117,8 +117,8 @@ describe("the coupon's name on Yiji", () => {
   it('sends the number as the name and the reason as the compensation', () => {
     expect(coupon()).toMatchObject({
       name: '+966501234567',
-      compensation: 'Late delivery',
-      compensationReason: 'Late delivery',
+      compensation: 'CRM - Late delivery',
+      compensationReason: 'CRM - Late delivery',
     });
   });
 
