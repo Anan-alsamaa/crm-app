@@ -379,10 +379,16 @@ describe('processCouponPushJob — a withheld coupon', () => {
     expect(body.name).toBe('+966508315325');
   });
 
-  it('uses the staging redirect phone for the name', async () => {
+  /*
+   * STAGING CREATES NOTHING ON YIJI (2026-10-06). Staging shares Yiji's
+   * production coupon API, and the test-handset redirect cannot protect a
+   * coupon that belongs to nobody: the first staging deploy created 3 real
+   * coupons on Yiji this way. Settled, so the sweep stops asking.
+   */
+  it('is never created on Yiji from staging', async () => {
     const h = harness(ROW, { redirectCouponsTo: '0537301009' });
-    await processCouponPushJob(job(), h.deps);
-    expect((h.postCoupon.mock.calls[0]![1] as Record<string, unknown>).name).toBe('+966537301009');
+    await expect(processCouponPushJob(job(), h.deps)).resolves.toBe('refused');
+    expect(h.postCoupon).not.toHaveBeenCalled();
   });
 });
 

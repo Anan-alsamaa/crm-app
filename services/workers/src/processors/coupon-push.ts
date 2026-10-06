@@ -1254,6 +1254,25 @@ async function createWithheldCoupon(args: {
   }
 
   /*
+   * STAGING NEVER CREATES A WITHHELD COUPON ON YIJI (2026-10-06).
+   *
+   * Staging talks to Yiji's PRODUCTION coupon API. Its safety net is the
+   * test-handset redirect, which changes WHO a coupon is for — and a withheld
+   * coupon is for nobody, so the redirect protected nothing: on the first
+   * staging deploy the sweep created 3 old staging test coupons on real Yiji
+   * (#74014-74016; private, unassigned, already expired — harmless, kept, never
+   * deleted per the owner). Recorded as settled so the sweep stops asking.
+   */
+  if (redirectCouponsTo?.trim()) {
+    await recordFailure(directus, id, 'staging: withheld coupons are never created on Yiji');
+    logger.warn(
+      { id, code: row.coupon_code },
+      'STAGING: withheld coupon NOT created on Yiji (staging shares the production API)',
+    );
+    return 'refused';
+  }
+
+  /*
    * The order, read for the SAME enrichment the assigned coupon gets — Yiji's
    * own brandId/restaurantId and the phone in their format — so the two bodies
    * stay identical. Best-effort, exactly as there: a failed read costs those

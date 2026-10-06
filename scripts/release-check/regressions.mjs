@@ -237,7 +237,12 @@ await check('EMA-23', 'coupons refused by Yiji in the last 24 h (listed for a hu
   const since = new Date(Date.now() - 86_400_000).toISOString();
   const r = await items('coupon_approvals', {
     filter: JSON.stringify({
-      _and: [{ yiji_push_error: { _nnull: true } }, { date_updated: { _gte: since } }],
+      _and: [
+        { yiji_push_error: { _nnull: true } },
+        /* Staging's own guard note is not a Yiji refusal (2026-10-06). */
+        { yiji_push_error: { _nstarts_with: 'staging:' } },
+        { date_updated: { _gte: since } },
+      ],
     }),
     fields: 'coupon_code,yiji_push_error',
     limit: '20',
