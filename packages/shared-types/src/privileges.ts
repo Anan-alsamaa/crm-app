@@ -180,8 +180,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
     'wecare supervisor',
     'wecare admin',
   ),
-  assign_chats: holds('use_chat'),
-  close_chats: holds('use_chat'),
+  // edit_all_tickets carried the whole conversation update before 2026-10-06.
+  assign_chats: (p) => p.use_chat === true || p.edit_all_tickets === true,
+  close_chats: (p) => p.use_chat === true || p.edit_all_tickets === true,
   bulk_edit_chats: holds('use_chat'),
   delete_chats: never, // was the Administrator only
   edit_own_messages: holds('use_chat'),
