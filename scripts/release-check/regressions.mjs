@@ -322,6 +322,30 @@ await check(
 );
 
 await check(
+  'EMA-53',
+  'every new coupon request records the agent\'s "send to Yiji" choice',
+  async () => {
+    /* Coupons raised from a NEW TICKET were created with `delivery_excluded`
+     missing, so an agent's "do not send" never reached the admin (2026-10-06).
+     Every request created after the fix must carry true or false, never null. */
+    const r = await items('coupon_approvals', {
+      filter: JSON.stringify({
+        _and: [
+          { date_created: { _gte: '2026-10-06T12:00:00Z' } },
+          { delivery_excluded: { _null: true } },
+        ],
+      }),
+      fields: 'coupon_code,date_created',
+      limit: '20',
+    });
+    return {
+      ok: r.status === 200 && r.data.length === 0,
+      detail: r.status !== 200 ? `HTTP ${r.status}` : r.data.map((c) => c.coupon_code).join(', '),
+    };
+  },
+);
+
+await check(
   'EMA-23',
   'recently delivered coupons are redeemable on Yiji (reachLimit >= 1000)',
   async () => {
