@@ -27,6 +27,8 @@ const api = vi.hoisted(() => ({
   useSlaReports: vi.fn(),
 }));
 vi.mock('../src/features/sla-reports/api.js', () => api);
+// Export is gated on `export_data`; this suite exercises it, so grant it.
+vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => ({ can: () => true }) }));
 
 import { SlaReportsPage } from '../src/features/sla-reports/SlaReportsPage.js';
 

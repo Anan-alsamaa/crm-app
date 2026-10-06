@@ -5,7 +5,11 @@
  */
 export {
   PRIVILEGES,
+  OWNER_PRIVILEGES,
+  ALL_PRIVILEGES,
   PRIVILEGE_GROUP,
+  effectivePrivileges,
+  isOwnerPrivilege,
   ADMIN_PORTAL_PRIVILEGES as PORTAL_PRIVILEGES,
   type Privilege,
   type PrivilegeGroup,

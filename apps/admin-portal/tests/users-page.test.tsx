@@ -24,7 +24,10 @@ vi.mock('../src/features/teams/api.js', () => ({
 }));
 // UsersPage reads the current user (to guard self/owner deletion).
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => ({ user: { id: 'me', email: 'me@b.com', role: { name: 'Administrator' } } }),
+  useAuth: () => ({
+    user: { id: 'me', email: 'me@b.com', role: { name: 'Administrator' } },
+    can: () => true,
+  }),
 }));
 
 import { UsersPage } from '../src/features/users/UsersPage.js';

@@ -33,6 +33,10 @@ vi.mock('../src/features/custom-fields/CustomFieldsSection.js', () => ({
   ),
 }));
 
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
+}));
+
 import { ContactProfilePage } from '../src/features/contacts/ContactProfilePage.js';
 
 function renderPage() {

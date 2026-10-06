@@ -89,12 +89,190 @@ export const PRIVILEGES = [
   'use_directus_app',
 ] as const;
 
-export type Privilege = (typeof PRIVILEGES)[number];
+/**
+ * THE FINE-GRAINED PERMISSIONS — shown to the ADMINISTRATOR ONLY (owner,
+ * 2026-10-06).
+ *
+ * Every action that used to be decided by a hard-coded role NAME, by "owner
+ * only", or by riding along with a broader privilege, as its own switch — so
+ * the owner can hand out "view all", "delete", "export"… per page without a
+ * developer. Everybody else who can open the Roles page (a WeCare Admin) keeps
+ * seeing exactly the list above and nothing of these.
+ *
+ * NONE OF THEM NEEDS TO BE STORED TO WORK. A role that has never had one ticked
+ * gets its DEFAULT (`OWNER_PRIVILEGE_DEFAULTS`), which reproduces precisely what
+ * that role could do before these existed — so shipping this changes nothing
+ * for anyone until the owner flips a switch. A stored true/false always wins.
+ */
+export const OWNER_PRIVILEGES = [
+  // ── chat ────────────────────────────────────────────────────────────────
+  'start_chats',
+  'assign_chats',
+  'close_chats',
+  'bulk_edit_chats',
+  'delete_chats',
+  'edit_own_messages',
+  'receive_chats',
+  'no_agents_alert',
+  // ── customers ───────────────────────────────────────────────────────────
+  'view_contacts',
+  'create_contacts',
+  'edit_contacts',
+  'export_contacts',
+  // ── tickets ─────────────────────────────────────────────────────────────
+  'view_ticket_history',
+  'export_ticket_excel',
+  // ── late orders ─────────────────────────────────────────────────────────
+  'work_late_orders',
+  'view_late_orders_report',
+  'export_late_orders',
+  'view_order_details',
+  // ── coupons ─────────────────────────────────────────────────────────────
+  'request_coupons',
+  'view_coupon_spend',
+  'view_compensation_reports',
+  'delete_compensation',
+  // ── reporting ───────────────────────────────────────────────────────────
+  'view_agent_reports',
+  'view_sla_report',
+  // ── administration ──────────────────────────────────────────────────────
+  'delete_users',
+  'manage_teams',
+  'edit_yiji_branch_id',
+  'manage_store_notifications',
+  'manage_notification_defaults',
+] as const;
 
-export type PrivilegeGroup = 'chat' | 'tickets' | 'reporting' | 'admin';
+export type OwnerPrivilege = (typeof OWNER_PRIVILEGES)[number];
+export type Privilege = (typeof PRIVILEGES)[number] | OwnerPrivilege;
+
+/** Every key, in editor order: the shared list, then the owner's. */
+export const ALL_PRIVILEGES: readonly Privilege[] = [...PRIVILEGES, ...OWNER_PRIVILEGES];
+
+export function isOwnerPrivilege(key: string): key is OwnerPrivilege {
+  return (OWNER_PRIVILEGES as readonly string[]).includes(key);
+}
+
+const nameIn =
+  (...names: string[]) =>
+  (_p: Record<string, boolean>, role: string) =>
+    names.includes(role);
+const holds = (key: string) => (p: Record<string, boolean>) => p[key] === true;
+const never = () => false;
+
+/**
+ * What each fine-grained permission is WHEN NOTHING IS STORED: exactly the
+ * rule the code applied before it existed. Role names are compared lowercased.
+ *
+ * Mirrored in directus/extensions/app-roles-sync/index.js (plain JS, cannot
+ * import this); `privileges-mirror.test.ts` fails if the two disagree.
+ */
+export const OWNER_PRIVILEGE_DEFAULTS: Record<
+  OwnerPrivilege,
+  (p: Record<string, boolean>, role: string) => boolean
+> = {
+  // The gateway's CHAT_INITIATE_ROLES.
+  start_chats: nameIn(
+    'administrator',
+    'admin',
+    'agent',
+    'wecare agent',
+    'wecare supervisor',
+    'wecare admin',
+  ),
+  assign_chats: holds('use_chat'),
+  close_chats: holds('use_chat'),
+  bulk_edit_chats: holds('use_chat'),
+  delete_chats: never, // was the Administrator only
+  edit_own_messages: holds('use_chat'),
+  // The gateway's PRESENCE_ROLES / the workers' ROUTABLE_ROLES.
+  receive_chats: nameIn('wecare agent', 'wecare supervisor'),
+  // The workers' SUPERVISOR_ROLES.
+  no_agents_alert: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
+  view_contacts: holds('use_chat'),
+  create_contacts: holds('use_chat'),
+  edit_contacts: holds('use_chat'),
+  export_contacts: holds('use_chat'),
+  // The agent portal's history-visibility list.
+  view_ticket_history: nameIn('administrator', 'admin', 'wecare admin', 'wecare supervisor'),
+  export_ticket_excel: nameIn('administrator', 'admin'),
+  work_late_orders: holds('create_tickets'),
+  view_late_orders_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
+  export_late_orders: nameIn('wecare admin', 'wecare supervisor'),
+  view_order_details: (_p, role) => role.startsWith('wecare'),
+  request_coupons: holds('create_tickets'),
+  view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
+  view_compensation_reports: holds('approve_coupons'),
+  delete_compensation: never, // no role could (the grant never existed)
+  view_agent_reports: holds('view_all_chats'),
+  view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
+  delete_users: nameIn('administrator', 'wecare admin'),
+  manage_teams: holds('manage_users'),
+  edit_yiji_branch_id: never, // was the Administrator only
+  manage_store_notifications: holds('manage_restaurants'),
+  manage_notification_defaults: never, // was the Administrator only
+};
+
+/**
+ * The privileges a role ACTUALLY has: what is stored, plus the default of every
+ * fine-grained permission that is not. The one function every reader uses —
+ * both portals, the gateway, the workers — so "what can this role do" has one
+ * answer.
+ */
+export function effectivePrivileges(
+  stored: Record<string, boolean> | null | undefined,
+  roleName: string | null | undefined,
+): Record<string, boolean> {
+  const p: Record<string, boolean> = { ...(stored ?? {}) };
+  const role = String(roleName ?? '')
+    .trim()
+    .toLowerCase();
+  for (const key of OWNER_PRIVILEGES) {
+    if (typeof p[key] !== 'boolean') p[key] = OWNER_PRIVILEGE_DEFAULTS[key](p, role);
+  }
+  return p;
+}
+
+export type PrivilegeGroup =
+  | 'chat'
+  | 'customers'
+  | 'tickets'
+  | 'lateOrders'
+  | 'coupons'
+  | 'reporting'
+  | 'admin';
 
 /** Which capability area each privilege belongs to, for the editor's grouping. */
 export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
+  start_chats: 'chat',
+  assign_chats: 'chat',
+  close_chats: 'chat',
+  bulk_edit_chats: 'chat',
+  delete_chats: 'chat',
+  edit_own_messages: 'chat',
+  receive_chats: 'chat',
+  no_agents_alert: 'chat',
+  view_contacts: 'customers',
+  create_contacts: 'customers',
+  edit_contacts: 'customers',
+  export_contacts: 'customers',
+  view_ticket_history: 'tickets',
+  export_ticket_excel: 'tickets',
+  work_late_orders: 'lateOrders',
+  view_late_orders_report: 'lateOrders',
+  export_late_orders: 'lateOrders',
+  view_order_details: 'lateOrders',
+  request_coupons: 'coupons',
+  view_compensation_reports: 'coupons',
+  view_coupon_spend: 'coupons',
+  delete_compensation: 'coupons',
+  view_agent_reports: 'reporting',
+  view_sla_report: 'reporting',
+  delete_users: 'admin',
+  manage_teams: 'admin',
+  edit_yiji_branch_id: 'admin',
+  manage_store_notifications: 'admin',
+  manage_notification_defaults: 'admin',
   use_chat: 'chat',
   view_all_chats: 'chat',
   view_tickets: 'tickets',
@@ -103,7 +281,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   edit_tickets: 'tickets',
   edit_all_tickets: 'tickets',
   delete_tickets: 'tickets',
-  approve_coupons: 'tickets',
+  approve_coupons: 'tickets', // where everyone else has always found it
   view_dashboard: 'reporting',
   view_ops_dashboard: 'reporting',
   export_data: 'reporting',
@@ -153,6 +331,33 @@ export const AGENT_PORTAL_PRIVILEGES: readonly Privilege[] = [
   'view_tickets',
   'create_tickets',
 ];
+
+/**
+ * The Directus role NAMES whose role holds `key` — for the services that pick
+ * people by role (who is routed chats, who is alerted). `roleNames` is every
+ * Directus role; a role with no app_roles row is judged on its defaults alone,
+ * which is how the Administrator keeps the alerts it always had.
+ */
+export function roleNamesHolding(
+  key: Privilege,
+  roleNames: readonly string[],
+  appRoles: ReadonlyArray<{ name: string; privileges: unknown }>,
+): string[] {
+  const byName = new Map(appRoles.map((r) => [r.name.trim().toLowerCase(), r.privileges]));
+  return roleNames.filter((name) => {
+    const raw = byName.get(name.trim().toLowerCase());
+    const stored = typeof raw === 'string' ? safeJson(raw) : raw;
+    return effectivePrivileges(stored as Record<string, boolean> | null, name)[key] === true;
+  });
+}
+
+function safeJson(s: string): unknown {
+  try {
+    return JSON.parse(s);
+  } catch {
+    return null;
+  }
+}
 
 /** True when `privileges` opens at least one screen in the given portal. */
 export function opensPortal(

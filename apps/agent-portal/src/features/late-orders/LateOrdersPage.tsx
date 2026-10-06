@@ -293,7 +293,10 @@ export function writeStoredKinds(next: Record<string, string>): void {
 
 export function LateOrdersPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  // Assigning a coupon is `request_coupons` (owner, 2026-10-06); the page itself
+  // is `work_late_orders`, so commenting needs nothing more.
+  const canRequestCoupon = can('request_coupons');
   /*
    * THE FILTERS (owner, 2026-09-21): order id, then a date range, then brand
    * or branch.
@@ -1686,7 +1689,7 @@ export function LateOrdersPage() {
                               <Pill tone="success" size="sm">
                                 {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
                               </Pill>
-                            ) : (
+                            ) : !canRequestCoupon ? null : (
                               /*
                           ONE DECISION, AND ONLY ONE (owner spec, 2026-09-29):
                           assign a coupon. Ignore is gone — it was a second

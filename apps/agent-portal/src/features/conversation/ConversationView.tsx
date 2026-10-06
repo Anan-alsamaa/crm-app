@@ -119,8 +119,10 @@ export function ConversationView({
    * actions disappear once the 15-minute window closes without a reload; the
    * gateway refuses a late attempt regardless.
    */
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const myId = user?.id ?? null;
+  // `edit_own_messages` (owner, 2026-10-06): without it the hover stays Copy.
+  const canEditOwn = can('edit_own_messages');
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -1294,7 +1296,8 @@ export function ConversationView({
                           const isLast = i === run.length - 1;
                           const isDeleted = !!m.deleted_at;
                           const hasContent = !isDeleted && (m.content ?? '').trim().length > 0;
-                          const ownActions = !isDeleted && canOfferMessageActions(m, myId, now);
+                          const ownActions =
+                            canEditOwn && !isDeleted && canOfferMessageActions(m, myId, now);
                           const isEditing = ownActions && editing?.id === m.id;
                           return (
                             <div

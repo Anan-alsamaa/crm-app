@@ -15,7 +15,9 @@ vi.mock('react-i18next', () => ({
     t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
   }),
 }));
-vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => ({ user: { id: 'agent-1' } }) }));
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
+}));
 vi.mock('../src/lib/socket.js', () => ({
   getSocket: vi.fn().mockResolvedValue({ emit: vi.fn(), on: vi.fn() }),
 }));

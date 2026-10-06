@@ -31,6 +31,10 @@ const contacts = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/contacts/api.js', () => contacts);
 
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
+}));
+
 import { ContactPicker } from '../src/features/tickets/ContactPicker.js';
 
 const createMutate = vi.fn();

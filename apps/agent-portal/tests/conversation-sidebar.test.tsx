@@ -35,6 +35,10 @@ vi.mock('../src/features/custom-fields/CustomFieldsSection.js', () => ({
   CustomFieldsSection: () => <div>custom-fields</div>,
 }));
 
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
+}));
+
 import { ConversationSidebar } from '../src/features/conversation/ConversationSidebar.js';
 
 function renderSidebar(props = {}) {

@@ -4,6 +4,7 @@ import { Avatar, Button, cn, FormField, Input, Spinner, Ltr } from '@yiji/ui';
 import { formatPhone, isDialablePhone, normalizePhone } from '@yiji/shared-types';
 import { useContactSearch, useCreateContact, type ContactRow } from '../contacts/api.js';
 import { isForbidden } from '../../lib/directus.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
  * WHO IS THIS TICKET ABOUT? One field, one answer.
@@ -51,6 +52,8 @@ export function ContactPicker({
   const contactSearch = useContactSearch(search);
   const matches = contactSearch.data ?? [];
   const createContact = useCreateContact();
+  // `create_contacts` (owner, 2026-10-06); defaults to `use_chat`.
+  const mayCreate = useAuth().can('create_contacts');
 
   /*
    * THE CUSTOMER WE HAVE NOT MET.
@@ -62,6 +65,7 @@ export function ContactPicker({
    */
   const typed = search.trim();
   const canCreate =
+    mayCreate &&
     !!vendorId &&
     !tooShort &&
     !contactSearch.isFetching &&

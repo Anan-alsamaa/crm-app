@@ -6,7 +6,7 @@ import { couponWorth, type CouponValueFact } from '@yiji/reports';
 import { cn, formatDate, HBarChart, ProgressRing, SplitBar, TrendChart } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { businessDayWindow } from '../../lib/date-range.js';
-import { canSeeCouponMoney, useAuth } from '../../lib/auth/AuthContext.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
  * What compensation is COSTING — total riyals on issued coupons, split by who
@@ -18,9 +18,10 @@ import { canSeeCouponMoney, useAuth } from '../../lib/auth/AuthContext.js';
  *
  * TWO GATES, and only one of them is security:
  *
- *   1. `canSeeCouponMoney` decides whether to render. This is a PRODUCT
- *      decision — payout totals are commercial, and not everyone who can open
- *      the admin portal needs the number.
+ *   1. `view_coupon_spend` decides whether to render (owner, 2026-10-06; it
+ *      replaced the hard-coded role list in `canSeeCouponMoney`). This is a
+ *      PRODUCT decision — payout totals are commercial, and not everyone who
+ *      can open the admin portal needs the number.
  *   2. Directus decides what the session may actually read from
  *      `coupon_approvals`. That is the real boundary, enforced server-side; a
  *      role without read permission gets nothing back no matter what the UI
@@ -122,8 +123,8 @@ const SAR = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
 
 export function CouponSpend({ from, to, className }: Props): JSX.Element | null {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const allowed = canSeeCouponMoney(user);
+  const { can } = useAuth();
+  const allowed = can('view_coupon_spend');
   const q = useCouponSpend(from, to, allowed);
 
   // Render nothing at all rather than an empty shell: a card that says

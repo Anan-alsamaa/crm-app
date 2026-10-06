@@ -34,13 +34,15 @@ const api = vi.hoisted(() => ({
 vi.mock('../src/features/restaurants/api.js', () => api);
 
 /**
- * Who is signed in. `admin_access` is the Directus signal that separates the
- * built-in Administrator from the CRM "Admin" role, and it gates whether the
- * Yiji restaurant id is editable.
+ * Who is signed in. The Yiji restaurant id is gated on `edit_yiji_branch_id`,
+ * whose default is the owner (`admin_access`), so the mock derives it from that.
  */
 const session = vi.hoisted(() => ({ user: { admin_access: true } as { admin_access: boolean } }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => session,
+  useAuth: () => ({
+    ...session,
+    can: (key: string) => (key === 'edit_yiji_branch_id' ? session.user.admin_access : true),
+  }),
 }));
 
 /** Capture toast copy — the import result is reported only through it. */

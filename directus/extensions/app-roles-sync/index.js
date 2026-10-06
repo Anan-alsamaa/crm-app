@@ -130,6 +130,91 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     'compensation',
   ];
   const COUPON_FIELDS = ['coupon_code', 'coupon_value', 'coupon_percent', 'compensation'];
+  /*
+   * A chat's columns, split by who may change them (owner, 2026-10-06): closing
+   * and assigning became their own permissions, so the agent's general update
+   * may no longer touch them. These are every column the portals write — the
+   * order stamp and the priority; status/solved_at and the two assignee
+   * columns now come with close_chats and assign_chats.
+   */
+  const CONVERSATION_FIELDS_BASE = [
+    'priority',
+    'last_order_id',
+    'last_order_snapshot',
+    'last_order_at',
+  ];
+  const CONVERSATION_FIELDS_CLOSE = ['status', 'solved_at'];
+  const CONVERSATION_FIELDS_ASSIGN = ['assigned_agent', 'assigned_team'];
+  const ORG_NOTIFICATION_DEFAULTS = { key: { _eq: 'notification_defaults' } };
+
+  /* ── the Administrator's fine-grained permissions ─────────────────────── */
+
+  /*
+   * MIRROR of OWNER_PRIVILEGES / OWNER_PRIVILEGE_DEFAULTS in
+   * packages/shared-types/src/privileges.ts — a bare hook cannot import it.
+   * `privileges-mirror.test.ts` fails if the two disagree.
+   *
+   * A key nobody has stored takes its DEFAULT: what the role could do before
+   * the key existed. So the rows below grant exactly what they granted before,
+   * until the owner flips a switch.
+   */
+  const nameIn =
+    (...names) =>
+    (_p, role) =>
+      names.includes(role);
+  const holds = (key) => (p) => p[key] === true;
+  const never = () => false;
+  const OWNER_PRIVILEGE_DEFAULTS = {
+    start_chats: nameIn(
+      'administrator',
+      'admin',
+      'agent',
+      'wecare agent',
+      'wecare supervisor',
+      'wecare admin',
+    ),
+    assign_chats: holds('use_chat'),
+    close_chats: holds('use_chat'),
+    bulk_edit_chats: holds('use_chat'),
+    delete_chats: never,
+    edit_own_messages: holds('use_chat'),
+    receive_chats: nameIn('wecare agent', 'wecare supervisor'),
+    no_agents_alert: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
+    view_contacts: holds('use_chat'),
+    create_contacts: holds('use_chat'),
+    edit_contacts: holds('use_chat'),
+    export_contacts: holds('use_chat'),
+    view_ticket_history: nameIn('administrator', 'admin', 'wecare admin', 'wecare supervisor'),
+    export_ticket_excel: nameIn('administrator', 'admin'),
+    work_late_orders: holds('create_tickets'),
+    view_late_orders_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
+    export_late_orders: nameIn('wecare admin', 'wecare supervisor'),
+    view_order_details: (_p, role) => role.startsWith('wecare'),
+    request_coupons: holds('create_tickets'),
+    view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
+    view_compensation_reports: holds('approve_coupons'),
+    delete_compensation: never,
+    view_agent_reports: holds('view_all_chats'),
+    view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
+    delete_users: nameIn('administrator', 'wecare admin'),
+    manage_teams: holds('manage_users'),
+    edit_yiji_branch_id: never,
+    manage_store_notifications: holds('manage_restaurants'),
+    manage_notification_defaults: never,
+  };
+  const OWNER_PRIVILEGES = Object.keys(OWNER_PRIVILEGE_DEFAULTS);
+  const isOwnerPrivilege = (k) => Object.prototype.hasOwnProperty.call(OWNER_PRIVILEGE_DEFAULTS, k);
+
+  function effectivePrivileges(stored, roleName) {
+    const p = { ...(stored ?? {}) };
+    const role = String(roleName ?? '')
+      .trim()
+      .toLowerCase();
+    for (const key of OWNER_PRIVILEGES) {
+      if (typeof p[key] !== 'boolean') p[key] = OWNER_PRIVILEGE_DEFAULTS[key](p, role);
+    }
+    return p;
+  }
   const STORE_FIELDS_NO_YIJI_ID = [
     'code',
     'name',
@@ -230,7 +315,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        * The LIVE scope is untouched: a colleague's OPEN chat is still
        * unreadable, so it cannot be updated either — the read is the gate.
        */
-      g('conversations', 'update'),
+      /* …and since 2026-10-06 only the columns that are not closing or
+         assigning a chat, which are close_chats / assign_chats now (still
+         unscoped; still gated by the read). */
+      g('conversations', 'update', {}, CONVERSATION_FIELDS_BASE),
       g('messages', 'create'),
       g('messages', 'read', MESSAGE_OF_VISIBLE_CONVERSATION),
       /*
@@ -253,9 +341,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        * `contacts.update` — which is the more dangerous of the two, since it can
        * rewrite somebody who exists.
        */
-      g('contacts', 'create'),
+      /* Creating and editing a customer moved to create_contacts and
+         edit_contacts (owner, 2026-10-06); both default to use_chat, so every
+         holder keeps them until the owner says otherwise. */
       g('contacts', 'read'),
-      g('contacts', 'update'),
       g('tags', 'create'),
       g('tags', 'read'),
       g('tags', 'update'),
@@ -268,9 +357,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('custom_field_values', 'create'),
       g('custom_field_values', 'read'),
       g('custom_field_values', 'update'),
-      g('contacts_tags', 'create'),
       g('contacts_tags', 'read'),
-      g('contacts_tags', 'delete'),
       g('store_notifications', 'create'),
     ],
     view_all_chats: [
@@ -307,19 +394,17 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     ],
     create_tickets: [
       g('tickets', 'create'),
-      // Deciding a late order is the same act as raising the ticket beside it,
-      // and the Comments button lets an agent correct what they wrote.
-      g('late_order_decisions', 'create'),
-      g('late_order_decisions', 'update'),
+      // Deciding a late order (create/update on late_order_decisions) and
+      // requesting a coupon (coupon_approvals.create) were here; since
+      // 2026-10-06 they are work_late_orders and request_coupons, which
+      // default to this privilege.
       g('ticket_events', 'create'),
       g('tickets_files', 'create'),
       g('tickets_files', 'read'),
       g('tickets_files', 'delete'),
       g('directus_files', 'create'),
-      // Requesting a coupon is part of raising a ticket; DECIDING one is
-      // approve_coupons. Reads are queue-wide: compensation is worked as a
-      // shared pool, so every agent sees every request (one source of truth).
-      g('coupon_approvals', 'create'),
+      // Reads are queue-wide: compensation is worked as a shared pool, so
+      // every agent sees every request (one source of truth).
       g('coupon_approvals', 'read'),
     ],
     edit_tickets: [
@@ -349,7 +434,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        * owns. The narrower grant from `use_chat` stays; Directus ORs them, so
        * an agent is unaffected.
        */
-      g('conversations', 'update', {}),
+      /* The general columns only; closing and assigning a chat are their own
+         permissions since 2026-10-06 (both unscoped, like this). */
+      g('conversations', 'update', {}, CONVERSATION_FIELDS_BASE),
     ],
     delete_tickets: [g('tickets', 'delete')],
     approve_coupons: [
@@ -403,7 +490,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('stores', 'create', {}, STORE_FIELDS_NO_YIJI_ID),
       g('stores', 'update', {}, STORE_FIELDS_NO_YIJI_ID),
     ],
-    manage_users: [...crud('directus_users')],
+    // Delete is delete_users since 2026-10-06 — the Users page only ever
+    // offered it to the Administrator and WeCare Admin, and that is its default.
+    manage_users: ['create', 'read', 'update'].map((a) => g('directus_users', a)),
     // UI gate: the Operations tab of the dashboard. Its reads arrive with
     // view_dashboard / view_all_tickets.
     view_ops_dashboard: [],
@@ -434,6 +523,47 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       ...readOnly('directus_relations'),
       ...readOnly('directus_translations'),
       ...readOnly('directus_presets'),
+    ],
+
+    /* ── the Administrator's fine-grained permissions (owner, 2026-10-06) ──
+       `[]` = decided by the portal or a service (the gateway, the workers),
+       because the data it reads is already granted elsewhere. */
+    start_chats: [], // the gateway's /chat/agent-initiate
+    assign_chats: [g('conversations', 'update', {}, CONVERSATION_FIELDS_ASSIGN)],
+    close_chats: [g('conversations', 'update', {}, CONVERSATION_FIELDS_CLOSE)],
+    bulk_edit_chats: [],
+    // Messages, files and tags cascade from the conversation row.
+    delete_chats: [g('conversations', 'delete')],
+    edit_own_messages: [], // the gateway's message edit/delete
+    receive_chats: [], // the gateway's presence + the workers' routing
+    no_agents_alert: [], // the workers' alert
+    view_contacts: [],
+    create_contacts: [g('contacts', 'create')],
+    edit_contacts: [
+      g('contacts', 'update'),
+      g('contacts_tags', 'create'),
+      g('contacts_tags', 'delete'),
+    ],
+    export_contacts: [],
+    view_ticket_history: [],
+    export_ticket_excel: [],
+    work_late_orders: [g('late_order_decisions', 'create'), g('late_order_decisions', 'update')],
+    view_late_orders_report: [...readOnly('late_order_decisions')],
+    export_late_orders: [],
+    view_order_details: [],
+    request_coupons: [g('coupon_approvals', 'create'), g('coupon_approvals', 'read')],
+    view_coupon_spend: [],
+    view_compensation_reports: [g('coupon_approvals', 'read')],
+    delete_compensation: [g('coupon_approvals', 'delete')],
+    view_agent_reports: [],
+    view_sla_report: [],
+    delete_users: [g('directus_users', 'delete')],
+    manage_teams: [...crud('teams')],
+    edit_yiji_branch_id: [g('stores', 'update', {}, ['yiji_restaurant_id'])],
+    manage_store_notifications: [...crud('store_notify_rules')],
+    manage_notification_defaults: [
+      g('app_settings', 'create', {}, null, ORG_NOTIFICATION_DEFAULTS),
+      g('app_settings', 'update', ORG_NOTIFICATION_DEFAULTS),
     ],
   };
 
@@ -763,7 +893,14 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
      * additive, and the sweep below removes it next time); deleting everything
      * is not (owner, 2026-09-24).
      */
-    const grants = buildGrants(row.privileges, row.brands, row.stores, await protectedRoleIds());
+    // EFFECTIVE, not stored: a fine-grained key nobody has set grants what its
+    // default says, which is what the role could already do.
+    const grants = buildGrants(
+      effectivePrivileges(row.privileges, row.name),
+      row.brands,
+      row.stores,
+      await protectedRoleIds(),
+    );
     const desired = grants.map((grant) => ({
       policy: policyId,
       collection: grant.collection,
@@ -881,6 +1018,39 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
    * owner's: nothing on this list reaches them, and the list is all a role
    * editor can touch.
    */
+  /**
+   * THE FINE-GRAINED KEYS ARE THE OWNER'S TO SET (owner, 2026-10-06).
+   *
+   * Everyone else who can open the Roles page sees only the shared list, so a
+   * save from them must neither set these keys nor wipe them: `privileges` is
+   * one JSON column, and a PATCH replaces it whole — a WeCare Admin saving a
+   * role would otherwise erase every switch the owner had set on it.
+   *
+   * So for a non-owner: whatever they sent for these keys is dropped, and on an
+   * update the stored values are carried over untouched.
+   */
+  async function keepOwnerPrivileges(payload, context, keys = []) {
+    const acc = context?.accountability;
+    if (!acc || acc.admin || !payload?.privileges) return payload;
+    // One shared map cannot carry several rows' stored keys; the page never
+    // sends a batch, so refuse rather than wipe.
+    if (keys.length > 1) {
+      throw new ValidationError('Save roles one at a time.');
+    }
+    const next = {};
+    for (const [k, v] of Object.entries(payload.privileges)) {
+      if (!isOwnerPrivilege(k)) next[k] = v;
+    }
+    if (keys.length === 1) {
+      const row = await loadRow(keys[0]);
+      for (const [k, v] of Object.entries(row?.privileges ?? {})) {
+        if (isOwnerPrivilege(k) && typeof v === 'boolean') next[k] = v;
+      }
+    }
+    payload.privileges = next;
+    return payload;
+  }
+
   async function enforceCeiling(payload, context, keys = []) {
     const acc = context?.accountability;
     if (!acc || acc.admin) return payload; // the owner is unrestricted
@@ -900,6 +1070,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     }
     if (payload && payload.privileges) {
       for (const [k, on] of Object.entries(payload.privileges)) {
+        // Owner keys here are the stored ones carried over, not a grant.
+        if (isOwnerPrivilege(k)) continue;
         if (on && !held[k]) {
           throw new ForbiddenishError(`You cannot grant '${k}' — your own role does not hold it.`);
         }
@@ -909,7 +1081,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   }
 
   filter('app_roles.items.create', async (payload, _meta, context) =>
-    enforceCeiling(validatePayload(payload), context),
+    enforceCeiling(await keepOwnerPrivileges(validatePayload(payload), context), context),
   );
   filter('app_roles.items.update', async (payload, meta, context) => {
     // A builtin row is display-only. Refuse edits to anything but description.
@@ -923,7 +1095,11 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
           );
       }
     }
-    return enforceCeiling(validatePayload(payload), context, meta.keys ?? []);
+    return enforceCeiling(
+      await keepOwnerPrivileges(validatePayload(payload), context, meta.keys ?? []),
+      context,
+      meta.keys ?? [],
+    );
   });
 
   // Deleting a row tears the materialized artifacts down BEFORE the row goes,

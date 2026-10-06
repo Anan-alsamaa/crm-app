@@ -16,6 +16,7 @@ import {
   Ltr,
 } from '@yiji/ui';
 import { useContacts, type ContactRow } from './api.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 import { exportFileName } from '@yiji/shared-config';
 
 /**
@@ -70,6 +71,7 @@ export function ContactsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const contacts = useContacts();
+  const { can } = useAuth();
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
@@ -152,9 +154,12 @@ export function ContactsPage() {
             className="block h-8 w-full rounded-lg bg-input ps-8 pe-3 text-xs text-foreground placeholder:text-muted-foreground/60 ring-1 ring-inset ring-foreground/[0.08] hover:ring-foreground/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 text-start transition-[box-shadow,background-color] duration-fast ease-out"
           />
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onExport}>
-          {t('contacts.exportCsv', { defaultValue: 'Export CSV' })}
-        </Button>
+        {/* `export_contacts` (owner, 2026-10-06). */}
+        {can('export_contacts') && (
+          <Button type="button" variant="outline" size="sm" onClick={onExport}>
+            {t('contacts.exportCsv', { defaultValue: 'Export CSV' })}
+          </Button>
+        )}
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">

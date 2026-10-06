@@ -348,14 +348,16 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/late-orders',
           label: t('nav.lateOrders', { defaultValue: 'Late orders' }),
           icon: ClockIcon,
-          requires: 'create_tickets',
+          // Its own switch now (owner, 2026-10-06); defaults to create_tickets.
+          requires: 'work_late_orders',
         },
         {
-          // The customer directory the inbox links into — it goes with chat.
+          // The customer directory the inbox links into (owner, 2026-10-06:
+          // its own switch; defaults to use_chat).
           to: '/contacts',
           label: t('nav.contacts', { defaultValue: 'Contacts' }),
           icon: UsersIcon,
-          requires: 'use_chat',
+          requires: 'view_contacts',
         },
         {
           to: '/performance',
@@ -364,11 +366,12 @@ function Shell({ children }: { children: React.ReactNode }) {
           requires: 'use_chat',
         },
         {
-          // Compensation is raised from a ticket, so it follows the ticket privilege.
+          // Asking for a coupon is its own switch (owner, 2026-10-06); it
+          // defaults to the ticket privilege it used to follow.
           to: '/compensation',
           label: t('nav.compensation', { defaultValue: 'Compensation' }),
           icon: ClockIcon,
-          requires: 'create_tickets',
+          requires: 'request_coupons',
         },
       ],
     },
@@ -505,9 +508,9 @@ export function App() {
           <Route
             path="/late-orders"
             element={
-              /* Raising a ticket and asking for a coupon is what this page DOES,
-                 so it follows the privilege that allows both. */
-              <ProtectedRoute requires="create_tickets">
+              /* Its own switch (owner, 2026-10-06); defaults to create_tickets,
+                 since raising a ticket or a coupon is what this page DOES. */
+              <ProtectedRoute requires="work_late_orders">
                 <Shell>
                   <LateOrdersPage />
                 </Shell>
@@ -569,7 +572,7 @@ export function App() {
           <Route
             path="/contacts"
             element={
-              <ProtectedRoute requires="use_chat">
+              <ProtectedRoute requires="view_contacts">
                 <Shell>
                   <ContactsPage />
                 </Shell>
@@ -579,7 +582,7 @@ export function App() {
           <Route
             path="/contacts/:id"
             element={
-              <ProtectedRoute requires="use_chat">
+              <ProtectedRoute requires="view_contacts">
                 <Shell>
                   <ContactProfilePage />
                 </Shell>
@@ -589,7 +592,7 @@ export function App() {
           <Route
             path="/compensation"
             element={
-              <ProtectedRoute requires="create_tickets">
+              <ProtectedRoute requires="request_coupons">
                 <Shell>
                   <MyCouponsPage />
                 </Shell>

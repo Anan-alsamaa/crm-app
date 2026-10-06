@@ -171,7 +171,8 @@ export function CreateTicketDialog({
 }: Props) {
   const { t, i18n } = useTranslation();
   const createFromChat = useCreateTicketFromConversation();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
+  const canRequestCoupon = can('request_coupons');
   const {
     register,
     handleSubmit,
@@ -825,52 +826,55 @@ export function CreateTicketDialog({
                   </span>
                 </p>
               )}
-              <div className="rounded-2xl bg-primary/[0.05] p-3.5 ring-1 ring-inset ring-primary/15">
-                <label className="flex items-start gap-2.5 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={assignCoupon}
-                    onChange={(e) => {
-                      const on = e.target.checked;
-                      setAssignCoupon(on);
-                      if (!on) setCollectedCoupon(null);
-                      // The compensation flag follows the box, so the agent is
-                      // never asked the same thing twice.
-                      setComplaint((c) => ({ ...c, compensation: compensationFlag(on) }));
-                    }}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded accent-primary"
-                  />
-                  <span className="min-w-0">
-                    <span className="block font-medium text-foreground">
-                      {t('coupons.assign', { defaultValue: 'Assign a coupon' })}
+              {/* `request_coupons` (owner, 2026-10-06). */}
+              {canRequestCoupon && (
+                <div className="rounded-2xl bg-primary/[0.05] p-3.5 ring-1 ring-inset ring-primary/15">
+                  <label className="flex items-start gap-2.5 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={assignCoupon}
+                      onChange={(e) => {
+                        const on = e.target.checked;
+                        setAssignCoupon(on);
+                        if (!on) setCollectedCoupon(null);
+                        // The compensation flag follows the box, so the agent is
+                        // never asked the same thing twice.
+                        setComplaint((c) => ({ ...c, compensation: compensationFlag(on) }));
+                      }}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded accent-primary"
+                    />
+                    <span className="min-w-0">
+                      <span className="block font-medium text-foreground">
+                        {t('coupons.assign', { defaultValue: 'Assign a coupon' })}
+                      </span>
+                      <span className="block text-2xs leading-relaxed text-muted-foreground">
+                        {t('coupons.assignHint', {
+                          defaultValue:
+                            'A supervisor approves it before anything reaches the customer.',
+                        })}
+                      </span>
                     </span>
-                    <span className="block text-2xs leading-relaxed text-muted-foreground">
-                      {t('coupons.assignHint', {
-                        defaultValue:
-                          'A supervisor approves it before anything reaches the customer.',
-                      })}
-                    </span>
-                  </span>
-                </label>
-                <div className="mt-3 flex items-center gap-3">
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={!assignCoupon}
-                    onClick={() => setCouponOpen(true)}
-                  >
-                    {t('coupons.create', { defaultValue: 'Create coupon' })}
-                  </Button>
-                  {collectedCoupon && (
-                    <span className="text-2xs font-medium text-success">
-                      {t('coupons.attached', {
-                        code: collectedCoupon.code,
-                        defaultValue: '{{code}} will be sent for approval',
-                      })}
-                    </span>
-                  )}
+                  </label>
+                  <div className="mt-3 flex items-center gap-3">
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={!assignCoupon}
+                      onClick={() => setCouponOpen(true)}
+                    >
+                      {t('coupons.create', { defaultValue: 'Create coupon' })}
+                    </Button>
+                    {collectedCoupon && (
+                      <span className="text-2xs font-medium text-success">
+                        {t('coupons.attached', {
+                          code: collectedCoupon.code,
+                          defaultValue: '{{code}} will be sent for approval',
+                        })}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
               <CouponRequestDialog
                 open={couponOpen}
                 onClose={() => setCouponOpen(false)}

@@ -463,17 +463,16 @@ export function LateOrdersReportPage() {
    * silently ignored the instruction. It is the kind of gate that looks right
    * in the diff and does nothing.
    *
-   * So it names the two roles, plus `isOwner` (Directus `admin_access`), which
-   * is how Administrator is identified everywhere in this portal — the owner is
-   * never a role name.
+   * So it is its own privilege, `export_late_orders` (owner, 2026-10-06),
+   * whose default reproduces the old rule: WeCare Admin and WeCare Supervisor,
+   * plus the owner, whom `can()` always admits.
    *
    * Hiding is not securing, and it is not pretending to be: the rows are
    * already on screen for anyone who can open this page. This decides who is
    * OFFERED the file, which is what was asked for.
    */
-  const { user, isOwner } = useAuth();
-  const EXPORT_ROLES = ['WeCare Admin', 'WeCare Supervisor'];
-  const canExport = isOwner || EXPORT_ROLES.includes(user?.role?.name ?? '');
+  const { can } = useAuth();
+  const canExport = can('export_late_orders');
 
   /*
    * WHO MAY OPEN THE ORDER PANEL — EVERY WeCare ROLE (owner, 2026-10-03).
@@ -489,14 +488,15 @@ export function LateOrdersReportPage() {
    * one keeps its narrower list rather than being widened by association. The
    * two were only ever the same gate because they touch the same column.
    *
-   * Matched by PREFIX, not by an exact list: `WeCare Agent`, `WeCare
-   * Supervisor` and `WeCare Admin` all qualify, and a WeCare role added later
-   * does not silently lose the button the way a hardcoded array would.
+   * Now `view_order_details` (owner, 2026-10-06). Its default still matches
+   * by PREFIX, not by an exact list: `WeCare Agent`, `WeCare Supervisor` and
+   * `WeCare Admin` all qualify, and a WeCare role added later does not
+   * silently lose the button the way a hardcoded array would.
    *
    * Hiding is not securing and does not pretend to be: the snapshot rides on
    * the row this page already reads. This decides who is OFFERED it.
    */
-  const canSeeOrder = isOwner || /^WeCare\b/i.test(user?.role?.name ?? '') || canExport;
+  const canSeeOrder = can('view_order_details') || canExport;
   /** Which row is open. One at a time: two order panels is a page, not a table. */
   const [openOrder, setOpenOrder] = useState<string | null>(null);
   /* The row the dialog is showing. Resolved from the id rather than stored, so

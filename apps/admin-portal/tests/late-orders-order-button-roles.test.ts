@@ -32,17 +32,12 @@ describe('who may open the order panel', () => {
   });
 
   /*
-   * By PREFIX, not an exact list. `WeCare Agent`, `WeCare Supervisor` and
-   * `WeCare Admin` all qualify, and a WeCare role added later does not silently
-   * lose the button the way a hardcoded array would — which is exactly how this
-   * broke.
+   * Its own privilege since 2026-10-06 (`view_order_details`). Its default
+   * still admits every WeCare role by PREFIX, and `can()` always admits the
+   * owner; both live with the defaults in shared-types.
    */
-  it('admits every WeCare role', () => {
-    expect(PAGE).toMatch(/\/\^WeCare\\b\/i\.test\(user\?\.role\?\.name \?\? ''\)/);
-  });
-
-  it('still admits the owner', () => {
-    expect(PAGE).toMatch(/const canSeeOrder = isOwner \|\|/);
+  it('is gated on view_order_details', () => {
+    expect(PAGE).toMatch(/const canSeeOrder = can\('view_order_details'\)/);
   });
 
   /*
@@ -50,8 +45,7 @@ describe('who may open the order panel', () => {
    * system is a different act from reading one order, and widening it as a side
    * effect of this fix is the kind of change nobody reviews.
    */
-  it('leaves the export gate narrow', () => {
-    expect(PAGE).toMatch(/const EXPORT_ROLES = \['WeCare Admin', 'WeCare Supervisor'\]/);
-    expect(PAGE).toMatch(/const canExport = isOwner \|\| EXPORT_ROLES\.includes/);
+  it('keeps export on its own privilege', () => {
+    expect(PAGE).toMatch(/const canExport = can\('export_late_orders'\)/);
   });
 });

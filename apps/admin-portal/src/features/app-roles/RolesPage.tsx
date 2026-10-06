@@ -21,7 +21,14 @@ import {
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { BranchPicker } from './BranchPicker.js';
-import { PRIVILEGES, PRIVILEGE_GROUP, type Privilege } from '../../lib/privileges.js';
+import {
+  ALL_PRIVILEGES,
+  PRIVILEGES,
+  PRIVILEGE_GROUP,
+  effectivePrivileges,
+  isOwnerPrivilege,
+  type Privilege,
+} from '../../lib/privileges.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
@@ -41,17 +48,26 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
  * authority on what a tick GRANTS: a tick with no catalog entry is stripped
  * server-side, which is what stops the two drifting into lying.
  */
-const PRIVS: ReadonlyArray<{ key: Privilege; group: string }> = PRIVILEGES.map((key) => ({
-  key,
-  group: PRIVILEGE_GROUP[key],
-}));
+/*
+ * TWO LISTS, ONE PAGE (owner, 2026-10-06). The Administrator sees every
+ * permission, the fine-grained ones included; everyone else who can open this
+ * page sees exactly the list they always had. The server keeps the owner's
+ * switches out of their saves too (app-roles-sync `keepOwnerPrivileges`).
+ */
+const toPrivs = (keys: readonly Privilege[]) =>
+  keys.map((key) => ({ key, group: PRIVILEGE_GROUP[key] as string }));
+const SHARED_PRIVS = toPrivs(PRIVILEGES);
+const OWNER_PRIVS = toPrivs(ALL_PRIVILEGES);
 
 /* One hue per capability area, so a role's shape is legible before reading a
  * single label: chat is sky, tickets jade, reporting violet, administration
  * red — the same ranking the catalogue itself implies. */
 const GROUP_CHIPS: Record<string, string> = {
   chat: 'bg-sky-tint text-sky',
+  customers: 'bg-sky-tint text-sky',
   tickets: 'bg-primary-tint text-primary',
+  lateOrders: 'bg-primary-tint text-primary',
+  coupons: 'bg-violet-tint text-violet',
   reporting: 'bg-violet-tint text-violet',
   admin: 'bg-destructive-tint text-destructive',
 };
@@ -240,7 +256,10 @@ export function RolesPage() {
 
   const GROUP_ICONS: Record<string, React.ReactNode> = {
     chat: <InboxIcon size={15} />,
+    customers: <InboxIcon size={15} />,
     tickets: <TicketIcon size={15} />,
+    lateOrders: <TicketIcon size={15} />,
+    coupons: <TicketIcon size={15} />,
     reporting: <ChartIcon size={15} />,
     admin: <ShieldIcon size={15} />,
   };
@@ -264,6 +283,13 @@ export function RolesPage() {
    * because a disabled toggle is a courtesy and a PATCH is not.
    */
   const grantable = (key: Privilege) => isOwner || can(key);
+  const PRIVS = isOwner ? OWNER_PRIVS : SHARED_PRIVS;
+  /* What a switch SHOWS: the stored value, or - for a fine-grained permission
+     nobody has set - its default, which is what the role can do right now. */
+  const shown = useMemo(
+    () => effectivePrivileges(draft.privileges, draft.name),
+    [draft.privileges, draft.name],
+  );
   /**
    * Which branches are offered. Fencing to a brand already implies its
    * branches, so once brands are picked the branch list narrows to them —
@@ -294,7 +320,10 @@ export function RolesPage() {
   }, [stores.data, draft.brands, brands.data]);
   const GROUPS: Record<string, string> = {
     chat: t('roles.groupChat', { defaultValue: 'Customer chat' }),
+    customers: t('roles.groupCustomers', { defaultValue: 'Customers' }),
     tickets: t('roles.groupTickets', { defaultValue: 'Tickets' }),
+    lateOrders: t('roles.groupLateOrders', { defaultValue: 'Late orders' }),
+    coupons: t('roles.groupCoupons', { defaultValue: 'Coupons & compensation' }),
     reporting: t('roles.groupReporting', { defaultValue: 'Dashboard & reports' }),
     admin: t('roles.groupAdmin', { defaultValue: 'Administration' }),
   };
@@ -325,6 +354,70 @@ export function RolesPage() {
     manage_backup: t('roles.p.manageBackup', { defaultValue: 'Run backups' }),
     use_directus_app: t('roles.p.useDirectusApp', {
       defaultValue: 'Use the Directus admin app',
+    }),
+    // the Administrator's fine-grained permissions
+    start_chats: t('roles.p.startChats', { defaultValue: 'Start a chat with a customer' }),
+    assign_chats: t('roles.p.assignChats', {
+      defaultValue: 'Assign or transfer a chat to an agent or team',
+    }),
+    close_chats: t('roles.p.closeChats', { defaultValue: 'Close or reopen a chat' }),
+    bulk_edit_chats: t('roles.p.bulkEditChats', {
+      defaultValue: 'Bulk actions on chats (status, tags)',
+    }),
+    delete_chats: t('roles.p.deleteChats', { defaultValue: 'Delete chats' }),
+    edit_own_messages: t('roles.p.editOwnMessages', {
+      defaultValue: 'Edit or delete own messages (15 min)',
+    }),
+    receive_chats: t('roles.p.receiveChats', {
+      defaultValue: 'Show as online and receive auto-assigned chats',
+    }),
+    no_agents_alert: t('roles.p.noAgentsAlert', {
+      defaultValue: 'Receive the "no agents available" alert',
+    }),
+    view_contacts: t('roles.p.viewContacts', { defaultValue: 'Open the Customers page' }),
+    create_contacts: t('roles.p.createContacts', { defaultValue: 'Add a new customer' }),
+    edit_contacts: t('roles.p.editContacts', { defaultValue: 'Edit a customer and their tags' }),
+    export_contacts: t('roles.p.exportContacts', { defaultValue: 'Export customers' }),
+    view_ticket_history: t('roles.p.viewTicketHistory', {
+      defaultValue: 'See ticket change history',
+    }),
+    export_ticket_excel: t('roles.p.exportTicketExcel', {
+      defaultValue: 'Export a ticket to Excel',
+    }),
+    work_late_orders: t('roles.p.workLateOrders', {
+      defaultValue: 'Work late orders (handle, ignore, comment)',
+    }),
+    view_late_orders_report: t('roles.p.viewLateOrdersReport', {
+      defaultValue: 'View the late-orders report',
+    }),
+    export_late_orders: t('roles.p.exportLateOrders', {
+      defaultValue: 'Export the late-orders report',
+    }),
+    view_order_details: t('roles.p.viewOrderDetails', {
+      defaultValue: 'See the order details panel',
+    }),
+    request_coupons: t('roles.p.requestCoupons', { defaultValue: 'Request a coupon' }),
+    view_coupon_spend: t('roles.p.viewCouponSpend', { defaultValue: 'See coupon spend amounts' }),
+    view_compensation_reports: t('roles.p.viewCompensationReports', {
+      defaultValue: 'View the compensation and coupon reports',
+    }),
+    delete_compensation: t('roles.p.deleteCompensation', {
+      defaultValue: 'Delete a compensation record',
+    }),
+    view_agent_reports: t('roles.p.viewAgentReports', {
+      defaultValue: 'Agent KPI and performance reports',
+    }),
+    view_sla_report: t('roles.p.viewSlaReport', { defaultValue: 'SLA report' }),
+    delete_users: t('roles.p.deleteUsers', { defaultValue: 'Delete users' }),
+    manage_teams: t('roles.p.manageTeams', { defaultValue: 'Manage teams' }),
+    edit_yiji_branch_id: t('roles.p.editYijiBranchId', {
+      defaultValue: "Edit a branch's Yiji restaurant ID",
+    }),
+    manage_store_notifications: t('roles.p.manageStoreNotifications', {
+      defaultValue: 'Branch notifications',
+    }),
+    manage_notification_defaults: t('roles.p.manageNotificationDefaults', {
+      defaultValue: 'Organisation-wide notification defaults',
     }),
   };
 
@@ -560,7 +653,10 @@ export function RolesPage() {
                 <div className="grid items-start gap-4 sm:grid-cols-2 2xl:grid-cols-4">
                   {Object.entries(GROUPS).map(([group, label]) => {
                     const groupPrivs = PRIVS.filter((p) => p.group === group);
-                    const ticked = groupPrivs.filter((p) => !!draft.privileges[p.key]).length;
+                    // Customers, late orders and coupons hold only the
+                    // Administrator's switches; nobody else sees those cards.
+                    if (groupPrivs.length === 0) return null;
+                    const ticked = groupPrivs.filter((p) => !!shown[p.key]).length;
                     return (
                       <fieldset
                         key={group}
@@ -652,6 +748,13 @@ export function RolesPage() {
                               >
                                 <span className="min-w-0 flex-1">
                                   {PRIV_LABELS[p.key]}
+                                  {isOwnerPrivilege(p.key) && (
+                                    <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
+                                      {t('roles.ownerOnlyHint', {
+                                        defaultValue: 'Only the Administrator sees this switch.',
+                                      })}
+                                    </span>
+                                  )}
                                   {!locked && !grantable(p.key) && (
                                     <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
                                       {t('roles.ceilingHint', {
@@ -665,7 +768,7 @@ export function RolesPage() {
                                   <input
                                     type="checkbox"
                                     className="peer sr-only"
-                                    checked={!!draft.privileges[p.key]}
+                                    checked={!!shown[p.key]}
                                     disabled={locked || !grantable(p.key)}
                                     title={
                                       !grantable(p.key)

@@ -10,7 +10,7 @@ import {
 import { readItems } from '@directus/sdk';
 import type { AuthUser } from '@yiji/shared-config';
 import { auth, directus } from '../directus.js';
-import { PORTAL_PRIVILEGES, type Privilege } from '../privileges.js';
+import { PORTAL_PRIVILEGES, effectivePrivileges, type Privilege } from '../privileges.js';
 
 interface AuthState {
   user: AuthUser | null;
@@ -79,7 +79,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } as never,
         ),
       )) as unknown as Array<{ privileges: Record<string, boolean> | null }>;
-      const next = rows[0]?.privileges ?? null;
+      /* EFFECTIVE: the Administrator's fine-grained keys fill in from their
+         defaults, so `can('view_coupon_spend')` answers what the role really
+         may do (owner, 2026-10-06). No row stays null. */
+      const next = rows[0] ? effectivePrivileges(rows[0].privileges, me?.role?.name) : null;
       setPrivileges(next);
       return next;
     } catch {
@@ -226,6 +229,8 @@ export function canSeeCouponMoney(user: AuthUser | null): boolean {
   if (!user) return false;
   return !!user.role && COUPON_MONEY_ROLES.includes(user.role.name);
 }
+/* Superseded by the `view_coupon_spend` permission (owner, 2026-10-06), whose
+   default is exactly COUPON_MONEY_ROLES; kept for the tests that pin that. */
 
 /**
  * Whether this portal has anything for a person.

@@ -59,7 +59,10 @@ vi.mock('../src/features/inbox/api.js', () => ({
   useTeamOptions: () => ({ data: [] }),
 }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => ({ user: { id: 'agent-1', first_name: 'Sara', last_name: null, email: null } }),
+  useAuth: () => ({
+    user: { id: 'agent-1', first_name: 'Sara', last_name: null, email: null },
+    can: () => true,
+  }),
 }));
 // The list is fed by the agent's own tickets, joined against the store
 // master so branch attribution matches the manager's report exactly.

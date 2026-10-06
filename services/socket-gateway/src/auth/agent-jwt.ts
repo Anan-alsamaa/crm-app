@@ -1,4 +1,5 @@
-import { createDirectus, rest, staticToken, readMe } from '@directus/sdk';
+import { createDirectus, rest, staticToken, readMe, readItems } from '@directus/sdk';
+import { ALL_PRIVILEGES, effectivePrivileges } from '@yiji/shared-types';
 
 /**
  * Validate an agent's Directus access token by calling /users/me as that user
@@ -7,6 +8,38 @@ import { createDirectus, rest, staticToken, readMe } from '@directus/sdk';
 export interface AgentIdentity {
   id: string;
   role: string | null;
+  /**
+   * What the role may do — its app_roles row, defaults filled in (owner,
+   * 2026-10-06). The gateway's endpoints check THESE instead of role names, so
+   * the Roles page decides who may start a chat, import, or run a report.
+   */
+  privileges: Record<string, boolean>;
+}
+
+/**
+ * Roles with no app_roles row that have always passed every check here: the
+ * owner (Administrator) and the two code-defined roles. Anyone else without a
+ * row gets the defaults alone.
+ */
+const ROWLESS_FULL_ROLES = ['administrator', 'admin', 'agent'];
+
+export function rolePrivileges(
+  roleName: string | null,
+  row: { privileges: unknown } | null,
+): Record<string, boolean> {
+  if (!row && ROWLESS_FULL_ROLES.includes(String(roleName ?? '').toLowerCase())) {
+    return Object.fromEntries(ALL_PRIVILEGES.map((k) => [k, true]));
+  }
+  const raw = row?.privileges;
+  let stored: Record<string, boolean> | null = null;
+  if (typeof raw === 'string') {
+    try {
+      stored = JSON.parse(raw) as Record<string, boolean>;
+    } catch {
+      stored = null;
+    }
+  } else if (raw && typeof raw === 'object') stored = raw as Record<string, boolean>;
+  return effectivePrivileges(stored, roleName);
 }
 
 export async function validateAgentToken(
@@ -15,11 +48,33 @@ export async function validateAgentToken(
 ): Promise<AgentIdentity | null> {
   try {
     const client = createDirectus(directusUrl).with(staticToken(token)).with(rest());
-    const me = (await client.request(readMe({ fields: ['id', { role: ['name'] }] }))) as {
+    const me = (await client.request(readMe({ fields: ['id', { role: ['id', 'name'] }] }))) as {
       id: string;
-      role: { name: string } | null;
+      role: { id?: string; name: string } | null;
     };
-    return { id: me.id, role: me.role?.name ?? null };
+    const role = me.role?.name ?? null;
+    /* Read with the agent's OWN token: every app role may read app_roles
+       (baseline grant). A failed read falls back to the defaults, which are
+       what the role could do before the Roles page decided it. */
+    let row: { privileges: unknown } | null = null;
+    if (me.role?.id) {
+      try {
+        const rows = (await client.request(
+          readItems(
+            'app_roles' as never,
+            {
+              filter: { directus_role: { _eq: me.role.id } },
+              fields: ['privileges'],
+              limit: 1,
+            } as never,
+          ),
+        )) as unknown as Array<{ privileges: unknown }> | undefined;
+        row = rows?.[0] ?? null;
+      } catch {
+        row = null;
+      }
+    }
+    return { id: me.id, role, privileges: rolePrivileges(role, row) };
   } catch {
     return null;
   }

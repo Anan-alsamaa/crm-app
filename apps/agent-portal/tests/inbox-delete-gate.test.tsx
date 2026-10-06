@@ -40,7 +40,13 @@ const h = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => ({ user: { id: 'u1' }, can: () => true, isOwner: h.isOwner }),
+  // `delete_chats` (owner, 2026-10-06) — defaults to the Administrator alone,
+  // so `h.isOwner` still stands for "holds it".
+  useAuth: () => ({
+    user: { id: 'u1' },
+    can: (k: string) => (k === 'delete_chats' ? h.isOwner : true),
+    isOwner: h.isOwner,
+  }),
 }));
 
 vi.mock('../src/features/inbox/api.js', () => ({

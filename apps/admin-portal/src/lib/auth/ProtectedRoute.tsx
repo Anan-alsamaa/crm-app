@@ -21,10 +21,13 @@ import type { Privilege } from '../privileges.js';
 export function ProtectedRoute({
   children,
   requires,
+  requiresAny,
   ownerOnly = false,
 }: {
   children: ReactNode;
   requires?: Privilege;
+  /** Open when ANY of these is held — a section whose tabs each have their own. */
+  requiresAny?: readonly Privilege[];
   /**
    * Open to the project owner (Directus admin_access) and nobody else. Not a
    * privilege on purpose: there is no key in the Roles editor that can hand
@@ -72,7 +75,7 @@ export function ProtectedRoute({
     );
   }
 
-  if (requires && !can(requires)) {
+  if ((requires && !can(requires)) || (requiresAny && !requiresAny.some((p) => can(p)))) {
     return (
       <div className="flex h-full items-center justify-center p-6">
         <EmptyState

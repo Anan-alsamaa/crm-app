@@ -18,6 +18,7 @@ import {
   type InboxConversation,
 } from '../inbox/api.js';
 import { getSocket } from '../../lib/socket.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
@@ -67,6 +68,9 @@ export function ConversationToolbar({
   const agents = useAgents();
   const teams = useTeamOptions();
   const update = useUpdateConversation();
+  const { can } = useAuth();
+  const canAssign = can('assign_chats');
+  const canClose = can('close_chats');
   const linkedTickets = useLinkedTickets(conversation.id);
   // Raising a ticket is a full page, the same one the sidebar's order id opens.
   // One screen for one task: two different shapes for "new ticket" is the kind
@@ -317,33 +321,51 @@ export function ConversationToolbar({
                 label: t(`priority.${p}`, { ns: 'common' }),
               }))}
             />
-            <GhostSelect
-              size="sm"
-              label={t('conversation.agent')}
-              aria-label={t('conversation.agent')}
-              value={conversation.assigned_agent ?? ''}
-              display={agentLabel}
-              onChange={(v) => void patch({ assigned_agent: v || null })}
-              options={[
-                { value: '', label: t('conversation.unassigned') },
-                ...(agents.data ?? []).map((a) => ({
-                  value: a.id,
-                  label: a.first_name ?? a.email ?? '',
-                })),
-              ]}
-            />
-            <GhostSelect
-              size="sm"
-              label={t('conversation.team')}
-              aria-label={t('conversation.team')}
-              value={conversation.assigned_team ?? ''}
-              display={teamLabel}
-              onChange={(v) => void handoverToTeam(v || null)}
-              options={[
-                { value: '', label: t('conversation.noTeam') },
-                ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
-              ]}
-            />
+            {/* `assign_chats` (owner, 2026-10-06): without it the owner and
+                team still SHOW, as plain text — who has the chat is worth
+                knowing even when you may not move it. */}
+            {canAssign ? (
+              <>
+                <GhostSelect
+                  size="sm"
+                  label={t('conversation.agent')}
+                  aria-label={t('conversation.agent')}
+                  value={conversation.assigned_agent ?? ''}
+                  display={agentLabel}
+                  onChange={(v) => void patch({ assigned_agent: v || null })}
+                  options={[
+                    { value: '', label: t('conversation.unassigned') },
+                    ...(agents.data ?? []).map((a) => ({
+                      value: a.id,
+                      label: a.first_name ?? a.email ?? '',
+                    })),
+                  ]}
+                />
+                <GhostSelect
+                  size="sm"
+                  label={t('conversation.team')}
+                  aria-label={t('conversation.team')}
+                  value={conversation.assigned_team ?? ''}
+                  display={teamLabel}
+                  onChange={(v) => void handoverToTeam(v || null)}
+                  options={[
+                    { value: '', label: t('conversation.noTeam') },
+                    ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
+                  ]}
+                />
+              </>
+            ) : (
+              <>
+                <span className="px-2 text-xs text-muted-foreground">
+                  {t('conversation.agent')}:{' '}
+                  <span className="font-medium text-foreground">{agentLabel}</span>
+                </span>
+                <span className="px-2 text-xs text-muted-foreground">
+                  {t('conversation.team')}:{' '}
+                  <span className="font-medium text-foreground">{teamLabel}</span>
+                </span>
+              </>
+            )}
           </div>
 
           {/* Product change (2026-07-26): a conversation may carry MULTIPLE
@@ -359,9 +381,11 @@ export function ConversationToolbar({
               it gets a primary-weight button in its own hue; once solved it
               steps back to a quiet outline, since the case needs nothing more.
               A new customer message flips it back automatically (gateway). */}
-          <Button
-            type="button"
-            /*
+          {/* `close_chats` (owner, 2026-10-06) gates both directions. */}
+          {canClose && (
+            <Button
+              type="button"
+              /*
               CLOSING IS NOT A POSITIVE ACTION (owner, 2026-09-30).
               
               It read "Mark as solved" in `success` green, which is the same
@@ -370,33 +394,34 @@ export function ConversationToolbar({
               still reversible, but no longer inviting. Reopening keeps the
               green it already had, because THAT is the positive act.
             */
-            variant={isSolved ? 'success' : 'destructive-soft'}
-            size="sm"
-            iconStart={isSolved ? undefined : <CheckIcon />}
-            onClick={() =>
-              // solved_at is stamped here rather than derived later: the status
-              // says WHETHER a chat is finished, never WHEN, and agent
-              // performance measures time-to-solve from exactly this moment.
-              // Reopening clears it, so a reopened chat is not still carrying a
-              // solve time that never happened.
-              void patch(
+              variant={isSolved ? 'success' : 'destructive-soft'}
+              size="sm"
+              iconStart={isSolved ? undefined : <CheckIcon />}
+              onClick={() =>
+                // solved_at is stamped here rather than derived later: the status
+                // says WHETHER a chat is finished, never WHEN, and agent
+                // performance measures time-to-solve from exactly this moment.
+                // Reopening clears it, so a reopened chat is not still carrying a
+                // solve time that never happened.
+                void patch(
+                  isSolved
+                    ? { status: 'open', solved_at: null }
+                    : { status: 'solved', solved_at: new Date().toISOString() },
+                )
+              }
+              title={
                 isSolved
-                  ? { status: 'open', solved_at: null }
-                  : { status: 'solved', solved_at: new Date().toISOString() },
-              )
-            }
-            title={
-              isSolved
-                ? t('conversation.solvedHint', {
-                    defaultValue: 'Solved. Reopen it if the case is not finished.',
-                  })
-                : undefined
-            }
-          >
-            {isSolved
-              ? t('conversation.markOpen', { defaultValue: 'Reopen' })
-              : t('conversation.closeChat', { defaultValue: 'Close this chat' })}
-          </Button>
+                  ? t('conversation.solvedHint', {
+                      defaultValue: 'Solved. Reopen it if the case is not finished.',
+                    })
+                  : undefined
+              }
+            >
+              {isSolved
+                ? t('conversation.markOpen', { defaultValue: 'Reopen' })
+                : t('conversation.closeChat', { defaultValue: 'Close this chat' })}
+            </Button>
+          )}
 
           {existingTicket && (
             <Button

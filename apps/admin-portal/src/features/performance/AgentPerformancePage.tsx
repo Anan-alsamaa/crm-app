@@ -45,6 +45,7 @@ import {
 import { directus } from '../../lib/directus.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 import { exportFileName } from '@yiji/shared-config';
 
 /**
@@ -322,6 +323,9 @@ function useCsatByConversation(filters: Filters) {
 
 export function AgentPerformancePage() {
   const { t } = useTranslation();
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const { can } = useAuth();
+  const canExport = can('export_data');
   const agents = useAgentList();
   const agentNames = useMemo(() => {
     const m = new Map<string, string>();
@@ -520,15 +524,17 @@ export function AgentPerformancePage() {
           {t('performance.title', { defaultValue: 'Agent performance' })}
         </h1>
         <ToolbarSpacer />
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={exportCsv}
-          disabled={rows.length === 0}
-        >
-          {t('stores.export', { defaultValue: 'Export CSV' })}
-        </Button>
+        {canExport && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={exportCsv}
+            disabled={rows.length === 0}
+          >
+            {t('stores.export', { defaultValue: 'Export CSV' })}
+          </Button>
+        )}
       </Toolbar>
 
       {/* The shell's <main> is overflow-hidden by design — every page owns its

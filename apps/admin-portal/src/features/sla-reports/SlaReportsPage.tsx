@@ -28,6 +28,7 @@ import {
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 import { exportCsv, reportFilename, type CsvColumn } from '@yiji/reports';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 
@@ -239,6 +240,9 @@ function Kpi({
 
 export function SlaReportsPage() {
   const { t } = useTranslation();
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const { can } = useAuth();
+  const canExport = can('export_data');
   const pinRef = usePinnedWidth();
   const {
     from,
@@ -515,25 +519,27 @@ export function SlaReportsPage() {
                 /* Secondary, like the export on every other report. It was
                    `ghost` here, so the same action looked like a different
                    weight of thing depending on which report you stood in. */
-                <ExportButtons
-                  visibleCount={ticketsShown.length}
-                  totalCount={report.data?.tickets.length ?? 0}
-                  onExportView={() => runExport('view')}
-                  onExportAll={() => runExport('all')}
-                  disabled={!report.data}
-                  labelPlain={t('agentReports.exportCsvCount', {
-                    count: ticketsShown.length,
-                    defaultValue: 'Export CSV ({{count}})',
-                  })}
-                  labelView={t('agentReports.exportCsvFiltered', {
-                    count: ticketsShown.length,
-                    defaultValue: 'Export {{count}} shown',
-                  })}
-                  labelAll={t('agentReports.exportCsvAll', {
-                    count: report.data?.tickets.length ?? 0,
-                    defaultValue: 'Export all {{count}}',
-                  })}
-                />
+                canExport && (
+                  <ExportButtons
+                    visibleCount={ticketsShown.length}
+                    totalCount={report.data?.tickets.length ?? 0}
+                    onExportView={() => runExport('view')}
+                    onExportAll={() => runExport('all')}
+                    disabled={!report.data}
+                    labelPlain={t('agentReports.exportCsvCount', {
+                      count: ticketsShown.length,
+                      defaultValue: 'Export CSV ({{count}})',
+                    })}
+                    labelView={t('agentReports.exportCsvFiltered', {
+                      count: ticketsShown.length,
+                      defaultValue: 'Export {{count}} shown',
+                    })}
+                    labelAll={t('agentReports.exportCsvAll', {
+                      count: report.data?.tickets.length ?? 0,
+                      defaultValue: 'Export all {{count}}',
+                    })}
+                  />
+                )
               }
               bar={{
                 from,

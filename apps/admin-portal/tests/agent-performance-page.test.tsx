@@ -24,6 +24,8 @@ const sdk = vi.hoisted(() => ({
   request: vi.fn(),
 }));
 vi.mock('../src/lib/directus.js', () => ({ directus: { request: sdk.request } }));
+// Export is gated on `export_data`; grant it so the toolbar renders as before.
+vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => ({ can: () => true }) }));
 vi.mock('@directus/sdk', () => ({
   readItems: (collection: string, query: unknown) => ({ kind: 'items', collection, query }),
   readUsers: (query: unknown) => ({ kind: 'users', query }),

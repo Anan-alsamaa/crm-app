@@ -43,6 +43,7 @@ function PencilIcon() {
 }
 import { CommercePanel } from './CommercePanel.js';
 import { ContactTags } from './ContactTags.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 
 /**
@@ -86,6 +87,8 @@ export function ContactProfilePage() {
   const conversations = useContactConversations(id);
   const tickets = useContactTickets(id);
   const updateContact = useUpdateContact();
+  // `edit_contacts` (owner, 2026-10-06): the details pencil and the tag editor.
+  const canEdit = useAuth().can('edit_contacts');
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({ name: '', email: '' });
   // Leave edit mode when navigating to a different contact.
@@ -180,7 +183,7 @@ export function ContactProfilePage() {
 
           {/* Right column: tags + custom fields + commerce panel */}
           <div className="space-y-6">
-            {contact.data && <ContactTags contact={contact.data} />}
+            {contact.data && <ContactTags contact={contact.data} readOnly={!canEdit} />}
             {/* FR-031 — admin-defined custom fields for contacts. Renders its own
                 card and collapses to nothing when no contact fields are defined. */}
             {contact.data && (
@@ -323,7 +326,7 @@ export function ContactProfilePage() {
               </>
             )}
           </div>
-          {!editing && (
+          {!editing && canEdit && (
             <button
               type="button"
               onClick={startEdit}

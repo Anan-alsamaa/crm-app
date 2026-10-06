@@ -95,7 +95,7 @@ const PAGE_SIZE = 20;
 
 export function UsersPage() {
   const { t } = useTranslation();
-  const { user: currentUser } = useAuth();
+  const { user: currentUser, can } = useAuth();
   const users = useUsers();
   const roles = useRoles();
   const teams = useTeams();
@@ -160,17 +160,14 @@ export function UsersPage() {
    * This checked only that you were not deleting yourself or the project
    * owner — so any role that could reach this page could remove accounts
    * (owner, 2026-09-15). Deletion is irreversible and takes the person's
-   * history with it, so it belongs to the two roles that own the user list:
+   * history with it, so it is its own privilege, `delete_users` (owner,
+   * 2026-10-06), whose default is the two roles that own the user list:
    * WeCare Admin and Administrator.
    *
    * Hiding the button is not the security boundary — Directus is — but a
    * control nobody should press should not be on screen either.
    */
-  const viewerRole = currentUser?.role?.name?.toLowerCase() ?? '';
-  const viewerMayDelete =
-    currentUser?.admin_access === true ||
-    viewerRole === 'administrator' ||
-    viewerRole === 'wecare admin';
+  const viewerMayDelete = can('delete_users');
   const canDelete = !!editing && !isSelf && !isOwner && viewerMayDelete;
 
   // Administrator is the system superuser (full schema + permission control) and

@@ -117,15 +117,34 @@ describe('createNotificationsRepo', () => {
 describe('createRoutingRepo.agentsByLoad', () => {
   const repo = createRoutingRepo(client);
 
+  /*
+   * WHO IS ROUTED is the `receive_chats` permission since 2026-10-06 (owner),
+   * so every call first reads the Directus roles and the app_roles rows. These
+   * two answers are those reads; the default for each role reproduces the old
+   * WeCare Agent + WeCare Supervisor list.
+   */
+  const ROLES = [
+    { name: 'WeCare Agent' },
+    { name: 'WeCare Supervisor' },
+    { name: 'WeCare Admin' },
+    { name: 'Administrator' },
+    { name: 'svc-workers' },
+  ];
+  const rolesRead = (appRoles: unknown[] = []) => {
+    request.mockResolvedValueOnce(ROLES);
+    request.mockResolvedValueOnce(appRoles);
+  };
+
   /** Resolve the SDK builder closure to the query that reaches Directus. */
   const userFilter = () => {
-    const [builder] = request.mock.calls[0] as [
+    const [builder] = request.mock.calls[2] as [
       (c: unknown) => { params: { filter?: Record<string, unknown> } },
     ];
     return builder({}).params.filter;
   };
 
   it('only offers customer-facing roles, never a service account', async () => {
+    rolesRead();
     request.mockResolvedValueOnce([]); // users
     await repo.agentsByLoad(null);
     // svc-socket-gateway, svc-workers, svc-ai-gateway and Administrator are all
@@ -145,7 +164,30 @@ describe('createRoutingRepo.agentsByLoad', () => {
     });
   });
 
+  it('follows the receive_chats switch the owner set on the Roles page', async () => {
+    rolesRead([
+      { name: 'WeCare Admin', privileges: { receive_chats: true } },
+      { name: 'WeCare Supervisor', privileges: { receive_chats: false } },
+    ]);
+    request.mockResolvedValueOnce([]);
+    await repo.agentsByLoad(null);
+    expect(userFilter()).toMatchObject({
+      role: { name: { _in: ['WeCare Agent', 'WeCare Admin'] } },
+    });
+  });
+
+  it('routes exactly as before when the roles cannot be read', async () => {
+    request.mockRejectedValueOnce(new Error('403'));
+    request.mockRejectedValueOnce(new Error('403'));
+    request.mockResolvedValueOnce([]);
+    await repo.agentsByLoad(null);
+    expect(userFilter()).toMatchObject({
+      role: { name: { _in: ['WeCare Agent', 'WeCare Supervisor'] } },
+    });
+  });
+
   it('still narrows to a team when one is given', async () => {
+    rolesRead();
     request.mockResolvedValueOnce([]);
     await repo.agentsByLoad('day-shift');
     expect(userFilter()).toMatchObject({
@@ -155,6 +197,7 @@ describe('createRoutingRepo.agentsByLoad', () => {
   });
 
   it('returns the least loaded first, ties broken stably', async () => {
+    rolesRead();
     request.mockResolvedValueOnce([{ id: 'b' }, { id: 'a' }, { id: 'c' }]);
     request.mockResolvedValueOnce([
       { assigned_agent: 'a' },
@@ -166,9 +209,20 @@ describe('createRoutingRepo.agentsByLoad', () => {
   });
 
   it('asks for no conversations at all when nobody is eligible', async () => {
+    rolesRead();
     request.mockResolvedValueOnce([]);
     expect(await repo.agentsByLoad(null)).toEqual([]);
-    // A second call would be an unfiltered `_in: []` load query.
-    expect(request).toHaveBeenCalledTimes(1);
+    // Roles, app_roles, users — a fourth call would be an unfiltered
+    // `_in: []` load query.
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it('routes to nobody when the owner switched it off for every role', async () => {
+    rolesRead([
+      { name: 'WeCare Agent', privileges: { receive_chats: false } },
+      { name: 'WeCare Supervisor', privileges: { receive_chats: false } },
+    ]);
+    expect(await repo.agentsByLoad(null)).toEqual([]);
+    expect(request).toHaveBeenCalledTimes(2);
   });
 });

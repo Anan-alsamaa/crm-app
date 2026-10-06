@@ -24,7 +24,7 @@ beforeEach(() => {
 describe('validateAgentToken', () => {
   it('returns the identity with role name on success', async () => {
     request.mockResolvedValueOnce({ id: 'agent-1', role: { name: 'Agent' } });
-    expect(await validateAgentToken('http://localhost:8055', 'tok')).toEqual({
+    expect(await validateAgentToken('http://localhost:8055', 'tok')).toMatchObject({
       id: 'agent-1',
       role: 'Agent',
     });
@@ -32,7 +32,7 @@ describe('validateAgentToken', () => {
 
   it('coerces a missing role to null', async () => {
     request.mockResolvedValueOnce({ id: 'agent-2', role: null });
-    expect(await validateAgentToken('http://localhost:8055', 'tok')).toEqual({
+    expect(await validateAgentToken('http://localhost:8055', 'tok')).toMatchObject({
       id: 'agent-2',
       role: null,
     });

@@ -142,7 +142,11 @@ describe('the row-level permission', () => {
    * oversight and is a decision.
    */
   it('leaves update unscoped so a closed chat can be worked', () => {
-    expect(SYNC).toMatch(/g\('conversations', 'update'\),/);
+    // Unscoped still; since 2026-10-06 split by column across use_chat,
+    // close_chats and assign_chats — every piece keeps the `{}` filter.
+    expect(SYNC).toMatch(/g\('conversations', 'update', \{\}, CONVERSATION_FIELDS_BASE\)/);
+    expect(SYNC).toMatch(/g\('conversations', 'update', \{\}, CONVERSATION_FIELDS_CLOSE\)/);
+    expect(SYNC).toMatch(/g\('conversations', 'update', \{\}, CONVERSATION_FIELDS_ASSIGN\)/);
     expect(ROLES).toMatch(/\{ collection: 'conversations', action: 'update' \}/);
   });
 
@@ -175,7 +179,9 @@ describe('the row-level permission', () => {
   });
 
   it('leaves the supervisors their wide update', () => {
-    expect(SYNC).toMatch(/g\('conversations', 'update', \{\}\)/);
+    expect(SYNC).toMatch(
+      /g\('conversations', 'update', \{\}, CONVERSATION_FIELDS_BASE\),\s*\],\s*delete_tickets/,
+    );
   });
 
   /* Messages follow their conversation, or a listed chat opens empty. */

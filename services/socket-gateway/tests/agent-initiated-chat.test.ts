@@ -170,14 +170,15 @@ describe('startConversationWithCustomer', () => {
 describe('who may open a chat', () => {
   const INDEX = readFileSync(resolve(import.meta.dirname, '..', 'src/index.ts'), 'utf8');
 
-  it.each(['WeCare Agent', 'WeCare Supervisor', 'WeCare Admin'])('includes %s', (role) => {
-    expect(INDEX).toContain(`'${role}'`);
-  });
-
-  /* Agent/Admin/Administrator ride in from STAFF_ROLES rather than being
-     repeated, so the two lists cannot disagree. */
-  it('builds on the existing staff roles', () => {
-    expect(INDEX).toMatch(/CHAT_INITIATE_ROLES = new Set\(\[\s*\.\.\.STAFF_ROLES/);
+  /*
+   * BY THE `start_chats` PERMISSION since 2026-10-06 (owner): the Roles page
+   * decides it. Its default reproduces the old role list exactly — every
+   * WeCare role plus Admin, Administrator and Agent — which is asserted in
+   * packages/shared-types/tests/privileges-mirror.test.ts.
+   */
+  it('gates the endpoint on the permission, not a role name', () => {
+    expect(INDEX).toMatch(/requirePrivilege\(req, reply, 'start_chats'\)/);
+    expect(INDEX).not.toMatch(/CHAT_INITIATE_ROLES/);
   });
 
   /*
@@ -187,11 +188,6 @@ describe('who may open a chat', () => {
    */
   it('does not widen the shared staff role set', () => {
     expect(INDEX).toMatch(/const STAFF_ROLES = new Set\(\[\.\.\.ADMIN_ROLES, 'Agent'\]\)/);
-  });
-
-  /* The endpoint is gated, not just the button: hiding is not securing. */
-  it('gates the endpoint on that set', () => {
-    expect(INDEX).toMatch(/requireRole\(\s*req,\s*reply,\s*CHAT_INITIATE_ROLES/);
   });
 });
 

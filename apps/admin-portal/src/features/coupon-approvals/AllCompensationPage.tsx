@@ -262,7 +262,10 @@ export function AllCompensationPage() {
   const [historyOf, setHistoryOf] = useState<{ id: string; label: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; label: string } | null>(null);
   const canSeeHistory = can('approve_coupons');
-  const canDelete = can('delete_tickets');
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const canExport = can('export_data');
+  // Its own privilege, no longer borrowed from tickets (owner, 2026-10-06).
+  const canDelete = can('delete_compensation');
   const del = useMutation({
     mutationFn: (id: string) => directus.request(deleteItem('coupon_approvals' as never, id)),
     onSuccess: () => {
@@ -795,21 +798,23 @@ export function AllCompensationPage() {
                   {t('agentReports.columns', { defaultValue: 'Columns' })}
                   <span className="tabular-nums opacity-70">{columns.length}</span>
                 </button>
-                <ExportButtons
-                  visibleCount={filtered.length}
-                  totalCount={rows.data?.length ?? 0}
-                  onExportView={() => exportCsv('view')}
-                  onExportAll={() => exportCsv('all')}
-                  labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
-                  labelView={t('compensationAll.exportFiltered', {
-                    count: filtered.length,
-                    defaultValue: 'Export {{count}} shown',
-                  })}
-                  labelAll={t('compensationAll.exportAll', {
-                    count: rows.data?.length ?? 0,
-                    defaultValue: 'Export all {{count}}',
-                  })}
-                />
+                {canExport && (
+                  <ExportButtons
+                    visibleCount={filtered.length}
+                    totalCount={rows.data?.length ?? 0}
+                    onExportView={() => exportCsv('view')}
+                    onExportAll={() => exportCsv('all')}
+                    labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+                    labelView={t('compensationAll.exportFiltered', {
+                      count: filtered.length,
+                      defaultValue: 'Export {{count}} shown',
+                    })}
+                    labelAll={t('compensationAll.exportAll', {
+                      count: rows.data?.length ?? 0,
+                      defaultValue: 'Export all {{count}}',
+                    })}
+                  />
+                )}
                 {canSeeHistory && (
                   <Button
                     size="sm"

@@ -326,8 +326,8 @@ function Shell({ children }: { children: React.ReactNode }) {
        */
       items: [
         {
+          // No single privilege: shown when ANY of its tabs is (see below).
           to: '/reports/agent-kpi',
-          requires: 'view_all_chats' as const,
           label: t('nav.agentKpiGroup', { defaultValue: 'Agent KPI' }),
           icon: DownloadIcon,
         },
@@ -355,7 +355,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/agent-performance',
-          requires: 'view_all_chats' as const,
+          requires: 'view_agent_reports' as const,
           label: t('nav.agentPerformance', { defaultValue: 'Agent performance' }),
           icon: ClockIcon,
         },
@@ -372,7 +372,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
         {
           to: '/coupon-report',
-          requires: 'approve_coupons' as const,
+          requires: 'view_compensation_reports' as const,
           label: t('nav.couponReport', { defaultValue: 'Admin statistics' }),
           icon: ShieldIcon,
         },
@@ -388,7 +388,7 @@ function Shell({ children }: { children: React.ReactNode }) {
           label: t('nav.roles', { defaultValue: 'Roles & privileges' }),
           icon: ShieldIcon,
         },
-        { to: '/teams', label: t('nav.teams'), icon: TeamIcon, requires: 'manage_users' as const },
+        { to: '/teams', label: t('nav.teams'), icon: TeamIcon, requires: 'manage_teams' as const },
         {
           to: '/vendors',
           label: t('nav.vendors', { defaultValue: 'Vendors' }),
@@ -426,7 +426,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
         {
           to: '/store-notifications',
-          requires: 'manage_restaurants' as const,
+          requires: 'manage_store_notifications' as const,
           label: t('nav.storeNotifications', { defaultValue: 'Branch notifications' }),
           icon: StoreIcon,
         },
@@ -514,6 +514,13 @@ function Shell({ children }: { children: React.ReactNode }) {
          * group name is how operations refer to this, and without it the bar
          * reads as loose reports with no operations heading.
          */
+        /* Agent KPI holds five reports with five permissions (owner,
+           2026-10-06): it is shown when any one is held, and links to the
+           first the role may open. */
+        if (it.to === '/reports/agent-kpi') {
+          const first = visibleTabs(tabs.agentKpi)[0];
+          return first ? [{ ...it, to: `/reports/agent-kpi/${first.to}` }] : [];
+        }
         if (it.to === '/reports/operational-kpi' && opsKpiCollapsedToTickets) {
           // Path only — the label stays "Operational KPI". See above.
           return [{ ...it, to: '/reports/operational-kpi/tickets' }];
@@ -625,38 +632,54 @@ function Shell({ children }: { children: React.ReactNode }) {
  */
 const COMPENSATION_PATH = '/reports/agent-kpi/compensation';
 
+/** Any one of these opens the Agent KPI section (each tab checks its own). */
+const AGENT_KPI_PRIVILEGES = [
+  'view_agent_reports',
+  'view_sla_report',
+  'view_late_orders_report',
+  'view_compensation_reports',
+] as const;
+
+/** The section's landing: its first tab this role may open. */
+function FirstReportTab({ tabs }: { tabs: { to: string; requires?: Privilege }[] }) {
+  const { can } = useAuth();
+  const first = tabs.find((tab) => !tab.requires || can(tab.requires));
+  return <Navigate to={first?.to ?? 'tickets'} replace />;
+}
+
 function reportTabs(t: TFunction) {
   return {
     agentKpi: [
       {
         to: 'tickets',
         label: t('nav.reportAgents', { defaultValue: 'Agent summary' }),
-        requires: 'view_all_chats' as const,
+        requires: 'view_agent_reports' as const,
       },
       {
         to: 'sla',
         label: t('nav.slaReports', { defaultValue: 'Ticket deadlines' }),
-        requires: 'view_all_tickets' as const,
+        requires: 'view_sla_report' as const,
       },
       {
         to: 'conversations',
         label: t('nav.reportConversations', { defaultValue: 'Chat status' }),
-        requires: 'view_all_chats' as const,
+        requires: 'view_agent_reports' as const,
       },
       {
         /* An agent measure: what agents DID with the orders that ran late.
-           Follows the ticket privilege — the work it reports on is raising
+           Its own privilege now (owner, 2026-10-06); the default still
+           follows the ticket one — the work it reports on is raising
            tickets and asking for coupons, not chat. */
         to: 'late-orders',
         label: t('nav.lateOrdersReport', { defaultValue: 'Late orders' }),
-        requires: 'view_all_tickets' as const,
+        requires: 'view_late_orders_report' as const,
       },
       {
-        // Compensation is a money screen, so it follows the coupon privilege
-        // rather than the chat one it happens to sit beside.
+        // Compensation is a money screen: its own report privilege (owner,
+        // 2026-10-06), defaulting to whoever holds the coupon one.
         to: 'compensation',
         label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
-        requires: 'approve_coupons' as const,
+        requires: 'view_compensation_reports' as const,
       },
     ],
     opsKpi: [
@@ -702,7 +725,7 @@ export function App() {
           <Route
             path="/teams"
             element={
-              <ProtectedRoute requires="manage_users">
+              <ProtectedRoute requires="manage_teams">
                 <Shell>
                   <TeamsPage />
                 </Shell>
@@ -776,18 +799,18 @@ export function App() {
           <Route
             path="/reports/agent-kpi"
             element={
-              <ProtectedRoute requires="view_all_chats">
+              <ProtectedRoute requiresAny={AGENT_KPI_PRIVILEGES}>
                 <Shell>
                   <ReportGroupTabs tabs={tabs.agentKpi} />
                 </Shell>
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="tickets" replace />} />
+            <Route index element={<FirstReportTab tabs={tabs.agentKpi} />} />
             <Route
               path="tickets"
               element={
-                <ProtectedRoute requires="view_all_chats">
+                <ProtectedRoute requires="view_agent_reports">
                   <ReportExportsPage report="agents" />
                 </ProtectedRoute>
               }
@@ -795,7 +818,7 @@ export function App() {
             <Route
               path="sla"
               element={
-                <ProtectedRoute requires="view_all_tickets">
+                <ProtectedRoute requires="view_sla_report">
                   <SlaReportsPage />
                 </ProtectedRoute>
               }
@@ -803,7 +826,7 @@ export function App() {
             <Route
               path="conversations"
               element={
-                <ProtectedRoute requires="view_all_chats">
+                <ProtectedRoute requires="view_agent_reports">
                   <ReportExportsPage report="conversations" />
                 </ProtectedRoute>
               }
@@ -811,7 +834,7 @@ export function App() {
             <Route
               path="late-orders"
               element={
-                <ProtectedRoute requires="view_all_tickets">
+                <ProtectedRoute requires="view_late_orders_report">
                   <LateOrdersReportPage />
                 </ProtectedRoute>
               }
@@ -819,7 +842,7 @@ export function App() {
             <Route
               path="compensation"
               element={
-                <ProtectedRoute requires="approve_coupons">
+                <ProtectedRoute requires="view_compensation_reports">
                   <AllCompensationPage />
                 </ProtectedRoute>
               }
@@ -870,7 +893,7 @@ export function App() {
           <Route
             path="/coupon-report"
             element={
-              <ProtectedRoute requires="approve_coupons">
+              <ProtectedRoute requires="view_compensation_reports">
                 <Shell>
                   <CouponReportPage />
                 </Shell>
@@ -880,7 +903,7 @@ export function App() {
           <Route
             path="/store-notifications"
             element={
-              <ProtectedRoute requires="manage_restaurants">
+              <ProtectedRoute requires="manage_store_notifications">
                 <Shell>
                   <StoreNotificationsPage />
                 </Shell>
@@ -890,7 +913,7 @@ export function App() {
           <Route
             path="/agent-performance"
             element={
-              <ProtectedRoute requires="view_all_chats">
+              <ProtectedRoute requires="view_agent_reports">
                 <Shell>
                   <AgentPerformancePage />
                 </Shell>

@@ -24,6 +24,7 @@ import {
 import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 /**
  * What happens to the coupons agents ask for.
@@ -100,6 +101,9 @@ function Rate({
 
 export function CouponReportPage() {
   const { t } = useTranslation();
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const { can } = useAuth();
+  const canExport = can('export_data');
   const facts = useCouponFacts();
 
   const total = useMemo(() => couponOutcomes(facts.data ?? []), [facts.data]);
@@ -161,15 +165,17 @@ export function CouponReportPage() {
           {t('couponReport.title', { defaultValue: 'Coupon approvals' })}
         </h1>
         <ToolbarSpacer />
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={exportCsv}
-          disabled={total.requested === 0}
-        >
-          {t('stores.export', { defaultValue: 'Export CSV' })}
-        </Button>
+        {canExport && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={exportCsv}
+            disabled={total.requested === 0}
+          >
+            {t('stores.export', { defaultValue: 'Export CSV' })}
+          </Button>
+        )}
       </Toolbar>
 
       <div className="flex-1 overflow-auto px-5 py-4">

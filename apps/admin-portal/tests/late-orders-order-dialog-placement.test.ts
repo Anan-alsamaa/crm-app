@@ -58,7 +58,8 @@ describe('the order snapshot dialog', () => {
    * fixing the placement.
    */
   it('keeps the widened role gate', () => {
-    expect(PAGE).toMatch(/const canSeeOrder = isOwner \|\|/);
-    expect(PAGE).toMatch(/\/\^WeCare\\b\/i\.test/);
+    // Now the `view_order_details` privilege (2026-10-06); its default is the
+    // WeCare prefix rule, which lives with the defaults in shared-types.
+    expect(PAGE).toMatch(/const canSeeOrder = can\('view_order_details'\)/);
   });
 });

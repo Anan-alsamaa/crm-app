@@ -1,9 +1,17 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+  type ReactNode,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@yiji/ui';
 import type { AuthUser } from '@yiji/shared-config';
 import { readItems } from '@directus/sdk';
-import { opensPortal, type Privilege } from '@yiji/shared-types';
+import { PRIVILEGES, effectivePrivileges, opensPortal, type Privilege } from '@yiji/shared-types';
 import { auth, directus } from '../directus.js';
 import { disconnectSocket, setSessionExpiredHandler } from '../socket.js';
 
@@ -57,7 +65,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           { filter: { directus_role: { _eq: roleId } }, fields: ['privileges'], limit: 1 } as never,
         ),
       )) as unknown as Array<{ privileges: Record<string, boolean> | null }>;
-      const next = rows[0]?.privileges ?? null;
+      /* EFFECTIVE: the Administrator's fine-grained keys fill in from their
+         defaults (owner, 2026-10-06). No row stays null — the legacy roles. */
+      const next = rows[0] ? effectivePrivileges(rows[0].privileges, me?.role?.name) : null;
       setPrivileges(next);
       return next;
     } catch {
@@ -155,10 +165,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * agent rather than locking out an account nobody has migrated yet.
    */
   const legacyAgent = !!user?.role && ['Agent', 'Admin'].includes(user.role.name);
+  /* Every shared privilege, and the Administrator's fine-grained ones at their
+     defaults — so the legacy roles gain nothing they did not have (2026-10-06). */
+  const legacyPrivileges = useMemo(
+    () =>
+      legacyAgent
+        ? effectivePrivileges(
+            Object.fromEntries(PRIVILEGES.map((k) => [k, true])),
+            user?.role?.name,
+          )
+        : null,
+    [legacyAgent, user?.role?.name],
+  );
   const can = useCallback(
     (priv: Privilege): boolean =>
-      isOwner || (legacyAgent && privileges === null) || privileges?.[priv] === true,
-    [isOwner, legacyAgent, privileges],
+      isOwner ||
+      (privileges === null && legacyPrivileges?.[priv] === true) ||
+      privileges?.[priv] === true,
+    [isOwner, legacyPrivileges, privileges],
   );
   const canUsePortal =
     isOwner || (legacyAgent && privileges === null) || opensPortal(privileges, 'agent');

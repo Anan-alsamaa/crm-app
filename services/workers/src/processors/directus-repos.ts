@@ -1,6 +1,6 @@
-import { readItems, updateItem, createItem, readUser, readUsers } from '@directus/sdk';
+import { readItems, updateItem, createItem, readUser, readUsers, readRoles } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
-import { HUMAN_AGENT_MESSAGE_FILTER } from '@yiji/shared-types';
+import { HUMAN_AGENT_MESSAGE_FILTER, roleNamesHolding, type Privilege } from '@yiji/shared-types';
 import type {
   ConversationRepo,
   ConversationRow,
@@ -51,6 +51,37 @@ const ROUTABLE_ROLES = ['WeCare Agent', 'WeCare Supervisor'] as const;
  * they are listed too and the alert has a real recipient.
  */
 const SUPERVISOR_ROLES = ['WeCare Supervisor', 'WeCare Admin', 'Administrator'] as const;
+
+/**
+ * The role NAMES whose role holds `key` — the Roles page's `receive_chats` and
+ * `no_agents_alert` since 2026-10-06 (owner). The two lists above are their
+ * DEFAULTS, and what is used whenever the roles cannot be read (the service
+ * account needs read on app_roles), so a failed read routes exactly as before.
+ */
+export async function roleNamesWith(
+  client: YijiDirectusClient,
+  key: Privilege,
+  fallback: readonly string[],
+): Promise<string[]> {
+  try {
+    const [roles, appRoles] = await Promise.all([
+      client.request(readRoles({ fields: ['name'], limit: -1 }) as never) as Promise<
+        Array<{ name: string }>
+      >,
+      client.request(
+        readItems('app_roles' as never, { fields: ['name', 'privileges'], limit: -1 }) as never,
+      ) as Promise<Array<{ name: string; privileges: unknown }>>,
+    ]);
+    // Possibly EMPTY: the owner may have switched it off for every role.
+    return roleNamesHolding(
+      key,
+      roles.map((r) => r.name),
+      appRoles,
+    );
+  } catch {
+    return [...fallback];
+  }
+}
 
 /** Real (Directus-backed) implementations of the processor repos. */
 
@@ -343,9 +374,11 @@ export function createRoutingRepo(client: YijiDirectusClient) {
       // Cast: the SDK types model `role` as a scalar on directus_users, so a
       // relational clause on it does not typecheck even though Directus serves
       // `filter[role][name][_in]` perfectly well.
+      const routable = await roleNamesWith(client, 'receive_chats', ROUTABLE_ROLES);
+      if (routable.length === 0) return [];
       const filter = {
         status: { _eq: 'active' },
-        role: { name: { _in: [...ROUTABLE_ROLES] } },
+        role: { name: { _in: routable } },
         ...(teamId ? { team: { _eq: teamId } } : {}),
       } as never;
       const users = (await client.request(
@@ -378,9 +411,11 @@ export function createRoutingRepo(client: YijiDirectusClient) {
      * emails, so a new service account cannot join the alert list by accident.
      */
     async supervisorIds(): Promise<string[]> {
+      const alerted = await roleNamesWith(client, 'no_agents_alert', SUPERVISOR_ROLES);
+      if (alerted.length === 0) return [];
       const filter = {
         status: { _eq: 'active' },
-        role: { name: { _in: [...SUPERVISOR_ROLES] } },
+        role: { name: { _in: alerted } },
       } as never;
       const users = (await client.request(
         readUsers({ filter, fields: ['id'], limit: -1 }) as never,

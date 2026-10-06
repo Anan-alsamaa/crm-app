@@ -23,6 +23,7 @@ import {
   detectLocale,
   pickWelcomeTemplate,
   renderWelcomeTemplate,
+  effectivePrivileges,
 } from '@yiji/shared-types';
 import type { GatewayDirectus } from './directus.js';
 import type { CustomerVerifier } from './auth/customer-jwt.js';
@@ -40,23 +41,23 @@ import {
 import { createTokenBucket } from './rate-limit.js';
 
 /**
- * Roles that may be handed a customer chat — and therefore the only ones worth
+ * Whether this agent may be handed a customer chat — and therefore is worth
  * publishing to the shared presence registry.
  *
- * Must stay in step with `ROUTABLE_ROLES` in
- * services/workers/src/processors/directus-repos.ts, which is what actually
- * picks an agent. The two are deliberately separate constants rather than a
- * shared import: this service and the workers deploy independently, and a
- * presence set that briefly disagrees with the router costs one skipped
- * assignment, whereas coupling their release cycles costs far more.
+ * The `receive_chats` permission since 2026-10-06 (owner): the Roles page
+ * decides it. Its default is exactly the old PRESENCE_ROLES list (WeCare Agent,
+ * WeCare Supervisor), and the workers' router reads the same permission, so
+ * presence and routing still agree.
  *
- * Anyone else — WeCare Admin, Administrator, a service account — may still hold
- * a socket and use the portal. They are simply not staff waiting for a chat.
+ * An identity without a privilege map (a test double) is judged on the
+ * defaults for its role name — the same answer the old list gave.
  */
-const PRESENCE_ROLES: ReadonlySet<string> = new Set(['WeCare Agent', 'WeCare Supervisor']);
-
-function isRoutableRole(role: string | null | undefined): boolean {
-  return !!role && PRESENCE_ROLES.has(role);
+function isRoutable(data: {
+  agentRole?: string | null;
+  agentPrivileges?: Record<string, boolean>;
+}): boolean {
+  const privileges = data.agentPrivileges ?? effectivePrivileges(null, data.agentRole);
+  return privileges.receive_chats === true;
 }
 
 interface SocketData {
@@ -114,9 +115,11 @@ interface SocketData {
   agentId?: string;
   /**
    * The agent's Directus role name, kept so presence can be limited to roles a
-   * chat may actually be routed to. See `isRoutableRole`.
+   * chat may actually be routed to. See `isRoutable`.
    */
   agentRole?: string | null;
+  /** What the agent's role may do (see `isRoutable`, message edits). */
+  agentPrivileges?: Record<string, boolean>;
   /**
    * Serialises conversation creation for THIS socket.
    *
@@ -442,6 +445,7 @@ export function registerConnection(deps: ConnectionDeps): void {
         data.kind = 'agent';
         data.agentId = agent.id;
         data.agentRole = agent.role;
+        data.agentPrivileges = agent.privileges;
         return next();
       }
       // Default: customer (widget)
@@ -584,7 +588,7 @@ export function registerConnection(deps: ConnectionDeps): void {
        * reconnect inside the grace window) — that's the only case worth
        * broadcasting.
        */
-      if (isRoutableRole(data.agentRole) && agentPresence.add(socket.id, data.agentId)) {
+      if (isRoutable(data) && agentPresence.add(socket.id, data.agentId)) {
         broadcastAgentPresence(io, deps);
       }
       /*
@@ -606,7 +610,7 @@ export function registerConnection(deps: ConnectionDeps): void {
        * Fire-and-forget: presence is a routing hint, and failing to record it
        * must never stop an agent connecting.
        */
-      if (isRoutableRole(data.agentRole)) {
+      if (isRoutable(data)) {
         void deps.presenceStore?.online(data.agentId).catch(() => undefined);
       }
     }
@@ -1278,7 +1282,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
        * Same predicate as presence, for the same reason: assignment follows the
        * roles that actually work the queue.
        */
-      if (data.kind === 'agent' && data.agentId && isRoutableRole(data.agentRole)) {
+      if (data.kind === 'agent' && data.agentId && isRoutable(data)) {
         const agentId = data.agentId;
         void directus
           .claimConversationIfUnassigned(convId, agentId)
@@ -1517,6 +1521,9 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   socket.on(SOCKET_EVENTS.messageEdit, async (raw: unknown) => {
     if (data.kind !== 'agent') return;
     if (!writeBucket.tryRemove()) return refuseEdit('rate_limited', 'too many edits, slow down');
+    /* The `edit_own_messages` permission (owner, 2026-10-06). */
+    if (data.agentPrivileges && data.agentPrivileges.edit_own_messages !== true)
+      return refuseEdit('forbidden', 'your role does not include editing your messages');
     const parsed = MessageEdit.safeParse(raw);
     if (!parsed.success) return refuseEdit('bad_payload', 'invalid message:edit');
     const { conversationId, messageId, content } = parsed.data;
@@ -1547,6 +1554,9 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
   socket.on(SOCKET_EVENTS.messageDelete, async (raw: unknown) => {
     if (data.kind !== 'agent') return;
     if (!writeBucket.tryRemove()) return refuseEdit('rate_limited', 'too many deletes, slow down');
+    /* The `edit_own_messages` permission (owner, 2026-10-06). */
+    if (data.agentPrivileges && data.agentPrivileges.edit_own_messages !== true)
+      return refuseEdit('forbidden', 'your role does not include editing your messages');
     const parsed = MessageDelete.safeParse(raw);
     if (!parsed.success) return refuseEdit('bad_payload', 'invalid message:delete');
     const { conversationId, messageId } = parsed.data;

@@ -460,6 +460,9 @@ function TicketsReport({
   days: number;
 }) {
   const { t } = useTranslation();
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const { can } = useAuth();
+  const canExport = can('export_data');
   // Order data is ALWAYS fetched: the Tickets report exists to show tickets
   // ALONGSIDE the customer's order, so hiding it behind a checkbox made the
   // report's whole point opt-in. Kept as a const so the query below reads the
@@ -693,9 +696,11 @@ function TicketsReport({
               </div>
             </>
           )}
-          <Button size="sm" onClick={onExport}>
-            {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
-          </Button>
+          {canExport && (
+            <Button size="sm" onClick={onExport}>
+              {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -855,9 +860,12 @@ function ComplaintsReport({
    * ever fails is worse than no button.
    */
   const { can } = useAuth();
-  const canSeeHistory = can('edit_all_tickets');
+  // Its own privilege, no longer borrowed from editing (owner, 2026-10-06).
+  const canSeeHistory = can('view_ticket_history');
   const canDelete = can('delete_tickets');
   const canImport = can('import_data');
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const canExport = can('export_data');
   /*
    * WHAT THIS REPORT OFFERS, which is not every column the row can carry.
    *
@@ -1639,24 +1647,26 @@ function ComplaintsReport({
               page in front of them. It never has — it has always exported the
               whole filtered set — but a promise that has to be trusted is one
               that gets re-tested by hand every single time. */}
-          <ExportButtons
-            visibleCount={visible.length}
-            totalCount={complete.length}
-            onExportView={() => onExport('view')}
-            onExportAll={() => onExport('all')}
-            labelPlain={t('agentReports.exportCsvCount', {
-              count: visible.length,
-              defaultValue: 'Export CSV ({{count}})',
-            })}
-            labelView={t('agentReports.exportCsvFiltered', {
-              count: visible.length,
-              defaultValue: 'Export {{count}} shown',
-            })}
-            labelAll={t('agentReports.exportCsvAll', {
-              count: complete.length,
-              defaultValue: 'Export all {{count}}',
-            })}
-          />
+          {canExport && (
+            <ExportButtons
+              visibleCount={visible.length}
+              totalCount={complete.length}
+              onExportView={() => onExport('view')}
+              onExportAll={() => onExport('all')}
+              labelPlain={t('agentReports.exportCsvCount', {
+                count: visible.length,
+                defaultValue: 'Export CSV ({{count}})',
+              })}
+              labelView={t('agentReports.exportCsvFiltered', {
+                count: visible.length,
+                defaultValue: 'Export {{count}} shown',
+              })}
+              labelAll={t('agentReports.exportCsvAll', {
+                count: complete.length,
+                defaultValue: 'Export all {{count}}',
+              })}
+            />
+          )}
           {/* Selection-driven actions, ops-portal style: pick a row, then act
               from here. Disabled — not hidden — without a selection, so the
               affordance teaches its own precondition. */}
@@ -1887,6 +1897,9 @@ function AgentKpiReport({
   days: number;
 } & RangeProps) {
   const { t } = useTranslation();
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const { can } = useAuth();
+  const canExport = can('export_data');
   const pagerLabels = usePagerLabels();
   const [query, setQuery] = useState('');
 
@@ -2041,24 +2054,26 @@ function AgentKpiReport({
           setPage(1);
         }}
         actions={
-          <ExportButtons
-            visibleCount={sorted.length}
-            totalCount={agents.length}
-            onExportView={() => onExport('view')}
-            onExportAll={() => onExport('all')}
-            labelPlain={t('agentReports.exportCsvCount', {
-              count: sorted.length,
-              defaultValue: 'Export CSV ({{count}})',
-            })}
-            labelView={t('agentReports.exportCsvFiltered', {
-              count: sorted.length,
-              defaultValue: 'Export {{count}} shown',
-            })}
-            labelAll={t('agentReports.exportCsvAll', {
-              count: agents.length,
-              defaultValue: 'Export all {{count}}',
-            })}
-          />
+          canExport && (
+            <ExportButtons
+              visibleCount={sorted.length}
+              totalCount={agents.length}
+              onExportView={() => onExport('view')}
+              onExportAll={() => onExport('all')}
+              labelPlain={t('agentReports.exportCsvCount', {
+                count: sorted.length,
+                defaultValue: 'Export CSV ({{count}})',
+              })}
+              labelView={t('agentReports.exportCsvFiltered', {
+                count: sorted.length,
+                defaultValue: 'Export {{count}} shown',
+              })}
+              labelAll={t('agentReports.exportCsvAll', {
+                count: agents.length,
+                defaultValue: 'Export all {{count}}',
+              })}
+            />
+          )
         }
         rangePreset={<RangePreset range={range} />}
       />
@@ -2191,6 +2206,9 @@ function ConversationReport({
   days: number;
 } & RangeProps) {
   const { t } = useTranslation();
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const { can } = useAuth();
+  const canExport = can('export_data');
   const pagerLabels = usePagerLabels();
   /** Which status box is expanded, showing the customers behind its count. */
   const [drill, setDrill] = useState<string | null>(null);
@@ -2556,24 +2574,26 @@ function ConversationReport({
             setPage(1);
           }}
           actions={
-            <ExportButtons
-              visibleCount={visible.length}
-              totalCount={report.rows.length}
-              onExportView={() => onExport('view')}
-              onExportAll={() => onExport('all')}
-              labelPlain={t('agentReports.exportCsvCount', {
-                count: visible.length,
-                defaultValue: 'Export CSV ({{count}})',
-              })}
-              labelView={t('agentReports.exportCsvFiltered', {
-                count: visible.length,
-                defaultValue: 'Export {{count}} shown',
-              })}
-              labelAll={t('agentReports.exportCsvAll', {
-                count: report.rows.length,
-                defaultValue: 'Export all {{count}}',
-              })}
-            />
+            canExport && (
+              <ExportButtons
+                visibleCount={visible.length}
+                totalCount={report.rows.length}
+                onExportView={() => onExport('view')}
+                onExportAll={() => onExport('all')}
+                labelPlain={t('agentReports.exportCsvCount', {
+                  count: visible.length,
+                  defaultValue: 'Export CSV ({{count}})',
+                })}
+                labelView={t('agentReports.exportCsvFiltered', {
+                  count: visible.length,
+                  defaultValue: 'Export {{count}} shown',
+                })}
+                labelAll={t('agentReports.exportCsvAll', {
+                  count: report.rows.length,
+                  defaultValue: 'Export all {{count}}',
+                })}
+              />
+            )
           }
           rangePreset={<RangePreset range={range} />}
         />

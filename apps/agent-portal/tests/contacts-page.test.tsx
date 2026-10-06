@@ -15,6 +15,10 @@ vi.mock('react-i18next', () => ({
 const hooks = vi.hoisted(() => ({ useContacts: vi.fn() }));
 vi.mock('../src/features/contacts/api.js', () => hooks);
 
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
+}));
+
 import { ContactsPage } from '../src/features/contacts/ContactsPage.js';
 
 function renderPage() {

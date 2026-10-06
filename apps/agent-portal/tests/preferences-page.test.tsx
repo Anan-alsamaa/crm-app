@@ -28,12 +28,19 @@ const hooks = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/notifications/api.js', () => hooks);
 
-/* Who is signed in. `admin_access` is what decides whether the page offers to
-   edit everybody's settings, so it is the knob these tests turn. */
+/* Who is signed in. `manage_notification_defaults` decides whether the page
+   offers to edit everybody's settings (owner, 2026-10-06); its default is the
+   owner (`admin_access`) alone, so `admin_access` is still the knob turned. */
 const auth = vi.hoisted(() => ({
   user: { id: 'u1', admin_access: false } as Record<string, unknown>,
 }));
-vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => auth }));
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({
+    ...auth,
+    can: (k: string) =>
+      k === 'manage_notification_defaults' ? auth.user.admin_access === true : true,
+  }),
+}));
 
 import { PreferencesPage } from '../src/features/notifications/PreferencesPage.js';
 

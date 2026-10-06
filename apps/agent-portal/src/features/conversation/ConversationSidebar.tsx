@@ -25,6 +25,7 @@ import {
 } from '../inbox/api.js';
 import { useContact, useUpdateContact } from '../contacts/api.js';
 import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 import { downloadAsset } from '../../lib/directus.js';
 import { Lightbox } from '../../components/Lightbox.js';
 import { LatestOrder } from '../commerce/OrderViews.js';
@@ -141,6 +142,7 @@ export function ConversationSidebar({
   const tickets = useLinkedTickets(conversationId);
   const navigate = useNavigate();
   const updateContact = useUpdateContact();
+  const canEditContact = useAuth().can('edit_contacts');
   // Pull the contact's Yiji ids (external_customer_id + vendor.yiji_vendor_id) so
   // the agent can retrieve orders without leaving the inbox. Called before the
   // early returns; the query is disabled until a contact id exists.
@@ -303,7 +305,8 @@ export function ConversationSidebar({
           <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('sidebar.contact')}
           </h3>
-          {c.contact?.id && !editing && (
+          {/* `edit_contacts` (owner, 2026-10-06). */}
+          {c.contact?.id && !editing && canEditContact && (
             <button
               type="button"
               onClick={startEdit}

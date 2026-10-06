@@ -1237,7 +1237,11 @@
     "branchSelectShown": "Select these {{n}}",
     "branchDeselectShown": "Clear these {{n}}",
     "branchCount": "{{n}} selected.",
-    "ceilingHint": "You cannot grant a privilege your own role does not hold."
+    "ceilingHint": "You cannot grant a privilege your own role does not hold.",
+    "groupCustomers": "Customers",
+    "groupLateOrders": "Late orders",
+    "groupCoupons": "Coupons & compensation",
+    "ownerOnlyHint": "Only the Administrator sees this switch."
   },
   "backup": {
     "title": "Backup",

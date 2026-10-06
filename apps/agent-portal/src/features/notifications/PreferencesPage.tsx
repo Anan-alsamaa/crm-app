@@ -150,7 +150,7 @@ export function PreferencesPage() {
   const { t } = useTranslation();
   const prefs = useNotificationPreferences();
   const update = useUpdateNotificationPreferences();
-  const { user: me } = useAuth();
+  const { can } = useAuth();
   const org = useOrgNotificationDefaults();
   const updateOrg = useUpdateOrgNotificationDefaults();
 
@@ -162,12 +162,12 @@ export function PreferencesPage() {
    * A separate admin screen would have meant two layouts to keep in step and
    * would hide the policy from the page it governs.
    *
-   * `admin_access` rather than a role name: this writes a setting that reaches
-   * every user, so it is fenced by the property Directus itself enforces. The
-   * Directus permission on `app_settings` is the real gate — this only decides
-   * whether the control is offered.
+   * `manage_notification_defaults` (owner, 2026-10-06), which was
+   * `admin_access` and still defaults to the owner alone. This writes a
+   * setting that reaches every user; the Directus permission on `app_settings`
+   * is the real gate — this only decides whether the control is offered.
    */
-  const isAdmin = me?.admin_access === true;
+  const isAdmin = can('manage_notification_defaults');
   const [scope, setScope] = useState<'mine' | 'everyone'>('mine');
   const editingOrg = isAdmin && scope === 'everyone';
 

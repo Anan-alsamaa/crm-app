@@ -763,6 +763,10 @@ export const roles: RoleSpec[] = [
        * SDK's rejection is not an Error and its message was being dropped.
        */
       ...readOnly('directus_roles'),
+      /* Who is routed chats and who is alerted is a PERMISSION on the Roles
+         page since 2026-10-06 (receive_chats / no_agents_alert), read from
+         app_roles. Without this the router falls back to the defaults. */
+      ...readOnly('app_roles'),
       ...readOnly('contacts'),
       // CSV import (imports processor) creates new contacts after dedup.
       { collection: 'contacts', action: 'create' },

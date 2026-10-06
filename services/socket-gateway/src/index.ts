@@ -649,26 +649,6 @@ async function main(): Promise<void> {
   // also accepts the Agent role (service accounts, which have no app access, are
   // still excluded — they must not be able to drive user-facing notifications).
   const STAFF_ROLES = new Set([...ADMIN_ROLES, 'Agent']);
-  /**
-   * WHO MAY OPEN A CHAT WITH A CUSTOMER (owner, 2026-10-03): every WeCare role,
-   * plus the agents and admins already in `STAFF_ROLES`.
-   *
-   * The names are matched exactly as Directus holds them — verified against the
-   * live production role list rather than guessed, because `requireRole`
-   * compares a STRING and a near-miss like "Wecare Agent" is not a visible
-   * error: it is a 403 for a role that should have been allowed, which reads to
-   * the agent as the feature being broken.
-   *
-   * `STAFF_ROLES` is deliberately not widened in place. It guards other
-   * endpoints, and quietly granting those to three more roles while adding a
-   * feature is the kind of change nobody reviews.
-   */
-  const CHAT_INITIATE_ROLES = new Set([
-    ...STAFF_ROLES,
-    'WeCare Agent',
-    'WeCare Supervisor',
-    'WeCare Admin',
-  ]);
   const bearerToken = (req: FastifyRequest): string => {
     const raw = req.headers['authorization'];
     const header = Array.isArray(raw) ? (raw[0] ?? '') : (raw ?? '');
@@ -695,8 +675,30 @@ async function main(): Promise<void> {
   };
   const requireAdmin = async (req: FastifyRequest, reply: FastifyReply): Promise<boolean> =>
     (await requireRole(req, reply, ADMIN_ROLES, 'admin role required')) !== null;
+  /**
+   * BY PERMISSION, NOT BY ROLE NAME (owner, 2026-10-06): the Roles page decides
+   * who may import, run a report or start a chat. A role name here meant the
+   * page could tick "Import tickets" and this endpoint still answered 403.
+   */
+  const requirePrivilege = async (
+    req: FastifyRequest,
+    reply: FastifyReply,
+    key: string,
+  ): Promise<{ id: string; role: string | null } | null> => {
+    const token = bearerToken(req);
+    if (!token) {
+      await reply.code(401).send({ ok: false, error: 'missing bearer token' });
+      return null;
+    }
+    const identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
+    if (!identity || identity.privileges[key] !== true) {
+      await reply.code(403).send({ ok: false, error: `your role does not include ${key}` });
+      return null;
+    }
+    return identity;
+  };
   app.post('/jobs/import', async (req, reply) => {
-    if (!(await requireAdmin(req, reply))) return reply;
+    if (!(await requirePrivilege(req, reply, 'import_data'))) return reply;
     const parsed = ImportJob.safeParse(req.body);
     if (!parsed.success)
       return reply.code(400).send({ ok: false, error: 'invalid import job payload' });
@@ -707,7 +709,7 @@ async function main(): Promise<void> {
     return reply.send({ ok: true, jobId });
   });
   app.post('/jobs/report', async (req, reply) => {
-    if (!(await requireAdmin(req, reply))) return reply;
+    if (!(await requirePrivilege(req, reply, 'schedule_reports'))) return reply;
     const parsed = ReportJob.safeParse(req.body);
     if (!parsed.success)
       return reply.code(400).send({ ok: false, error: 'invalid report job payload' });
@@ -1150,12 +1152,9 @@ async function main(): Promise<void> {
     /* Staff only, and the ROLE is checked rather than the button being hidden:
        an outbound message to a customer is exactly the sort of thing that must
        not be reachable by anyone who can reach the endpoint. */
-    const identity = await requireRole(
-      req,
-      reply,
-      CHAT_INITIATE_ROLES,
-      'you do not have permission to start a chat',
-    );
+    /* The `start_chats` permission since 2026-10-06; its default is exactly the
+       old role list (WeCare roles + Admin, Administrator, Agent). */
+    const identity = await requirePrivilege(req, reply, 'start_chats');
     if (!identity) return reply;
 
     const parsed = AgentInitiateRequest.safeParse(req.body);

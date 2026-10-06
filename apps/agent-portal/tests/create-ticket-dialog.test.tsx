@@ -15,7 +15,7 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
-  useAuth: () => ({ user: { id: 'agent-1' } }),
+  useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
 }));
 
 const hooks = vi.hoisted(() => ({

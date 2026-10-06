@@ -55,7 +55,6 @@ import { useAgents, useTeamOptions } from '../inbox/api.js';
 import type { ComplaintScope } from '../complaints/api.js';
 import { WhatsAppReply } from './WhatsAppReply.js';
 import { ChangeHistory } from './ChangeHistory.js';
-import { canSeeFieldHistory } from './history-visibility.js';
 import { exportTicketWorkbook } from './export-ticket.js';
 import {
   distinctValues,
@@ -914,13 +913,14 @@ function ChatMediaDialog({
 function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => void }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { user: me } = useAuth();
-  // Excel export of one ticket is an administrator action, by request — the
-  // file is operations paperwork, not part of an agent's queue work.
-  const isAdmin = ['administrator', 'admin'].includes(me?.role?.name?.toLowerCase() ?? '');
-  /* The edit history is a supervisory view — see `canSeeFieldHistory`, which
-     carries the reasoning and the fail-closed rule, and is tested on its own. */
-  const canSeeHistory = canSeeFieldHistory(me?.role?.name);
+  const { can } = useAuth();
+  // Excel export of one ticket is operations paperwork, not queue work. Its own
+  // switch now (owner, 2026-10-06); defaults to Administrator and Admin.
+  const canExportExcel = can('export_ticket_excel');
+  /* The edit history is a supervisory view (owner, 2026-10-06: its own switch,
+     `view_ticket_history`; the default is the role list `canSeeFieldHistory`
+     used to hold). */
+  const canSeeHistory = can('view_ticket_history');
   const ticket = useTicket(ticketId);
   const events = useTicketEvents(ticketId);
   const update = useUpdateTicket();
@@ -1165,7 +1165,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   </div>
                 </div>
               )}
-              {isAdmin && (
+              {canExportExcel && (
                 <button
                   type="button"
                   onClick={() =>
@@ -1623,7 +1623,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   const { t } = useTranslation();
   const update = useUpdateTicket();
   const requestCoupon = useRequestCouponApproval();
-  const { user } = useAuth();
+  const { user, can } = useAuth();
   const stores = useStores();
   const [editing, setEditing] = useState(false);
   const [storeId, setStoreId] = useState(ticket.store ?? '');
@@ -1834,6 +1834,8 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           <ComplaintResolution
             values={draft}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
+            // Editing the coupon here RAISES a request (owner, 2026-10-06).
+            hideCoupon={!can('request_coupons')}
           />
           {/* Said while the agent is still typing the coupon, not after they
               have told the customer about it — the same warning the create

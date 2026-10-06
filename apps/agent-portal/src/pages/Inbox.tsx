@@ -192,7 +192,11 @@ export function Inbox() {
     min: 288,
     max: 480,
   });
-  const { user, can, isOwner } = useAuth();
+  const { user, can } = useAuth();
+  // Each its own switch (owner, 2026-10-06); see OWNER_PRIVILEGE_DEFAULTS.
+  const canBulkEdit = can('bulk_edit_chats');
+  const canDeleteChats = can('delete_chats');
+  const canSelect = canBulkEdit || canDeleteChats;
 
   /*
    * THE QUEUE IS NOT A FILTER — it is what this screen IS.
@@ -607,30 +611,32 @@ export function Inbox() {
                 does. A `+` rather than a labelled button: the column is 320px
                 and a word here would crowd the filters below it.
 
-                Not gated in the UI. The ENDPOINT checks the role
-                (`CHAT_INITIATE_ROLES`), which is the check that matters — an
-                outbound message to a customer must not be reachable by hiding a
-                button. Every role that reaches this inbox is in that set.
+                Gated on `start_chats` (owner, 2026-10-06), whose default is the
+                gateway's `CHAT_INITIATE_ROLES`. The ENDPOINT still checks, which
+                is the check that matters — an outbound message to a customer
+                must not be reachable by un-hiding a button.
               */}
-              <button
-                type="button"
-                onClick={() => setComposing(true)}
-                aria-label={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
-                title={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
-                className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground ring-1 ring-inset ring-primary/20 transition-colors duration-fast ease-out hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                <svg
-                  aria-hidden
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  strokeLinecap="round"
-                  className="h-4 w-4"
+              {can('start_chats') && (
+                <button
+                  type="button"
+                  onClick={() => setComposing(true)}
+                  aria-label={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
+                  title={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
+                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground ring-1 ring-inset ring-primary/20 transition-colors duration-fast ease-out hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
-                  <path d="M8 3.5v9M3.5 8h9" />
-                </svg>
-              </button>
+                  <svg
+                    aria-hidden
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.75"
+                    strokeLinecap="round"
+                    className="h-4 w-4"
+                  >
+                    <path d="M8 3.5v9M3.5 8h9" />
+                  </svg>
+                </button>
+              )}
             </div>
             {/* One quiet cluster, same anatomy as the conversation toolbar's
                 property group, so the selects read as one filter control. */}
@@ -687,47 +693,48 @@ export function Inbox() {
               not bg-primary-subtle: that token embeds its own alpha, so the
               <alpha-value> expansion is invalid CSS and the fill paints NOTHING
               (the design-law token-alpha trap). Jade wash + jade hairline. */}
-          {someChecked && (
+          {someChecked && canSelect && (
             <div className="mx-4 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 px-3 py-2 text-xs animate-fade-in">
               <span className="font-semibold text-primary">
                 {t('inbox.bulkSelected', { count: checked.size })}
               </span>
-              <SelectMenu
-                size="sm"
-                value=""
-                placeholder={t('inbox.bulkSetStatus')}
-                aria-label={t('inbox.bulkSetStatus')}
-                className="bg-card/80"
-                onChange={(v) => {
-                  if (v) void bulkSetStatus(v as ConversationStatus);
-                }}
-                options={STATUSES.map((s) => ({
-                  value: s,
-                  label: t(`status.${s}`, { ns: 'common' }),
-                }))}
-              />
-              <SelectMenu
-                size="sm"
-                value=""
-                placeholder={t('inbox.bulkAddTag')}
-                aria-label={t('inbox.bulkAddTag')}
-                className="bg-card/80"
-                onChange={(v) => {
-                  if (v) void bulkAddTag(v);
-                }}
-                options={(tags.data ?? []).map((tg) => ({ value: tg.id, label: tg.name }))}
-              />
+              {canBulkEdit && (
+                <SelectMenu
+                  size="sm"
+                  value=""
+                  placeholder={t('inbox.bulkSetStatus')}
+                  aria-label={t('inbox.bulkSetStatus')}
+                  className="bg-card/80"
+                  onChange={(v) => {
+                    if (v) void bulkSetStatus(v as ConversationStatus);
+                  }}
+                  options={STATUSES.map((s) => ({
+                    value: s,
+                    label: t(`status.${s}`, { ns: 'common' }),
+                  }))}
+                />
+              )}
+              {canBulkEdit && (
+                <SelectMenu
+                  size="sm"
+                  value=""
+                  placeholder={t('inbox.bulkAddTag')}
+                  aria-label={t('inbox.bulkAddTag')}
+                  className="bg-card/80"
+                  onChange={(v) => {
+                    if (v) void bulkAddTag(v);
+                  }}
+                  options={(tags.data ?? []).map((tg) => ({ value: tg.id, label: tg.name }))}
+                />
+              )}
               {/*
-                DELETE — the Administrator's control, and nobody else's.
-
-                Gated on `isOwner` (Directus `admin_access`), not on a
-                privilege: there is no grantable key for this and there must
-                not be, so no role edit can hand it out. Hiding it is only a
-                courtesy — no app role holds `conversations.delete`, so the
-                API refuses everyone else however the button is reached
-                (owner, 2026-09-27).
+                DELETE — `delete_chats` (owner, 2026-10-06). It was the
+                Administrator's alone (owner, 2026-09-27) and still defaults to
+                nobody else; the owner can now hand it out per role. Hiding it
+                is only a courtesy — the API refuses a role without
+                `conversations.delete` however the button is reached.
               */}
-              {isOwner && (
+              {canDeleteChats && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -784,19 +791,22 @@ export function Inbox() {
             ) : conversations.data && conversations.data.length > 0 ? (
               <>
                 {/* px-4 puts this checkbox on the same column as the row
-                    checkboxes below (ms-4) — one aligned select rail. */}
-                <label className="flex h-8 items-center gap-2 border-b border-b-foreground/[0.06] px-4 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  <input
-                    type="checkbox"
-                    checked={allChecked}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someChecked && !allChecked;
-                    }}
-                    onChange={toggleAll}
-                    className="h-3.5 w-3.5 rounded-md border-border-strong bg-input accent-primary"
-                  />
-                  {t('inbox.selectAll')}
-                </label>
+                    checkboxes below (ms-4) — one aligned select rail. Only
+                    offered when there is a bulk action to apply. */}
+                {canSelect && (
+                  <label className="flex h-8 items-center gap-2 border-b border-b-foreground/[0.06] px-4 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={allChecked}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someChecked && !allChecked;
+                      }}
+                      onChange={toggleAll}
+                      className="h-3.5 w-3.5 rounded-md border-border-strong bg-input accent-primary"
+                    />
+                    {t('inbox.selectAll')}
+                  </label>
+                )}
                 <ul className="space-y-1.5 p-2">
                   {conversations.data.map((c) => {
                     const active = selected === c.id;
@@ -828,13 +838,15 @@ export function Inbox() {
                               : 'hover:bg-card hover:shadow-[0_4px_14px_-10px_oklch(var(--shadow-color)/0.45)]',
                         )}
                       >
-                        <input
-                          type="checkbox"
-                          className="ms-4 mt-4 h-3.5 w-3.5 rounded-md border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
-                          checked={checked.has(c.id)}
-                          onChange={() => toggleOne(c.id)}
-                          aria-label={displayName}
-                        />
+                        {canSelect && (
+                          <input
+                            type="checkbox"
+                            className="ms-4 mt-4 h-3.5 w-3.5 rounded-md border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
+                            checked={checked.has(c.id)}
+                            onChange={() => toggleOne(c.id)}
+                            aria-label={displayName}
+                          />
+                        )}
                         <button
                           type="button"
                           onClick={() => setSelected(c.id)}

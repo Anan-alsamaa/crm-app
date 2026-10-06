@@ -101,13 +101,14 @@ const PAGE_SIZE = 25;
 
 export function StoresPage() {
   const { t } = useTranslation();
-  // Only the Administrator may set the Yiji restaurant id. `admin_access` is
-  // the authoritative Directus signal (the built-in Administrator has it; the
-  // CRM "Admin" role does not) — a role-NAME check would be spoofable by
-  // creating a role called "Administrator". This only hides the control; the
-  // real enforcement is the field-scoped permission in roles.ts.
-  const { user } = useAuth();
-  const canEditYijiId = !!user?.admin_access;
+  // Setting the Yiji restaurant id is its own privilege (owner, 2026-10-06);
+  // by default only the owner (`admin_access`) holds it, as before. This only
+  // hides the control; the real enforcement is the field-scoped permission in
+  // roles.ts.
+  const { can } = useAuth();
+  const canEditYijiId = can('edit_yiji_branch_id');
+  // Export is offered only with `export_data` (owner, 2026-10-06).
+  const canExport = can('export_data');
   const stores = useStores();
   const brands = useBrands();
   const createStore = useCreateStore();
@@ -434,21 +435,23 @@ export function StoresPage() {
         >
           {t('stores.import', { defaultValue: 'Import CSV' })}
         </Button>
-        <ExportButtons
-          visibleCount={filtered.length}
-          totalCount={list.length}
-          onExportView={() => exportCsv('view')}
-          onExportAll={() => exportCsv('all')}
-          labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
-          labelView={t('stores.exportFiltered', {
-            count: filtered.length,
-            defaultValue: 'Export {{count}} shown',
-          })}
-          labelAll={t('stores.exportAll', {
-            count: list.length,
-            defaultValue: 'Export all {{count}}',
-          })}
-        />
+        {canExport && (
+          <ExportButtons
+            visibleCount={filtered.length}
+            totalCount={list.length}
+            onExportView={() => exportCsv('view')}
+            onExportAll={() => exportCsv('all')}
+            labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+            labelView={t('stores.exportFiltered', {
+              count: filtered.length,
+              defaultValue: 'Export {{count}} shown',
+            })}
+            labelAll={t('stores.exportAll', {
+              count: list.length,
+              defaultValue: 'Export all {{count}}',
+            })}
+          />
+        )}
         <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
           {t('stores.create', { defaultValue: 'Add store' })}
         </Button>
