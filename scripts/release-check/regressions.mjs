@@ -322,7 +322,7 @@ await check(
 );
 
 await check(
-  'EMA-53',
+  'EMA-54',
   'every new coupon request records the agent\'s "send to Yiji" choice',
   async () => {
     /* Coupons raised from a NEW TICKET were created with `delivery_excluded`
