@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
+import { normaliseTicketStatus } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -216,7 +217,9 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
         id: t.id,
         subject: t.subject || '(no subject)',
         priority: t.priority,
-        status: t.status,
+        /* Normalised (owner, 2026-10-07): two states only. ~7,900 imported rows
+           store `closed`, and the status filter and pill read this field. */
+        status: normaliseTicketStatus(t.status),
         agentId: t.assigned_agent,
         agentName: t.assigned_agent ? (userName.get(t.assigned_agent) ?? '—') : 'Unassigned',
         created: t.date_created,

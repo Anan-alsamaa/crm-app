@@ -15,6 +15,7 @@ import {
 } from '@yiji/ui';
 import {
   COUPON_APPROVAL_STATUSES,
+  cleanContactName,
   couponDecision,
   couponOrderId,
   normalizePhone,
@@ -324,8 +325,10 @@ export function MyCouponsPage() {
                       >
                         {[
                           /* The PHONE always, not only when the name is absent:
-                             it is what an agent reads back to a customer. */
-                          r.contact?.name,
+                             it is what an agent reads back to a customer.
+                             So a name that is only that number is dropped
+                             rather than shown twice in two spellings. */
+                          cleanContactName(r.contact?.name),
                           normalizePhone(r.contact?.phone ?? r.customer_phone ?? '') || null,
                           r.ticket?.subject,
                           /* The ticket's order FIRST, then the request's own —

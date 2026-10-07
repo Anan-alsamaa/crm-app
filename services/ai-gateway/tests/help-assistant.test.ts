@@ -125,7 +125,9 @@ describe('/help-assistant — happy path', () => {
     await ask(h.app, 'What are the ticket statuses?');
     const call = h.provider.calls[0]!;
     expect(call.system).toContain('Sara CRM');
-    expect(call.system).toContain('new -> open -> pending -> resolved -> closed');
+    // Two ticket states (owner, 2026-10-07).
+    expect(call.system).toContain('exactly two statuses: pending (not done yet) and solved');
+    expect(call.system).not.toContain('new -> open -> pending -> resolved -> closed');
     // The scope guard actually reaches the provider.
     expect(call.system).toContain('OUT OF SCOPE');
     expect(call.system).toContain('"offTopic":true');

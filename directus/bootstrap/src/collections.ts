@@ -13,6 +13,7 @@ import {
   ComplaintType,
   ConversationStatus,
   ServiceType,
+  TicketStatus,
 } from '@yiji/shared-types';
 
 export type FieldType =
@@ -449,8 +450,22 @@ export const collections: CollectionSpec[] = [
       {
         field: 'status',
         type: 'string',
-        choices: ['new', 'open', 'pending', 'resolved', 'closed'],
-        defaultValue: 'new',
+        /*
+         * TWO states (owner, 2026-10-07): `pending` and `solved` — see
+         * TicketStatus. The retired spellings stay in the CHOICE LIST, after
+         * the live two, because stored rows are not migrated (~7,900 imported
+         * tickets hold `closed`) and a choice list that dropped them would show
+         * those rows as invalid in the Directus admin. The portals never offer
+         * them: every reader goes through `normaliseTicketStatus`.
+         *
+         * The default only reaches a NEW environment — `createField` is
+         * idempotent and never re-applies schema on an existing one — so the
+         * portals send `status: 'pending'` explicitly on every insert rather
+         * than trusting it; an existing database keeping `new` as its default
+         * still normalises to pending.
+         */
+        choices: [...TicketStatus.options, 'open', 'new', 'resolved', 'closed'],
+        defaultValue: 'pending',
       },
       { field: 'priority', type: 'string', choices: PRIORITY, defaultValue: 'medium' },
       { field: 'first_response_due_at', type: 'dateTime' },

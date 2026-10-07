@@ -86,7 +86,10 @@
       "inTime": "رد خلال ٥ دقائق",
       "noReply": "بلا رد",
       "customer": "العميل",
-      "orderNumber": "الطلب"
+      "orderNumber": "الطلب",
+      "agentStarted": "بدأها الموظف",
+      "agentStartedReplied": "ردّ العميل (محادثات بدأها الموظف)",
+      "startedBy": "بدأها"
     },
     "ticketsTitle": "التذاكر",
     "ticketsSubtitle": "كل تذكرة مع أزمنة SLA والطلب المرتبط بالعميل — قابلة للتصدير إلى CSV.",
@@ -125,7 +128,10 @@
     "searchAgentHint": "اسم الموظف",
     "searchConversationsHint": "العميل أو الجوال أو الموظف أو رقم الطلب",
     "viewChats": "المحادثات",
-    "viewBreakdown": "التوزيع"
+    "viewBreakdown": "التوزيع",
+    "startedByAgent": "موظف",
+    "startedByCustomer": "العميل",
+    "replied": "ردّوا"
   },
   "aiConfig": {
     "title": "المساعدة بالذكاء الاصطناعي",
@@ -1083,7 +1089,22 @@
     "avgFirstSec": "أول رد (بالثواني، المتوسط)",
     "medFirstSec": "أول رد (بالثواني، الوسيط)",
     "avgSolveSec": "زمن الحل (بالثواني، المتوسط)",
-    "medSolveSec": "زمن الحل (بالثواني، الوسيط)"
+    "medSolveSec": "زمن الحل (بالثواني، الوسيط)",
+    "outreachTitle": "محادثات بدأها موظف",
+    "outreachStarted": "بدأها موظف",
+    "outreachReplied": "ردّ العميل",
+    "outreachRepliedHint": "{{n}} من {{total}}",
+    "outreachReplyTime": "وقت ردّ العميل",
+    "median": "الوسيط",
+    "outreachHandling": "وقت الحل بعد ردّ العميل",
+    "outreachHandlingHint": "الوسيط · {{n}} أُغلقت دون ردّ",
+    "startedBy": "بدأها",
+    "byAgent": "موظف",
+    "byCustomer": "العميل",
+    "customerNotReplied": "لم يردّ العميل بعد",
+    "closedNoReply": "أُغلقت — دون ردّ من العميل",
+    "closed": "مغلقة",
+    "waitingCustomer": "بانتظار العميل"
   },
   "portalFullName": "سارة CRM · إدارة",
   "portalName": "إدارة",
@@ -1364,6 +1385,23 @@
     "deleteTitle": "حذف \"{{name}}\"؟"
   },
   "slaReports": {
+    "open": {
+      "title": "التذاكر المفتوحة",
+      "note": "كل تذكرة ما زالت قيد الانتظار حتى الآن — دون التقيّد بالتواريخ أدناه، لأن التذكرة التي فُتحت قبل أشهر ولم تُحل بعد هي عمل مفتوح اليوم.",
+      "failed": "تعذّر تحميل أرقام التذاكر المفتوحة. حدّث الصفحة للمحاولة مجددًا.",
+      "kpiPending": "قيد الانتظار",
+      "kpiOverdue": "متأخرة",
+      "kpiDueSoon": "مستحقة خلال {{hours}} ساعة",
+      "kpiNoDeadline": "بلا موعد نهائي",
+      "byPriority": "حسب الأولوية",
+      "byAgent": "حسب الموظف",
+      "byBrand": "حسب العلامة التجارية",
+      "colBrand": "العلامة التجارية",
+      "colPending": "قيد الانتظار",
+      "colOverdue": "متأخرة",
+      "unassigned": "غير مُسندة",
+      "noBrand": "بلا علامة تجارية"
+    },
     "breached": "تم الإخلال بها",
     "byAgent": "حسب الموظف",
     "byTicket": "حسب التذكرة",

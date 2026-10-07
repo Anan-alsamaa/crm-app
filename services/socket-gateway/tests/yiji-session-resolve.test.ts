@@ -72,6 +72,26 @@ describe('a session opened from the Yiji app', () => {
     expect(claims.walk_in).toBe(false);
   });
 
+  /*
+   * Yiji's full name is often the customer's own number, or ends in it (owner,
+   * 2026-10-07). Neither is a name: the number is already the phone, and an
+   * agent portal that shows it as a name shows it in a second spelling.
+   */
+  it.each([
+    ['+966508315325', undefined],
+    ['+966564490993 - +966564490993', undefined],
+    ['منيره - +966562088955', 'منيره'],
+  ])('takes no phone number as the name: %j -> %j', async (fullName, expected) => {
+    const yijiUsers = reader({
+      id: 'cd32f3aa-fbaa-438c-abfb-1c122a6f3130',
+      phone: '+966508315325',
+      name: fullName,
+      email: null,
+    });
+    const claims = await resolveCustomerClaims(yijiToken(), verifier, yijiUsers, logger);
+    expect(claims.name ?? undefined).toBe(expected);
+  });
+
   it('still prefers OUR token, and never calls Yiji for one', async () => {
     // The common path must cost nothing: a token we minted is verified locally.
     const yijiUsers = reader(null);

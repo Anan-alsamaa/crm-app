@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Skeleton } from '@yiji/ui';
@@ -7,6 +7,14 @@ import type { ContactRow } from '../contacts/api.js';
 import { ContactPicker } from './ContactPicker.js';
 import { CreateTicketDialog } from './CreateTicketDialog.js';
 import { useVendors } from './api.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
+import {
+  fromDraftContact,
+  readTicketDraft,
+  ticketDraftKey,
+  toDraftContact,
+  writeTicketDraft,
+} from './ticket-draft.js';
 
 /**
  * "Add ticket" — the one place a ticket is raised, in either of its two shapes.
@@ -30,7 +38,20 @@ export function NewTicketPage() {
   const conversationId = params.get('conversation');
 
   const conversation = useConversation(conversationId);
-  const [picked, setPicked] = useState<ContactRow | null>(null);
+  /*
+   * The chosen customer is part of the DRAFT (owner, 2026-10-07): leaving the
+   * page and coming back finds them still picked. Standalone only — from a chat
+   * the customer comes from the conversation and is never stored here. The
+   * form keeps the rest of the draft under the same key (`ticket-draft.ts`).
+   */
+  const { user } = useAuth();
+  const draftKey = conversationId ? null : ticketDraftKey(user?.id, null);
+  const [picked, setPicked] = useState<ContactRow | null>(() =>
+    fromDraftContact(readTicketDraft(draftKey)?.contact),
+  );
+  useEffect(() => {
+    writeTicketDraft(draftKey, { contact: toDraftContact(picked) });
+  }, [draftKey, picked]);
   const vendors = useVendors();
 
   // From a chat the customer is settled; standalone, the agent picks one. A
@@ -102,6 +123,8 @@ export function NewTicketPage() {
         }
         // Land on the ticket just raised, not back where it was started.
         onCreated={(ticketId) => navigate(`/tickets/${ticketId}`, { replace: true })}
+        // "Clear draft" starts the whole page over, customer included.
+        onDiscardDraft={() => setPicked(null)}
       />
     </div>
   );

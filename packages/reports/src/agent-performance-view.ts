@@ -1,5 +1,6 @@
 import {
   agentPerformance,
+  awaitingCustomer,
   firstResponseSec,
   metFirstResponse,
   timeToSolveSec,
@@ -88,6 +89,9 @@ export function performanceSummary(
      * from both this count and the common-chat count — the worst outcome in the
      * system, invisible.
      */
+    /* An agent-started chat the customer has not answered has nothing to
+       respond to: not unanswered, not on time, not late (owner, 2026-10-07). */
+    if (awaitingCustomer(c)) continue;
     if (firstResponseSec(c) == null) unanswered += 1;
     if (c.passedOn) continue;
     ownChats += 1;

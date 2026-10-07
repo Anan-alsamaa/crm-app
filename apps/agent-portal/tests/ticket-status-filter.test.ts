@@ -42,8 +42,9 @@ const STAGING = [
   { status: 'open', count: 2 },
 ];
 
-/** What a status tile does: compare against one canonical value. */
-const TILES = ['open', 'pending', 'solved'] as const;
+/** What a status tile does: compare against one canonical value. Two states
+ *  now (owner, 2026-10-07): pending and solved. */
+const TILES = ['pending', 'solved'] as const;
 
 describe('every stored status reaches a filter tile', () => {
   it.each(STAGING)('$status is filterable once normalised', ({ status }) => {
@@ -57,8 +58,8 @@ describe('every stored status reaches a filter tile', () => {
       (r) => !(TILES as readonly string[]).includes(r.status),
     ).reduce((n, r) => n + r.count, 0);
 
-    /* Raw: 1,692 of 1,694 matched no tile. */
-    expect(unfilterable).toBe(1692);
+    /* Raw: none of the 1,694 matches a tile — even `open` is retired now. */
+    expect(unfilterable).toBe(1694);
     expect(total).toBe(1694);
 
     /* Normalised: none. */
@@ -69,22 +70,22 @@ describe('every stored status reaches a filter tile', () => {
   });
 
   /*
-   * AND THE FOLDING IS THE DOCUMENTED ONE. `new` means "nobody has picked it
-   * up", which is a queue position rather than a state — assignment already
-   * records that — so it is open, not a fourth status.
+   * AND THE FOLDING IS THE DOCUMENTED ONE. `new` and `open` both only ever
+   * meant "not done yet", so they are pending, not a third status.
    */
   it('folds the retired spellings the way enums.ts says', () => {
-    expect(normaliseTicketStatus('new')).toBe('open');
+    expect(normaliseTicketStatus('new')).toBe('pending');
+    expect(normaliseTicketStatus('open')).toBe('pending');
     expect(normaliseTicketStatus('closed')).toBe('solved');
     expect(normaliseTicketStatus('resolved')).toBe('solved');
   });
 
-  /* An unknown or absent status is OPEN, not hidden: a ticket nobody can
+  /* An unknown or absent status is PENDING, not hidden: a ticket nobody can
      classify is still work somebody has to do. */
   it('never hides a ticket it cannot classify', () => {
-    expect(normaliseTicketStatus(null)).toBe('open');
-    expect(normaliseTicketStatus('')).toBe('open');
-    expect(normaliseTicketStatus('something-nobody-expected')).toBe('open');
+    expect(normaliseTicketStatus(null)).toBe('pending');
+    expect(normaliseTicketStatus('')).toBe('pending');
+    expect(normaliseTicketStatus('something-nobody-expected')).toBe('pending');
   });
 });
 
@@ -120,10 +121,11 @@ describe('the agent queue reads status the same way the admin report does', () =
    * so the two disagreed. With the query normalising, a second idea of "open"
    * is not a safety net, it is a bug waiting to diverge again.
    */
-  it('counts open without a second idea of what open means', () => {
+  it('counts pending without a second idea of what unfinished means', () => {
     expect(PAGE).toMatch(
-      /const open = list\.filter\(\(r\) => r\.complaintStatus === 'open'\)\.length/,
+      /const pending = list\.filter\(\(r\) => r\.complaintStatus === 'pending'\)\.length/,
     );
     expect(PAGE).not.toMatch(/r\.complaintStatus === 'new'/);
+    expect(PAGE).not.toMatch(/r\.complaintStatus === 'open'/);
   });
 });

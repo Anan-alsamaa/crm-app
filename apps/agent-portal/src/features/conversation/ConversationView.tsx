@@ -20,7 +20,7 @@ import {
 } from '@yiji/ui';
 import {
   SOCKET_EVENTS,
-  isDialablePhone,
+  cleanContactName,
   displayContactName,
   isAutomatedAgentMessage,
   type MessageDeleted,
@@ -1017,15 +1017,13 @@ export function ConversationView({
    * The prompt therefore goes in the HEADER, where the agent is already reading
    * the customer's name, and says what to do rather than offering an icon.
    */
-  const nameIsMissing =
-    !c?.contact?.name?.trim() ||
-    isDialablePhone(c.contact.name) ||
-    /* A MACHINE ADDRESS IS NOT A NAME EITHER. Yiji registers app customers
-       under a synthesised address (`…@yiji.com`, `…@AFCO.com`), and a header
-       showing one is exactly the "we do not know who this is" case the prompt
-       exists for — it simply did not recognise the shape (ops, 2026-10-04). */
-    displayContactName(c.contact.name, c.contact.phone) !== c.contact.name ||
-    c.contact.name === c.contact.phone;
+  /* `cleanContactName` is null for a blank name, a phone number in any shape,
+     and A MACHINE ADDRESS: Yiji registers app customers under a synthesised
+     address (`…@yiji.com`, `…@AFCO.com`), and a header showing one is exactly
+     the "we do not know who this is" case the prompt exists for (ops,
+     2026-10-04). One rule, shared with the sidebar and the gateway, rather
+     than a fourth spelling of it here (owner, 2026-10-07). */
+  const nameIsMissing = !cleanContactName(c?.contact?.name);
 
   const dayLabel = (iso: string | null): string => {
     if (!iso) return '';
@@ -1150,7 +1148,9 @@ export function ConversationView({
                       className="flex items-center gap-1.5"
                       onSubmit={(e) => {
                         e.preventDefault();
-                        const v = nameDraft.trim();
+                        // A number typed here is not a name; it is already
+                        // the phone, so it is never written as one.
+                        const v = cleanContactName(nameDraft);
                         if (!v) return;
                         updateContactName.mutate(
                           { id: c.contact!.id, patch: { name: v } },
@@ -1511,7 +1511,8 @@ export function ConversationView({
                   searching={replySearching}
                   vars={{
                     order: c?.last_order_id ?? null,
-                    name: c?.contact?.name ?? null,
+                    // A phone stored as the name is no name to greet by.
+                    name: cleanContactName(c?.contact?.name),
                     brand: c?.last_order_snapshot?.brandName ?? null,
                     restaurant: c?.last_order_snapshot?.restaurantName ?? null,
                   }}

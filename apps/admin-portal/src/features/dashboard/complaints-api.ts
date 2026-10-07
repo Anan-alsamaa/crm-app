@@ -5,6 +5,7 @@ import {
   HUMAN_AGENT_MESSAGE_FILTER,
   matchStore,
   normaliseConversationStatus,
+  normaliseTicketStatus,
   type StoreSnapshot,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
@@ -313,12 +314,10 @@ export interface ComplaintMetrics {
   rows: ComplaintRow[];
 }
 
-/* Both the live vocabulary (open/pending/solved) and the retired one, because
-   rows are NOT rewritten: 1,671 imported tickets still store `closed`. Dropping
-   the old values here would quietly stop counting them. */
-/** Statuses that mean "still being worked". */
-const OPEN_STATUSES = new Set(['open', 'pending', 'new']);
-const CLOSED_STATUSES = new Set(['solved', 'resolved', 'closed']);
+/* Two ticket states (owner, 2026-10-07): pending and solved. Rows are NOT
+   rewritten — ~7,900 imported tickets still store `closed` — so every status
+   below is read through `normaliseTicketStatus`, which folds the retired
+   spellings in. The by-status cut therefore shows only Pending and Solved. */
 
 interface TicketRecord {
   id: string;
@@ -765,6 +764,8 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       const flat: ComplaintRow[] = [];
 
       for (const r of rows) {
+        const status = normaliseTicketStatus(r.status);
+        const isSolved = status === 'solved';
         /*
          * Still read per ROW, for the drill-down list only.
          *
@@ -797,11 +798,11 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         // in trouble is one that blew its first-response SLA and is unanswered.
         if (isOverdue) overdue += 1;
 
-        if (OPEN_STATUSES.has(r.status)) {
+        if (!isSolved) {
           open += 1;
           if (!isOverdue) openNotOverdue += 1;
         }
-        if (CLOSED_STATUSES.has(r.status)) {
+        if (isSolved) {
           closed += 1;
           /* Kept for the ticket-side reading only. `rated`/`satisfied` moved to
              CHATS below (owner, 2026-09-14) — a rating belongs to the
@@ -828,7 +829,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
         bump(byArea, r.area);
         bump(byChain, r.chain);
         bump(byCity, r.city);
-        bump(byStatus, r.status);
+        bump(byStatus, status);
         bump(byServiceType, r.service_type);
         bump(bySource, r.complaint_source);
         const agentId = r.assigned_agent ?? '';
@@ -836,7 +837,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           id: r.id,
           subject: r.subject ?? '',
           date: day,
-          status: r.status,
+          status,
           agentId,
           agentName: nameOf(agentId),
           restaurantName: r.restaurantName,
@@ -849,18 +850,18 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           source: r.complaint_source ?? '',
           compensation: r.compensation ?? '',
           couponValue: money,
-          isOpen: !CLOSED_STATUSES.has(r.status),
+          isOpen: !isSolved,
           overdue: isOverdue,
         });
         byAgentCount.set(agentId, (byAgentCount.get(agentId) ?? 0) + 1);
-        if (!CLOSED_STATUSES.has(r.status)) {
+        if (!isSolved) {
           byOpenAgentCount.set(agentId, (byOpenAgentCount.get(agentId) ?? 0) + 1);
         }
 
         const a = agentAgg.get(agentId) ?? { logged: 0, solved: 0, open: 0, hours: [], money: 0 };
         a.logged += 1;
         a.money += money;
-        if (CLOSED_STATUSES.has(r.status)) {
+        if (isSolved) {
           a.solved += 1;
           const end = r.closed_at ?? r.resolved_at;
           if (r.date_created && end) {

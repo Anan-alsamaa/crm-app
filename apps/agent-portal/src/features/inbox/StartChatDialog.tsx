@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Button, Input, Modal, Spinner, Textarea, cn } from '@yiji/ui';
-import { isDialablePhone, normalizePhone } from '@yiji/shared-types';
+import { cleanContactName, isDialablePhone, normalizePhone } from '@yiji/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import { lookupContactByPhone, soleYijiVendorId, startChatWithCustomer } from './start-chat.js';
 import { QuickReplies } from '../conversation/QuickReplies.js';
@@ -100,7 +100,8 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
       const found = await lookupContactByPhone(canonical);
       setLookup(
         found
-          ? { state: 'known', name: found.name?.trim() || null, phone: canonical }
+          ? // A stored name that is only the number is no name (owner, 2026-10-07).
+            { state: 'known', name: cleanContactName(found.name), phone: canonical }
           : { state: 'new', phone: canonical },
       );
     } catch {

@@ -146,10 +146,8 @@ describe('ticket-ops api — useTicketOps', () => {
     expect(data.rows).toEqual([]);
     expect(data.totals).toEqual({
       total: 0,
-      open: 0,
       pending: 0,
-      resolved: 0,
-      closed: 0,
+      solved: 0,
       overdue: 0,
       unassigned: 0,
     });
@@ -163,15 +161,16 @@ describe('ticket-ops api — useTicketOps', () => {
     });
   });
 
-  it('counts the open backlog as new + open + pending', async () => {
+  it('counts the backlog in two states: stored new + open + pending are all pending', async () => {
+    // Owner, 2026-10-07: tickets are pending or solved, nothing else. Stored
+    // rows are not migrated, so the retired spellings must fold in.
     mockData(fullWindow());
     const data = await load();
 
     expect(data.totals.total).toBe(6);
-    expect(data.totals.open).toBe(3); // t-open + t-new + t-pending
-    expect(data.totals.pending).toBe(1);
-    expect(data.totals.resolved).toBe(1);
-    expect(data.totals.closed).toBe(2);
+    expect(data.totals.pending).toBe(3); // t-open + t-new + t-pending
+    expect(data.totals.solved).toBe(3); // t-res + t-closed + t-closed2
+    expect(data.rows.every((r) => r.status === 'pending' || r.status === 'solved')).toBe(true);
   });
 
   it('counts overdue only when the resolution due date passed AND the ticket is live', async () => {
@@ -193,7 +192,7 @@ describe('ticket-ops api — useTicketOps', () => {
     ]);
     const data = await load();
     expect(data.totals.unassigned).toBe(1);
-    expect(data.totals.open).toBe(1);
+    expect(data.totals.pending).toBe(1);
   });
 
   it('exposes age only for live tickets and computes lifecycle minutes', async () => {
@@ -238,15 +237,11 @@ describe('ticket-ops api — useTicketOps', () => {
     mockData(fullWindow());
     const data = await load();
 
-    /* Live vocabulary first (open/pending/solved), then the retired values the
-       imported history still stores. This fixture predates the narrowing, so it
-       exercises the retired half — which is the half that must keep working. */
+    /* Only the two live states (owner, 2026-10-07). The fixture stores the
+       retired values too — the half that must keep working — and they fold in. */
     expect(data.byStatus).toEqual([
-      { key: 'open', count: 1 },
-      { key: 'pending', count: 1 },
-      { key: 'new', count: 1 },
-      { key: 'resolved', count: 1 },
-      { key: 'closed', count: 2 },
+      { key: 'pending', count: 3 },
+      { key: 'solved', count: 3 },
     ]);
     expect(data.byPriority).toEqual([
       { key: 'urgent', count: 1 },
@@ -256,7 +251,7 @@ describe('ticket-ops api — useTicketOps', () => {
     ]);
   });
 
-  it('groups load per agent (incl. an Unassigned bucket) sorted by overdue, open, total', async () => {
+  it('groups load per agent (incl. an Unassigned bucket) sorted by overdue, pending, total', async () => {
     mockData(fullWindow());
     const data = await load();
 
@@ -267,15 +262,15 @@ describe('ticket-ops api — useTicketOps', () => {
     expect(unassigned).toMatchObject({
       agentId: null,
       total: 1,
-      open: 1,
+      pending: 1,
       overdue: 1,
-      resolved: 0,
+      solved: 0,
       avgResolutionMin: null,
     });
-    // Ann carries more live work than Bo, so she outranks him on `open`.
-    expect(ann).toMatchObject({ agentId: 'u1', total: 2, open: 2, overdue: 0, resolved: 0 });
+    // Ann carries more live work than Bo, so she outranks him on `pending`.
+    expect(ann).toMatchObject({ agentId: 'u1', total: 2, pending: 2, overdue: 0, solved: 0 });
     // Bo's three tickets are all done; avg of 120, 600 and 300 minutes.
-    expect(bo).toMatchObject({ agentId: 'u2', total: 3, open: 0, overdue: 0, resolved: 3 });
+    expect(bo).toMatchObject({ agentId: 'u2', total: 3, pending: 0, overdue: 0, solved: 3 });
     expect(bo!.avgResolutionMin).toBe(340);
   });
 

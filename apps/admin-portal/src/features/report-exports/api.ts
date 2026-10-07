@@ -11,6 +11,7 @@ import { displayContactName, type StoreSnapshot } from '@yiji/shared-types';
 import {
   agentPerformance,
   chatHandoffs,
+  agentInitiatedSummary,
   conversationTimestamps,
   firstResponseSec,
   readChunked,
@@ -108,6 +109,8 @@ interface RawConversation {
   last_message_at: string | null;
   contact: { id: string; name: string | null; phone: string | null; email: string | null } | null;
   last_order_id: string | null;
+  /** 'agent' when an agent opened the chat (owner, 2026-10-07). */
+  initiated_by?: string | null;
 }
 
 interface RawCsat {
@@ -218,6 +221,10 @@ export interface AgentKpiRow {
   noReply: number;
   /** Chats picked up after somebody else let them go. */
   commonTaken: number;
+  /** Chats this agent STARTED (owner, 2026-10-07). */
+  agentStarted: number;
+  /** ...of which the customer replied. */
+  agentStartedReplied: number;
   /**
    * MEDIAN seconds to first reply over the chats the agent answered.
    *
@@ -273,6 +280,8 @@ export interface ConversationRow {
   awaitingReply: boolean;
   /** Minutes since the customer's first message, when awaiting a reply. */
   waitingMinutes: number | null;
+  /** Who opened the chat (owner, 2026-10-07). */
+  startedBy: 'agent' | 'customer';
 }
 
 export interface ConversationStatusReport {
@@ -698,6 +707,7 @@ async function loadAgentReport(
                   // phone numbers is a morning's work.
                   { contact: ['id', 'name', 'phone', 'email'] },
                   'last_order_id',
+                  'initiated_by',
                 ],
                 limit: -1,
                 sort: ['-date_created'],
@@ -941,7 +951,10 @@ async function loadAgentReport(
       const ticketRows: TicketReportRow[] = (kind === 'complaints' ? [] : tickets).map((t) => ({
         id: t.id,
         subject: t.subject || labels.noSubject,
-        status: t.status,
+        /* Normalised (owner, 2026-10-07: two ticket states, pending and
+           solved). The status chips, the pill and the export all read this
+           field, and the stored value on imported history is `closed`. */
+        status: normaliseTicketStatus(t.status),
         priority: t.priority,
         contactId: t.contact?.id ?? null,
         /* THROUGH `displayContactName` (owner, 2026-10-05: "the customer name
@@ -1088,8 +1101,8 @@ async function loadAgentReport(
           /*
            * THE LIVE VOCABULARY, not whatever the row happens to store.
            *
-           * Ticket status is `open | pending | solved`; `resolved` and `closed`
-           * are retired names still carried by 1,671 imported rows, which are
+           * Ticket status is `pending | solved` (owner, 2026-10-07); `open`,
+           * `new`, `resolved` and `closed` are retired names still carried by 1,671 imported rows, which are
            * deliberately never rewritten. Every reader is supposed to go
            * through the normaliser so that a stored `closed` and a stored
            * `solved` read the same — this report did not, so the status column
@@ -1180,6 +1193,10 @@ async function loadAgentReport(
           solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
           passedOn: handoffs.get(c.id)?.passedOn ?? false,
           takenBy: handoffs.get(c.id)?.takenBy ?? null,
+          // Agent-started chats: measured from the customer's reply, and one
+          // never answered is not "not replied" (owner, 2026-10-07).
+          initiatedBy: c.initiated_by === 'agent' ? ('agent' as const) : ('customer' as const),
+          firstOutreachAt: chatTimes.get(c.id)?.firstAgentAnyAt ?? null,
         };
       });
       const perfRows = new Map(agentPerformance(timings).map((r) => [r.agentId ?? '', r]));
@@ -1243,6 +1260,12 @@ async function loadAgentReport(
             chats: perf?.chats ?? 0,
             noReply: perf?.unanswered ?? 0,
             commonTaken: perf?.commonChats ?? 0,
+            ...(() => {
+              const o = agentInitiatedSummary(
+                timings.filter((x) => (x.agentId ?? '') === (a.agentId ?? '')),
+              );
+              return { agentStarted: o.started, agentStartedReplied: o.customerReplied };
+            })(),
             medianFirstResponseSec: perf?.medianFirstResponseSec ?? null,
             avgTimeToSolveSec: perf?.avgTimeToSolveSec ?? null,
             inTimePct: it && it.answered > 0 ? (it.inTime / it.answered) * 100 : null,
@@ -1291,6 +1314,7 @@ async function loadAgentReport(
           customerEmail: c.contact?.email ?? '',
           orderId: c.last_order_id ?? '',
           awaitingReply,
+          startedBy: c.initiated_by === 'agent' ? 'agent' : 'customer',
           waitingMinutes:
             awaitingReply && times?.firstCustomerAt
               ? Math.max(0, Math.round((now - new Date(times.firstCustomerAt).getTime()) / 60000))

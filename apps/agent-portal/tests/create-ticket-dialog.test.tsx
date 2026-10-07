@@ -71,18 +71,26 @@ vi.mock('../src/features/tickets/useStoreMatch.js', () => ({
 
 import { CreateTicketDialog } from '../src/features/tickets/CreateTicketDialog.js';
 
-function renderDialog(onClose = vi.fn()) {
+function renderDialog(onClose = vi.fn(), conversationId: string | null = null) {
   const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
   return {
     onClose,
-    ...render(<CreateTicketDialog contactId="k1" vendorId="v1" onClose={onClose} />, {
-      wrapper: Wrapper,
-    }),
+    ...render(
+      <CreateTicketDialog
+        contactId="k1"
+        vendorId="v1"
+        conversationId={conversationId}
+        onClose={onClose}
+      />,
+      { wrapper: Wrapper },
+    ),
   };
 }
+
+const DRAFT_KEY = 'yiji.agent.ticketDraft.agent-1.standalone';
 
 /** Pick a ticket type the way an agent does: type, then choose from the list. */
 async function chooseComplaintType(label: string) {
@@ -93,6 +101,8 @@ async function chooseComplaintType(label: string) {
 }
 
 beforeEach(() => {
+  // The form keeps a per-tab draft; one test's typing must not seed the next.
+  sessionStorage.clear();
   hooks.useCreateTicketFromConversation.mockReset();
   hooks.useCreateTicketFromConversation.mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue({}),
@@ -258,6 +268,77 @@ describe('CreateTicketForm', () => {
    * This overrides the module mock for one test so no branch resolves, which is
    * a walk-in with no order behind it.
    */
+  /*
+   * THE DRAFT SURVIVES LEAVING THE PAGE (owner, 2026-10-07). Unmounting is
+   * what navigating to another route does, and a reload re-mounts from
+   * sessionStorage — so "unmount, mount again" is both cases.
+   */
+  describe('draft', () => {
+    it('restores what was typed after the form is left and reopened', async () => {
+      const first = renderDialog();
+      await chooseComplaintType('Missing item');
+      await userEvent.type(screen.getByLabelText('tickets.description'), 'Cold fries');
+      first.unmount();
+
+      renderDialog();
+      expect(screen.getByLabelText('tickets.description')).toHaveValue('Cold fries');
+      expect(screen.getAllByText('Missing item').length).toBeGreaterThan(0);
+      expect(screen.getByText(/Draft restored/)).toBeInTheDocument();
+    });
+
+    it('does not claim a draft for a form nobody touched', () => {
+      const first = renderDialog();
+      first.unmount();
+      expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+      renderDialog();
+      expect(screen.queryByText(/Draft restored/)).not.toBeInTheDocument();
+    });
+
+    it('Clear draft empties the form and forgets it', async () => {
+      const first = renderDialog();
+      await userEvent.type(screen.getByLabelText('tickets.description'), 'Cold fries');
+      first.unmount();
+
+      renderDialog();
+      await userEvent.click(screen.getByRole('button', { name: 'Clear draft' }));
+      expect(screen.getByLabelText('tickets.description')).toHaveValue('');
+      expect(screen.queryByText(/Draft restored/)).not.toBeInTheDocument();
+      expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+    });
+
+    it('Cancel discards the draft', async () => {
+      renderDialog();
+      await userEvent.type(screen.getByLabelText('tickets.description'), 'Cold fries');
+      expect(sessionStorage.getItem(DRAFT_KEY)).not.toBeNull();
+      await userEvent.click(screen.getByText('actions.cancel'));
+      expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
+    });
+
+    it('is cleared once the ticket is saved', async () => {
+      const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1' });
+      hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+      renderDialog();
+      await chooseComplaintType('Missing item');
+      expect(sessionStorage.getItem(DRAFT_KEY)).not.toBeNull();
+      await userEvent.click(screen.getByText('tickets.create'));
+      await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+      await waitFor(() => expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull());
+    });
+
+    it("never carries one chat's draft into another chat", async () => {
+      const first = renderDialog(vi.fn(), 'chat-A');
+      await userEvent.type(screen.getByLabelText('tickets.description'), 'About chat A');
+      first.unmount();
+
+      const second = renderDialog(vi.fn(), 'chat-B');
+      expect(screen.getByLabelText('tickets.description')).toHaveValue('');
+      second.unmount();
+
+      renderDialog(vi.fn(), 'chat-A');
+      expect(screen.getByLabelText('tickets.description')).toHaveValue('About chat A');
+    });
+  });
+
   it('will not save without a branch, and says why', async () => {
     const mod = await import('../src/features/tickets/useStoreMatch.js');
     /* `StoreMatch`'s display fields are plain strings, not nullable — an

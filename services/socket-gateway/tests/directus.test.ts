@@ -196,6 +196,26 @@ describe('GatewayDirectus.upsertContact', () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 
+  /*
+   * A NAME THAT IS ONLY A NUMBER IS NO NAME (owner, 2026-10-07). The agent
+   * portal read `+966508315325` back as the customer's name; the number lives
+   * in `phone`, so the contact is created nameless for an agent to fill in.
+   */
+  it.each([
+    ['+966508315325', null],
+    ['+966564490993 - +966564490993', null],
+    ['منيره - +966562088955', 'منيره'],
+  ])('stores the name %j as %j', async (given, stored) => {
+    request.mockResolvedValueOnce([]).mockResolvedValueOnce({ id: 'contact-new' });
+    const res = await makeGateway().upsertContact('vendor-uuid', { ...baseClaims, name: given });
+    expect(res.name).toBe(stored);
+    // The value WRITTEN, not just the one handed back. The SDK command is a
+    // function that builds the request; its body is the JSON sent to Directus.
+    const cmd = request.mock.calls[1]![0] as () => { body?: string };
+    const body = JSON.parse(cmd().body ?? '{}') as { name?: string | null };
+    expect(body.name).toBe(stored);
+  });
+
   it('still creates a contact when claims carry only an email', async () => {
     request.mockResolvedValueOnce([]).mockResolvedValueOnce({ id: 'c2' });
     const res = await makeGateway().upsertContact('vendor-uuid', {

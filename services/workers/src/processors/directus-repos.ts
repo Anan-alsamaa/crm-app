@@ -1,6 +1,11 @@
 import { readItems, updateItem, createItem, readUser, readUsers, readRoles } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
-import { HUMAN_AGENT_MESSAGE_FILTER, roleNamesHolding, type Privilege } from '@yiji/shared-types';
+import {
+  HUMAN_AGENT_MESSAGE_FILTER,
+  roleNamesHolding,
+  UNSOLVED_TICKET_STATUSES_STORED,
+  type Privilege,
+} from '@yiji/shared-types';
 import type {
   ConversationRepo,
   ConversationRow,
@@ -90,7 +95,9 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
     async listOpenTickets() {
       return (await client.request(
         readItems('tickets', {
-          filter: { status: { _in: ['new', 'open', 'pending'] } },
+          /* `pending` is the live unfinished state (owner, 2026-10-07); `open`
+             and `new` are kept so rows stored before it still match. */
+          filter: { status: { _in: [...UNSOLVED_TICKET_STATUSES_STORED] } },
           fields: [
             'id',
             'status',

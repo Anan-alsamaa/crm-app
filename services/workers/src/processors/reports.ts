@@ -1,7 +1,7 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import { readItems, readItem, updateItem } from '@directus/sdk';
-import type { ReportJob } from '@yiji/shared-types';
+import { normaliseTicketStatus, type ReportJob } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import type { MailTransport } from '../mail/index.js';
 
@@ -209,7 +209,9 @@ async function reportTicketResolution(
       const dt = new Date(t.resolved_at).getTime() - new Date(t.date_created).getTime();
       minutes = String(Math.round(dt / 60_000));
     }
-    rows.push([t.id, t.subject, t.status, t.priority, minutes]);
+    // Normalised: the file says pending/solved, never a retired spelling
+    // (owner, 2026-10-07).
+    rows.push([t.id, t.subject, normaliseTicketStatus(t.status), t.priority, minutes]);
   }
   return { rows, rowCount: rows.length - 1 };
 }
@@ -248,7 +250,10 @@ export async function reportAgentProductivity(
       resCount: 0,
     };
     b.assigned += 1;
-    if (t.status === 'resolved' || t.status === 'closed') {
+    /* Through the normaliser: this tested only the RETIRED `resolved`/`closed`,
+       so a ticket marked `solved` (the live value) never counted as resolved
+       (owner, 2026-10-07: two states, pending and solved). */
+    if (normaliseTicketStatus(t.status) === 'solved') {
       b.resolved += 1;
       if (t.date_created && t.resolved_at) {
         b.totalMin +=

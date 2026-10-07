@@ -18,8 +18,8 @@ export type VendorStatus = z.infer<typeof VendorStatus>;
  * alone would leave rows holding a value no filter matches, so those chats
  * would vanish from the inbox rather than error.
  *
- * TICKET status is separate and has its own three (open/pending/solved).
- * They now SHARE the word `solved`, but they are still different columns on
+ * TICKET status is separate and has its own two (pending/solved).
+ * They SHARE the word `solved`, but they are still different columns on
  * different collections: do not unify the enums.
  */
 export const ConversationStatus = z.enum(['open', 'solved']);
@@ -40,48 +40,68 @@ export function normaliseConversationStatus(raw: string | null | undefined): Con
 }
 
 /**
- * THREE states, not five (owner, 2026-09-09).
+ * TWO states (owner, 2026-10-07: "ensure we only have 2 states for the
+ * tickets: pending and solved, throughout the application").
  *
- * `new` / `open` / `resolved` / `closed` asked agents to make distinctions
- * nobody acted on: a "new" ticket and an "open" one were worked identically,
- * and "resolved" versus "closed" was a difference operations could not state.
- * Five buttons where three would do is five chances to file the same ticket
- * two ways, which is what made the status column unreportable.
- *
- * What survives is the three states that carry a decision:
- *   open    — being worked
- *   pending — waiting on somebody else (the customer, a branch)
+ *   pending — not done yet
  *   solved  — done
  *
- * `solved` rather than `resolved`, matching the chat status, so the two halves
- * of the product stop using different words for the same thing.
+ * It was five (`new`/`open`/`pending`/`resolved`/`closed`), then three
+ * (`open`/`pending`/`solved`, 2026-09-09). The three still asked agents to
+ * choose between "open" and "pending", and nothing in the product ever treated
+ * them differently: the SLA clocks, the dashboards and every backlog count read
+ * both as unsolved, and `pending` never paused a timer. A choice that changes
+ * nothing is a choice that gets made inconsistently, so it is gone.
+ *
+ * `pending` rather than `open` because that is the owner's word, and because
+ * `open` is the CHAT vocabulary — keeping the two halves of the product on
+ * different words for "unfinished" stops a ticket filter being read as a chat
+ * one. `solved` is shared with chats, as before.
+ *
+ * NOT `ConversationStatus`: different column, different collection. Do not
+ * unify the enums.
  */
-export const TicketStatus = z.enum(['open', 'pending', 'solved']);
+export const TicketStatus = z.enum(['pending', 'solved']);
 export type TicketStatus = z.infer<typeof TicketStatus>;
 
 /**
  * What each retired ticket status becomes.
  *
- * Rows are NOT rewritten in place. 1,671 of staging's 1,693 tickets are
- * `closed` imported history, and rewriting them would destroy the only record
- * of what operations actually filed while gaining nothing — every reader goes
- * through `normaliseTicketStatus`, so a stored `closed` and a stored `solved`
- * already read the same. The map is the migration; running one is optional.
+ * Rows are NOT rewritten in place. Production holds ~7,900 tickets stored as
+ * `closed` (imported history) against ~90 `solved`, and rewriting them would
+ * destroy the only record of what operations actually filed while gaining
+ * nothing — every reader goes through `normaliseTicketStatus`, so a stored
+ * `closed` and a stored `solved` already read the same. The map is the
+ * migration; running one is optional.
  *
- * `new` folds into `open` because that is what it always meant — nobody had
- * picked it up yet, which is a queue position, not a state. Assignment already
- * records that.
+ * `new` and `open` fold into `pending`: both only ever meant "not done".
  */
 export const RETIRED_TICKET_STATUS: Record<string, TicketStatus> = {
-  new: 'open',
+  new: 'pending',
+  open: 'pending',
   resolved: 'solved',
   closed: 'solved',
 };
 
-/** Normalise any stored ticket status, including the retired ones. */
+/**
+ * Every value a `tickets.status` column may hold — the live two plus the
+ * retired ones still stored on historical rows. For SERVER-SIDE filters only
+ * (a Directus `_in` that must still match an old row); never offer these in a
+ * UI.
+ */
+export const UNSOLVED_TICKET_STATUSES_STORED = ['pending', 'open', 'new'] as const;
+export const SOLVED_TICKET_STATUSES_STORED = ['solved', 'resolved', 'closed'] as const;
+
+/**
+ * Normalise any stored ticket status, including the retired ones.
+ *
+ * Anything unrecognised (null, a typo, a value nobody has seen) reads as
+ * `pending`: an unknown ticket shown as unfinished gets looked at, one shown as
+ * solved disappears from every queue.
+ */
 export function normaliseTicketStatus(raw: string | null | undefined): TicketStatus {
-  if (raw === 'open' || raw === 'pending' || raw === 'solved') return raw;
-  return RETIRED_TICKET_STATUS[raw ?? ''] ?? 'open';
+  if (raw === 'pending' || raw === 'solved') return raw;
+  return RETIRED_TICKET_STATUS[raw ?? ''] ?? 'pending';
 }
 
 export const Priority = z.enum(['low', 'medium', 'high', 'urgent']);

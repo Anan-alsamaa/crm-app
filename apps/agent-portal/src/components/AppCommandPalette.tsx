@@ -12,6 +12,7 @@ import {
   TicketIcon,
   useCommandPaletteShortcut,
 } from '@yiji/ui';
+import { displayContactName } from '@yiji/shared-types';
 import { useConversations } from '../features/inbox/api.js';
 import { useTickets } from '../features/tickets/api.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
@@ -85,7 +86,9 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
         items: (conversations.data ?? []).slice(0, 8).map((c) => ({
           id: `conv-${c.id}`,
           label:
-            c.contact?.name || c.contact?.phone || c.contact?.email || t('inbox.unknownContact'),
+            displayContactName(c.contact?.name, c.contact?.phone) ||
+            c.contact?.email ||
+            t('inbox.unknownContact'),
           /* The MOBILE under the name, not the email (ops, 2026-10-04). Every
              Yiji account carries both — the app registers on an email and
              stores the mobile beside it — and the mobile is what WeCare dial,
@@ -115,7 +118,10 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
         items: (tickets.data ?? []).slice(0, 8).map((tk) => ({
           id: `ticket-${tk.id}`,
           label: tk.subject,
-          meta: tk.contact?.name || tk.contact?.phone || tk.contact?.email || undefined,
+          meta:
+            displayContactName(tk.contact?.name, tk.contact?.phone) ||
+            tk.contact?.email ||
+            undefined,
           icon: <TicketIcon size={14} />,
           keywords: [tk.status, tk.priority, tk.contact?.email ?? ''].filter(Boolean) as string[],
           onSelect: () => navigate(`/tickets?id=${tk.id}`),

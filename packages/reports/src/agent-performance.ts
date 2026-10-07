@@ -58,6 +58,14 @@ export interface ChatTiming {
   firstAgentBy?: string | null;
   /** The agent who picked it up AFTER it had been passed on, if any. */
   takenBy?: string | null;
+  /**
+   * WHO OPENED THE CHAT (owner, 2026-10-07). `'agent'` is an outreach the
+   * customer may answer late or never, so its timings are read differently —
+   * see `awaitingCustomer` and `agentInitiatedSummary`. Absent = customer.
+   */
+  initiatedBy?: 'agent' | 'customer' | null;
+  /** For an agent-started chat: when the agent's first message went out. */
+  firstOutreachAt?: string | null;
 }
 
 export interface AgentPerformanceRow {
@@ -122,6 +130,19 @@ const median = (xs: number[]): number | null => {
   const mid = Math.floor(s.length / 2);
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 };
+
+/**
+ * AN AGENT-STARTED CHAT THE CUSTOMER HAS NOT ANSWERED (owner, 2026-10-07).
+ *
+ * The agent did their part; there is nothing to respond to yet. Counting it as
+ * "No reply yet" / unanswered — what every report did — blamed the agent for
+ * the customer's silence and reported a chat closed the same day as "Still
+ * open". Such chats leave the response-time and answered-in-time populations
+ * and are reported in their own figures instead.
+ */
+export function awaitingCustomer(c: ChatTiming): boolean {
+  return c.initiatedBy === 'agent' && !c.firstCustomerAt;
+}
 
 /** First response for one chat, or null when it cannot be measured. */
 export function firstResponseSec(c: ChatTiming): number | null {
@@ -256,7 +277,8 @@ export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformance
       answered: responses.length,
       // Every chat with no reply, passed on or not — see the note in
       // performanceSummary. Only the timings below are scoped to `own`.
-      unanswered: group.filter((c) => firstResponseSec(c) === null).length,
+      // An agent-started chat the customer never answered is not unanswered.
+      unanswered: group.filter((c) => firstResponseSec(c) === null && !awaitingCustomer(c)).length,
       ownChats: own.length,
       // Credited from the routing history, not from who currently holds the
       // chat: the ladder may hand it on again afterwards.
@@ -279,8 +301,61 @@ export function splitBySla(
 ): { met: ChatTiming[]; missed: ChatTiming[] } {
   const met: ChatTiming[] = [];
   const missed: ChatTiming[] = [];
-  for (const c of chats) (metFirstResponse(c, targetSec) ? met : missed).push(c);
+  for (const c of chats) {
+    // Nothing to answer yet: neither in time nor late.
+    if (awaitingCustomer(c)) continue;
+    (metFirstResponse(c, targetSec) ? met : missed).push(c);
+  }
   return { met, missed };
+}
+
+export interface AgentInitiatedSummary {
+  /** Chats an agent started. */
+  started: number;
+  /** ...that the customer answered. */
+  customerReplied: number;
+  /** Percentage answered by the customer. Null when none were started. */
+  replyRatePct: number | null;
+  /** Median seconds from the agent's first message to the customer's reply. */
+  medianCustomerReplySec: number | null;
+  /** Closed without the customer ever writing back. */
+  closedWithoutReply: number;
+  /**
+   * Median seconds from the customer's reply to solved — the handling time,
+   * which a customer who answers a day later cannot stretch.
+   */
+  medianHandlingSec: number | null;
+}
+
+/**
+ * THE KPI FOR AGENT-STARTED CHATS (owner, 2026-10-07): "first response time
+ * wouldn't be very practical to measure such chats; time to solve would still
+ * make sense, but not fully, as the customer might reply after a long time."
+ *
+ * So for these chats: did the customer answer (rate), how fast did they, and —
+ * once they did — how long the agent took to close it. First response for an
+ * agent-started chat is the agent's reply AFTER the customer's reply, which
+ * `firstResponseSec` already measures.
+ */
+export function agentInitiatedSummary(chats: readonly ChatTiming[]): AgentInitiatedSummary {
+  const started = chats.filter((c) => c.initiatedBy === 'agent');
+  const replied = started.filter((c) => !!c.firstCustomerAt);
+  const replyTimes = replied
+    .map((c) =>
+      c.firstOutreachAt
+        ? positiveOrNull(secondsBetween(c.firstOutreachAt, c.firstCustomerAt!))
+        : null,
+    )
+    .filter((n): n is number => n !== null);
+  const handling = replied.map(timeToSolveSec).filter((n): n is number => n !== null);
+  return {
+    started: started.length,
+    customerReplied: replied.length,
+    replyRatePct: started.length ? Math.round((replied.length / started.length) * 100) : null,
+    medianCustomerReplySec: median(replyTimes),
+    closedWithoutReply: started.filter((c) => !c.firstCustomerAt && !!c.solvedAt).length,
+    medianHandlingSec: median(handling),
+  };
 }
 
 /** `92` -> "1m 32s". Null renders as a dash by the caller, never as "0s". */

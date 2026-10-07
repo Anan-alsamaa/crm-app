@@ -16,7 +16,7 @@ import {
   useResizable,
   LockIcon,
 } from '@yiji/ui';
-import { displayContactName, type YijiOrder } from '@yiji/shared-types';
+import { cleanContactName, displayContactName, type YijiOrder } from '@yiji/shared-types';
 import {
   useConversation,
   useLinkedTickets,
@@ -119,6 +119,8 @@ const TICKET_TONE: Record<
 > = {
   open: 'success',
   pending: 'highlight',
+  // The two ticket states since 2026-10-07; the rest are stored history.
+  solved: 'primary',
   resolved: 'primary',
   closed: 'muted',
   reopened: 'neutral',
@@ -188,9 +190,10 @@ export function ConversationSidebar({
    * `05…`, so the same customer read two ways on one screen. The helper
    * renders a phone-shaped name canonically and rejects a machine address.
    *
-   * DISPLAY ONLY — the edit draft below deliberately keeps the RAW stored
-   * value, because an agent editing the name should see what is actually in
-   * the database, not a rendering of it.
+   * The edit draft below goes through `cleanContactName` instead (owner,
+   * 2026-10-07): a stored name that is only the phone number opens as an EMPTY
+   * box with a "No name yet" placeholder, so the agent types the real name
+   * rather than editing around a number that is already in the Phone field.
    */
   const contactName =
     displayContactName(c.contact?.name, c.contact?.phone) ||
@@ -200,10 +203,19 @@ export function ConversationSidebar({
 
   const startEdit = () => {
     setDraft({
-      name: c.contact?.name ?? '',
+      name: cleanContactName(c.contact?.name) ?? '',
       email: c.contact?.email ?? '',
     });
     setEditing(true);
+  };
+  /* What Save writes for the name. A box left empty over a phone-shaped
+     stored name leaves that column ALONE — Save is about what the agent
+     changed, and this is no data migration. Anything typed goes through
+     the same rule, so a number typed as a name is never written. */
+  const namePatch = (): { name?: string | null } => {
+    const typed = cleanContactName(draft.name);
+    if (typed === cleanContactName(c.contact?.name)) return {};
+    return { name: typed };
   };
   const saveContact = async () => {
     if (!c.contact?.id) return;
@@ -211,7 +223,7 @@ export function ConversationSidebar({
       await updateContact.mutateAsync({
         id: c.contact.id,
         patch: {
-          name: draft.name.trim() || null,
+          ...namePatch(),
           email: draft.email.trim() || null,
           /* Never sent. The phone is the identity key and the field above is
              read-only; writing it here anyway would reintroduce the bug the
@@ -326,7 +338,7 @@ export function ConversationSidebar({
               <Input
                 value={draft.name}
                 onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                placeholder={t('inbox.unknownContact')}
+                placeholder={t('sidebar.noNameYet', { defaultValue: 'No name yet' })}
                 aria-label={t('sidebar.name', { defaultValue: 'Name' })}
               />
             </label>

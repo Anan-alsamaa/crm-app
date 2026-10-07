@@ -31,6 +31,8 @@ import { exportCsv, reportFilename, type CsvColumn } from '@yiji/reports';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { TicketStatus } from '@yiji/shared-types';
+import { OpenTicketsSection } from './OpenTicketsSection.js';
 
 /* These reports open on the LAST 30 DAYS, not today's business day: one day of
    KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
@@ -46,18 +48,13 @@ const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructi
     high: 'warning',
     urgent: 'destructive',
   };
-/* Board mapping, same as the export reports: open reads sky, resolved jade,
- * closed neutral. 'warning' keeps the darkened-treatment pill (warning is a
- * light token on its own). */
-const STATUS_TONE: Record<
-  string,
-  'primary' | 'success' | 'warning' | 'highlight' | 'muted' | 'neutral' | 'blue'
-> = {
-  new: 'primary',
-  open: 'blue',
-  pending: 'highlight',
-  resolved: 'success',
-  closed: 'neutral',
+/* Two ticket states (owner, 2026-10-07): pending reads sky, solved jade. The
+ * rows arrive NORMALISED from the api, so a stored `open`/`closed` never
+ * reaches this map — it used to list only the retired names, and a ticket
+ * marked `solved` fell through to the grey used for "no idea". */
+const STATUS_TONE: Record<TicketStatus, 'success' | 'blue'> = {
+  pending: 'blue',
+  solved: 'success',
 };
 
 const fmtPct = (n: number | null) => (n == null ? '—' : `${Math.round(n)}%`);
@@ -289,7 +286,8 @@ export function SlaReportsPage() {
     });
   }, [report.data, agentFilter, query, outcome, priority, statusFilter]);
 
-  /** Options built from the rows in range, never from an enum. */
+  /** Options built from the rows in range, never from an enum — except
+   *  status, below, which is the fixed two. */
   const optionsOf = (pick: (tk: TicketSla) => string) =>
     [...new Set((report.data?.tickets ?? []).map(pick).filter(Boolean))].sort();
 
@@ -397,6 +395,13 @@ export function SlaReportsPage() {
               defaultValue: 'Which tickets were finished by the time they were promised.',
             })}
           </p>
+        </div>
+
+        {/* The live backlog first — what is still pending NOW — then the
+            window's deadline report below it (owner, 2026-10-07). Outside the
+            loading branch: it has its own query and its own date rules. */}
+        <div className="mt-3">
+          <OpenTicketsSection />
         </div>
 
         {report.isLoading ? (
@@ -551,7 +556,12 @@ export function SlaReportsPage() {
                 status: statusFilter,
                 setStatus: setStatusFilter,
                 priorityOptions: optionsOf((tk) => tk.priority),
-                statusOptions: optionsOf((tk) => tk.status),
+                /* THE TWO STATES, always (owner, 2026-10-07: "the values show
+                   closed and solved. The correct should be pending and
+                   solved"). Built from the rows it offered the STORED words —
+                   imported history says `closed` — and a range with nothing
+                   pending dropped the option a supervisor came to pick. */
+                statusOptions: [...TicketStatus.options],
                 filtering: Boolean(query.trim() || priority || statusFilter),
                 onClear: () => {
                   setQuery('');
@@ -810,7 +820,7 @@ function TicketTable({
                   </Pill>
                 </Td>
                 <Td>
-                  <Pill tone={STATUS_TONE[tk.status] ?? 'neutral'} size="sm">
+                  <Pill tone={STATUS_TONE[tk.status as TicketStatus] ?? 'neutral'} size="sm">
                     {t(`status.${tk.status}`, { ns: 'common', defaultValue: tk.status })}
                   </Pill>
                 </Td>

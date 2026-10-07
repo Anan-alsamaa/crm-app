@@ -123,7 +123,8 @@ export const Ticket = z.object({
   vendor: z.string(),
   subject: z.string().min(1),
   description: z.string().nullable().optional(),
-  status: TicketStatus.default('open'),
+  // Two states (owner, 2026-10-07): a new ticket is `pending` until solved.
+  status: TicketStatus.default('pending'),
   priority: Priority.default('medium'),
   assigned_agent: z.string().nullable().optional(),
   assigned_team: z.string().nullable().optional(),

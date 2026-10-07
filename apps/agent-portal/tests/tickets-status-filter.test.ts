@@ -38,8 +38,8 @@ describe('the status dropdown in the toolbar', () => {
 
   /*
    * THE SAME STATE AS THE TILES, not a second source of truth. Two controls
-   * answering one question must agree: picking "Open" in the menu lights the
-   * Open tile, and vice versa. A private `useState` here would let the rail
+   * answering one question must agree: picking "Pending" in the menu lights the
+   * Pending tile, and vice versa. A private `useState` here would let the rail
    * and the toolbar disagree about what the table below is showing.
    */
   it('drives the same state the rail tiles set', () => {
@@ -58,9 +58,21 @@ describe('the status dropdown in the toolbar', () => {
     const block = SRC.match(/const STATUS_FILTERS = \[([\s\S]*?)\] as const/);
     expect(block).not.toBeNull();
     const listed = block![1];
-    for (const s of ['open', 'pending', 'solved', 'overdue']) {
+    for (const s of ['pending', 'solved', 'overdue']) {
       expect(listed).toContain(`'${s}'`);
     }
+  });
+
+  /* TWO STATES ONLY (owner, 2026-10-07: "only 2 states for the tickets:
+     pending and solved"). `open` is the CHAT word and is retired for tickets;
+     no ticket control may offer it again. */
+  it('never offers the retired `open` as a ticket status', () => {
+    for (const name of ['STATUS_FILTERS', 'STAT_FILTERS', 'REST_FILTERS']) {
+      const block = SRC.match(new RegExp(`const ${name} = \\[([\\s\\S]*?)\\] as const`));
+      expect(block, name).not.toBeNull();
+      expect(block![1]).not.toContain("'open'");
+    }
+    expect(SRC).not.toMatch(/status: 'open'/);
   });
 
   /* `all` is the placeholder row, not a status — it must not appear twice. */

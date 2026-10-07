@@ -142,7 +142,9 @@ describe('processReportJob', () => {
       ])
       .mockResolvedValueOnce(undefined);
     const res = await processReportJob(jobFor('r-1'), deps);
-    expect(res.csv).toContain('"t1","done","closed","high","60"');
+    // A stored `closed` leaves the file as `solved` — two ticket states only
+    // (owner, 2026-10-07).
+    expect(res.csv).toContain('"t1","done","solved","high","60"');
   });
 
   it('falls back to a "not implemented" CSV for unknown report types', async () => {

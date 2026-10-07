@@ -1,4 +1,4 @@
-import { displayContactName } from '@yiji/shared-types';
+import { displayContactName, normaliseTicketStatus, TicketStatus } from '@yiji/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
@@ -16,15 +16,15 @@ import { directus } from '../../lib/directus.js';
  *   - The full ticket register with every lifecycle timestamp, exportable.
  */
 
-/* The live vocabulary AND the retired one. This page reports on what is
-   STORED, and historical rows keep `new`/`resolved`/`closed` — see
+/* Two states (owner, 2026-10-07). Rows are normalised on read, so a stored
+   `open`/`new`/`resolved`/`closed` reports as what it now means — see
    RETIRED_TICKET_STATUS. */
-export type LifecycleStatus = 'open' | 'pending' | 'solved' | 'new' | 'resolved' | 'closed';
+export type LifecycleStatus = TicketStatus;
 
 export interface TicketOpsRow {
   id: string;
   subject: string;
-  status: string;
+  status: LifecycleStatus;
   priority: string;
   agentId: string | null;
   agentName: string;
@@ -52,9 +52,9 @@ export interface AgentLoad {
   agentId: string | null;
   agentName: string;
   total: number;
-  open: number;
+  pending: number;
   overdue: number;
-  resolved: number;
+  solved: number;
   avgResolutionMin: number | null;
 }
 
@@ -62,12 +62,10 @@ export interface TicketOps {
   rows: TicketOpsRow[];
   totals: {
     total: number;
-    open: number; // new + open + pending (live backlog)
-    pending: number;
-    resolved: number;
-    closed: number;
+    pending: number; // the live backlog — every unsolved ticket
+    solved: number;
     overdue: number;
-    unassigned: number; // open backlog with no assigned agent
+    unassigned: number; // pending backlog with no assigned agent
   };
   byStatus: Array<{ key: string; count: number }>;
   byPriority: Array<{ key: string; count: number }>;
@@ -99,11 +97,6 @@ interface RawTicket {
     vendor: { yiji_vendor_id: string | null } | null;
   } | null;
 }
-
-/* Live vocabulary plus the retired one — historical rows keep their stored
-   value, so `new`/`resolved`/`closed` must still be recognised here. */
-const OPEN_STATES = new Set(['open', 'pending', 'new']);
-const DONE_STATES = new Set(['solved', 'resolved', 'closed']);
 
 function median(nums: number[]): number | null {
   if (nums.length === 0) return null;
@@ -179,13 +172,14 @@ export function useTicketOps(days: number) {
       const teamName = new Map(teams.map((tm) => [tm.id, tm.name || '—']));
 
       const rows: TicketOpsRow[] = tickets.map((t) => {
-        const isDone = DONE_STATES.has(t.status);
+        const status = normaliseTicketStatus(t.status);
+        const isDone = status === 'solved';
         const overdue =
           !isDone && !!t.resolution_due_at && new Date(t.resolution_due_at).getTime() < now;
         return {
           id: t.id,
           subject: t.subject || '(no subject)',
-          status: t.status,
+          status,
           priority: t.priority,
           agentId: t.assigned_agent,
           agentName: t.assigned_agent ? (userName.get(t.assigned_agent) ?? '—') : 'Unassigned',
@@ -212,10 +206,8 @@ export function useTicketOps(days: number) {
       // Totals + breakdowns.
       const byStatusMap = new Map<string, number>();
       const byPriorityMap = new Map<string, number>();
-      let open = 0;
       let pending = 0;
-      let resolved = 0;
-      let closed = 0;
+      let solved = 0;
       let overdue = 0;
       let unassigned = 0;
       const resolutionMins: number[] = [];
@@ -224,20 +216,18 @@ export function useTicketOps(days: number) {
       for (const r of rows) {
         byStatusMap.set(r.status, (byStatusMap.get(r.status) ?? 0) + 1);
         byPriorityMap.set(r.priority, (byPriorityMap.get(r.priority) ?? 0) + 1);
-        if (OPEN_STATES.has(r.status)) {
-          open += 1;
-          if (r.status === 'pending') pending += 1;
+        if (r.status === 'pending') {
+          pending += 1;
           if (!r.agentId) unassigned += 1;
+        } else {
+          solved += 1;
         }
-        // `solved` is the live value; `resolved` its retired spelling.
-        if (r.status === 'solved' || r.status === 'resolved') resolved += 1;
-        if (r.status === 'closed') closed += 1;
         if (r.overdue) overdue += 1;
         if (r.resolutionMinutes != null) resolutionMins.push(r.resolutionMinutes);
         if (r.responseMinutes != null) responseMins.push(r.responseMinutes);
       }
 
-      // Per-agent load (open + overdue backlog, throughput, avg resolution time).
+      // Per-agent load (pending + overdue backlog, throughput, avg resolution time).
       const loadMap = new Map<string, AgentLoad & { _resMins: number[] }>();
       for (const r of rows) {
         const key = r.agentId ?? '__unassigned__';
@@ -247,18 +237,18 @@ export function useTicketOps(days: number) {
             agentId: r.agentId,
             agentName: r.agentName,
             total: 0,
-            open: 0,
+            pending: 0,
             overdue: 0,
-            resolved: 0,
+            solved: 0,
             avgResolutionMin: null,
             _resMins: [],
           };
           loadMap.set(key, a);
         }
         a.total += 1;
-        if (OPEN_STATES.has(r.status)) a.open += 1;
+        if (r.status === 'pending') a.pending += 1;
+        else a.solved += 1;
         if (r.overdue) a.overdue += 1;
-        if (DONE_STATES.has(r.status)) a.resolved += 1;
         if (r.resolutionMinutes != null) a._resMins.push(r.resolutionMinutes);
       }
       const agents: AgentLoad[] = Array.from(loadMap.values())
@@ -268,9 +258,9 @@ export function useTicketOps(days: number) {
             ? _resMins.reduce((s, n) => s + n, 0) / _resMins.length
             : null,
         }))
-        .sort((a, b) => b.overdue - a.overdue || b.open - a.open || b.total - a.total);
+        .sort((a, b) => b.overdue - a.overdue || b.pending - a.pending || b.total - a.total);
 
-      const order = ['open', 'pending', 'solved', 'new', 'resolved', 'closed'];
+      const order: readonly string[] = TicketStatus.options;
       const prioOrder = ['urgent', 'high', 'medium', 'low'];
       const byStatus = Array.from(byStatusMap.entries())
         .map(([key, count]) => ({ key, count }))
@@ -281,7 +271,7 @@ export function useTicketOps(days: number) {
 
       return {
         rows,
-        totals: { total: rows.length, open, pending, resolved, closed, overdue, unassigned },
+        totals: { total: rows.length, pending, solved, overdue, unassigned },
         byStatus,
         byPriority,
         timing: {

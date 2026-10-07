@@ -15,6 +15,7 @@ import {
   UsersIcon,
   Ltr,
 } from '@yiji/ui';
+import { displayContactName } from '@yiji/shared-types';
 import { useContacts, type ContactRow } from './api.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { exportFileName } from '@yiji/shared-config';
@@ -243,7 +244,10 @@ export function ContactsPage() {
             </div>
             <ul className="divide-y divide-foreground/[0.06]">
               {filtered.map((c) => {
-                const name = c.name ?? c.email ?? c.phone ?? c.external_customer_id ?? '—';
+                /* Same rule as the inbox list (owner, 2026-10-07): a name that
+                   is really the phone reads as the canonical 05 number. */
+                const name =
+                  displayContactName(c.name, c.phone) || c.email || c.external_customer_id || '—';
                 return (
                   <li key={c.id}>
                     <button

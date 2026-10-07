@@ -1,7 +1,12 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Avatar, Button, cn, FormField, Input, Spinner, Ltr } from '@yiji/ui';
-import { formatPhone, isDialablePhone, normalizePhone } from '@yiji/shared-types';
+import {
+  displayContactName,
+  formatPhone,
+  isDialablePhone,
+  normalizePhone,
+} from '@yiji/shared-types';
 import { useContactSearch, useCreateContact, type ContactRow } from '../contacts/api.js';
 import { isForbidden } from '../../lib/directus.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -107,7 +112,7 @@ export function ContactPicker({
           <Avatar name={value.name} email={value.email} phone={value.phone} size="sm" />
           <div className="min-w-0 flex-1">
             <div dir="auto" className="truncate text-sm font-medium text-foreground">
-              {value.name ?? value.phone ?? value.email ?? value.id}
+              {displayContactName(value.name, value.phone) || value.email || value.id}
             </div>
             {(value.phone ?? value.email) && (
               <Ltr as="div" className="truncate text-xs text-muted-foreground">
@@ -163,7 +168,7 @@ export function ContactPicker({
                         <Avatar name={c.name} email={c.email} phone={c.phone} size="sm" />
                         <div className="min-w-0 flex-1">
                           <div dir="auto" className="truncate text-sm font-medium text-foreground">
-                            {c.name ?? c.phone ?? c.email ?? c.id}
+                            {displayContactName(c.name, c.phone) || c.email || c.id}
                           </div>
                           {(c.phone ?? c.email) && (
                             <Ltr as="div" className="truncate text-xs text-muted-foreground">

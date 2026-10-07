@@ -199,10 +199,10 @@ describe('ticketPayloadFromCsvRow', () => {
     });
   });
 
-  it('imports as closed — these are handled complaints, not new work', () => {
+  it('imports as solved — these are handled complaints, not new work', () => {
     // Every historical row is "Closed - Customer Satisfied". Importing them as
-    // open would drop 50 fake items into somebody's queue.
-    expect(ticketPayloadFromCsvRow({}, base).status).toBe('closed');
+    // pending would drop 50 fake items into somebody's queue.
+    expect(ticketPayloadFromCsvRow({}, base).status).toBe('solved');
   });
 
   it('freezes the branch attribution, like a ticket raised in the portal', () => {

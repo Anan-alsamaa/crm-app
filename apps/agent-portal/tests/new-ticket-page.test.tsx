@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import React from 'react';
 import { MemoryRouter } from 'react-router-dom';
@@ -28,8 +28,34 @@ const inbox = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
 
+vi.mock('../src/lib/auth/AuthContext.js', () => ({
+  useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
+}));
+
+/* A picker that can choose somebody, so the page's draft of the chosen
+   customer can be exercised without the real search. */
 vi.mock('../src/features/tickets/ContactPicker.js', () => ({
-  ContactPicker: () => <div data-testid="contact-picker" />,
+  ContactPicker: (p: { value: { id: string } | null; onChange: (c: unknown) => void }) => (
+    <div data-testid="contact-picker" data-picked={p.value?.id ?? ''}>
+      <button
+        type="button"
+        onClick={() =>
+          p.onChange({
+            id: 'k9',
+            name: 'Muneera',
+            phone: '0562088955',
+            email: null,
+            external_customer_id: null,
+            metadata: { secret: 'not for storage' },
+            vendor: { id: 'v9', name: 'Yiji', yiji_vendor_id: 'y' },
+            date_created: null,
+          })
+        }
+      >
+        pick
+      </button>
+    </div>
+  ),
 }));
 
 /*
@@ -49,9 +75,13 @@ vi.mock('../src/features/tickets/CreateTicketDialog.js', () => ({
     contactId: string | null;
     vendorId: string | null;
     contactField?: React.ReactNode;
+    onDiscardDraft?: () => void;
   }) => (
     <div data-testid="ticket-form" data-contact={p.contactId ?? ''} data-vendor={p.vendorId ?? ''}>
       {p.contactField}
+      <button type="button" onClick={() => p.onDiscardDraft?.()}>
+        discard
+      </button>
     </div>
   ),
 }));
@@ -62,6 +92,7 @@ const wrap = ({ children }: { children: ReactNode }) => <MemoryRouter>{children}
 const renderPage = () => render(<NewTicketPage />, { wrapper: wrap });
 
 beforeEach(() => {
+  sessionStorage.clear();
   navigateSpy.mockClear();
   search.value = '?conversation=c1';
   inbox.useConversation.mockReturnValue({
@@ -125,6 +156,34 @@ describe('NewTicketPage — standalone from the nav', () => {
   });
 
   it('starts with no contact chosen', () => {
+    renderPage();
+    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-contact', '');
+  });
+
+  /* The chosen customer is part of the draft (owner, 2026-10-07). */
+  it('keeps the chosen customer across leaving the page and coming back', async () => {
+    const first = renderPage();
+    fireEvent.click(screen.getByText('pick'));
+    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-contact', 'k9');
+    first.unmount();
+
+    renderPage();
+    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-contact', 'k9');
+    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-vendor', 'v9');
+    // Only what the form shows is kept — not the contact's free-form metadata.
+    const stored = Array.from({ length: sessionStorage.length }, (_, i) =>
+      sessionStorage.getItem(sessionStorage.key(i)!),
+    ).join('');
+    expect(stored).toContain('k9');
+    expect(stored).not.toContain('not for storage');
+  });
+
+  it('forgets the customer when the draft is cleared', () => {
+    const first = renderPage();
+    fireEvent.click(screen.getByText('pick'));
+    fireEvent.click(screen.getByText('discard'));
+    expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-contact', '');
+    first.unmount();
     renderPage();
     expect(screen.getByTestId('ticket-form')).toHaveAttribute('data-contact', '');
   });

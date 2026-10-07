@@ -284,48 +284,130 @@ await check('EMA-23', 'Yiji accepts our coupon endpoint (probe that creates noth
   // 400 = reachable and permitted (empty body refused); 401/403 = we lost access.
   return { ok: r.status === 400, detail: `HTTP ${r.status}` };
 });
-await check(
-  'EMA-39/45',
-  'newest delivered coupon on Yiji: +966 name, reason in compensation, fixed limits',
-  async () => {
+/*
+ * THE COUPON PIPELINES, LIVE (owner, 2026-10-07: "these processes should be
+ * verified on every release, as they're critical"). For each route a coupon
+ * takes to Yiji, the newest real coupons since the v1.38.8 fixes are read back
+ * FROM YIJI and every value the owner fixed or named is compared:
+ *
+ *   1a  assign, with an order   CreateCouponUserFromOrder
+ *   1b  assign, no order        AddCoupon -> AddUserCoupon
+ *   2   create, don't assign    AddCoupon only (nobody holds it)
+ *
+ * For 1a/1b the customer must actually HOLD it on Yiji; for 2, nobody may.
+ * Path 3 (held until signup) is the EMA-49 check below. The build-time twin is
+ * services/workers/tests/coupon-pipelines-contract.test.ts.
+ */
+const PIPE_SINCE = '2026-10-06T10:00:00Z';
+const PIPE_FIELDS =
+  'coupon_code,coupon_type,discount_category,coupon_value,coupon_percent,max_discount,usage_limit,reason,customer_phone,contact.phone,order_id,ticket.order_id,yiji_coupon_id,yiji_pushed_at';
+const plusPhone = (row) => {
+  const d = String(row.customer_phone || row.contact?.phone || '').replace(/\D/g, '');
+  return d ? `+966${d.replace(/^(966|0)/, '')}` : null;
+};
+function compareCoupon(row, c) {
+  const pct = /^percent/i.test(row.discount_category ?? '');
+  const want = {
+    name: plusPhone(row),
+    type: { private: 1, general: 0, public: 0 }[String(row.coupon_type ?? '').toLowerCase()],
+    category: pct ? 0 : 1,
+    discount: pct ? 0 : Number(row.coupon_value),
+    discountPercentage: pct ? Number(row.coupon_percent) : 0,
+    maximumDiscount: Number(row.max_discount),
+    reachLimit: 10000,
+    orderMaximum: 1000000,
+    limitForUser: Number(row.usage_limit),
+    monthlyReachLimit: Number(row.usage_limit),
+  };
+  const bad = Object.entries(want)
+    .filter(([k, v]) => v !== undefined && v !== null && !Number.isNaN(v) && c[k] !== v)
+    .map(([k, v]) => `${k} ${c[k]}≠${v}`);
+  for (const d of ['saturday', 'sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday'])
+    if (c[d] !== true) bad.push(`${d} off`);
+  if (!/^CRM - /.test(String(c.compensationReason ?? ''))) bad.push('description lacks "CRM - "');
+  return bad;
+}
+async function yijiHeldBy(row) {
+  const YH = { authorization: `Bearer ${yijiToken}` };
+  const orderId = row.order_id ?? row.ticket?.order_id;
+  let userId = null;
+  if (orderId) {
+    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, { headers: YH });
+    userId = o.ok ? ((await o.json())?.userId ?? null) : null;
+  }
+  const phone = plusPhone(row)?.slice(1);
+  if (!userId && phone) {
+    const r = await fetch(`${Y}/api/User/GetfilteredCustomers?PhoneNumber=${phone}&PageSize=5`, { headers: YH });
+    const list = r.ok ? await r.json() : [];
+    userId = (list ?? []).find((u) => String(u.phoneNumber ?? '').replace(/\D/g, '') === phone)?.id ?? null;
+  }
+  if (!userId) return { error: 'customer not found on Yiji' };
+  const r = await fetch(`${Y}/api/CouponUser/GetCouponByUser/${userId}?PageNumber=1&PageSize=500`, { headers: YH });
+  const list = r.ok ? await r.json() : [];
+  const held = (list ?? []).find((x) => x.couponCode === row.coupon_code);
+  return held?.coupon ? { coupon: held.coupon } : { error: 'the customer does NOT hold it on Yiji' };
+}
+async function pipelineCheck(id, name, filter, fetchCoupon) {
+  await check(id, name, async () => {
     if (!yijiToken) return 'skip';
+    if (ENV !== 'prod') return { ok: true, detail: 'production only — staging coupons go to the test handset' };
     const r = await items('coupon_approvals', {
-      filter: JSON.stringify({
-        _and: [
-          { yiji_coupon_user_id: { _nnull: true } },
-          { yiji_pushed_at: { _gte: '2026-10-05T12:30:00Z' } },
-        ],
-      }),
-      fields: 'coupon_code,order_id,ticket.order_id,yiji_pushed_at',
+      filter: JSON.stringify({ _and: [{ yiji_pushed_at: { _gte: PIPE_SINCE } }, ...filter] }),
+      fields: PIPE_FIELDS,
       sort: '-yiji_pushed_at',
-      limit: '1',
+      limit: '3',
     });
-    const row = r.data?.[0];
-    if (!row)
-      return { ok: true, detail: 'no coupon delivered since v1.38.5 yet — nothing to compare' };
-    const orderId = row.order_id ?? row.ticket?.order_id;
-    if (!orderId) return { ok: true, detail: `${row.coupon_code} has no order; skipped` };
-    const YH = { authorization: `Bearer ${yijiToken}` };
-    const order = await (
-      await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, { headers: YH })
-    ).json();
-    const list = await (
-      await fetch(`${Y}/api/CouponUser/GetCouponByUser/${order.userId}?PageNumber=1&PageSize=500`, {
-        headers: YH,
-      })
-    ).json();
-    const c = (list ?? []).find((x) => x.couponCode === row.coupon_code)?.coupon;
-    if (!c)
-      return { ok: false, detail: `${row.coupon_code} not found on the customer's Yiji account` };
-    const ok =
-      /^\+9665\d{8}$/.test(c.name) &&
-      c.reachLimit === 10000 &&
-      c.orderMaximum === 1000000 &&
-      !!c.compensation;
+    if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
+    if (!r.data?.length) return { ok: true, detail: 'no coupon on this path since the fixes yet' };
+    const problems = [];
+    for (const row of r.data) {
+      const got = await fetchCoupon(row);
+      if (got.error) problems.push(`${row.coupon_code}: ${got.error}`);
+      else {
+        const bad = compareCoupon(row, got.coupon);
+        if (bad.length) problems.push(`${row.coupon_code}: ${bad.join(', ')}`);
+      }
+    }
     return {
-      ok,
-      detail: `${row.coupon_code}: name=${c.name} reachLimit=${c.reachLimit} orderMaximum=${c.orderMaximum}`,
+      ok: problems.length === 0,
+      detail: problems.length ? problems.join('; ') : `${r.data.map((x) => x.coupon_code).join(', ')} all match`,
     };
+  });
+}
+await pipelineCheck(
+  'COUPON-1a',
+  'assigned WITH an order: on Yiji, held by the customer, every value right',
+  [
+    { delivery_excluded: { _neq: true } },
+    { status: { _eq: 'assigned' } },
+    { _or: [{ order_id: { _nnull: true } }, { ticket: { order_id: { _nnull: true } } }] },
+  ],
+  yijiHeldBy,
+);
+await pipelineCheck(
+  'COUPON-1b',
+  'assigned with NO order (create, then give): held by the customer, every value right',
+  [
+    { delivery_excluded: { _neq: true } },
+    { status: { _eq: 'assigned' } },
+    { order_id: { _null: true } },
+    { _or: [{ ticket: { _null: true } }, { ticket: { order_id: { _null: true } } }] },
+  ],
+  yijiHeldBy,
+);
+await pipelineCheck(
+  'COUPON-2',
+  "created but NOT assigned: on Yiji, nobody holds it, every value right",
+  [{ delivery_excluded: { _eq: true } }, { yiji_coupon_id: { _nnull: true } }],
+  async (row) => {
+    const r = await fetch(`${Y}/api/Coupon/GetCoupon/id/${row.yiji_coupon_id}`, {
+      headers: { authorization: `Bearer ${yijiToken}` },
+    });
+    if (!r.ok) return { error: `GetCoupon HTTP ${r.status}` };
+    const c = await r.json();
+    if (c.code !== row.coupon_code) return { error: `Yiji id ${row.yiji_coupon_id} is ${c.code}` };
+    if ((c.assignee ?? []).length) return { error: 'somebody was assigned it' };
+    return { coupon: c };
   },
 );
 
@@ -506,6 +588,14 @@ await check(
     );
     const token = (adm.YIJI_UPDATE_TOKEN ?? '').replace(/^Bearer\s+/i, '');
     if (!token) return 'skip';
+    /* The CRM side FIRST: reading Yiji's broken pages one coupon at a time
+       can outlast this session's token (401 after ~15 min). */
+    const crm = await items('coupon_approvals', {
+      filter: JSON.stringify({ coupon_code: { _nnull: true } }),
+      fields: 'coupon_code,coupon_type',
+      limit: '-1',
+    });
+    if (crm.status !== 200) return { ok: false, detail: `CRM HTTP ${crm.status}` };
     /* Yiji's list fails a whole page when ONE coupon in it cannot be
        serialised (HTTP 500), so such a page is re-read position by position;
        only a position that still fails is skipped, and it is counted. */
@@ -529,13 +619,6 @@ await check(
         else unreadable += 1;
       }
     }
-    const codes = yiji.map((c) => c.code).filter(Boolean);
-    const crm = await items('coupon_approvals', {
-      filter: JSON.stringify({ coupon_code: { _in: codes } }),
-      fields: 'coupon_code,coupon_type',
-      limit: '-1',
-    });
-    if (crm.status !== 200) return { ok: false, detail: `CRM HTTP ${crm.status}` };
     const want = Object.fromEntries(
       (crm.data ?? []).map((c) => [c.coupon_code, { general: 0, public: 0, private: 1 }[String(c.coupon_type ?? '').trim().toLowerCase()]]),
     );
@@ -544,7 +627,7 @@ await check(
       ok: wrong.length === 0,
       detail: wrong.length
         ? wrong.map((c) => `${c.code} (#${c.id}) Yiji type ${c.type}, agent chose ${want[c.code]}`).join('; ')
-        : `${Object.keys(want).length} CRM coupons among Yiji's newest 100, all match${unreadable ? ` (${unreadable} list positions Yiji could not return)` : ''}`,
+        : `${yiji.filter((c) => want[c.code] !== undefined).length} CRM coupons among Yiji's newest 100, all match${unreadable ? ` (${unreadable} list positions Yiji could not return)` : ''}`,
     };
   },
 );

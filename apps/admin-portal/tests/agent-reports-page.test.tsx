@@ -146,7 +146,8 @@ const tickets = [
   {
     id: 't1',
     subject: 'Late delivery',
-    status: 'open',
+    // Ticket rows arrive normalised to the two states (owner, 2026-10-07).
+    status: 'pending',
     priority: 'urgent',
     contactId: 'c1',
     contactName: 'Dana Ali',
@@ -179,7 +180,7 @@ const tickets = [
   {
     id: 't3',
     subject: 'Wrong item shipped',
-    status: 'closed',
+    status: 'solved',
     priority: 'medium',
     contactId: null,
     contactName: '',
@@ -294,7 +295,7 @@ const complaints = [
     couponCode: 'OPS - 46',
     couponValue: 25,
     couponPercent: null,
-    complaintStatus: 'closed',
+    complaintStatus: 'solved',
     agent: 'Amjad',
     compensation: 'Compensated',
   },
@@ -330,7 +331,7 @@ const complaints = [
     couponCode: '',
     couponValue: null,
     couponPercent: null,
-    complaintStatus: 'open',
+    complaintStatus: 'pending',
     agent: 'Ali',
     compensation: 'Not Compensated',
   },
@@ -371,7 +372,7 @@ const complaints = [
     couponCode: '',
     couponValue: null,
     couponPercent: null,
-    complaintStatus: 'open',
+    complaintStatus: 'pending',
     agent: '',
     compensation: 'Not Compensated',
   },
@@ -485,7 +486,8 @@ describe('AgentReportsPage — shell', () => {
     const ticketsView = renderPage('tickets');
     expect(kpis(ticketsView.container)).toEqual({
       Tickets: '3',
-      Open: '1',
+      // `pending` is the one unfinished state now: t1 and t2.
+      Pending: '2',
       Urgent: '1',
       Breached: '1',
     });
@@ -600,8 +602,8 @@ describe('AgentReportsPage — tickets report', () => {
     // SLA outcome pills ('na' renders as an em dash instead of a pill).
     expect(body.getByText('met')).toBeInTheDocument();
     expect(body.getByText('breached')).toBeInTheDocument();
-    // 'pending' is both t2's status and its first-response SLA outcome.
-    expect(body.getAllByText('pending')).toHaveLength(2);
+    // 'pending' is t1's and t2's status, and t2's first-response SLA outcome.
+    expect(body.getAllByText('pending')).toHaveLength(3);
   });
 
   it('sorts the ticket table by a column header', async () => {
@@ -729,7 +731,7 @@ describe('AgentReportsPage — agent KPI report', () => {
     // sort the reader just applied is the order the rows come out in.
     const lines = await csvText(dl.blobs[0]!);
     expect(lines[0]).toBe(
-      'Agent,Chats,Not replied,Replied within 5 min,First response (median),Time to solve (avg),Common chats taken,Tickets,Customer rating (1-5)',
+      'Agent,Chats,Not replied,Replied within 5 min,First response (median),Time to solve (avg),Common chats taken,Started by agent,Customer replied (agent-started),Tickets,Customer rating (1-5)',
     );
     expect(lines[1]!.startsWith('Unassigned,')).toBe(true);
     expect(lines[2]!.startsWith('Ann Lee,')).toBe(true);
@@ -779,6 +781,8 @@ describe('AgentReportsPage — conversation status report', () => {
       'Status',
       'Priority',
       'Agent',
+      // Who opened the chat (owner, 2026-10-07).
+      'Started by',
       'Order',
       'Last message',
     ]);
@@ -838,7 +842,7 @@ describe('AgentReportsPage — conversation status report', () => {
       /^Sara CRM - Conversations \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/,
     );
     const lines = await csvText(dl.blobs[0]!);
-    expect(lines[0]).toBe('Customer,Phone,Status,Priority,Agent,Order,Last message');
+    expect(lines[0]).toBe('Customer,Phone,Status,Priority,Agent,Started by,Order,Last message');
     // Status and priority arrive TRANSLATED, exactly as the pills read on
     // screen — a file that says "open" where the page says something else is a
     // file somebody has to come back and ask about.
@@ -1116,6 +1120,12 @@ describe('AgentReportsPage — ticket breakdown', () => {
        no longer hidden, so a search for that branch finds both. That is the
        point of the change — the table shows what is there. */
     expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+    console.log(
+      'DBG',
+      screen.getByRole('combobox', { name: 'Status' }).textContent,
+      document.body.textContent?.match(/.{0,40}of 3.{0,20}/g),
+      document.body.textContent?.match(/Showing.{0,20}/g),
+    );
     expect(screen.getByText('2 of 3')).toBeInTheDocument();
   });
 
@@ -1255,6 +1265,22 @@ describe('AgentReportsPage — ticket breakdown', () => {
     const shown = container.querySelectorAll('tbody tr').length;
     expect(shown).toBeGreaterThan(0);
     expect(shown).toBeLessThanOrEqual(3);
+  });
+
+  it('offers exactly the two ticket states as the status filter, and filters by them', async () => {
+    // Owner, 2026-10-07: tickets are pending or solved — the menu offers both
+    // always (not the stored words in range), translated through `status.*`.
+    api.useAgentReportData.mockReturnValue(ok);
+    const user = userEvent.setup({ delay: null });
+    renderPage('complaints');
+
+    await user.click(screen.getByRole('combobox', { name: 'Status' }));
+    const options = screen.getAllByRole('option').map((o) => o.textContent ?? '');
+    expect(options).toEqual(['Any', 'pending', 'solved']);
+
+    // The role sits on the <li>; the click handler is on the button inside it.
+    await user.click(within(screen.getByRole('option', { name: 'pending' })).getByRole('button'));
+    expect(screen.getByText('Showing 1–2 of 2')).toBeInTheDocument();
   });
 
   it('clears every filter at once', async () => {

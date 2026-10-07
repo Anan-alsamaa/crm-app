@@ -79,7 +79,7 @@ const POLICY: SlaPolicyRow = {
 
 const baseTicket: TicketRow = {
   id: 't1',
-  status: 'open',
+  status: 'pending',
   priority: 'high',
   sla_policy: null,
   first_response_due_at: null,
@@ -405,6 +405,24 @@ describe('runWarning + runBreach (T067)', () => {
     };
     await runBreach(deps, 't1', 'first_response');
     expect(events).toEqual([]);
+  });
+
+  it('no-op on a ticket marked `solved` — the live value, not only the retired ones', async () => {
+    // isDone tested `resolved`/`closed` only, so a queued warning or breach
+    // still fired on a ticket an agent had marked solved (owner, 2026-10-07).
+    const { repo, events } = makeRepo([{ ...baseTicket, status: 'solved' as const }], [POLICY]);
+    const q = makeQueues();
+    const deps: SlaDeps = {
+      tickets: repo,
+      teams: makeTeams(),
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    };
+    await runWarning(deps, 't1', 'resolution');
+    await runBreach(deps, 't1', 'resolution');
+    expect(events).toEqual([]);
+    expect(q.notifications).toHaveLength(0);
   });
 });
 

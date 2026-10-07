@@ -7,7 +7,10 @@ import type { Priority, SlaPolicyScope } from '@yiji/shared-types';
 
 export interface TicketRow {
   id: string;
-  status: 'new' | 'open' | 'pending' | 'resolved' | 'closed';
+  /* As STORED: the live two (`pending`/`solved`, owner 2026-10-07) plus the
+     retired spellings historical rows still carry. Read it through
+     `normaliseTicketStatus`, never compare it raw. */
+  status: 'pending' | 'solved' | 'new' | 'open' | 'resolved' | 'closed';
   priority: Priority;
   sla_policy: string | null;
   first_response_due_at: string | null;

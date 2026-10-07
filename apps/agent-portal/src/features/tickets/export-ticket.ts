@@ -3,6 +3,7 @@ import {
   downloadWorkbook,
   type ComplaintsTemplateInput,
 } from '@yiji/reports';
+import { normaliseTicketStatus, TicketStatus } from '@yiji/shared-types';
 import type { TicketRow } from './api.js';
 
 /**
@@ -46,7 +47,9 @@ export function exportTicketWorkbook(
     'Coupon code': tk.coupon_code ?? '',
     'Coupon value': tk.coupon_value != null ? Number(tk.coupon_value) : '',
     'Coupon %': tk.coupon_percent != null ? Number(tk.coupon_percent) : '',
-    'Ticket status': tk.status,
+    // Normalised: a stored `closed`/`open` leaves as `solved`/`pending`, the
+    // only two values the sheet's own dropdown offers (owner, 2026-10-07).
+    'Ticket status': normaliseTicketStatus(tk.status),
     Agent: agentName,
     Compensation: tk.compensation ?? '',
   };
@@ -57,9 +60,9 @@ export function exportTicketWorkbook(
     brands: [],
     cities: [],
     agents: [],
-    // The three an agent can choose. Retired values still READ from stored
-    // rows, but nothing should offer them as a new choice in a sheet.
-    statuses: ['open', 'pending', 'solved'],
+    // The two an agent can choose (owner, 2026-10-07). Retired values still
+    // READ from stored rows, but nothing should offer them as a choice.
+    statuses: [...TicketStatus.options],
   });
   const headers = sheets[0]!.columns.map((c) => c.header);
   sheets[0]!.rows = [headers.map((h) => fill[h] ?? '')];

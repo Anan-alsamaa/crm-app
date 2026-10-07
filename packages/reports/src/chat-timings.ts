@@ -48,6 +48,11 @@ export interface ConversationTimestamps {
    * Null when nobody replied, or when the caller did not request `sender_user`.
    */
   firstAgentBy: string | null;
+  /**
+   * The earliest HUMAN agent message, whether or not the customer had written.
+   * For an agent-started chat this is the outreach itself (owner, 2026-10-07).
+   */
+  firstAgentAnyAt: string | null;
 }
 
 /**
@@ -107,6 +112,7 @@ export function conversationTimestamps(
       // just has no measurable interval, which is what a null says.
       firstAgentAt: first?.at ?? null,
       firstAgentBy: first?.by ?? null,
+      firstAgentAnyAt: agents.length ? agents.reduce((a, b) => (a.at <= b.at ? a : b)).at : null,
     });
   }
   return out;

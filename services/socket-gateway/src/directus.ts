@@ -10,6 +10,7 @@ import {
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { SenderType } from '@yiji/shared-types';
 import {
+  cleanContactName,
   isAutomatedAgentMessage,
   isPhoneDerivedCustomerId,
   phoneCustomerId,
@@ -186,7 +187,12 @@ export class GatewayDirectus {
     // stored as null (not ""), so the agent UI's `name ?? "Unknown"` fallback and
     // the phone/email dedup behave consistently. Only customer_id + (usually)
     // phone are guaranteed by the host — name is often absent or a dummy value.
-    const name = claims.name?.trim() || null;
+    /* NOT A PHONE NUMBER (owner, 2026-10-07). Yiji's full name is often just
+       the customer's number (`+966508315325`) or ends in it (`منيره - +966…`);
+       stored as a name, the agent portal read the number back as the name in
+       a second spelling. The number lives in `phone`; a name that is only a
+       number is stored as null so an agent can fill in the real one. */
+    const name = cleanContactName(claims.name);
     const phone = claims.phone?.trim() || null;
     const email = claims.email?.trim() || null;
 

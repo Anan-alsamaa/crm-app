@@ -334,7 +334,10 @@ export function ticketPayloadFromCsvRow(
     description: row.complaintDescription ?? null,
     // Every historical row is "Closed - Customer Satisfied"; these are records
     // of handled complaints, not live work arriving in someone's queue.
-    status: 'closed',
+    // `solved`, the live word (owner, 2026-10-07: two states, pending and
+    // solved) — earlier imports wrote the retired `closed`, which still reads
+    // as solved through the normaliser.
+    status: 'solved',
     ...(ctx.complaintDate ? { complaint_date: ctx.complaintDate } : {}),
     ...(ctx.contactId ? { contact: ctx.contactId } : {}),
     ...(ctx.vendorId ? { vendor: ctx.vendorId } : {}),

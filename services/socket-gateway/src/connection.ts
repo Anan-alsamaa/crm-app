@@ -19,7 +19,7 @@ import {
   type YijiUserReader,
   type YijiLatestOrderReader,
   normalizePhone,
-  displayContactName,
+  cleanContactName,
   detectLocale,
   pickWelcomeTemplate,
   renderWelcomeTemplate,
@@ -386,10 +386,13 @@ export async function resolveCustomerClaims(
        * On live production 44 of 77 contacts read that way, disagreeing with
        * their own phone on the same row (owner, 2026-10-01).
        *
-       * `displayContactName` rewrites ONLY a name that is purely a Saudi
-       * number; a real name and a foreign number pass through untouched.
+       * NOT EVEN IN THE CANONICAL SHAPE (owner, 2026-10-07): a name that is
+       * only a number is no name at all, because the number is already in
+       * `phone`. `cleanContactName` drops it (and a trailing ` - +966…` after a
+       * real name), so the contact is created nameless and an agent can type
+       * the real one. `upsertContact` applies the same rule to every claim.
        */
-      ...(profile.name ? { name: displayContactName(profile.name) } : {}),
+      ...(cleanContactName(profile.name) ? { name: cleanContactName(profile.name) } : {}),
       ...(profile.email ? { email: profile.email } : {}),
       /*
        * NOT a walk-in. This customer arrived through the Yiji app and their id

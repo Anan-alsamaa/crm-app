@@ -145,6 +145,10 @@ describe('sla-reports api', () => {
     expect(t3.agentId).toBeNull();
     expect(t3.responseMinutes).toBeNull();
 
+    // Two ticket states (owner, 2026-10-07): a stored `open` reads as pending.
+    expect(t2.status).toBe('pending');
+    expect(data.tickets.every((t) => t.status === 'pending' || t.status === 'solved')).toBe(true);
+
     /*
      * Resolution met=1, breached=1 -> 50%, and ONE breach in the headline.
      *

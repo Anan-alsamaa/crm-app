@@ -1151,8 +1151,10 @@ export function Inbox() {
                       >
                         <ul className="divide-y divide-foreground/[0.06]">
                           {waiting.map((c) => {
+                            // Same rule as the inbox list: a phone-shaped
+                            // name reads as the canonical 05 number.
                             const name =
-                              c.contact?.name ||
+                              displayContactName(c.contact?.name, c.contact?.phone) ||
                               c.contact?.phone ||
                               c.contact?.email ||
                               t('inbox.unknownContact');

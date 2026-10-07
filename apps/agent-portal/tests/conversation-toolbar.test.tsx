@@ -88,6 +88,28 @@ describe('ConversationToolbar', () => {
     expect(screen.queryByLabelText('conversation.status')).not.toBeInTheDocument();
   });
 
+  /* The header read `+966508315325` while the inbox list beside it read
+     `0508315325` for the same customer (owner, 2026-10-07). */
+  it('shows a name that is really the phone as the canonical 05 number', () => {
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>
+          <ConversationToolbar
+            conversation={
+              {
+                ...conversation,
+                contact: { id: 'k2', name: '+966508315325', email: null, phone: '0508315325' },
+              } as never
+            }
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('+966508315325')).not.toBeInTheDocument();
+    expect(screen.getAllByText('0508315325').length).toBeGreaterThan(0);
+  });
+
   /* Renamed from "Mark as solved" (owner, 2026-09-30): closing a chat is not a
      positive act, and the green success button made ending a conversation look
      like the thing to do. The WRITE is unchanged — still `solved` with its

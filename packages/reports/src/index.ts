@@ -62,8 +62,11 @@ export {
   metFirstResponse,
   splitBySla,
   formatDuration,
+  awaitingCustomer,
+  agentInitiatedSummary,
   type ChatTiming,
   type AgentPerformanceRow,
+  type AgentInitiatedSummary,
 } from './agent-performance.js';
 
 export {

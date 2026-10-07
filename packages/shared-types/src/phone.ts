@@ -261,7 +261,9 @@ export function displayContactName(
   name: string | null | undefined,
   fallbackPhone?: string | null,
 ): string {
-  const raw = (name ?? '').trim();
+  /* "منيره - +966562088955" reads as "منيره", and "+966… - +966…" reduces to
+     the one number, which the phone branch below then renders as `05…`. */
+  const raw = stripTrailingPhones((name ?? '').trim());
   if (!raw) return normalizePhone(fallbackPhone) || '';
   /* An address is not a name. The phone is what the agent needs; the address
      only stands in when there is no phone at all. */
@@ -271,4 +273,55 @@ export function displayContactName(
      number unchanged, so comparing against it keeps "+447…" as it was. */
   const local = normalizePhone(raw);
   return /^05\d{8}$/.test(local) ? local : raw;
+}
+
+/** ` - `, ` – `, ` — ` or ` | ` with space either side: how Yiji glues a number on. */
+const NAME_SEPARATOR = /\s+[-–—|]\s+/g;
+
+/**
+ * Peel off trailing ` - <phone>` segments.
+ *
+ * Yiji's `fullName` often carries the customer's number after the name —
+ * `منيره - +966562088955` — and sometimes is nothing BUT the number, twice:
+ * `+966564490993 - +966564490993`. Only a segment that is itself a dialable
+ * number is removed, so a real double-barrelled name ("Al - Harbi") is left as
+ * typed.
+ */
+function stripTrailingPhones(name: string): string {
+  let out = name;
+  for (;;) {
+    let last: RegExpExecArray | null = null;
+    for (const m of out.matchAll(NAME_SEPARATOR)) last = m as RegExpExecArray;
+    if (!last) return out;
+    const tail = out.slice(last.index + last[0].length);
+    if (!isDialablePhone(tail)) return out;
+    out = out.slice(0, last.index).trim();
+  }
+}
+
+/**
+ * A name worth STORING (or putting in an edit box), or null when there is none.
+ *
+ * The write-side twin of `displayContactName` (owner, 2026-10-07): the agent
+ * portal showed `+966508315325` as the customer's NAME because the gateway
+ * copied Yiji's `fullName` into the contact when it was created, and for many
+ * customers that "name" is just their number. The number already lives in the
+ * `phone` column, in the one canonical shape; repeating it as a name, in a
+ * different shape, is how one customer came to read two ways on one screen.
+ *
+ * So:
+ *   - a trailing ` - +966…` is removed (`منيره - +966562088955` -> `منيره`);
+ *   - a name that is ONLY a phone number is no name at all -> null;
+ *   - so is a machine address (`9665410950517557@yiji.com`);
+ *   - blank -> null, never `""`.
+ *
+ * Unlike `displayContactName` there is no phone fallback: the point is to say
+ * "we do not know their name yet", which is what lets an agent type it.
+ */
+export function cleanContactName(raw: string | null | undefined): string | null {
+  const name = stripTrailingPhones((raw ?? '').trim());
+  if (!name) return null;
+  if (isDialablePhone(name)) return null;
+  if (MACHINE_EMAIL.test(name)) return null;
+  return name;
 }

@@ -57,7 +57,8 @@ describe('planImport', () => {
     expect(row!.phone).toBe('0510103375');
     expect(row!.payload.assigned_agent).toBe('user-faisal');
     expect(row!.payload.order_id).toBe('451351');
-    expect(row!.payload.status).toBe('closed');
+    // `solved`, the live word for a handled complaint (owner, 2026-10-07).
+    expect(row!.payload.status).toBe('solved');
     // The branch is FROZEN onto the ticket, so editing the store later cannot
     // rewrite what this row reports.
     expect(row!.payload.store).toBe('store-1');

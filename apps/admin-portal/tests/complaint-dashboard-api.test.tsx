@@ -393,6 +393,28 @@ describe('ticket dashboard — status, satisfaction and agents', () => {
     expect(d.overdue).toBe(1);
   });
 
+  it('breaks status down into the two ticket states only', async () => {
+    // Owner, 2026-10-07: pending and solved, throughout. Stored rows keep the
+    // retired spellings, so they must fold in rather than show as their own bars.
+    mockData({
+      tickets: [
+        ticket({ status: 'new' }),
+        ticket({ status: 'open' }),
+        ticket({ status: 'pending' }),
+        ticket({ status: 'closed' }),
+        ticket({ status: 'resolved' }),
+      ],
+      stores: STORES,
+      users: USERS,
+    });
+    const d = await run();
+    expect(d.byStatus.rows.map((r) => [r.key, r.count])).toEqual([
+      ['pending', 3],
+      ['solved', 2],
+    ]);
+    expect(new Set(d.rows.map((r) => r.status))).toEqual(new Set(['pending', 'solved']));
+  });
+
   it('rates satisfaction over CHATS the customer rated, not over tickets', async () => {
     mockData({
       tickets: [

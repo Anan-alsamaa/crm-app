@@ -26,7 +26,7 @@ const INPUT = {
   brands: ['Casa Pasta'],
   cities: ['Riyadh 1'],
   agents: ['Amjad', 'Yara'],
-  statuses: ['new', 'open', 'pending', 'resolved', 'closed'],
+  statuses: ['pending', 'solved'],
 };
 
 describe('template → workbook → reader → parser round-trip', () => {

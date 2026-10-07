@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { Button, toast } from '@yiji/ui';
+import { cleanContactName } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { customerPhone, useStampContacted, type TicketRow } from './api.js';
 import { fillWaTemplate, useWaTemplate, waUrl } from './whatsapp.js';
@@ -25,7 +26,8 @@ export function WhatsAppReply({ ticket }: { ticket: TicketRow }) {
   const phone = customerPhone(ticket);
   const message = fillWaTemplate(template.data ?? '', {
     order: ticket.order_id ?? ticket.order_snapshot?.orderId?.toString() ?? null,
-    name: ticket.contact?.name ?? null,
+    // A phone stored as the name is no name to greet the customer by.
+    name: cleanContactName(ticket.contact?.name),
     brand: ticket.store_snapshot?.brandName ?? ticket.order_snapshot?.brandName ?? null,
     restaurant:
       ticket.store_snapshot?.restaurantName ?? ticket.order_snapshot?.restaurantName ?? null,

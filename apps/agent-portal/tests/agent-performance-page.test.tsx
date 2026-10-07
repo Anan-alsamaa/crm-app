@@ -97,6 +97,8 @@ function tile(label: string): string {
 }
 
 beforeEach(() => {
+  // The page keeps its filters per tab (owner, 2026-10-07); each test starts fresh.
+  sessionStorage.clear();
   navigate.mockReset();
   inbox.useAgents.mockReturnValue({
     data: [{ id: 'a1', first_name: 'Sara', email: 'sara@yiji.test' }],
@@ -197,6 +199,21 @@ describe('AgentPerformancePage', () => {
     await user.click(screen.getByRole('combobox', { name: 'Agent' }));
     await user.click(screen.getByRole('button', { name: 'All agents' }));
     expect(screen.getByText('Who handled the chats')).toBeInTheDocument();
+  });
+
+  /* Owner, 2026-10-07: coming back from another page reset the agent and the
+     date range. The filters now outlive leaving the page (per tab). */
+  it('keeps the chosen filters when the agent leaves the page and comes back', () => {
+    const first = renderPage();
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '06/10/2026' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '06/10/2026' } });
+    first.unmount();
+    perf.useChatTimings.mockClear();
+    renderPage();
+    expect(perf.useChatTimings.mock.calls[0]![0]).toMatchObject({
+      from: '2026-10-06',
+      to: '2026-10-06',
+    });
   });
 
   it('passes the filters through to the query rather than filtering after the fact', () => {

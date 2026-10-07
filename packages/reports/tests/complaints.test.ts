@@ -412,8 +412,11 @@ describe('the Status column', () => {
     expect(cell('resolved')).toBe('Solved');
   });
 
-  it('still shows the states that are genuinely not finished', () => {
-    expect(cell('open')).toBe('Open');
+  it('shows every unfinished state as Pending — two states only', () => {
+    // Owner, 2026-10-07: pending and solved. `open` and `new` are retired
+    // spellings of "not done yet" and read as Pending, never as a third word.
+    expect(cell('open')).toBe('Pending');
+    expect(cell('new')).toBe('Pending');
     expect(cell('pending')).toBe('Pending');
   });
 });

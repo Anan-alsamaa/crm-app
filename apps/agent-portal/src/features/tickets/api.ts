@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@directus/sdk';
 import {
+  displayContactName,
   storeNotificationDraft,
   type Priority,
   type StoreNotificationSkip,
@@ -133,7 +134,14 @@ export function customerLabel(t: {
   contact?: { name: string | null; phone: string | null; email: string | null } | null;
   customer_phone?: string | null;
 }): string | null {
-  return t.contact?.name ?? t.contact?.phone ?? t.contact?.email ?? t.customer_phone ?? null;
+  /* A name that is really the phone reads as the canonical 05 number, like
+     the inbox list (owner, 2026-10-07). */
+  return (
+    displayContactName(t.contact?.name, t.contact?.phone ?? t.customer_phone) ||
+    t.contact?.email ||
+    t.customer_phone ||
+    null
+  );
 }
 
 /**
@@ -340,7 +348,8 @@ export function useCreateTicket() {
   return useMutation({
     mutationFn: (input: CreateTicketInput) => {
       assertStore(input);
-      return directus.request(createItem('tickets', { ...input, status: 'open' } as never));
+      // `pending`: the one unfinished state of the two (owner, 2026-10-07).
+      return directus.request(createItem('tickets', { ...input, status: 'pending' } as never));
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tickets'] });
@@ -462,7 +471,8 @@ export function useCreateTicketFromConversation() {
     }: CreateTicketFromConversationInput) => {
       assertStore(ticket);
       const created = (await directus.request(
-        createItem('tickets', { ...ticket, status: 'open' } as never),
+        // `pending`, not the retired `open` — see TicketStatus (owner, 2026-10-07).
+        createItem('tickets', { ...ticket, status: 'pending' } as never),
       )) as { id: string };
       if (attachmentFileIds && attachmentFileIds.length > 0) {
         await Promise.allSettled(

@@ -216,6 +216,8 @@ describe('buildAgentKpiSheets', () => {
       chats: 9,
       noReply: 2,
       commonTaken: 3,
+      agentStarted: 0,
+      agentStartedReplied: 0,
       medianFirstResponseSec: 125,
       avgTimeToSolveSec: 7300,
       inTimePct: 85.4,
@@ -231,6 +233,8 @@ describe('buildAgentKpiSheets', () => {
       chats: 0,
       noReply: 0,
       commonTaken: 0,
+      agentStarted: 0,
+      agentStartedReplied: 0,
       medianFirstResponseSec: null,
       avgTimeToSolveSec: null,
       inTimePct: null,
@@ -282,6 +286,7 @@ describe('buildConversationSheets', () => {
         // tile counts exactly this.
         awaitingReply: true,
         waitingMinutes: 42,
+        startedBy: 'customer',
       },
       {
         id: 'c2',
@@ -298,6 +303,7 @@ describe('buildConversationSheets', () => {
         orderId: '',
         awaitingReply: false,
         waitingMinutes: null,
+        startedBy: 'customer',
       },
     ],
     byStatus: [

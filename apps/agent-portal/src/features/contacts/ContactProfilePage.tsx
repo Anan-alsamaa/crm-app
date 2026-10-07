@@ -16,6 +16,7 @@ import {
   ToolbarSpacer,
   LockIcon,
 } from '@yiji/ui';
+import { cleanContactName, displayContactName, normaliseTicketStatus } from '@yiji/shared-types';
 import {
   useContact,
   useContactConversations,
@@ -73,6 +74,7 @@ const STATUS_TONE: Record<
 > = {
   open: 'success',
   pending: 'highlight',
+  solved: 'primary',
   resolved: 'primary',
   closed: 'muted',
   new: 'primary',
@@ -97,8 +99,16 @@ export function ContactProfilePage() {
   const startEdit = () => {
     const c = contact.data;
     if (!c) return;
-    setDraft({ name: c.name ?? '', email: c.email ?? '' });
+    /* A stored name that is only the phone opens EMPTY, with "No name yet",
+       so the agent types the real name (owner, 2026-10-07). */
+    setDraft({ name: cleanContactName(c.name) ?? '', email: c.email ?? '' });
     setEditing(true);
+  };
+  /* Unchanged -> not sent, so an empty box over a phone-shaped name leaves
+     the column alone; a number typed as a name is never written. */
+  const namePatch = (stored: string | null): { name?: string | null } => {
+    const typed = cleanContactName(draft.name);
+    return typed === cleanContactName(stored) ? {} : { name: typed };
   };
   const saveContact = async () => {
     const c = contact.data;
@@ -107,7 +117,7 @@ export function ContactProfilePage() {
       await updateContact.mutateAsync({
         id: c.id,
         patch: {
-          name: draft.name.trim() || null,
+          ...namePatch(c.name),
           email: draft.email.trim() || null,
           /* Never sent. The field above is read-only; writing it here anyway
              would reintroduce the bug the moment somebody re-adds an input. */
@@ -142,9 +152,8 @@ export function ContactProfilePage() {
   }, [conversations.data, tickets.data]);
 
   const fullName =
-    contact.data?.name ??
-    contact.data?.phone ??
-    contact.data?.email ??
+    displayContactName(contact.data?.name, contact.data?.phone) ||
+    contact.data?.email ||
     t('contacts.unknown', { defaultValue: 'Unknown contact' });
 
   return (
@@ -230,7 +239,7 @@ export function ContactProfilePage() {
                   <Input
                     value={draft.name}
                     onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                    placeholder={t('contacts.unknown', { defaultValue: 'Unknown contact' })}
+                    placeholder={t('contacts.noNameYet', { defaultValue: 'No name yet' })}
                     aria-label={t('contacts.name', { defaultValue: 'Name' })}
                   />
                 </label>
@@ -296,7 +305,7 @@ export function ContactProfilePage() {
                     dir="auto"
                     className="text-xl font-semibold tracking-tight text-foreground truncate"
                   >
-                    {c.name ?? c.phone ?? c.email}
+                    {displayContactName(c.name, c.phone) || c.email}
                   </h2>
                   {metaTier && <Pill tone="primary">{metaTier}</Pill>}
                 </div>
@@ -419,8 +428,17 @@ export function ContactProfilePage() {
         <div className="flex items-baseline justify-between gap-3">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <Pill tone={STATUS_TONE[ticket.status] ?? 'neutral'} size="sm" dot>
-                {t(`status.${ticket.status}`, { ns: 'common', defaultValue: ticket.status })}
+              {/* Tickets have two states, Pending and Solved (owner, 2026-10-07);
+                  a stored `closed`/`open` is read through the same rule. */}
+              <Pill
+                tone={STATUS_TONE[normaliseTicketStatus(ticket.status)] ?? 'neutral'}
+                size="sm"
+                dot
+              >
+                {t(`status.${normaliseTicketStatus(ticket.status)}`, {
+                  ns: 'common',
+                  defaultValue: normaliseTicketStatus(ticket.status),
+                })}
               </Pill>
               <span className="text-2xs uppercase tracking-wide text-muted-foreground">
                 {t('contacts.ticket', { defaultValue: 'Ticket' })}

@@ -59,6 +59,23 @@ describe('reportAgentProductivity', () => {
     expect(m.get('a1')).toEqual(['2', '1', '50', '60']); // 1 of 2 resolved, 60min
     expect(m.get('a2')).toEqual(['1', '1', '100', '30']);
   });
+
+  it('counts the LIVE `solved` as resolved, and `pending` as not', async () => {
+    // It tested only the retired `resolved`/`closed`, so a ticket marked solved
+    // in the portal never counted (owner, 2026-10-07: two states).
+    const deps = depsReturning([
+      {
+        id: 'x',
+        assigned_agent: 'a1',
+        status: 'solved',
+        date_created: '2026-01-01T00:00:00Z',
+        resolved_at: '2026-01-01T00:10:00Z',
+      },
+      { id: 'y', assigned_agent: 'a1', status: 'pending', date_created: null, resolved_at: null },
+    ]);
+    const { rows } = await reportAgentProductivity(deps, {});
+    expect(toMap(rows).get('a1')).toEqual(['2', '1', '50', '10']);
+  });
 });
 
 describe('reportCsat', () => {

@@ -871,3 +871,88 @@ jobs:
             fail=1
           fi
           exit $fail
+
+  # ── 7. Release checks — every release, every environment (EMA-51) ─────────
+  #
+  # Owner, 2026-10-06/07: "whenever there is a deployment to prod, several
+  # things must be checked for sure ... these processes are critical and must
+  # be verified on every release." So the same checks run on EVERY deploy, not
+  # by hand: every previously solved bug (regressions.mjs, read-only) — the
+  # coupon pipelines 1a/1b/2 read back from Yiji, the coupon type, chat
+  # previews, the fields the code reads — and on staging also the live chat
+  # round-trip and the WeCare-agent permission check (they create and remove
+  # their own test data, so they stay off production).
+  #
+  # Credentials: the release-check login lives in repo secrets
+  # RELEASE_CHECK_<ENV>_EMAIL / _PASSWORD (a dedicated account, owner-approved);
+  # the Yiji login is read from the workers' live task definition, which this
+  # role can already describe. Without the secrets the job says so loudly.
+  release-checks:
+    name: Release checks (${{ needs.plan.outputs.environment }})
+    needs: [plan, smoke]
+    if: always() && needs.smoke.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+      CHECK_EMAIL_STAGING: ${{ secrets.RELEASE_CHECK_STAGING_EMAIL }}
+      CHECK_PASSWORD_STAGING: ${{ secrets.RELEASE_CHECK_STAGING_PASSWORD }}
+      CHECK_EMAIL_PROD: ${{ secrets.RELEASE_CHECK_PROD_EMAIL }}
+      CHECK_PASSWORD_PROD: ${{ secrets.RELEASE_CHECK_PROD_PASSWORD }}
+      CHECK_PHONE_STAGING: ${{ secrets.RELEASE_CHECK_STAGING_PHONE }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4.2.0
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install (the chat round-trip needs socket.io-client)
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Run the release checks
+        run: |
+          if [ "$ENVIRONMENT" = prod ]; then
+            API=https://crm-api.anan.sa; ORIGIN=https://crm.anan.sa
+            EMAIL="$CHECK_EMAIL_PROD"; PASSWORD="$CHECK_PASSWORD_PROD"
+          else
+            API=https://crm-api-staging.anan.sa; ORIGIN=https://crm-staging.anan.sa
+            EMAIL="$CHECK_EMAIL_STAGING"; PASSWORD="$CHECK_PASSWORD_STAGING"
+          fi
+          if [ -z "$EMAIL" ] || [ -z "$PASSWORD" ]; then
+            echo "::warning::RELEASE CHECKS NOT RUN on $ENVIRONMENT — add the RELEASE_CHECK_${ENVIRONMENT^^}_EMAIL / _PASSWORD secrets (EMA-51)."
+            exit 0
+          fi
+
+          # The Yiji login the workers use, from their RUNNING task definition.
+          TD=$(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services workers --query 'services[0].taskDefinition' --output text)
+          aws ecs describe-task-definition --task-definition "$TD" --query 'taskDefinition.containerDefinitions[0].environment' --output json > /tmp/wenv.json
+          export YIJI_ADMIN_API_URL=$(node -e 'console.log(require("/tmp/wenv.json").find(e=>e.name==="YIJI_ADMIN_API_URL")?.value??"")')
+          export YIJI_ADMIN_EMAIL=$(node -e 'console.log(require("/tmp/wenv.json").find(e=>e.name==="YIJI_ADMIN_EMAIL")?.value??"")')
+          export YIJI_ADMIN_PASSWORD=$(node -e 'console.log(require("/tmp/wenv.json").find(e=>e.name==="YIJI_ADMIN_PASSWORD")?.value??"")')
+          echo "::add-mask::$YIJI_ADMIN_PASSWORD"
+          rm -f /tmp/wenv.json
+
+          fail=0
+          API="$API" ENV="$ENVIRONMENT" ADMIN_EMAIL="$EMAIL" ADMIN_PASSWORD="$PASSWORD" \
+            node scripts/release-check/regressions.mjs || fail=1
+
+          if [ "$ENVIRONMENT" != prod ]; then
+            if [ -n "$CHECK_PHONE_STAGING" ]; then
+              API="$API" WIDGET_ORIGIN="$ORIGIN" CHECK_PHONE="$CHECK_PHONE_STAGING" \
+                ADMIN_EMAIL="$EMAIL" ADMIN_PASSWORD="$PASSWORD" \
+                node scripts/release-check/chat-roundtrip.mjs || fail=1
+            else
+              echo "::warning::chat round-trip not run — add RELEASE_CHECK_STAGING_PHONE"
+            fi
+            E="$EMAIL" P="$PASSWORD" node scripts/release-check/staff-permissions.mjs || fail=1
+          fi
+          exit $fail

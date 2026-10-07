@@ -1,6 +1,7 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import {
+  normaliseTicketStatus,
   pickSlaPolicy,
   QUEUES,
   type NotificationJob,
@@ -111,8 +112,15 @@ function pickChatPolicy(c: ConversationRow, policies: SlaPolicyRow[]): SlaPolicy
   );
 }
 
+/*
+ * Through the normaliser (owner, 2026-10-07: two states, pending and solved).
+ * This compared against `resolved`/`closed` only — the RETIRED spellings — so a
+ * ticket an agent marked `solved`, the live value since 2026-09-09, was not
+ * "done" here: a warning or breach job already queued for it still fired on a
+ * finished ticket.
+ */
 function isDone(t: TicketRow): boolean {
-  return t.status === 'resolved' || t.status === 'closed';
+  return normaliseTicketStatus(t.status) === 'solved';
 }
 
 /**

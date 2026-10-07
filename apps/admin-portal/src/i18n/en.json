@@ -497,6 +497,23 @@
     "retry": "Retry"
   },
   "slaReports": {
+    "open": {
+      "title": "Open tickets",
+      "note": "Every ticket still pending, as of now — not limited to the dates below, because a ticket raised months ago and still unsolved is open work today.",
+      "failed": "The open-ticket figures could not be loaded. Refresh to try again.",
+      "kpiPending": "Pending",
+      "kpiOverdue": "Overdue",
+      "kpiDueSoon": "Due within {{hours}}h",
+      "kpiNoDeadline": "No deadline",
+      "byPriority": "By priority",
+      "byAgent": "By agent",
+      "byBrand": "By brand",
+      "colBrand": "Brand",
+      "colPending": "Pending",
+      "colOverdue": "Overdue",
+      "unassigned": "Unassigned",
+      "noBrand": "No brand"
+    },
     "breached": "Breached",
     "byAgent": "By agent",
     "byTicket": "By ticket",

@@ -4,7 +4,9 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, toast } from '@yiji/ui';
 import {
   SOCKET_EVENTS,
+  displayContactName,
   normaliseConversationStatus,
+  normalizePhone,
   type ConversationStatus,
   type Priority,
 } from '@yiji/shared-types';
@@ -101,14 +103,17 @@ export function ConversationToolbar({
   // With no live presence (e.g. an old thread opened while the customer is
   // offline) we fall back to the plain stored identity.
   const isNew = customerPresence?.isNew ?? false;
+  /* THROUGH `displayContactName`, like the inbox list (owner, 2026-10-07):
+     this header read `+966508315325` while the list beside it read
+     `0508315325` for the same customer, because the stored name WAS the
+     number in Yiji's spelling. `||`, not `??`: a blank name is no name. */
   const primaryLabel = isNew
-    ? (contact?.phone ??
-      contact?.name ??
-      t('conversation.newCustomer', { defaultValue: 'New customer' }))
-    : (contact?.name ??
-      contact?.phone ??
-      contact?.email ??
-      t('inbox.unknownContact', { defaultValue: 'Customer' }));
+    ? normalizePhone(contact?.phone) ||
+      displayContactName(contact?.name) ||
+      t('conversation.newCustomer', { defaultValue: 'New customer' })
+    : displayContactName(contact?.name, contact?.phone) ||
+      contact?.email ||
+      t('inbox.unknownContact', { defaultValue: 'Customer' });
   const statusLine = isNew ? (
     <span className="inline-flex items-center gap-1 font-medium text-primary">
       <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />

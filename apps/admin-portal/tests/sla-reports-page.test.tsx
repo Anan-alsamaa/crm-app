@@ -27,6 +27,13 @@ const api = vi.hoisted(() => ({
   useSlaReports: vi.fn(),
 }));
 vi.mock('../src/features/sla-reports/api.js', () => api);
+/* The open-tickets block has its own query (owner, 2026-10-07). Mocked here so
+   the deadline-report cases below stay about the deadline report. */
+const open = vi.hoisted(() => ({
+  useOpenTicketStats: vi.fn(),
+  DUE_SOON_HOURS: 24,
+}));
+vi.mock('../src/features/sla-reports/open-tickets.js', () => open);
 // Export is gated on `export_data`; this suite exercises it, so grant it.
 vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => ({ can: () => true }) }));
 
@@ -54,7 +61,7 @@ const fullReport = {
       id: 't1',
       subject: 'Broken login flow',
       priority: 'urgent',
-      status: 'open',
+      status: 'pending',
       agentId: 'a1',
       agentName: 'Alice',
       created: '2026-06-01T08:00:00.000Z',
@@ -66,7 +73,7 @@ const fullReport = {
       id: 't2',
       subject: 'Invoice question, comma "quoted"',
       priority: 'low',
-      status: 'closed',
+      status: 'solved',
       agentId: 'a1',
       agentName: 'Alice',
       created: '2026-06-02T08:00:00.000Z',
@@ -78,7 +85,7 @@ const fullReport = {
       id: 't3',
       subject: 'Feature request',
       priority: 'medium',
-      status: 'new',
+      status: 'pending',
       agentId: 'a2',
       agentName: 'Bob',
       created: '2026-06-03T08:00:00.000Z',
@@ -128,6 +135,8 @@ beforeEach(() => {
   // not become the next case's starting point.
   window.localStorage.clear();
   api.useSlaReports.mockReset();
+  open.useOpenTicketStats.mockReset();
+  open.useOpenTicketStats.mockReturnValue({ isLoading: false, data: undefined });
   if (!Element.prototype.scrollIntoView) {
     Element.prototype.scrollIntoView = vi.fn();
   }
@@ -385,5 +394,72 @@ describe('SlaReportsPage', () => {
     // Drilling into an agentId:null row should still work.
     await userEvent.click(screen.getByText('Unassigned'));
     expect(screen.getByText('Orphan ticket')).toBeInTheDocument();
+  });
+
+  it('offers exactly the two ticket states in the status filter: Pending and Solved', async () => {
+    // Owner, 2026-10-07: "the values show closed and solved. The correct should
+    // be pending and solved." Offered from the enum, not from stored values.
+    api.useSlaReports.mockReturnValue({ isLoading: false, data: fullReport });
+    renderPage();
+    await userEvent.click(screen.getByRole('combobox', { name: 'Status' }));
+    const options = screen.getAllByRole('option').map((o) => o.textContent?.trim());
+    // This suite's `t` returns the defaultValue, which for a status is the key.
+    expect(options).toEqual(['Any', 'pending', 'solved']);
+    expect(options).not.toContain('closed');
+    expect(options).not.toContain('open');
+  });
+});
+
+describe('SlaReportsPage — open tickets', () => {
+  const stats = {
+    total: 5,
+    overdue: 2,
+    dueSoon: 1,
+    noDeadline: 1,
+    byPriority: [
+      { key: 'urgent', count: 2 },
+      { key: 'medium', count: 3 },
+    ],
+    byAgent: [
+      { key: 'a1', name: 'Alice', pending: 3, overdue: 2 },
+      { key: null, name: 'Unassigned', pending: 2, overdue: 0 },
+    ],
+    byBrand: [
+      { key: 'Casa Pasta', name: 'Casa Pasta', pending: 4, overdue: 2 },
+      { key: null, name: 'No brand', pending: 1, overdue: 0 },
+    ],
+  };
+
+  it('shows the pending backlog above the deadline report, even while that loads', () => {
+    api.useSlaReports.mockReturnValue({ isLoading: true, data: undefined });
+    open.useOpenTicketStats.mockReturnValue({ isLoading: false, data: stats });
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'Open tickets' })).toBeInTheDocument();
+    const kpi = (label: string) =>
+      screen.getByText(label, { selector: 'span' }).closest('[data-kpi-label]')!
+        .previousElementSibling!.textContent;
+    expect(kpi('Pending')).toBe('5');
+    expect(kpi('Overdue')).toBe('2');
+    expect(kpi('Due within 24h')).toBe('1');
+    expect(kpi('No deadline')).toBe('1');
+  });
+
+  it('breaks the backlog down by agent and by brand, naming the empty buckets', () => {
+    api.useSlaReports.mockReturnValue({ isLoading: false, data: undefined });
+    open.useOpenTicketStats.mockReturnValue({ isLoading: false, data: stats });
+    renderPage();
+    const byAgent = screen.getByRole('table', { name: 'By agent' });
+    expect(byAgent).toHaveTextContent('Alice');
+    expect(byAgent).toHaveTextContent('Unassigned');
+    const byBrand = screen.getByRole('table', { name: 'By brand' });
+    expect(byBrand).toHaveTextContent('Casa Pasta');
+    expect(byBrand).toHaveTextContent('No brand');
+  });
+
+  it('says so when the backlog cannot be loaded, rather than showing zeros', () => {
+    api.useSlaReports.mockReturnValue({ isLoading: false, data: undefined });
+    open.useOpenTicketStats.mockReturnValue({ isLoading: false, data: undefined, isError: true });
+    renderPage();
+    expect(screen.getByText(/could not be loaded/)).toBeInTheDocument();
   });
 });

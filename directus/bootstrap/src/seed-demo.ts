@@ -294,7 +294,7 @@ async function main(): Promise<void> {
     await post<{ id: string }>('tickets', {
       subject: 'App crashes on checkout',
       description: 'Customer reports a crash when tapping checkout on iPhone.',
-      status: 'open',
+      status: 'pending',
       priority: 'high',
       vendor,
       contact: ahmed.contact,
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
     await post<{ id: string }>('tickets', {
       subject: 'Order never arrived + refund missing',
       description: 'Urgent: undelivered order, refund not received.',
-      status: 'new',
+      status: 'pending',
       priority: 'urgent',
       vendor,
       contact: layla.contact,

@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -28,6 +28,8 @@ import {
   formatDuration,
   performanceSummary,
   timeToSolveSec,
+  agentInitiatedSummary,
+  awaitingCustomer,
 } from '@yiji/reports';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useAgents } from '../inbox/api.js';
@@ -96,12 +98,36 @@ export function AgentPerformancePage() {
    * Lazy initial state, not an effect: setting it afterwards would render the
    * team view for a frame and fire a second query for data nobody asked for.
    */
-  const [filters, setFilters] = useState<PerformanceFilters>(() =>
-    user?.id ? { agentId: user.id } : {},
+  /*
+   * THE FILTERS SURVIVE LEAVING THE PAGE (owner, 2026-10-07): coming back from
+   * another page used to reset the agent and the date range to "my own, all
+   * time". Kept per TAB (sessionStorage — sessions here are per tab) and per
+   * signed-in user, so two agents sharing a machine never inherit each
+   * other's view. Storage can be unavailable; then it simply starts fresh.
+   */
+  const filtersKey = `agent-performance:${user?.id ?? 'anon'}`;
+  const saved = useMemo(() => {
+    try {
+      const raw = sessionStorage.getItem(filtersKey);
+      return raw ? (JSON.parse(raw) as { filters?: PerformanceFilters; targetMin?: number }) : null;
+    } catch {
+      return null;
+    }
+    // Read once per user; later writes are this page's own.
+  }, [filtersKey]);
+  const [filters, setFilters] = useState<PerformanceFilters>(
+    () => saved?.filters ?? (user?.id ? { agentId: user.id } : {}),
   );
-  const [targetMin, setTargetMin] = useState(DEFAULT_TARGET_MIN);
+  const [targetMin, setTargetMin] = useState(saved?.targetMin ?? DEFAULT_TARGET_MIN);
   /** What is in the box WHILE typing — '' is a legal intermediate state. */
-  const [targetDraft, setTargetDraft] = useState(String(DEFAULT_TARGET_MIN));
+  const [targetDraft, setTargetDraft] = useState(String(saved?.targetMin ?? DEFAULT_TARGET_MIN));
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(filtersKey, JSON.stringify({ filters, targetMin }));
+    } catch {
+      /* private mode or full storage: the page still works, it just forgets */
+    }
+  }, [filtersKey, filters, targetMin]);
 
   const timings = useChatTimings(filters);
   /**
@@ -154,6 +180,8 @@ export function AgentPerformancePage() {
 
   const targetSec = targetMin * 60;
   const summary = useMemo(() => performanceSummary(chats, targetSec), [chats, targetSec]);
+  /* Chats an AGENT started, read on their own terms (owner, 2026-10-07). */
+  const outreach = useMemo(() => agentInitiatedSummary(chats), [chats]);
   const compare = useMemo(
     () =>
       comparisonRows(chats, (n) => t('performance.chatsCount', { defaultValue: '{{n}} chats', n })),
@@ -393,6 +421,55 @@ export function AgentPerformancePage() {
                   tone={summary.commonChats > 0 ? 'good' : 'plain'}
                 />
               </section>
+
+              {/* 1b — chats an AGENT started (owner, 2026-10-07). First
+                  response is not a fair measure for them — the agent wrote
+                  first — and time to solve depends on when the customer
+                  answers, so they get their own numbers: did the customer
+                  answer, how fast, and how long the chat took once they did. */}
+              {outreach.started > 0 && (
+                <section
+                  aria-label={t('performance.outreachTitle', {
+                    defaultValue: 'Chats started by an agent',
+                  })}
+                  className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+                >
+                  <Tile
+                    label={t('performance.outreachStarted', {
+                      defaultValue: 'Started by agent',
+                    })}
+                    value={String(outreach.started)}
+                  />
+                  <Tile
+                    label={t('performance.outreachReplied', {
+                      defaultValue: 'Customer replied',
+                    })}
+                    value={outreach.replyRatePct == null ? '—' : `${outreach.replyRatePct}%`}
+                    hint={t('performance.outreachRepliedHint', {
+                      defaultValue: '{{n}} of {{total}}',
+                      n: outreach.customerReplied,
+                      total: outreach.started,
+                    })}
+                  />
+                  <Tile
+                    label={t('performance.outreachReplyTime', {
+                      defaultValue: 'Customer reply time',
+                    })}
+                    value={formatDuration(outreach.medianCustomerReplySec) ?? '—'}
+                    hint={t('performance.median', { defaultValue: 'median' })}
+                  />
+                  <Tile
+                    label={t('performance.outreachHandling', {
+                      defaultValue: 'Solved after customer replied',
+                    })}
+                    value={formatDuration(outreach.medianHandlingSec) ?? '—'}
+                    hint={t('performance.outreachHandlingHint', {
+                      defaultValue: 'median · {{n}} closed without a reply',
+                      n: outreach.closedWithoutReply,
+                    })}
+                  />
+                </section>
+              )}
 
               {/* 2 — agent by agent. Hidden for a single agent: a bar chart of
                   one person against themselves compares nothing. */}
@@ -653,6 +730,9 @@ export function AgentPerformancePage() {
                         <th className="px-4 py-2.5 text-start font-semibold">
                           {t('performance.started', { defaultValue: 'Started' })}
                         </th>
+                        <th className="px-4 py-2.5 text-start font-semibold">
+                          {t('performance.startedBy', { defaultValue: 'Started by' })}
+                        </th>
                         <th className="px-4 py-2.5 text-end font-semibold">
                           {t('performance.firstResponse', { defaultValue: 'First response' })}
                         </th>
@@ -693,21 +773,32 @@ export function AgentPerformancePage() {
                           <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
                             {chat.startedAt ? formatDateTime(chat.startedAt) : '—'}
                           </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">
+                            {chat.initiatedBy === 'agent'
+                              ? t('performance.byAgent', { defaultValue: 'Agent' })
+                              : t('performance.byCustomer', { defaultValue: 'Customer' })}
+                          </td>
                           {/* "No reply" rather than a dash: the worst outcome on
                               the page must not read as missing data. */}
                           <td
                             className={cn(
                               'px-4 py-2.5 text-end tabular-nums',
-                              chat.passedOn
+                              chat.passedOn || awaitingCustomer(chat)
                                 ? 'text-muted-foreground'
                                 : first == null
                                   ? 'font-semibold text-destructive'
                                   : 'text-foreground',
                             )}
                           >
-                            {first == null
-                              ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
-                              : formatDuration(first)}
+                            {/* An agent-started chat the customer has not
+                                answered has nothing to respond to yet. */}
+                            {awaitingCustomer(chat)
+                              ? t('performance.customerNotReplied', {
+                                  defaultValue: 'Customer hasn’t replied',
+                                })
+                              : first == null
+                                ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
+                                : formatDuration(first)}
                             {/* Says WHY this row is not counted against the
                                 target, rather than leaving a slow-looking
                                 number with no explanation beside it. */}
@@ -719,8 +810,21 @@ export function AgentPerformancePage() {
                           </td>
                           <td className="px-4 py-2.5 text-end tabular-nums text-foreground">
                             {solve == null ? (
+                              /* A CLOSED chat is never "Still open" — that was
+                                 the agent-started chat with no customer reply,
+                                 which has no customer message to time from. */
                               <span className="text-muted-foreground">
-                                {t('performance.stillOpen', { defaultValue: 'Still open' })}
+                                {chat.solvedAt
+                                  ? awaitingCustomer(chat)
+                                    ? t('performance.closedNoReply', {
+                                        defaultValue: 'Closed — no customer reply',
+                                      })
+                                    : t('performance.closed', { defaultValue: 'Closed' })
+                                  : awaitingCustomer(chat)
+                                    ? t('performance.waitingCustomer', {
+                                        defaultValue: 'Waiting for customer',
+                                      })
+                                    : t('performance.stillOpen', { defaultValue: 'Still open' })}
                               </span>
                             ) : (
                               formatDuration(solve)
@@ -769,6 +873,10 @@ export function AgentPerformancePage() {
             {t('performance.basis', {
               defaultValue:
                 'First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.',
+            })}{' '}
+            {t('performance.outreachBasis', {
+              defaultValue:
+                'A chat an agent started is measured from the customer’s reply: first response is the agent’s answer to it, and time to solve runs from it to closing. Until the customer replies, the chat is not counted as unanswered or late.',
             })}
           </p>
         </div>

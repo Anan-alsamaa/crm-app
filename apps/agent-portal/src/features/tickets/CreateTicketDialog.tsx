@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, cn, formatDate, FormField, Pill, SelectMenu, Textarea, toast } from '@yiji/ui';
 import {
   compensationFlag,
+  displayContactName,
   isCouponRequested,
   isNotifyingType,
   manualStoreMatch,
@@ -45,6 +46,13 @@ import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import {
+  clearTicketDraft,
+  readTicketDraft,
+  ticketDraftKey,
+  writeTicketDraft,
+  type TicketFormDraft,
+} from './ticket-draft.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
@@ -80,6 +88,55 @@ interface Props {
   backLabel?: string;
   /** The new ticket's id, for callers that navigate to it. */
   onCreated?: (ticketId: string) => void;
+  /**
+   * Called when the agent throws the saved draft away ("Clear"), so a caller
+   * holding part of the form — the page's contact picker — can reset it too.
+   */
+  onDiscardDraft?: () => void;
+}
+
+/**
+ * Whether the agent has actually put anything into the complaint. Fields the
+ * form fills in by itself — the date, and a service type read off the order —
+ * do not count, or every chat-opened form would be a "draft".
+ */
+function complaintTouched(c: ComplaintValues, inferredService: string | null): boolean {
+  return (Object.keys(complaintFromConversation) as (keyof ComplaintValues)[]).some((k) => {
+    if (k === 'complaint_date') return false;
+    if (k === 'service_type' && c.service_type === (inferredService ?? '')) return false;
+    if (k === 'compensation') return false; // follows the coupon box, counted there
+    return (c[k] ?? '') !== (complaintFromConversation[k] ?? '');
+  });
+}
+
+/**
+ * The Add-ticket form, KEPT across navigation and reloads (owner, 2026-10-07).
+ *
+ * This wrapper owns the draft's identity: one per signed-in agent per chat (or
+ * one standalone), see `ticket-draft.ts`. Keying the form on it means a route
+ * that switches conversation underneath a mounted form starts that chat's own
+ * draft rather than carrying the previous chat's text across. "Clear" remounts
+ * the form from nothing rather than resetting a dozen pieces of state by hand —
+ * a reset that misses one field is how a discarded coupon reappears.
+ */
+export function CreateTicketDialog(props: Props) {
+  const { user } = useAuth();
+  const draftKey = ticketDraftKey(user?.id, props.conversationId);
+  const [generation, setGeneration] = useState(0);
+  const { onDiscardDraft } = props;
+  const discard = useCallback(() => {
+    clearTicketDraft(draftKey);
+    setGeneration((g) => g + 1);
+    onDiscardDraft?.();
+  }, [draftKey, onDiscardDraft]);
+  return (
+    <CreateTicketForm
+      key={`${draftKey ?? 'no-draft'}:${generation}`}
+      {...props}
+      draftKey={draftKey}
+      onDiscardDraft={discard}
+    />
+  );
 }
 
 function money(amount: number, currency: string): string {
@@ -160,7 +217,7 @@ function IncludeToggle({
   );
 }
 
-export function CreateTicketDialog({
+function CreateTicketForm({
   contactId,
   vendorId,
   conversationId,
@@ -168,11 +225,21 @@ export function CreateTicketDialog({
   contactField,
   backLabel,
   onCreated,
-}: Props) {
+  draftKey,
+  onDiscardDraft,
+}: Props & { draftKey: string | null }) {
   const { t, i18n } = useTranslation();
   const createFromChat = useCreateTicketFromConversation();
   const { user, can } = useAuth();
   const canRequestCoupon = can('request_coupons');
+  /* Read ONCE, on mount: the draft seeds the form, and from then on the form
+     is the truth and the draft its copy. */
+  const [initialDraft] = useState(() => readTicketDraft(draftKey));
+  const restored: TicketFormDraft | null = initialDraft?.form ?? null;
+  const draftRestored = !!(initialDraft?.form || initialDraft?.contact);
+  /* Set once the draft has been consumed (saved or cancelled), so a render on
+     the way out cannot write the form back into storage. */
+  const draftDone = useRef(false);
   const {
     register,
     handleSubmit,
@@ -181,7 +248,10 @@ export function CreateTicketDialog({
     formState: { isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { priority: 'medium' },
+    defaultValues: {
+      priority: restored?.priority ?? 'medium',
+      description: restored?.description ?? '',
+    },
   });
 
   // Chat context (#3): the order shown in this chat + the files shared in it.
@@ -230,8 +300,8 @@ export function CreateTicketDialog({
    * `chooseOrder`, which is keyed by conversation and would have nowhere to
    * live here.
    */
-  const [typedOrderId, setTypedOrderId] = useState('');
-  const [lookupId, setLookupId] = useState('');
+  const [typedOrderId, setTypedOrderId] = useState(restored?.typedOrderId ?? '');
+  const [lookupId, setLookupId] = useState(restored?.lookupId ?? '');
   const typedOrderQuery = useQuery({
     queryKey: ['manual-order', yijiVendorId, lookupId],
     enabled: !!yijiVendorId && !!lookupId,
@@ -259,17 +329,21 @@ export function CreateTicketDialog({
      until it is made. There is no ticket yet, so the coupon is COLLECTED here
      and raised once the ticket exists — a failed coupon can then never leave a
      half-created ticket behind. */
-  const [assignCoupon, setAssignCoupon] = useState(false);
+  const [assignCoupon, setAssignCoupon] = useState(restored?.assignCoupon ?? false);
   const [couponOpen, setCouponOpen] = useState(false);
-  const [collectedCoupon, setCollectedCoupon] = useState<CouponRequestDraft | null>(null);
-  const [includeOrder, setIncludeOrder] = useState(true);
-  const [includeFiles, setIncludeFiles] = useState(true);
+  const [collectedCoupon, setCollectedCoupon] = useState<CouponRequestDraft | null>(
+    restored?.collectedCoupon ?? null,
+  );
+  const [includeOrder, setIncludeOrder] = useState(restored?.includeOrder ?? true);
+  const [includeFiles, setIncludeFiles] = useState(restored?.includeFiles ?? true);
   // Seeded lazily with "now": a module-level default would freeze at import
   // and stamp every complaint with the time the tab was opened. The agent can
   // still change it — a complaint phoned in yesterday belongs to yesterday.
+  // A restored draft keeps the date it was given.
   const [complaint, setComplaint] = useState<ComplaintValues>(() => ({
     ...complaintFromConversation,
     complaint_date: nowLocalInput(),
+    ...(restored?.complaint ?? {}),
   }));
 
   /*
@@ -303,7 +377,7 @@ export function CreateTicketDialog({
   // master and pre-select it. `brand_only` is deliberately excluded — it means
   // we matched the BRAND, not a branch, and pre-filling one of that brand's
   // branches would be a guess the agent has no reason to doubt.
-  const [storeId, setStoreId] = useState('');
+  const [storeId, setStoreId] = useState(restored?.storeId ?? '');
   const orderStore = useOrderStore(orderSnapshotView ?? {});
   const inferredStoreId =
     orderStore.store && orderStore.via !== 'brand_only' && orderStore.via !== 'none'
@@ -363,6 +437,66 @@ export function CreateTicketDialog({
   // the customer anything.
   const requestCoupon = useRequestCouponApproval();
   const needsApproval = isCouponRequested(complaint);
+
+  /*
+   * KEEP THE DRAFT (owner, 2026-10-07). Every change is copied to the tab's
+   * sessionStorage, so leaving for another page — or reloading — and coming
+   * back finds the ticket as it was left. A form with nothing the agent put
+   * there is stored as nothing, so an untouched form never claims to be a
+   * restored draft.
+   */
+  const draftDescription = watch('description') ?? '';
+  const draftPriority = watch('priority');
+  useEffect(() => {
+    if (draftDone.current) return;
+    const touched =
+      !!draftDescription.trim() ||
+      draftPriority !== 'medium' ||
+      !!typedOrderId.trim() ||
+      assignCoupon ||
+      !!collectedCoupon ||
+      (!!storeId && storeId !== inferredStoreId) ||
+      !includeOrder ||
+      !includeFiles ||
+      complaintTouched(complaint, inferredService);
+    writeTicketDraft(draftKey, {
+      form: touched
+        ? {
+            description: draftDescription,
+            priority: draftPriority,
+            complaint,
+            typedOrderId,
+            lookupId,
+            storeId,
+            assignCoupon,
+            collectedCoupon,
+            includeOrder,
+            includeFiles,
+          }
+        : null,
+    });
+  }, [
+    draftKey,
+    draftDescription,
+    draftPriority,
+    complaint,
+    typedOrderId,
+    lookupId,
+    storeId,
+    inferredStoreId,
+    inferredService,
+    assignCoupon,
+    collectedCoupon,
+    includeOrder,
+    includeFiles,
+  ]);
+
+  /** Cancel is an explicit "I do not want this ticket": the draft goes too. */
+  const cancel = () => {
+    draftDone.current = true;
+    clearTicketDraft(draftKey);
+    onClose();
+  };
 
   const onSubmit = handleSubmit(async (values) => {
     if (!contactId || !vendorId) return;
@@ -424,6 +558,10 @@ export function CreateTicketDialog({
         attachmentFileIds: includeFiles ? sessionFileIds : [],
         storeNotifyTypes: notifyTypes.data ?? [],
       });
+      // The ticket exists, so the draft has done its job — whatever happens to
+      // the coupon below, a reload must not offer to file it a second time.
+      draftDone.current = true;
+      clearTicketDraft(draftKey);
 
       // Raised AFTER the ticket, because the request has to point at one. If it
       // fails the ticket still stands and the agent is told the coupon did not
@@ -533,7 +671,8 @@ export function CreateTicketDialog({
     // on the form, this is the only place the agent sees the name they are
     // about to give it.
     subject ? optionLabel(subject) : null,
-    contact.data?.name ?? contact.data?.phone ?? null,
+    // A name that is really the phone reads as the canonical 05 number.
+    displayContactName(contact.data?.name, contact.data?.phone) || null,
     latestOrder ? `#${latestOrder.orderId}` : null,
     chosenMatch?.store ? chosenMatch.restaurantName : null,
   ].filter((v): v is string => !!v);
@@ -630,7 +769,7 @@ export function CreateTicketDialog({
               {blockedReason}
             </span>
           )}
-          <Button type="button" variant="ghost" size="md" onClick={onClose}>
+          <Button type="button" variant="ghost" size="md" onClick={cancel}>
             {t('actions.cancel', { ns: 'common' })}
           </Button>
           <Button
@@ -643,6 +782,25 @@ export function CreateTicketDialog({
           </Button>
         </div>
       </div>
+
+      {/* Said once, quietly, so a form that opens half-filled is not mistaken
+          for somebody else's ticket — and so the agent can start clean. */}
+      {draftRestored && (
+        <div
+          role="status"
+          className="flex items-center gap-2 border-b border-border bg-primary/[0.05] px-5 py-1.5 text-xs text-foreground sm:px-7"
+        >
+          <span aria-hidden className="h-1 w-1 shrink-0 rounded-full bg-primary" />
+          <span className="min-w-0 flex-1">
+            {t('tickets.draftRestored', {
+              defaultValue: 'Draft restored — the ticket you started here was kept.',
+            })}
+          </span>
+          <Button type="button" variant="ghost" size="sm" onClick={onDiscardDraft}>
+            {t('tickets.draftClear', { defaultValue: 'Clear draft' })}
+          </Button>
+        </div>
+      )}
 
       {/* Two sections now, not three: Subject is gone and the rest of what was
           the Ticket card lives at the foot of "What happened", so the agent

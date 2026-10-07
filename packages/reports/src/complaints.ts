@@ -313,8 +313,8 @@ export function complaintCell(
     /*
      * THE LIVE VOCABULARY, not whatever the row happens to store.
      *
-     * Ticket status is `open | pending | solved`. `resolved` and `closed` are
-     * RETIRED names that 1,671 imported rows still carry — deliberately never
+     * Ticket status is `pending | solved` (owner, 2026-10-07). `open`, `new`,
+     * `resolved` and `closed` are RETIRED names that 1,671 imported rows still carry — deliberately never
      * rewritten, because every reader is supposed to normalise so that a
      * stored `closed` and a stored `solved` read the same. This cell did not,
      * so the one report operations use to see what is finished showed the

@@ -20,6 +20,19 @@ describe('createTicketRepo', () => {
     expect(await repo.listOpenTickets()).toHaveLength(2);
   });
 
+  it('listOpenTickets matches the live `pending` AND the retired unsolved spellings', async () => {
+    // Two ticket states (owner, 2026-10-07). Stored rows are not migrated, so a
+    // filter naming only `pending` would drop every older open ticket from the
+    // SLA sweep without an error.
+    request.mockResolvedValueOnce([]);
+    await repo.listOpenTickets();
+    const [builder] = request.mock.calls[0] as [
+      (c: unknown) => { params: { filter?: { status?: { _in?: string[] } } } },
+    ];
+    const statuses = builder({}).params.filter?.status?._in ?? [];
+    expect([...statuses].sort()).toEqual(['new', 'open', 'pending']);
+  });
+
   it('listActiveSlaPolicies returns rows', async () => {
     request.mockResolvedValueOnce([{ id: 'p1' }]);
     expect(await repo.listActiveSlaPolicies()).toHaveLength(1);

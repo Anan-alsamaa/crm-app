@@ -99,15 +99,16 @@ const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
 type TicketFilter = 'all' | TicketStatus | 'overdue';
 /*
- * Three statuses now (owner, 2026-09-09), and they do not all deserve a tile.
+ * Two statuses now (owner, 2026-10-07: "only 2 states for the tickets: pending
+ * and solved"), and they do not both deserve a tile.
  *
  * "All" is the cleared state, reached by pressing the active tile again rather
  * than by its own control, and "solved" is the pile an agent has finished with
- * — both are reachable from the row of chips below without taking a third of
- * the strip. What is left is what somebody scans the queue FOR: work in hand,
- * work waiting on somebody else, and work that is late.
+ * — both are reachable from the row of chips below without taking room in the
+ * strip. What is left is what somebody scans the queue FOR: work not done yet,
+ * and work that is late.
  */
-const STAT_FILTERS = ['open', 'pending', 'overdue'] as const satisfies readonly TicketFilter[];
+const STAT_FILTERS = ['pending', 'overdue'] as const satisfies readonly TicketFilter[];
 
 /** The rest, as quiet text below the tiles, so nothing becomes unreachable. */
 const REST_FILTERS = ['all', 'solved'] as const satisfies readonly TicketFilter[];
@@ -116,42 +117,32 @@ const REST_FILTERS = ['all', 'solved'] as const satisfies readonly TicketFilter[
  * Every status the TOOLBAR dropdown offers, in the order an agent thinks about
  * them: the work, then what is late.
  *
- * Deliberately NOT `STAT_FILTERS` — that set exists to decide which three
- * deserve a counted tile, and `solved` is excluded from it because a tile for
- * finished work is not what somebody scans a queue for. A dropdown has no such
- * budget, and a status menu missing "Solved" is a menu that cannot answer
- * "show me what we closed", which is most of what a supervisor asks it.
+ * Deliberately NOT `STAT_FILTERS` — that set exists to decide which deserve a
+ * counted tile, and `solved` is excluded from it because a tile for finished
+ * work is not what somebody scans a queue for. A dropdown has no such budget,
+ * and a status menu missing "Solved" is a menu that cannot answer "show me what
+ * we closed", which is most of what a supervisor asks it.
  *
  * `all` is not here: it is the menu's placeholder row, not a status.
  */
-const STATUS_FILTERS = [
-  'open',
-  'pending',
-  'solved',
-  'overdue',
-] as const satisfies readonly TicketFilter[];
+const STATUS_FILTERS = ['pending', 'solved', 'overdue'] as const satisfies readonly TicketFilter[];
 
-/** Late is alarming, in-hand is not. `default` is the calm green dot. */
+/** Late is alarming, not-done-yet is not. `default` is the calm green dot. */
 const STAT_TONE: Record<(typeof STAT_FILTERS)[number], 'default' | 'primary' | 'destructive'> = {
-  open: 'default',
-  pending: 'primary',
+  pending: 'default',
   overdue: 'destructive',
 };
 
 /**
  * Ticket status -> dot colour. Same hue ladder as the detail's status pill.
  *
- * The retired values keep their entries: rows are not rewritten, so a stored
- * `closed` still has to render, and it renders as what it now means.
+ * Keyed by the NORMALISED status (the queue rows are normalised on read), so
+ * only the live two can arrive here; a stored `open`/`closed` reads as what it
+ * now means before it gets this far.
  */
-const STATUS_DOT: Record<string, string> = {
-  open: 'bg-primary',
-  pending: 'bg-warning',
+const STATUS_DOT: Record<TicketStatus, string> = {
+  pending: 'bg-primary',
   solved: 'bg-success',
-  // Retired, still stored on historical rows.
-  new: 'bg-primary',
-  resolved: 'bg-success',
-  closed: 'bg-success',
 };
 
 export function TicketsPage() {
@@ -231,11 +222,9 @@ export function TicketsPage() {
     [complaints.data, storeIndex],
   );
   const stats = useMemo(() => {
-    /* `new` is gone from this test: the query now normalises, and `new` folds
-       into `open` there (EMA-31). Leaving it would be a second, stale idea of
-       what open means — and the tile below counts with `filterCount`, which
-       never knew about `new` at all, so the KPI and the tile disagreed. */
-    const open = list.filter((r) => r.complaintStatus === 'open').length;
+    /* The query normalises (EMA-31), so `new`/`open` arrive here as `pending`
+       already — testing the retired spellings would be a second, stale idea of
+       what unfinished means, and the tile below counts with `filterCount`. */
     const pending = list.filter((r) => r.complaintStatus === 'pending').length;
     const overdue = list.filter(isOverdue).length;
     // `date` is already the row's LOCAL calendar day, so comparing strings
@@ -244,7 +233,7 @@ export function TicketsPage() {
     const p = (n: number) => String(n).padStart(2, '0');
     const todayKey = `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
     const today = list.filter((r) => r.date === todayKey).length;
-    return { open, pending, overdue, today };
+    return { pending, overdue, today };
   }, [list]);
 
   // The search runs over the SAME filter the manager's report uses, so "find
@@ -311,12 +300,12 @@ export function TicketsPage() {
 
             {/* The status filters, moved out of the top toolbar and into the
                 rail as counted tiles — the same control the inbox uses.
-                EXCLUSIVE, unlike the inbox's: a ticket is open or pending,
+                EXCLUSIVE, unlike the inbox's: a ticket is pending or solved,
                 never both, so pressing one replaces the last rather than
                 narrowing it. Pressing the active one clears back to All. */}
             {/* pt-4, not mt-3: this is the first thing in the rail now, so it
                 owns the top inset the removed header used to provide. */}
-            <div className="grid grid-cols-3 gap-1.5 px-4 pt-4">
+            <div className="grid grid-cols-2 gap-1.5 px-4 pt-4">
               {STAT_FILTERS.map((f) => (
                 <QueueStat
                   key={f}
@@ -434,12 +423,12 @@ export function TicketsPage() {
                   nothing. Reported twice as missing while technically present.
 
                   The two stay in sync rather than competing: this writes the
-                  SAME `filter` state the tiles set, so picking "Open" here
-                  lights the Open tile and vice versa. Two controls disagreeing
+                  SAME `filter` state the tiles set, so picking "Pending" here
+                  lights the Pending tile and vice versa. Two controls disagreeing
                   about one question is worse than having only one.
 
                   Unlike the type menu above, the options are the full enum, not
-                  the values in range: status is a fixed vocabulary of three that
+                  the values in range: status is a fixed vocabulary of two that
                   an agent reasons about as a set, and a "Solved" option missing
                   because today happens to have none reads as the filter being
                   broken.
@@ -565,7 +554,7 @@ export function TicketsPage() {
                               })}
                               className={cn(
                                 'absolute -bottom-0.5 -end-0.5 h-3 w-3 rounded-full ring-2 ring-card',
-                                STATUS_DOT[r.complaintStatus] ?? 'bg-muted-foreground/40',
+                                STATUS_DOT[normaliseTicketStatus(r.complaintStatus)],
                               )}
                             />
                           </span>
@@ -1035,13 +1024,16 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
     return 'text-foreground';
   };
 
-  // Board pill hues: live work jade, waiting warning-treated, finished success
-  // — one ladder shared with the list dots.
-  const statusTone: Record<TicketStatus, 'primary' | 'warning' | 'highlight' | 'success'> = {
-    open: 'primary',
-    pending: 'highlight',
+  // Board pill hues: unfinished work jade, finished success — one ladder
+  // shared with the list dots. Two states (owner, 2026-10-07).
+  const statusTone: Record<TicketStatus, 'primary' | 'success'> = {
+    pending: 'primary',
     solved: 'success',
   };
+  /* NORMALISED, not the stored value: ~7,900 production rows store `closed`
+     and the older live ones `open`, neither of which is a key above — the pill
+     fell through to no tone and the raw word. */
+  const tkStatus = normaliseTicketStatus(tk.status);
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6 sm:p-8">
@@ -1072,8 +1064,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
           </span>
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-1.5">
-              <Pill tone={statusTone[tk.status]} dot>
-                {t(`status.${tk.status}`, { ns: 'common' })}
+              <Pill tone={statusTone[tkStatus]} dot>
+                {t(`status.${tkStatus}`, { ns: 'common' })}
               </Pill>
               {tk.priority !== 'medium' && tk.priority !== 'low' && (
                 <Pill tone={tk.priority === 'urgent' ? 'destructive' : 'orange'}>
@@ -1137,7 +1129,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     type="button"
                     size="sm"
                     variant="success"
-                    onClick={() => patch({ status: 'open', resolved_at: undefined })}
+                    /* Reopening puts it back to `pending`, the one unfinished
+                       state (owner, 2026-10-07) — never the retired `open`. */
+                    onClick={() => patch({ status: 'pending', resolved_at: undefined })}
                   >
                     {t('tickets.reopenTicket', { defaultValue: 'Reopen ticket' })}
                   </Button>

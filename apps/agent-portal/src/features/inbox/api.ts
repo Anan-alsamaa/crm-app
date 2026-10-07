@@ -2,7 +2,7 @@ import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority, YijiOrder } from '@yiji/shared-types';
-import { isAutomatedAgentMessage } from '@yiji/shared-types';
+import { isAutomatedAgentMessage, normaliseTicketStatus } from '@yiji/shared-types';
 import { readChunked } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
@@ -793,8 +793,8 @@ export function useLinkedTickets(conversationId: string | null) {
   return useQuery({
     enabled: !!conversationId,
     queryKey: ['linked-tickets', conversationId],
-    queryFn: () =>
-      directus.request(
+    queryFn: async () => {
+      const rows = (await directus.request(
         readItems('tickets', {
           filter: { conversation: { _eq: conversationId } },
           fields: ['id', 'subject', 'status', 'priority', 'date_created'],
@@ -804,7 +804,12 @@ export function useLinkedTickets(conversationId: string | null) {
           // full history stays reachable from the tickets page and reports.
           limit: 3,
         }),
-      ) as Promise<LinkedTicket[]>,
+      )) as LinkedTicket[];
+      /* Normalised on read (owner, 2026-10-07: two ticket states, pending and
+         solved): a stored `open`/`closed` would otherwise reach the sidebar
+         pill as a third and fourth word for the same two states. */
+      return rows.map((r) => ({ ...r, status: normaliseTicketStatus(r.status) }));
+    },
   });
 }
 

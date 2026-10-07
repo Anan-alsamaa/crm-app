@@ -297,22 +297,13 @@ async function main(): Promise<void> {
         if (rnd() < 0.55) {
           const firstResponseMin = int(2, 45);
           const resolutionMin = firstResponseMin + int(30, 900);
-          // Status mix: mostly resolved/closed, a live tail of open work.
+          // Status mix: mostly solved, a live tail of pending work. TICKET
+          // status has two values (owner, 2026-10-07) — not the chat's two.
           const roll = rnd();
-          const status =
-            d < 7 && roll < 0.25
-              ? 'new'
-              : d < 7 && roll < 0.5
-                ? 'open'
-                : roll < 0.12
-                  ? 'pending'
-                  : roll < 0.62
-                    ? 'resolved'
-                    : 'closed';
+          const status = (d < 7 && roll < 0.5) || roll < 0.12 ? 'pending' : 'solved';
           const respondedAt = openedAt + firstResponseMin * 60_000;
           const resolvedAt = openedAt + resolutionMin * 60_000;
-          // TICKET status, which still has five values — not the chat's two.
-          const done = status === 'resolved' || status === 'closed';
+          const done = status === 'solved';
 
           await api('/items/tickets', {
             method: 'POST',
@@ -331,7 +322,6 @@ async function main(): Promise<void> {
               resolution_due_at: iso(openedAt + 8 * 3_600_000),
               first_responded_at: iso(respondedAt),
               ...(done ? { resolved_at: iso(resolvedAt) } : {}),
-              ...(status === 'closed' ? { closed_at: iso(resolvedAt + 3_600_000) } : {}),
             }),
           });
           tickets++;

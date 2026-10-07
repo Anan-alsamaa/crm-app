@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
@@ -37,6 +37,16 @@ vi.mock('../src/features/custom-fields/CustomFieldsSection.js', () => ({
 
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'agent-1' }, can: () => true }),
+}));
+
+/* Only the WRITE is replaced, so the name-edit test can see what Save sends. */
+const updateContact = vi.hoisted(() => ({
+  mutateAsync: vi.fn().mockResolvedValue({}),
+  isPending: false,
+}));
+vi.mock('../src/features/contacts/api.js', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useUpdateContact: () => updateContact,
 }));
 
 import { ConversationSidebar } from '../src/features/conversation/ConversationSidebar.js';
@@ -82,6 +92,54 @@ describe('ConversationSidebar', () => {
     expect(screen.getByText('alice@example.com')).toBeInTheDocument();
     expect(screen.getByText('VIP')).toBeInTheDocument();
     expect(screen.getByText('custom-fields')).toBeInTheDocument();
+  });
+
+  /* A stored name that is only the phone (owner, 2026-10-07): the heading
+     reads the canonical 05 number, and the Name box opens EMPTY so the agent
+     types the real name — Save never writes the number back as a name. */
+  describe('a name that is really the phone number', () => {
+    const phoneNamed = {
+      ...convo,
+      contact: { id: 'k1', name: '+966508315325', email: null, phone: '0508315325' },
+    };
+
+    it('heads the panel with the 05 number, not the +966 one', () => {
+      inbox.useConversation.mockReturnValue({ data: phoneNamed, isLoading: false });
+      renderSidebar();
+      expect(screen.queryByText('+966508315325')).not.toBeInTheDocument();
+      expect(screen.getAllByText('0508315325').length).toBeGreaterThan(0);
+    });
+
+    it('opens the Name box empty, and Save leaves the name alone', async () => {
+      updateContact.mutateAsync.mockClear();
+      inbox.useConversation.mockReturnValue({ data: phoneNamed, isLoading: false });
+      renderSidebar();
+      fireEvent.click(screen.getByLabelText('Edit customer details'));
+      const nameBox = screen.getByLabelText('Name');
+      expect(nameBox).toHaveValue('');
+      expect(nameBox).toHaveAttribute('placeholder', 'No name yet');
+
+      fireEvent.click(screen.getByText('Save'));
+      await waitFor(() => expect(updateContact.mutateAsync).toHaveBeenCalled());
+      const { patch } = updateContact.mutateAsync.mock.calls[0]![0] as {
+        patch: Record<string, unknown>;
+      };
+      expect(patch).not.toHaveProperty('name');
+    });
+
+    it('writes the real name once the agent types it', async () => {
+      updateContact.mutateAsync.mockClear();
+      inbox.useConversation.mockReturnValue({ data: phoneNamed, isLoading: false });
+      renderSidebar();
+      fireEvent.click(screen.getByLabelText('Edit customer details'));
+      fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Muneera' } });
+      fireEvent.click(screen.getByText('Save'));
+      await waitFor(() =>
+        expect(updateContact.mutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({ patch: expect.objectContaining({ name: 'Muneera' }) }),
+        ),
+      );
+    });
   });
 
   it('leaves AI assistance to the composer, not the sidebar', () => {

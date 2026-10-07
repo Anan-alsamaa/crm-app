@@ -52,6 +52,8 @@ interface ConversationRow {
   date_created: string | null;
   contact: { id: string; name: string | null; phone: string | null } | null;
   last_order_id: string | null;
+  /** 'agent' when an agent opened the chat (owner, 2026-10-07). */
+  initiated_by: string | null;
 }
 
 interface MessageRow {
@@ -100,6 +102,7 @@ export function useChatTimings(filters: PerformanceFilters) {
             // The per-chat breakdown names the customer and the order. A row of
             // timings against a uuid is a number nobody can act on.
             'last_order_id',
+            'initiated_by',
             { contact: ['id', 'name', 'phone'] },
           ],
           ...(and.length ? { filter: { _and: and } } : {}),
@@ -230,6 +233,10 @@ export function useChatTimings(filters: PerformanceFilters) {
         subject: subjectOf.get(c.id) ?? null,
         passedOn: handoffs.get(c.id)?.passedOn ?? false,
         takenBy: handoffs.get(c.id)?.takenBy ?? null,
+        // Agent-started chats are measured from the customer's reply, and one
+        // the customer never answered is not "unanswered" (owner, 2026-10-07).
+        initiatedBy: c.initiated_by === 'agent' ? ('agent' as const) : ('customer' as const),
+        firstOutreachAt: times.get(c.id)?.firstAgentAnyAt ?? null,
       }));
     },
   });

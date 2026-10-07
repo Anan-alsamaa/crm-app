@@ -104,7 +104,7 @@ const ticket = {
   id: 't1',
   subject: 'Refund please',
   description: 'I want a refund',
-  status: 'open',
+  status: 'pending',
   priority: 'high',
   assigned_agent: null,
   assigned_team: null,
@@ -140,7 +140,7 @@ const complaintRow = {
   couponCode: '',
   couponValue: null,
   couponPercent: null,
-  complaintStatus: 'open',
+  complaintStatus: 'pending',
   agent: 'Sara',
   compensation: '',
   storeSnapshot: null,
@@ -371,6 +371,34 @@ describe('TicketsPage — marking a ticket solved', () => {
     expect(mutateAsync.mock.calls[0]![0].patch).not.toHaveProperty('first_responded_at');
   });
 
+  it('reopens to `pending`, never the retired `open`', async () => {
+    // Two ticket states (owner, 2026-10-07): pending and solved.
+    const mutateAsync = vi.fn().mockResolvedValue({});
+    hooks.useUpdateTicket.mockReturnValue({ mutateAsync });
+    hooks.useTicket.mockReturnValue({
+      data: { ...ticket, status: 'closed', first_responded_at: '2026-01-01T09:00:00.000Z' },
+      isLoading: false,
+    });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Reopen ticket')).toBeInTheDocument());
+    await userEvent.click(screen.getByText('Reopen ticket'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0]![0].patch.status).toBe('pending');
+  });
+
+  it.each([
+    ['closed', 'status.solved'],
+    ['resolved', 'status.solved'],
+    ['open', 'status.pending'],
+    ['new', 'status.pending'],
+  ])('shows a stored `%s` as %s — only the two live states', async (stored, label) => {
+    hooks.useTicket.mockReturnValue({ data: { ...ticket, status: stored }, isLoading: false });
+    renderPage('/tickets?id=t1');
+    await waitFor(() => expect(screen.getByText('Timings')).toBeInTheDocument());
+    expect(screen.getAllByText(label).length).toBeGreaterThan(0);
+    expect(screen.queryByText(`status.${stored}`)).toBeNull();
+  });
+
   it('shows when it was solved instead of the button, once resolved', async () => {
     hooks.useTicket.mockReturnValue({
       data: { ...ticket, status: 'resolved', resolved_at: '2026-01-02T00:00:00.000Z' },
@@ -396,7 +424,7 @@ describe('tickets rail: the counted status tiles', () => {
       ...complaintRow,
       id: 't2',
       subject: 'Already done',
-      complaintStatus: 'resolved',
+      complaintStatus: 'solved',
     };
     complaints.useMyComplaints.mockReturnValue({ data: [open, resolved], isLoading: false });
     renderPage();
@@ -408,11 +436,11 @@ describe('tickets rail: the counted status tiles', () => {
     /*
      * The tiles are named by count AND label, which is what tells them apart
      * from the toolbar chips carrying the same status words. The label here is
-     * `status.open` rather than "Open" because this suite's `t` returns the
-     * key when there is no defaultValue — the shape is what matters, not the
-     * wording.
+     * `status.pending` rather than "Pending" because this suite's `t` returns
+     * the key when there is no defaultValue — the shape is what matters, not
+     * the wording.
      */
-    await userEvent.click(screen.getByRole('button', { name: '1 status.open' }));
+    await userEvent.click(screen.getByRole('button', { name: '1 status.pending' }));
     expect(screen.getByText('Still open')).toBeInTheDocument();
     expect(screen.queryByText('Already done')).toBeNull();
   });
@@ -421,7 +449,7 @@ describe('tickets rail: the counted status tiles', () => {
     /*
      * Ticket statuses are mutually EXCLUSIVE, unlike the inbox's tiles which
      * combine. That leaves no "All" tile to return to, so the active tile has
-     * to be the way back — otherwise pressing Open is a one-way door and the
+     * to be the way back — otherwise pressing Pending is a one-way door and the
      * rest of the queue looks lost.
      */
     const open = { ...complaintRow, id: 't1', subject: 'Still open' };
@@ -429,12 +457,12 @@ describe('tickets rail: the counted status tiles', () => {
       ...complaintRow,
       id: 't2',
       subject: 'Already done',
-      complaintStatus: 'resolved',
+      complaintStatus: 'solved',
     };
     complaints.useMyComplaints.mockReturnValue({ data: [open, resolved], isLoading: false });
     renderPage();
 
-    const openTile = screen.getByRole('button', { name: '1 status.open' });
+    const openTile = screen.getByRole('button', { name: '1 status.pending' });
     await userEvent.click(openTile);
     expect(screen.queryByText('Already done')).toBeNull();
 

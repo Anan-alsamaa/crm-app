@@ -40,7 +40,12 @@ import {
   useTableSort,
   ZapIcon,
 } from '@yiji/ui';
-import { matchStore, isUnmappedStore, resolveStoreAttribution } from '@yiji/shared-types';
+import {
+  matchStore,
+  isUnmappedStore,
+  resolveStoreAttribution,
+  TicketStatus,
+} from '@yiji/shared-types';
 import {
   useAgentReportData,
   useTicketOrders,
@@ -287,7 +292,8 @@ const fmtPct = (n: number | null) => (n == null ? '—' : `${Math.round(n)}%`);
 const fmtScore = (n: number | null) => (n == null ? '—' : n.toFixed(2));
 
 const PRIORITY_RANK: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
-const STATUS_RANK: Record<string, number> = { new: 0, open: 1, pending: 2, resolved: 3, closed: 4 };
+// Ticket rows arrive normalised to the two states (owner, 2026-10-07).
+const STATUS_RANK: Record<string, number> = { pending: 0, solved: 1 };
 const PAGE_SIZE = 10;
 const TICKET_SORT: Record<string, (r: TicketReportRow) => string | number | null | undefined> = {
   subject: (r) => r.subject.toLowerCase(),
@@ -306,6 +312,7 @@ const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | un
   medianFirstResponseSec: (r) => r.medianFirstResponseSec,
   avgTimeToSolveSec: (r) => r.avgTimeToSolveSec,
   commonTaken: (r) => r.commonTaken,
+  agentStarted: (r) => r.agentStarted,
   tickets: (r) => r.tickets,
   csatAvg: (r) => r.csatAvg,
 };
@@ -581,7 +588,8 @@ function TicketsReport({
   /** This report's own headline numbers, rolled up from the rows below. */
   const totals = useMemo(
     () => ({
-      open: rows.filter((r) => String(r.status).toLowerCase() === 'open').length,
+      // `pending`: the one unfinished ticket state (owner, 2026-10-07).
+      pending: rows.filter((r) => String(r.status).toLowerCase() === 'pending').length,
       urgent: rows.filter((r) => String(r.priority).toLowerCase() === 'urgent').length,
       breached: rows.filter((r) => r.firstResponseState === 'breached').length,
     }),
@@ -598,8 +606,8 @@ function TicketsReport({
           icon={<TicketIcon size={18} />}
         />
         <ReportKpi
-          label={t('status.open', { ns: 'common', defaultValue: 'Open' })}
-          value={String(totals.open)}
+          label={t('status.pending', { ns: 'common', defaultValue: 'Pending' })}
+          value={String(totals.pending)}
           tone="violet"
           icon={<InboxIcon size={18} />}
         />
@@ -1229,11 +1237,14 @@ function ComplaintsReport({
     field,
     values,
     value,
+    labelOf = (v: string) => v,
   }: {
     label: string;
     field: keyof TicketFilterCriteria;
     values: string[];
     value: string | undefined;
+    /** Display text for a value; the stored value stays the option's key. */
+    labelOf?: (v: string) => string;
   }) =>
     values.length === 0 ? null : (
       <label className="flex flex-col gap-1">
@@ -1248,7 +1259,7 @@ function ComplaintsReport({
           onChange={(v) => pickCriterion({ [field]: v } as Partial<TicketFilterCriteria>)}
           options={[
             { value: '', label: t('complaintReport.any', { defaultValue: 'Any' }) },
-            ...values.map((v) => ({ value: v, label: v })),
+            ...values.map((v) => ({ value: v, label: labelOf(v) })),
           ]}
         />
       </label>
@@ -1379,7 +1390,10 @@ function ComplaintsReport({
           <FilterSelect
             label={t('complaintReport.col.complaintStatus', { defaultValue: 'Status' })}
             field="status"
-            values={options.complaintStatus}
+            /* THE TWO STATES, translated (owner, 2026-10-07: pending and
+               solved only). Was the distinct values in range, untranslated. */
+            values={[...TicketStatus.options]}
+            labelOf={(v) => String(t(`status.${v}`, { ns: 'common', defaultValue: v }))}
             value={draft.status}
           />
           <FilterSelect
@@ -1978,6 +1992,16 @@ function AgentKpiReport({
       value: (a) => a.commonTaken,
     },
     {
+      header: tr('agentReports.col.agentStarted', { defaultValue: 'Started by agent' }),
+      value: (a) => a.agentStarted,
+    },
+    {
+      header: tr('agentReports.col.agentStartedReplied', {
+        defaultValue: 'Customer replied (agent-started)',
+      }),
+      value: (a) => a.agentStartedReplied,
+    },
+    {
       header: tr('agentReports.col.tickets', { defaultValue: 'Tickets' }),
       value: (a) => a.tickets,
     },
@@ -2107,6 +2131,11 @@ function AgentKpiReport({
               <SortTh {...sp('commonTaken', 'end')}>
                 {tr('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' })}
               </SortTh>
+              {/* Chats the agent STARTED, and how many the customer answered
+                  (owner, 2026-10-07) — kept out of "Not replied" above. */}
+              <SortTh {...sp('agentStarted', 'end')}>
+                {tr('agentReports.col.agentStarted', { defaultValue: 'Started by agent' })}
+              </SortTh>
               <SortTh {...sp('tickets', 'end')}>
                 {tr('agentReports.col.tickets', { defaultValue: 'Tickets' })}
               </SortTh>
@@ -2161,6 +2190,11 @@ function AgentKpiReport({
                   ) : (
                     <span className="text-muted-foreground">0</span>
                   )}
+                </Td>
+                <Td className="text-end tabular-nums text-muted-foreground">
+                  {a.agentStarted > 0
+                    ? `${a.agentStarted} · ${a.agentStartedReplied} ${tr('agentReports.replied', { defaultValue: 'replied' })}`
+                    : '0'}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
                 <Td className="text-end tabular-nums font-semibold">{fmtScore(a.csatAvg)}</Td>
@@ -2301,6 +2335,13 @@ function ConversationReport({
       value: (r) => String(t(`priority.${r.priority}`, { ns: 'common', defaultValue: r.priority })),
     },
     { header: tr('agentReports.col.agent', { defaultValue: 'Agent' }), value: (r) => r.agentName },
+    {
+      header: tr('agentReports.col.startedBy', { defaultValue: 'Started by' }),
+      value: (r) =>
+        r.startedBy === 'agent'
+          ? tr('agentReports.startedByAgent', { defaultValue: 'Agent' })
+          : tr('agentReports.startedByCustomer', { defaultValue: 'Customer' }),
+    },
     {
       header: tr('agentReports.col.orderNumber', { defaultValue: 'Order' }),
       value: (r) => r.orderId,
@@ -2619,6 +2660,7 @@ function ConversationReport({
                   <Th>{tr('agentReports.col.status', { defaultValue: 'Status' })}</Th>
                   <Th>{tr('agentReports.col.priority', { defaultValue: 'Priority' })}</Th>
                   <Th>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</Th>
+                  <Th>{tr('agentReports.col.startedBy', { defaultValue: 'Started by' })}</Th>
                   <Th>{tr('agentReports.col.orderNumber', { defaultValue: 'Order' })}</Th>
                   <Th>{tr('agentReports.col.lastMessage', { defaultValue: 'Last message' })}</Th>
                 </tr>
@@ -2646,6 +2688,11 @@ function ConversationReport({
                       <PriorityPill value={r.priority} />
                     </Td>
                     <Td className="text-muted-foreground">{r.agentName}</Td>
+                    <Td className="text-muted-foreground">
+                      {r.startedBy === 'agent'
+                        ? tr('agentReports.startedByAgent', { defaultValue: 'Agent' })
+                        : tr('agentReports.startedByCustomer', { defaultValue: 'Customer' })}
+                    </Td>
                     <Td className="font-mono tabular-nums text-muted-foreground">
                       {r.orderId || '—'}
                     </Td>

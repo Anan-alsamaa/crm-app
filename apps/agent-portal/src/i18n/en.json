@@ -11,6 +11,7 @@
   },
   "contacts": {
     "title": "Contacts",
+    "noNameYet": "No name yet",
     "total": "total",
     "matching": "matching",
     "searchPlaceholder": "Search by name, email, phone, vendor…",
@@ -333,6 +334,7 @@
   },
   "sidebar": {
     "contact": "Contact",
+    "noNameYet": "No name yet",
     "channelWidget": "widget · web",
     "email": "Email",
     "phone": "Phone",
@@ -438,6 +440,8 @@
     "fixFieldsFirst": "Check the highlighted fields",
     "backToTickets": "Back to tickets",
     "backToChat": "Back to the chat",
+    "draftRestored": "Draft restored — the ticket you started here was kept.",
+    "draftClear": "Clear draft",
     "noOrderContext": "No order attached. Pick a branch on the left so the ticket still reports against one.",
     "pickComplaintType": "Choose a ticket type — it names the ticket",
     "branchNotified": "The branch will be told.",
