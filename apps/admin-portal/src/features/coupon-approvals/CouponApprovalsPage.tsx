@@ -767,22 +767,16 @@ function Row({
             )}
           </dl>
 
-          {row.ticket?.description && (
-            // What the customer actually reported, straight off the ticket — the
-            // supervisor should not have to open the agent portal to read it.
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              <span className="font-semibold uppercase tracking-[0.12em] text-2xs">
-                {t('couponApprovals.ticketDescription', { defaultValue: 'Ticket description' })}
-              </span>{' '}
-              {row.ticket.description}
-            </p>
-          )}
-
-          {row.reason && (
-            // The agent's own words about why. A supervisor deciding without this
-            // is guessing, and guessing quickly is worse than deciding slowly.
+          {/*
+            ONE BOX, NOT TWO (owner, 2026-10-07). The ticket description used to
+            sit above the agent's reason, and since the reason is normally that
+            same description the card printed it twice. The reason box stays;
+            when an agent left it empty, the ticket's description fills it so
+            the supervisor still reads what the customer reported.
+          */}
+          {(row.reason?.trim() || row.ticket?.description?.trim()) && (
             <p className="mt-2.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-foreground/[0.04]">
-              {row.reason}
+              {row.reason?.trim() || row.ticket?.description?.trim()}
             </p>
           )}
 

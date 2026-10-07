@@ -183,7 +183,49 @@ await check('EMA-28', 'chat gateway may read quick replies', async () => {
     })}`,
     { headers: H },
   );
-  return ((await r.json())?.data ?? []).length > 0;
+  if (r.status === 200) return ((await r.json())?.data ?? []).length > 0;
+  /*
+   * THE RELEASE-CHECK ACCOUNT CANNOT READ PERMISSIONS (EMA-51, 2026-10-07):
+   * on production it is deliberately not an owner-level account. So it checks
+   * the BEHAVIOUR instead, which is the stronger proof anyway: every
+   * customer-started chat of the last day must have received the automatic
+   * welcome — sent by the gateway from the quick replies it must be able to
+   * read. An automated message is an agent message with no sender_user.
+   */
+  const since = new Date(Date.now() - 24 * 3600_000).toISOString();
+  const convs = await items('conversations', {
+    filter: JSON.stringify({
+      _and: [{ date_created: { _gte: since } }, { initiated_by: { _neq: 'agent' } }],
+    }),
+    fields: 'id',
+    limit: '20',
+    sort: '-date_created',
+  });
+  if (convs.status !== 200) return { ok: false, detail: `conversations HTTP ${convs.status}` };
+  const ids = (convs.data ?? []).map((c) => c.id);
+  if (!ids.length) return { ok: true, detail: 'no customer chat in the last day — nothing to prove' };
+  const msgs = await items('messages', {
+    filter: JSON.stringify({
+      _and: [{ conversation: { _in: ids } }, { sender_type: { _eq: 'agent' } }, { sender_user: { _null: true } }],
+    }),
+    fields: 'conversation',
+    limit: '-1',
+  });
+  const welcomed = new Set((msgs.data ?? []).map((m) => m.conversation));
+  // A chat whose customer has not written yet has had no reason to be welcomed.
+  const wrote = await items('messages', {
+    filter: JSON.stringify({ _and: [{ conversation: { _in: ids } }, { sender_type: { _eq: 'customer' } }] }),
+    fields: 'conversation',
+    limit: '-1',
+  });
+  const spoke = new Set((wrote.data ?? []).map((m) => m.conversation));
+  const missing = ids.filter((id) => spoke.has(id) && !welcomed.has(id));
+  return {
+    ok: missing.length === 0,
+    detail: missing.length
+      ? `${missing.length} customer chat(s) of the last day got no automatic welcome`
+      : `${welcomed.size} recent customer chats welcomed (permissions not readable by this account)`,
+  };
 });
 
 // ── inbox previews (EMA-48: one huge request 414'd and blanked every row) ────

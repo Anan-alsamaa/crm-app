@@ -154,6 +154,34 @@ describe('CouponApprovalsPage', () => {
     expect(screen.getAllByText(/Two items missing/).length).toBeGreaterThan(0);
   });
 
+  /* Owner, 2026-10-07: the description and the reason are usually the same
+     text, and the card printed it twice. Once, in the reason box. */
+  it('shows the reason once, not the ticket description as well', async () => {
+    const text = 'The customer ordered naan bread but received rice instead.';
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...pending, reason: text, ticket: { ...pending.ticket, description: text } }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getAllByText(text)).toHaveLength(1);
+    expect(screen.queryByText('Ticket description')).toBeNull();
+  });
+
+  it('falls back to the ticket description when the agent gave no reason', async () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [
+        { ...pending, reason: null, ticket: { ...pending.ticket, description: 'From the ticket' } },
+      ],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText('From the ticket')).toBeInTheDocument();
+  });
+
   /* EMA-57 (operations, 2026-10-07): where the complaint came in, from the
      ticket the agent filed. */
   it('shows the ticket source the agent set on the ticket', async () => {
