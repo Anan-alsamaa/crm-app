@@ -506,14 +506,28 @@ await check(
     );
     const token = (adm.YIJI_UPDATE_TOKEN ?? '').replace(/^Bearer\s+/i, '');
     if (!token) return 'skip';
+    /* Yiji's list fails a whole page when ONE coupon in it cannot be
+       serialised (HTTP 500), so such a page is re-read position by position;
+       only a position that still fails is skipped, and it is counted. */
+    const list = (n, size) =>
+      fetch(`https://admin.yiji-app.com/api/Coupon/GetAllCoupons?PageNumber=${n}&PageSize=${size}`, {
+        headers: { authorization: `Bearer ${token}` },
+      });
     const yiji = [];
-    for (const page of [1, 2]) {
-      const r = await fetch(
-        `https://admin.yiji-app.com/api/Coupon/GetAllCoupons?PageNumber=${page}&PageSize=50`,
-        { headers: { authorization: `Bearer ${token}` } },
-      );
-      if (r.status !== 200) return { ok: false, detail: `Yiji coupon list HTTP ${r.status} (admin token expired?)` };
-      yiji.push(...((await r.json()) ?? []));
+    let unreadable = 0;
+    for (const page of [1, 2, 3, 4]) {
+      const r = await list(page, 25);
+      if (r.status === 401 || r.status === 403)
+        return { ok: false, detail: `Yiji coupon list HTTP ${r.status} — the admin token in .env.yiji-admin expired` };
+      if (r.status === 200) {
+        yiji.push(...((await r.json()) ?? []));
+        continue;
+      }
+      for (let i = 1; i <= 25; i++) {
+        const one = await list((page - 1) * 25 + i, 1);
+        if (one.status === 200) yiji.push(...((await one.json()) ?? []));
+        else unreadable += 1;
+      }
     }
     const codes = yiji.map((c) => c.code).filter(Boolean);
     const crm = await items('coupon_approvals', {
@@ -530,7 +544,7 @@ await check(
       ok: wrong.length === 0,
       detail: wrong.length
         ? wrong.map((c) => `${c.code} (#${c.id}) Yiji type ${c.type}, agent chose ${want[c.code]}`).join('; ')
-        : `${Object.keys(want).length} CRM coupons among Yiji's newest 100, all match`,
+        : `${Object.keys(want).length} CRM coupons among Yiji's newest 100, all match${unreadable ? ` (${unreadable} list positions Yiji could not return)` : ''}`,
     };
   },
 );

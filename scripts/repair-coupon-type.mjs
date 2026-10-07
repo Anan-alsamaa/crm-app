@@ -87,7 +87,7 @@ const crmRows = (
             { yiji_pushed_at: { _nnull: true } },
           ],
         }),
-        fields: 'coupon_code,coupon_type,status,yiji_pushed_at',
+        fields: 'coupon_code,coupon_type,status,yiji_pushed_at,yiji_coupon_id,reason',
         limit: '-1',
       })}`,
       { headers: { authorization: `Bearer ${crmToken}` } },
@@ -129,37 +129,78 @@ if (process.argv.includes('--cached') && fs.existsSync(CACHE)) {
   for (const [k, v] of JSON.parse(fs.readFileSync(CACHE, 'utf8'))) yijiByCode.set(k, v);
 } else {
   const wanted = new Set(crmRows.map((r) => r.coupon_code));
+  /*
+   * KNOWN IDS FIRST. The list is slow and fails on some pages, so every coupon
+   * whose Yiji id is already known — `yiji_coupon_id` on the CRM row, or the
+   * earlier by-customer scan in $TEMP/coupon-scan.json — is read by id and
+   * kept only if its code matches EXACTLY. The list is then walked only until
+   * the rest are found.
+   */
+  const knownIds = new Map();
+  for (const r of crmRows) if (r.yiji_coupon_id) knownIds.set(r.coupon_code, r.yiji_coupon_id);
+  const scanFile = path.join(process.env.TEMP, 'coupon-scan.json');
+  if (fs.existsSync(scanFile)) {
+    for (const x of JSON.parse(fs.readFileSync(scanFile, 'utf8'))) {
+      if (x.code && x.couponId && !knownIds.has(x.code)) knownIds.set(x.code, x.couponId);
+    }
+  }
+  const ids = [...knownIds];
+  for (let i = 0; i < ids.length; i += 8) {
+    await Promise.all(
+      ids.slice(i, i + 8).map(async ([code, id]) => {
+        try {
+          const c = await yget(`${A}/api/Coupon/GetCoupon/id/${id}`);
+          if (c?.code === code) yijiByCode.set(code, [c]);
+        } catch {
+          /* left for the list walk */
+        }
+      }),
+    );
+  }
+  console.log(`found by known id: ${yijiByCode.size} of ${wanted.size}`);
   /* Small pages, and a page Yiji fails to serialise (HTTP 500 — one bad
      coupon in it) is re-read one coupon at a time so only that one is lost. */
   const PAGE = 50;
   const listPage = (n, size) =>
     yget(`${A}/api/Coupon/GetAllCoupons?${new URLSearchParams({ PageNumber: String(n), PageSize: String(size) })}`);
   const unreadable = [];
-  for (let page = 1; page <= 400; page++) {
-    let list;
+  const readPage = async (page) => {
     try {
-      list = await listPage(page, PAGE);
+      return await listPage(page, PAGE);
     } catch {
-      list = [];
-      for (let i = 1; i <= PAGE; i++) {
-        const n = (page - 1) * PAGE + i;
-        try {
-          list.push(...(await listPage(n, 1)));
-        } catch {
-          unreadable.push(n);
-        }
+      // One bad coupon breaks the page: read its 50 positions one by one.
+      const one = await Promise.all(
+        Array.from({ length: PAGE }, (_, i) => (page - 1) * PAGE + i + 1).map(async (n) => {
+          try {
+            return await listPage(n, 1);
+          } catch {
+            unreadable.push(n);
+            return [];
+          }
+        }),
+      );
+      return one.flat();
+    }
+  };
+  const BATCH = 4;
+  walk: for (let first = 1; first <= 400; first += BATCH) {
+    const pages = await Promise.all(
+      Array.from({ length: BATCH }, (_, i) => readPage(first + i)),
+    );
+    for (const list of pages) {
+      if (!Array.isArray(list) || list.length === 0) break walk;
+      for (const c of list) {
+        if (!c?.code || (yijiByCode.get(c.code) ?? []).some((h) => h.id === c.id)) continue;
+        const hits = yijiByCode.get(c.code) ?? [];
+        hits.push(c);
+        yijiByCode.set(c.code, hits);
       }
     }
-    if (!Array.isArray(list) || list.length === 0) break;
-    for (const c of list) {
-      if (!c?.code) continue;
-      const hits = yijiByCode.get(c.code) ?? [];
-      hits.push(c);
-      yijiByCode.set(c.code, hits);
-    }
     const found = [...wanted].filter((code) => yijiByCode.has(code)).length;
-    const minId = Math.min(...list.map((c) => c.id));
-    if (found === wanted.size || minId < 69000) break;
+    const minId = Math.min(...pages.flat().map((c) => c.id));
+    console.log(`list read to Yiji id ${minId}: ${found} of ${wanted.size} CRM codes found`);
+    // Not by id: Yiji lists older ids among new ones. 120 pages = 6000 coupons.
+    if (found === wanted.size || first + BATCH > 120) break;
   }
   if (unreadable.length) console.log(`Yiji could not return ${unreadable.length} list position(s): ${unreadable.join(',')}`);
   fs.writeFileSync(CACHE, JSON.stringify([...yijiByCode]));
@@ -190,8 +231,16 @@ const report = {
   notCrm: [],
   skippedGeneral: [],
 };
-/* Issued by the CRM: Yiji's description starts "CRM - " (owner, 2026-10-07). */
-const isCrmCoupon = (c) => /^\s*crm\s*-/i.test(String(c?.compensationReason ?? ''));
+/*
+ * Issued by the CRM (owner, 2026-10-07): "verify using the coupon code,
+ * description would be the 2nd confirmation." The code is matched EXACTLY
+ * before this is asked; the description must then confirm it — either it
+ * starts "CRM - ", or it is word for word the reason the agent wrote.
+ */
+const isCrmCoupon = (c, row) => {
+  const desc = String(c?.compensationReason ?? '').trim();
+  return /^crm\s*-/i.test(desc) || (!!desc && desc === String(row?.reason ?? '').trim());
+};
 let fixed = 0;
 let failed = 0;
 for (const row of crmRows) {
@@ -230,7 +279,7 @@ for (const row of crmRows) {
       report.skippedGeneral.push(`${row.coupon_code} (#${hit.id}) Yiji ${NAME[hit.type]}, CRM ${NAME[want]}`);
       continue;
     }
-    if (!isCrmCoupon(hit)) {
+    if (!isCrmCoupon(hit, row)) {
       report.notCrm.push(`${row.coupon_code} (#${hit.id}) "${String(hit.compensationReason ?? '').slice(0, 40)}"`);
       continue;
     }
@@ -238,7 +287,7 @@ for (const row of crmRows) {
     try {
       const coupon = await yget(`${A}/api/Coupon/GetCoupon/id/${hit.id}`);
       // Re-checked on the fresh read, not the list: the fences hold at write time.
-      if (coupon.code !== row.coupon_code || coupon.type !== 0 || !isCrmCoupon(coupon)) {
+      if (coupon.code !== row.coupon_code || coupon.type !== 0 || !isCrmCoupon(coupon, row)) {
         throw new Error(`fresh read no longer matches (code ${coupon.code}, type ${coupon.type})`);
       }
       const r = await fetch(`${A}/api/Coupon/UpdateCoupon`, {
@@ -276,7 +325,7 @@ if (report.noChoice.length) console.log(`no coupon type in the CRM: ${report.noC
 if (report.skippedGeneral.length)
   console.log(`NOT changed — not a Private->General mismatch: ${report.skippedGeneral.join('; ')}`);
 if (report.notCrm.length)
-  console.log(`NOT changed — description has no "CRM -" prefix: ${report.notCrm.join('; ')}`);
+  console.log(`NOT changed — description confirms neither "CRM -" nor the CRM reason: ${report.notCrm.join('; ')}`);
 console.log(WRITE || ONE ? `\n${fixed} fixed, ${failed} failed` : '\ndry run — nothing changed');
 fs.writeFileSync(
   path.join(process.env.TEMP, 'coupon-type-report.json'),
