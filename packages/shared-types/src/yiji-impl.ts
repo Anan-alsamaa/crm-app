@@ -787,6 +787,36 @@ export class HttpYijiClient implements YijiClient {
    * ordinary case — roughly a third of this queue — and must be reported
    * honestly, never resolved to "the closest customer".
    */
+  /**
+   * THE GRANT THIS CUSTOMER ALREADY HOLDS FOR A COUPON CODE, or null.
+   *
+   * Owner, 2026-10-07: Yiji answered OPS-54R27RS7 with "Object reference not
+   * set to an instance of an object" — and had in fact created the coupon AND
+   * given it to the customer before crashing. The CRM recorded a refusal, and
+   * "Try again" would have sent it twice. So a refusal is believed only after
+   * the customer's own coupons have been read back and this code is not there.
+   *
+   * Throws on an outage (the caller must not decide on a guess); null means
+   * the customer really does not hold it.
+   */
+  async findUserCoupon(
+    userId: string,
+    code: string,
+  ): Promise<{ couponUserId: string; couponId: number | null } | null> {
+    if (!userId || !code) return null;
+    const rows = await this.adminFetch<Array<{
+      id?: number | string;
+      couponId?: number | null;
+      couponCode?: string | null;
+    }> | null>(
+      `/api/CouponUser/GetCouponByUser/${encodeURIComponent(userId)}?PageNumber=1&PageSize=500`,
+    );
+    const hit = (rows ?? []).find((r) => r?.couponCode === code);
+    return hit?.id != null
+      ? { couponUserId: String(hit.id), couponId: hit.couponId ?? null }
+      : null;
+  }
+
   async findCustomerIdByPhone(phone: string): Promise<string | null> {
     /* The national number as Yiji indexes it: digits only, no country code and
        no leading zero. `+966 50 123 4567`, `0501234567` and `501234567` all
@@ -1577,6 +1607,26 @@ export function createYijiCustomerFinder(env: YijiClientEnv = {}): YijiCustomerF
     adminPassword: env.adminPassword,
   });
   return (phone) => client.findCustomerIdByPhone(phone);
+}
+
+/** See `HttpYijiClient.findUserCoupon`. */
+export type YijiUserCouponFinder = (
+  userId: string,
+  code: string,
+) => Promise<{ couponUserId: string; couponId: number | null } | null>;
+
+export function createYijiUserCouponFinder(env: YijiClientEnv = {}): YijiUserCouponFinder | null {
+  if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
+    return null;
+  }
+  const client = new HttpYijiClient({
+    baseUrl: env.apiUrl || env.adminApiUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+  });
+  return (userId, code) => client.findUserCoupon(userId, code);
 }
 
 export function createYijiUserReader(env: YijiClientEnv = {}): YijiUserReader | null {

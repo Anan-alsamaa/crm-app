@@ -4,6 +4,7 @@ import {
   QUEUES,
   createYijiAdminPoster,
   createYijiCustomerFinder,
+  createYijiUserCouponFinder,
   createYijiOrderReader,
   createYijiLatestBrandReader,
   type QueueName,
@@ -161,6 +162,18 @@ const yijiLatestBrandReader = createYijiLatestBrandReader({
  * simply stays `approved` exactly as it did before this path existed.
  */
 const yijiCustomerFinder = createYijiCustomerFinder({
+  apiUrl: process.env.YIJI_API_URL ?? '',
+  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+});
+
+/*
+ * Reads back whether a customer HOLDS a coupon code — consulted before any
+ * refusal is recorded, because Yiji has answered with an error after granting
+ * the coupon (OPS-54R27RS7, 2026-10-07).
+ */
+const yijiUserCouponFinder = createYijiUserCouponFinder({
   apiUrl: process.env.YIJI_API_URL ?? '',
   adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
   adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
@@ -337,6 +350,7 @@ export const processors: Record<QueueName, Processor> = {
          delivery switch as the poster: a deployment with coupon delivery off
          must not start resolving customers either. */
       findCustomer: (couponDeliveryEnabled ? yijiCustomerFinder : null) ?? undefined,
+      findUserCoupon: (couponDeliveryEnabled ? yijiUserCouponFinder : null) ?? undefined,
       // Yiji's API is multi-tenant and routes on this header. Defaulted to the
       // tenant the captured request used rather than left blank: a missing
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind

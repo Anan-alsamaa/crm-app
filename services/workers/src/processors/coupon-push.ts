@@ -6,6 +6,7 @@ import type {
   CouponPushJob,
   YijiAdminPoster,
   YijiCustomerFinder,
+  YijiUserCouponFinder,
   YijiOrderReader,
 } from '@yiji/shared-types';
 import {
@@ -228,6 +229,13 @@ export interface CouponPushDeps {
    * needs no lookup.
    */
   findCustomer?: YijiCustomerFinder;
+  /**
+   * Reads back whether a customer HOLDS a coupon code on Yiji (owner,
+   * 2026-10-07). Consulted before any refusal is recorded: Yiji has answered
+   * an error AFTER granting the coupon. Absent = refusals are taken at their
+   * word, as before.
+   */
+  findUserCoupon?: YijiUserCouponFinder;
   /**
    * Yiji's `tenantid` header. Their API is multi-tenant and mis-routes a call
    * without it; the captured request sends `1`.
@@ -1663,6 +1671,43 @@ export async function processCouponPushJob(
   }
 
   let body: YijiCouponResponse;
+
+  /*
+   * A REFUSAL IS BELIEVED ONLY AFTER A READ-BACK (owner, 2026-10-07).
+   *
+   * Yiji answered OPS-54R27RS7 with "Object reference not set to an instance
+   * of an object" after it had already created the coupon and given it to the
+   * customer. Recorded as refused, the coupon looked owed, and "Try again"
+   * would have sent it twice. So: who is the customer (the order's user, or
+   * the one found by phone), and do they now HOLD this code? If they do, it is
+   * delivered — with Yiji's own grant id as the receipt. A read that fails
+   * changes nothing: the refusal is recorded exactly as before.
+   */
+  const recordIfActuallyHeld = async (detail: string): Promise<boolean> => {
+    const holder = compensationUserId ?? order?.userId ?? null;
+    if (!deps.findUserCoupon || !holder || !row.coupon_code) return false;
+    let held: Awaited<ReturnType<YijiUserCouponFinder>> = null;
+    try {
+      held = await deps.findUserCoupon(holder, row.coupon_code);
+    } catch {
+      return false;
+    }
+    if (!held) return false;
+    await directus.request(
+      updateItem('coupon_approvals' as never, id, {
+        status: 'assigned',
+        yiji_coupon_user_id: held.couponUserId,
+        yiji_pushed_at: new Date().toISOString(),
+        yiji_push_error: null,
+      } as never),
+    );
+    logger.warn(
+      { id, code: row.coupon_code, orderId, couponUserId: held.couponUserId, yijiSaid: detail },
+      'yiji answered with an error but the customer HOLDS the coupon — recorded as delivered',
+    );
+    return true;
+  };
+
   try {
     const headers = {
       // Yiji's API is multi-tenant and routes on this.
@@ -1759,6 +1804,8 @@ export async function processCouponPushJob(
      */
     if (isYijiRefused(err)) {
       const detail = describeRefusal(err.body);
+      // Believed only once the customer's coupons say it did not arrive.
+      if (await recordIfActuallyHeld(detail)) return 'delivered';
       await recordFailure(directus, id, detail);
       logger.warn(
         { id, code: row.coupon_code, orderId, detail },
@@ -1801,6 +1848,7 @@ export async function processCouponPushJob(
    */
   const verdict = readCouponUserId(body);
   if (!verdict.ok) {
+    if (await recordIfActuallyHeld(verdict.error ?? 'yiji refused the coupon')) return 'delivered';
     /*
      * A refusal can also arrive as a 200 — their API is not consistent about
      * which it uses, so both roads lead here. Recorded and not retried for the
