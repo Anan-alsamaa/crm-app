@@ -83,8 +83,7 @@ const send = (user: ReturnType<typeof userEvent.setup>) =>
 
 /* A combobox BUTTON, not a labelled input — `SelectMenu` names itself with
    `aria-label`, so that is what this queries. */
-const withholdSelect = () =>
-  screen.getByRole('combobox', { name: /send to the customer on the yiji app/i });
+const withholdSelect = () => screen.getByRole('combobox', { name: /assign the coupon on yiji/i });
 
 beforeEach(() => {
   mutateAsync.mockReset();
@@ -111,7 +110,7 @@ describe('withholding a coupon from the Yiji app', () => {
   it('offers the choice, opening on “send it”', () => {
     renderDialog();
     expect(withholdSelect()).toBeInTheDocument();
-    expect(screen.getByText(/yes — send it on yiji/i)).toBeInTheDocument();
+    expect(withholdSelect()).toHaveTextContent(/^yes$/i);
   });
 
   /* THE REPORTED CASE: a refund customer. */
@@ -120,7 +119,7 @@ describe('withholding a coupon from the Yiji app', () => {
     renderDialog();
     await fillRequired(user);
     await user.click(withholdSelect());
-    await user.click(await screen.findByRole('button', { name: /do not send it on yiji/i }));
+    await user.click(await screen.findByRole('button', { name: /don.t assign to customer/i }));
     await send(user);
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(mutateAsync.mock.calls[0]![0]).toMatchObject({ delivery_excluded: true });
@@ -133,7 +132,7 @@ describe('withholding a coupon from the Yiji app', () => {
     renderDialog();
     await fillRequired(user);
     await user.click(withholdSelect());
-    await user.click(await screen.findByRole('button', { name: /do not send it on yiji/i }));
+    await user.click(await screen.findByRole('button', { name: /don.t assign to customer/i }));
     await send(user);
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     const sent = mutateAsync.mock.calls[0]![0];
@@ -153,7 +152,7 @@ describe('withholding a coupon from the Yiji app', () => {
     renderDialog();
     expect(screen.queryByLabelText(/why is it not being sent/i)).not.toBeInTheDocument();
     await user.click(withholdSelect());
-    await user.click(await screen.findByRole('button', { name: /do not send it on yiji/i }));
+    await user.click(await screen.findByRole('button', { name: /don.t assign to customer/i }));
     expect(screen.getByLabelText(/why is it not being sent/i)).toBeInTheDocument();
   });
 
@@ -162,7 +161,7 @@ describe('withholding a coupon from the Yiji app', () => {
     renderDialog();
     await fillRequired(user);
     await user.click(withholdSelect());
-    await user.click(await screen.findByRole('button', { name: /do not send it on yiji/i }));
+    await user.click(await screen.findByRole('button', { name: /don.t assign to customer/i }));
     await user.type(
       screen.getByLabelText(/why is it not being sent/i),
       'Customer insisted on a refund',
@@ -182,7 +181,7 @@ describe('withholding a coupon from the Yiji app', () => {
     renderDialog();
     await fillRequired(user);
     await user.click(withholdSelect());
-    await user.click(await screen.findByRole('button', { name: /do not send it on yiji/i }));
+    await user.click(await screen.findByRole('button', { name: /don.t assign to customer/i }));
     await send(user);
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(mutateAsync.mock.calls[0]![0]).toMatchObject({
@@ -201,11 +200,11 @@ describe('withholding a coupon from the Yiji app', () => {
     renderDialog();
     await fillRequired(user);
     await user.click(withholdSelect());
-    await user.click(await screen.findByRole('button', { name: /do not send it on yiji/i }));
+    await user.click(await screen.findByRole('button', { name: /don.t assign to customer/i }));
     await user.type(screen.getByLabelText(/why is it not being sent/i), 'refund');
     // Changed their mind.
     await user.click(withholdSelect());
-    await user.click(await screen.findByRole('button', { name: /yes — send it on yiji/i }));
+    await user.click(await screen.findByRole('button', { name: /^yes$/i }));
     await send(user);
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(mutateAsync.mock.calls[0]![0]).toMatchObject({

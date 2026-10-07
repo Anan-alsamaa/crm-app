@@ -99,7 +99,7 @@ async function expandFirst(user: ReturnType<typeof userEvent.setup>) {
 }
 
 const withholdBox = () =>
-  screen.getByRole('checkbox', { name: /do not send this to the customer on the yiji app/i });
+  screen.getByRole('checkbox', { name: /don.t assign the coupon to the customer on yiji/i });
 
 beforeEach(() => {
   saveMutate.mockReset();
@@ -191,7 +191,7 @@ describe('supervisor override on Yiji delivery', () => {
     await expandFirst(user);
     expect(
       screen.queryByRole('checkbox', {
-        name: /do not send this to the customer on the yiji app/i,
+        name: /don.t assign the coupon to the customer on yiji/i,
       }),
     ).not.toBeInTheDocument();
   });
@@ -340,7 +340,7 @@ describe('withheld coupon: created on Yiji, not sent to the customer', () => {
     await expandFirst(user);
     expect(
       screen.queryByRole('checkbox', {
-        name: /do not send this to the customer on the yiji app/i,
+        name: /don.t assign the coupon to the customer on yiji/i,
       }),
     ).not.toBeInTheDocument();
   });

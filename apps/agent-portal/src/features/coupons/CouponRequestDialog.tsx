@@ -960,30 +960,30 @@ export function CouponRequestDialog({
         <div className="mt-4">
           <FormField
             label={t('coupons.yijiDelivery', {
-              defaultValue: 'Send to the customer on the Yiji app',
+              defaultValue: 'Assign the coupon on Yiji',
             })}
             hint={t('coupons.yijiDeliveryHint', {
               defaultValue:
-                'Choose “Do not send” for a customer who wants a refund instead. The coupon is still recorded and still needs approval — it simply never reaches the app.',
+                'Choose “No” for a customer who wants a refund instead. The coupon still needs approval and is still created on Yiji — it is just not given to the customer.',
             })}
           >
             <SelectMenu
               /* Its own accessible name: `SelectMenu` renders a combobox BUTTON,
                  which a surrounding <label> does not name. */
               aria-label={t('coupons.yijiDelivery', {
-                defaultValue: 'Send to the customer on the Yiji app',
+                defaultValue: 'Assign the coupon on Yiji',
               })}
               value={draft.delivery_excluded ? 'no' : 'yes'}
               onChange={(v) => set('delivery_excluded', v === 'no')}
               options={[
                 {
                   value: 'yes',
-                  label: t('coupons.yijiDeliverYes', { defaultValue: 'Yes — send it on Yiji' }),
+                  label: t('coupons.yijiDeliverYes', { defaultValue: 'Yes' }),
                 },
                 {
                   value: 'no',
                   label: t('coupons.yijiDeliverNo', {
-                    defaultValue: 'No — do not send it on Yiji',
+                    defaultValue: 'No, don’t assign to customer',
                   }),
                 },
               ]}

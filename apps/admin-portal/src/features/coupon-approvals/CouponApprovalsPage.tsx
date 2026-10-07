@@ -816,13 +816,13 @@ function Row({
                 <span className="min-w-0">
                   <span className="block text-xs font-medium text-foreground">
                     {t('couponApprovals.withhold', {
-                      defaultValue: 'Do not send this to the customer on the Yiji app',
+                      defaultValue: 'Don’t assign the coupon to the customer on Yiji',
                     })}
                   </span>
                   <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
                     {t('couponApprovals.withholdHint', {
                       defaultValue:
-                        'For a customer who wants a refund instead. The coupon is still approved and recorded — it simply never reaches the app.',
+                        'For a customer who wants a refund instead. The coupon is still approved and created on Yiji — it is just not given to the customer.',
                     })}
                   </span>
                 </span>
