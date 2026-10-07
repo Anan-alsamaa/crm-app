@@ -528,8 +528,14 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # Deploy one at a time: directus first, since the others depend on it.
-      max-parallel: 1
+      # DIRECTUS FIRST, THE REST TOGETHER (owner, 2026-10-07).
+      #
+      # This was `max-parallel: 1`: all four one after another, ~12 of every
+      # deploy's ~16 minutes, because each waits for its rollout to settle.
+      # Only Directus has to lead — the gateway, AI gateway and workers talk to
+      # it, not to each other — so they now start together and each one's
+      # first step waits for Directus to be live on THIS run's rollout.
+      max-parallel: 4
       matrix:
         service: [directus, socket-gateway, ai-gateway, workers]
     steps:
@@ -540,6 +546,30 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
           aws-region: ${{ env.AWS_REGION }}
+
+      # The ordering `max-parallel: 1` used to give: nothing but Directus
+      # rolls until Directus has finished rolling out in THIS run. Judged by
+      # the rollout's start time, not the image tag — staging always deploys
+      # `:main`, so "directus runs :main" is true before it has moved at all.
+      # Every leg starts together after the approval, so Directus's new
+      # deployment is created after this step begins (a minute of slack).
+      - name: Wait for Directus to go live first
+        if: matrix.service != 'directus'
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+        run: |
+          SINCE=$(( $(date +%s) - 60 ))
+          for i in $(seq 1 90); do
+            read -r CREATED STATE < <(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services directus --query 'services[0].deployments[?status==`PRIMARY`]|[0].[createdAt,rolloutState]' --output text)
+            CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null || echo 0)
+            if [ "$CREATED_S" -ge "$SINCE" ] && [ "$STATE" = "COMPLETED" ]; then
+              echo "::notice::directus live (rollout started $CREATED) — deploying ${{ matrix.service }}"
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "::error::directus did not finish a new rollout within 30 minutes — not deploying ${{ matrix.service }}"
+          exit 1
 
       # DERIVED FROM WHAT IS RUNNING, not from the repo template.
       #
