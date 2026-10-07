@@ -643,6 +643,7 @@
     "importPartialLines": "تم استيراد {{created}}؛ ورُفض {{failed}} سطرًا — {{first}}. تم تنزيل القائمة الكاملة في الملف import-errors.csv."
   },
   "couponApprovals": {
+    "description": "الوصف",
     "ticketSource": "مصدر التذكرة",
     "sourceLateOrder": "الطلبات المتأخرة",
     "agent": "طلبها",

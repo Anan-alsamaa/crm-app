@@ -284,6 +284,18 @@ describe('CouponApprovalsPage', () => {
     ).toBeInTheDocument();
   });
 
+  /* Owner, 2026-10-07: "Why" read oddly for what is the description, and it
+     was squeezed into one column. */
+  it('edits the description under that name, on a full row', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    const field = screen.getByLabelText('Description');
+    expect(field).toHaveValue(pending.reason);
+    expect(screen.queryByLabelText('Why')).toBeNull();
+    expect(field.closest('[class~="lg:col-span-3"]')).not.toBeNull();
+  });
+
   it('will not save amended terms without a reason for the change', async () => {
     const user = userEvent.setup();
     renderPage();

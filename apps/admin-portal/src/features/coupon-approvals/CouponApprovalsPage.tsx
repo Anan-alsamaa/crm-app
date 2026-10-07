@@ -1165,11 +1165,16 @@ function Row({
                         value={edits.item_name}
                         onChange={(v) => setEdit('item_name', v)}
                       />
-                      <EditField
-                        label={t('coupons.why', { defaultValue: 'Why' })}
-                        value={edits.reason}
-                        onChange={(v) => setEdit('reason', v)}
-                      />
+                      {/* "Description", on its own full row (owner, 2026-10-07):
+                          it is the long text the card shows before Edit, and
+                          squeezed into one column it could not be read. */}
+                      <div className="sm:col-span-2 lg:col-span-3">
+                        <EditField
+                          label={t('couponApprovals.description', { defaultValue: 'Description' })}
+                          value={edits.reason}
+                          onChange={(v) => setEdit('reason', v)}
+                        />
+                      </div>
                       {/* WHY the terms were changed, and it is required.
                           
                           Changing what an agent asked for without saying why
