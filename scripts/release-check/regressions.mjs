@@ -164,6 +164,10 @@ const FIELD_QUERIES = [
 for (const [id, col, fields] of FIELD_QUERIES)
   await check(id, `${col}: every field the code reads exists`, async () => {
     const r = await items(col, { fields, limit: '1' });
+    /* The prod check account cannot read the AI log (v1.41.0 failed on this
+       alone); the AI service's own grant is checked separately below. */
+    if (col === 'ai_calls' && r.status === 403)
+      return { ok: true, detail: 'check account may not read ai_calls; table verified by the grant check' };
     return {
       ok: r.status === 200,
       detail: r.status === 200 ? '' : `HTTP ${r.status} ${r.error ?? ''}`,
@@ -699,12 +703,19 @@ await check(
 await check('REC-SOURCE', 'every new message records where its words came from', async () => {
   const since = new Date(Date.now() - 15 * 60_000).toISOString();
   const r = await items('messages', {
-    fields: 'id,source,sender_type',
+    fields: 'id,source,sender_type,date_created',
     filter: JSON.stringify({ date_created: { _gte: since } }),
+    sort: 'date_created',
     limit: '200',
   });
   if (r.status !== 200) return { ok: false, detail: `HTTP ${r.status} ${r.error ?? ''}` };
-  const rows = r.data ?? [];
+  /* Judged from the first labelled message on: during a rollout the OLD
+     gateway tasks keep serving connected sockets for a minute or two and
+     write unlabelled rows (v1.41.0: 16 of them). None labelled at all is
+     still a failure. */
+  const all = r.data ?? [];
+  const firstLabelled = all.findIndex((m) => m.source);
+  const rows = firstLabelled > 0 ? all.slice(firstLabelled) : all;
   const missing = rows.filter((m) => !m.source);
   if (!rows.length) return { ok: true, detail: 'no messages in the last 15 min to judge' };
   return {
