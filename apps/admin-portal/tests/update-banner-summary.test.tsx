@@ -175,4 +175,46 @@ describe('Update now strip — what the release changes', () => {
     await waitFor(() => expect(container.firstChild).toBeNull());
     expect(producer.listReleases).not.toHaveBeenCalled();
   });
+
+  /*
+   * EVERYTHING ONE CLICK RELEASES (owner, 2026-10-07). One press released
+   * v1.38.8 AND v1.39.0 together while the strip named only the newest.
+   */
+  it('lists every version waiting when a newer build was parked on an older one', async () => {
+    producer.listReleases.mockResolvedValue({
+      ok: true,
+      pending: [
+        build({
+          version: 'v1.39.0',
+          summary: 'Every permission on the Roles page',
+          changes: [
+            { version: 'v1.38.8', summary: 'Welcome greeting restored' },
+            { version: 'v1.39.0', summary: 'Every permission on the Roles page' },
+          ],
+        }),
+      ],
+      live: null,
+    });
+    render(<UpdateBanner />, { wrapper: wrap() });
+    expect(await screen.findByText(/This releases 2 updates together/)).toBeTruthy();
+    expect(screen.getByText('v1.38.8')).toBeTruthy();
+    expect(screen.getByText(/Welcome greeting restored/)).toBeTruthy();
+    expect(screen.getByText('v1.39.0')).toBeTruthy();
+  });
+
+  it('lists the versions of different surfaces waiting together', async () => {
+    producer.listReleases.mockResolvedValue({
+      ok: true,
+      pending: [
+        build({ app: 'agent', version: 'v1.39.0', summary: 'Roles' }),
+        build({ app: 'chat widget', version: 'v1.38.8', summary: 'Greeting' }),
+      ],
+      live: null,
+    });
+    render(<UpdateBanner />, { wrapper: wrap() });
+    expect(await screen.findByText(/This releases 2 updates together/)).toBeTruthy();
+    const items = screen.getAllByRole('listitem').map((li) => li.textContent);
+    expect(items[0]).toMatch(/^v1\.38\.8/);
+    expect(items[1]).toMatch(/^v1\.39\.0/);
+  });
 });

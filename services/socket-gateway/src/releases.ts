@@ -255,6 +255,8 @@ export async function readParkedBuild(
   publishedAt?: string;
   app?: string;
   summary?: string;
+  /** Every version still waiting, oldest first (owner, 2026-10-07). */
+  changes?: Array<{ version: string; summary: string }>;
 } | null> {
   const host = `${target.bucket}.s3.${target.region}.amazonaws.com`;
   const path = '/pending/index.html';
@@ -317,6 +319,21 @@ export async function readParkedBuild(
             /* Absent on a staging build, where the ref is a branch and there
                is no tag annotation to read. The banner falls back. */
             ...(meta.summary ? { summary: meta.summary } : {}),
+            /* EVERY version waiting, not only the newest (owner, 2026-10-07):
+               one Update now once released two versions while the strip named
+               one. CI carries the earlier, unreleased ones forward. */
+            ...(Array.isArray((meta as { changes?: unknown }).changes)
+              ? {
+                  changes: ((meta as { changes: unknown[] }).changes ?? [])
+                    .filter(
+                      (c): c is { version: string; summary: string } =>
+                        !!c &&
+                        typeof (c as { version?: unknown }).version === 'string' &&
+                        typeof (c as { summary?: unknown }).summary === 'string',
+                    )
+                    .map((c) => ({ version: c.version, summary: c.summary })),
+                }
+              : {}),
           };
         }
       }

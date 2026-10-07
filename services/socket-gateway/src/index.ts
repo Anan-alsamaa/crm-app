@@ -1442,6 +1442,8 @@ async function main(): Promise<void> {
            no annotation to read) and on anything published before this
            existed — the banner falls back to naming the surfaces. */
         ...(parked.summary ? { summary: parked.summary } : {}),
+        // Every version this click would release (owner, 2026-10-07).
+        ...(parked.changes?.length ? { changes: parked.changes } : {}),
       });
     }
     return reply.send({ ok: true, pending: found, live });

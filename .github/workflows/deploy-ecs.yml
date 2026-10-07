@@ -331,11 +331,27 @@ jobs:
               # change exists to add. jq emits correct JSON for any input, which
               # is what it is for. Already used elsewhere in CI, so it is
               # present on the runner.
+              # EVERY VERSION STILL WAITING, not only this one (owner, 2026-10-07).
+              #
+              # One "Update now" released v1.38.8 AND v1.39.0 together: the newer
+              # build had been parked on top of the one the owner meant to release,
+              # and the strip named only the newest. So when the build already
+              # parked here is NOT what is live, its changes are carried into this
+              # file and the strip lists them all before anybody clicks.
+              PREV=$(aws s3 cp "s3://${BUCKET}/pending/release.json" - 2>/dev/null || echo '{}')
+              LIVE=$(aws s3 cp "s3://${BUCKET}/index.html" - 2>/dev/null | grep -o "/assets/index-[A-Za-z0-9_-]*[.]js" | head -1)
+              PREV_BUNDLE=$(echo "$PREV" | jq -r '.bundle // empty' 2>/dev/null || true)
+              if [ -n "$PREV_BUNDLE" ] && [ "$PREV_BUNDLE" != "$LIVE" ]; then
+                CARRY=$(echo "$PREV" | jq -c '(.changes // [{version:(.version // ""), summary:(.summary // "")}]) | map(select(.version != ""))' 2>/dev/null || echo '[]')
+              else
+                CARRY='[]'
+              fi
               jq -n --arg version "$RELEASE_VERSION" \
                     --arg commit "$(echo "$GITHUB_SHA" | cut -c1-7)" \
                     --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                     --arg app "$app" --arg bundle "$BUNDLE" --arg summary "$SUMMARY" \
-                    '{version:$version,commit:$commit,publishedAt:$publishedAt,app:$app,bundle:$bundle,summary:$summary}' \
+                    --argjson carry "$CARRY" \
+                    '{version:$version,commit:$commit,publishedAt:$publishedAt,app:$app,bundle:$bundle,summary:$summary,changes:(([{version:$version,summary:$summary}] + $carry) | unique_by(.version) | sort_by(.version | ltrimstr("v") | split(".") | map(tonumber? // 0)))}' \
                 > /tmp/release.json
               aws s3 cp /tmp/release.json "s3://${BUCKET}/pending/release.json" \
                 --cache-control "no-cache" --content-type "application/json"
@@ -454,11 +470,27 @@ jobs:
               WSUMMARY=""
             fi
             # jq, for the same reason as the portals above.
+            # EVERY VERSION STILL WAITING, not only this one (owner, 2026-10-07).
+            #
+            # One "Update now" released v1.38.8 AND v1.39.0 together: the newer
+            # build had been parked on top of the one the owner meant to release,
+            # and the strip named only the newest. So when the build already
+            # parked here is NOT what is live, its changes are carried into this
+            # file and the strip lists them all before anybody clicks.
+            PREV=$(aws s3 cp "s3://${BUCKET}/pending/release.json" - 2>/dev/null || echo '{}')
+            LIVE=$(aws s3 cp "s3://${BUCKET}/index.html" - 2>/dev/null | grep -o "/assets/index-[A-Za-z0-9_-]*[.]js" | head -1)
+            PREV_BUNDLE=$(echo "$PREV" | jq -r '.bundle // empty' 2>/dev/null || true)
+            if [ -n "$PREV_BUNDLE" ] && [ "$PREV_BUNDLE" != "$LIVE" ]; then
+              CARRY=$(echo "$PREV" | jq -c '(.changes // [{version:(.version // ""), summary:(.summary // "")}]) | map(select(.version != ""))' 2>/dev/null || echo '[]')
+            else
+              CARRY='[]'
+            fi
             jq -n --arg version "$RELEASE_VERSION" \
                   --arg commit "$(echo "$GITHUB_SHA" | cut -c1-7)" \
                   --arg publishedAt "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
                   --arg app "chat widget" --arg bundle "$WBUNDLE" --arg summary "$WSUMMARY" \
-                  '{version:$version,commit:$commit,publishedAt:$publishedAt,app:$app,bundle:$bundle,summary:$summary}' \
+                  --argjson carry "$CARRY" \
+                  '{version:$version,commit:$commit,publishedAt:$publishedAt,app:$app,bundle:$bundle,summary:$summary,changes:(([{version:$version,summary:$summary}] + $carry) | unique_by(.version) | sort_by(.version | ltrimstr("v") | split(".") | map(tonumber? // 0)))}' \
               > /tmp/widget-release.json
             aws s3 cp /tmp/widget-release.json "s3://${BUCKET}/pending/release.json" \
               --cache-control "no-cache" --content-type "application/json" >/dev/null

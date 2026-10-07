@@ -93,6 +93,11 @@ export interface PendingBuild {
    * The banner names the surfaces instead.
    */
   summary?: string;
+  /**
+   * EVERY version this click would release, oldest first (owner, 2026-10-07).
+   * Present when a newer build was parked on top of one still waiting.
+   */
+  changes?: Array<{ version: string; summary: string }>;
 }
 
 export const jobProducer = {

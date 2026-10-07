@@ -97,6 +97,40 @@ export function UpdateBanner(): JSX.Element | null {
    * as it did before rather than showing an empty gap.
    */
   const summary = pending.find((p) => p.summary?.trim())?.summary?.trim() ?? '';
+  /*
+   * EVERYTHING THIS CLICK RELEASES (owner, 2026-10-07).
+   *
+   * One press released v1.38.8 AND v1.39.0 together: the newer build had been
+   * parked on top of the one the owner meant to release, and this strip named
+   * only the newest. So every waiting version is listed, from every surface,
+   * oldest first — when there is more than one, the owner sees all of them
+   * before deciding.
+   */
+  const included = (() => {
+    const byVersion = new Map<string, string>();
+    for (const p of pending) {
+      for (const c of p.changes ?? []) {
+        if (c.version && !byVersion.has(c.version))
+          byVersion.set(c.version, c.summary?.trim() ?? '');
+      }
+      if (p.version && p.version !== 'unreleased build' && !byVersion.has(p.version)) {
+        byVersion.set(p.version, p.summary?.trim() ?? '');
+      }
+    }
+    const num = (v: string) =>
+      v
+        .replace(/^v/, '')
+        .split('.')
+        .map((n) => Number(n) || 0);
+    return [...byVersion.entries()].sort(([a], [b]) => {
+      const x = num(a);
+      const y = num(b);
+      for (let i = 0; i < Math.max(x.length, y.length); i++) {
+        if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0);
+      }
+      return 0;
+    });
+  })();
 
   return (
     <div
@@ -122,10 +156,32 @@ export function UpdateBanner(): JSX.Element | null {
           the strip is a single band and a two-line summary would push the
           button out of reach on a narrow screen. `title` carries the whole
           sentence for anyone who wants it. */}
-      {summary && (
-        <span className="line-clamp-1 max-w-[42ch] text-xs text-ink-foreground/85" title={summary}>
-          {summary}
+      {included.length > 1 ? (
+        <span className="w-full text-xs text-ink-foreground/85">
+          <span className="font-semibold">
+            {t('releases.includesCount', {
+              defaultValue: 'This releases {{n}} updates together:',
+              n: included.length,
+            })}
+          </span>
+          <ul className="mt-1 list-disc space-y-0.5 ps-5">
+            {included.map(([version, text]) => (
+              <li key={version}>
+                <span className="font-semibold tabular-nums">{version}</span>
+                {text ? ` — ${text}` : ''}
+              </li>
+            ))}
+          </ul>
         </span>
+      ) : (
+        summary && (
+          <span
+            className="line-clamp-1 max-w-[42ch] text-xs text-ink-foreground/85"
+            title={summary}
+          >
+            {summary}
+          </span>
+        )
       )}
       {/* Muted ON THE DARK GROUND, not the page's muted token — that is tuned
           for a light surface and would sit almost invisible here. */}
