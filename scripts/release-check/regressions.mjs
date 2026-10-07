@@ -480,6 +480,61 @@ await check(
   },
 );
 
+await check(
+  'COUPON-TYPE',
+  "every recent CRM coupon on Yiji has the agent's type (Private=1, General=0)",
+  async () => {
+    /*
+     * OWNER, 2026-10-07: "this mistake should never happen again. By never I
+     * mean never." Coupons raised as Private reached Yiji as General because
+     * a code path FORCED the type. Matched BY CODE (the owner's instruction):
+     * Yiji's newest 100 coupons against the CRM's coupon_type.
+     *
+     * Listing coupons is above the CRM's Yiji role (403), so this reads with the
+     * owner's admin login from the git-ignored `.env.yiji-admin`; SKIP without
+     * it — never a silent pass.
+     */
+    const fs = await import('node:fs');
+    const envFile = new URL('../../.env.yiji-admin', import.meta.url);
+    if (!fs.existsSync(envFile)) return 'skip';
+    const adm = Object.fromEntries(
+      fs
+        .readFileSync(envFile, 'utf8')
+        .split(/\r?\n/)
+        .filter((l) => /^[A-Z_]+=/.test(l))
+        .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '')]),
+    );
+    const token = (adm.YIJI_UPDATE_TOKEN ?? '').replace(/^Bearer\s+/i, '');
+    if (!token) return 'skip';
+    const yiji = [];
+    for (const page of [1, 2]) {
+      const r = await fetch(
+        `https://admin.yiji-app.com/api/Coupon/GetAllCoupons?PageNumber=${page}&PageSize=50`,
+        { headers: { authorization: `Bearer ${token}` } },
+      );
+      if (r.status !== 200) return { ok: false, detail: `Yiji coupon list HTTP ${r.status} (admin token expired?)` };
+      yiji.push(...((await r.json()) ?? []));
+    }
+    const codes = yiji.map((c) => c.code).filter(Boolean);
+    const crm = await items('coupon_approvals', {
+      filter: JSON.stringify({ coupon_code: { _in: codes } }),
+      fields: 'coupon_code,coupon_type',
+      limit: '-1',
+    });
+    if (crm.status !== 200) return { ok: false, detail: `CRM HTTP ${crm.status}` };
+    const want = Object.fromEntries(
+      (crm.data ?? []).map((c) => [c.coupon_code, { general: 0, public: 0, private: 1 }[String(c.coupon_type ?? '').trim().toLowerCase()]]),
+    );
+    const wrong = yiji.filter((c) => want[c.code] !== undefined && c.type !== want[c.code]);
+    return {
+      ok: wrong.length === 0,
+      detail: wrong.length
+        ? wrong.map((c) => `${c.code} (#${c.id}) Yiji type ${c.type}, agent chose ${want[c.code]}`).join('; ')
+        : `${Object.keys(want).length} CRM coupons among Yiji's newest 100, all match`,
+    };
+  },
+);
+
 const failed = results.filter((r) => r.status === 'FAIL').length;
 const skipped = results.filter((r) => r.status === 'SKIP').length;
 console.log(`\n${results.length - failed - skipped} passed, ${failed} failed, ${skipped} skipped`);
