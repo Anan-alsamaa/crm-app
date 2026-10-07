@@ -193,9 +193,27 @@ try {
     conversationId,
     content: `${stamp} — agent reply`,
     clientMsgId: `a1-${Date.now()}`,
+    // Sent as an EDITED quick reply, so the recording is checked end to end
+    // (owner, 2026-10-07).
+    origin: { source: 'quick_reply', quickReplyId: 'release-check', text: `${stamp} — draft` },
   });
   const reply = await custGets;
   step('customer receives the agent reply live', reply.content.includes('agent reply'));
+  const rec = await (
+    await fetch(
+      `${API}/items/messages/${reply.id}?fields=source,quick_reply_id,source_text,source_edited`,
+      { headers: { authorization: `Bearer ${adminToken}` } },
+    )
+  )
+    .json()
+    .catch(() => null);
+  step(
+    'the reply is recorded as an edited quick reply',
+    rec?.data?.source === 'quick_reply' &&
+      rec.data.quick_reply_id === 'release-check' &&
+      rec.data.source_edited === true &&
+      String(rec.data.source_text).endsWith('draft'),
+  );
 
   // ── edit / delete (EMA-33) ──────────────────────────────────────────────
   const editedP = waitFor(

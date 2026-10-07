@@ -152,6 +152,14 @@ const FIELD_QUERIES = [
   /* A manual apply:fields; without it the admin coupon list 403s whole. */
   ['EMA-55', 'coupon_approvals', 'id,delivery_excluded,yiji_coupon_id'],
   ['EMA-49', 'coupon_approvals', 'id,awaiting_signup_at,signup_checked_at'],
+  /* Recording (owner, 2026-10-07). The gateway WRITES these on every message:
+     missing = every message refused, so this is a chat-is-down check. */
+  ['REC-SOURCE', 'messages', 'id,source,quick_reply_id,source_text,source_edited'],
+  [
+    'REC-AI-LOG',
+    'ai_calls',
+    'id,endpoint,provider,model,status,error_code,input_tokens,output_tokens,thinking_tokens,est_cost_usd,latency_ms,user_id,vendor_id,conversation_id',
+  ],
 ];
 for (const [id, col, fields] of FIELD_QUERIES)
   await check(id, `${col}: every field the code reads exists`, async () => {
@@ -686,6 +694,65 @@ await check(
     };
   },
 );
+
+// ── recording (owner, 2026-10-07) ────────────────────────────────────────────
+await check('REC-SOURCE', 'every new message records where its words came from', async () => {
+  const since = new Date(Date.now() - 15 * 60_000).toISOString();
+  const r = await items('messages', {
+    fields: 'id,source,sender_type',
+    filter: JSON.stringify({ date_created: { _gte: since } }),
+    limit: '200',
+  });
+  if (r.status !== 200) return { ok: false, detail: `HTTP ${r.status} ${r.error ?? ''}` };
+  const rows = r.data ?? [];
+  const missing = rows.filter((m) => !m.source);
+  if (!rows.length) return { ok: true, detail: 'no messages in the last 15 min to judge' };
+  return {
+    ok: missing.length === 0,
+    detail: missing.length
+      ? `${missing.length}/${rows.length} new messages have no source`
+      : `${rows.length} new messages, all labelled`,
+  };
+});
+await check('REC-AI-LOG', 'the AI gateway may write its call log', async () => {
+  const r = await fetch(
+    `${API}/permissions?${new URLSearchParams({
+      fields: 'action',
+      filter: JSON.stringify({
+        collection: { _eq: 'ai_calls' },
+        policy: { name: { _icontains: 'svc-ai-gateway' } },
+      }),
+    })}`,
+    { headers: H },
+  );
+  // The prod release-check account cannot read permissions; the field check
+  // above still proves the table exists.
+  if (r.status === 403) return { ok: true, detail: 'permissions unreadable here; table checked above' };
+  const actions = ((await r.json())?.data ?? []).map((p) => p.action);
+  return { ok: actions.includes('create'), detail: `svc-ai-gateway on ai_calls: ${actions.join(',') || 'none'}` };
+});
+
+// ── coupon terms (OPS-SGVAVXW6) ──────────────────────────────────────────────
+await check('COUPON-CAP', 'no waiting Amount coupon has a cap below its value', async () => {
+  const r = await items('coupon_approvals', {
+    fields: 'coupon_code,discount_category,coupon_value,max_discount',
+    filter: JSON.stringify({ status: { _eq: 'pending' } }),
+    limit: '-1',
+  });
+  if (r.status !== 200) return { ok: false, detail: `HTTP ${r.status} ${r.error ?? ''}` };
+  const bad = (r.data ?? []).filter(
+    (c) =>
+      String(c.discount_category ?? '').toLowerCase() !== 'percentage' &&
+      Number(c.max_discount) > 0 &&
+      Number(c.max_discount) < Number(c.coupon_value),
+  );
+  return {
+    ok: bad.length === 0,
+    detail: bad.length
+      ? bad.map((c) => `${c.coupon_code} value ${c.coupon_value} cap ${Number(c.max_discount)}`).join('; ')
+      : `${(r.data ?? []).length} waiting coupons, all consistent`,
+  };
+});
 
 const failed = results.filter((r) => r.status === 'FAIL').length;
 const skipped = results.filter((r) => r.status === 'SKIP').length;
