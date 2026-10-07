@@ -193,9 +193,10 @@ function uuidPrimaryKey(): Record<string, unknown> {
   };
 }
 
-async function applyCollections(client: AnyClient): Promise<void> {
+async function applyCollections(client: AnyClient, only?: Set<string>): Promise<void> {
   console.log('Collections & fields:');
   for (const spec of collections) {
+    if (only && !only.has(spec.collection)) continue;
     // Create with UUID primary key + system date/user fields up front.
     await idempotent(`collection ${spec.collection}`, () =>
       client.request(
@@ -908,6 +909,24 @@ async function main(): Promise<void> {
    * difference between the two modes is whether roles get rewritten.
    */
   const fieldsOnly = process.argv.includes('--fields-only');
+  /*
+   * `--only=messages,ai_calls` (with --fields-only): just those collections.
+   * A full fields-only pass is one round trip per field across ~70
+   * collections — over an hour against staging — for a release that adds
+   * four fields. Relations and junctions are skipped in this mode, so name
+   * only collections whose change is fields.
+   */
+  const onlyArg = process.argv.find((a) => a.startsWith('--only='));
+  const only = onlyArg
+    ? new Set(
+        onlyArg
+          .slice('--only='.length)
+          .split(',')
+          .map((c) => c.trim())
+          .filter(Boolean),
+      )
+    : undefined;
+  if (only && !fieldsOnly) throw new Error('--only requires --fields-only');
   console.log(
     fieldsOnly
       ? `Applying SCHEMA ONLY (no roles, no users, no constraints) at ${env.directusUrl} ...`
@@ -915,6 +934,16 @@ async function main(): Promise<void> {
   );
   const client = makeClient(env.directusUrl);
   await client.login(env.adminEmail, env.adminPassword);
+
+  if (fieldsOnly && only) {
+    console.log(`Only: ${[...only].join(', ')}`);
+    const known = new Set(collections.map((c) => c.collection));
+    const unknown = [...only].filter((c) => !known.has(c));
+    if (unknown.length) throw new Error(`Unknown collection(s): ${unknown.join(', ')}`);
+    await applyCollections(client, only);
+    console.log('Done. Only the named collections were touched.');
+    return;
+  }
 
   if (fieldsOnly) {
     await applySchemaOnly(client);
