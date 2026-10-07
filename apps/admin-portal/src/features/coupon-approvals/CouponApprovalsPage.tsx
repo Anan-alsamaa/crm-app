@@ -1012,6 +1012,26 @@ function Row({
                   {t('couponApprovals.retryDelivery', { defaultValue: 'Try again' })}
                 </Button>
               </div>
+            ) : row.awaiting_signup_at ? (
+              /* Held until the customer joins Yiji (owner, 2026-10-07, EMA-49):
+                 nothing exists on Yiji yet, and the number is looked up again
+                 on a schedule — say so, and when it was last looked at. */
+              <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                <Pill tone="warning" size="sm" dot>
+                  {t('couponApprovals.awaitingSignup', {
+                    defaultValue: 'Waiting for the customer to join Yiji',
+                  })}
+                </Pill>
+                <span>
+                  {t('couponApprovals.awaitingSignupHint', {
+                    defaultValue:
+                      'It is sent to their account automatically when they sign up with this number. Last checked {{when}}.',
+                    when: new Date(
+                      row.signup_checked_at ?? row.awaiting_signup_at,
+                    ).toLocaleString(),
+                  })}
+                </span>
+              </p>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">
                 {t('couponApprovals.deliveryPending', {

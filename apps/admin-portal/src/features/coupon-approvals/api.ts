@@ -76,6 +76,9 @@ export interface CouponApprovalRow {
    * 2026-10-06). Never a customer grant — that is `yiji_coupon_user_id`.
    */
   yiji_coupon_id?: string | null;
+  /** Held because the customer has no Yiji account yet (EMA-49). */
+  awaiting_signup_at?: string | null;
+  signup_checked_at?: string | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -149,6 +152,8 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'delivery_excluded',
               'delivery_excluded_reason',
               'yiji_coupon_id',
+              'awaiting_signup_at',
+              'signup_checked_at',
               'order_id',
               {
                 ticket: [

@@ -138,6 +138,7 @@ const FIELD_QUERIES = [
   ['EMA-46', 'tickets', 'id,complaint_date,date_created,assigned_agent,order_id,complaint_type'],
   /* A manual apply:fields; without it the admin coupon list 403s whole. */
   ['EMA-55', 'coupon_approvals', 'id,delivery_excluded,yiji_coupon_id'],
+  ['EMA-49', 'coupon_approvals', 'id,awaiting_signup_at,signup_checked_at'],
 ];
 for (const [id, col, fields] of FIELD_QUERIES)
   await check(id, `${col}: every field the code reads exists`, async () => {
@@ -444,6 +445,37 @@ await check(
       detail: pending.length
         ? `WAITING: ${pending.map((p) => `${p.app} ${p.version}`).join(', ')}`
         : 'nothing parked',
+    };
+  },
+);
+
+await check(
+  'EMA-49',
+  'coupons held for signup are being re-checked (none silent for over a day)',
+  async () => {
+    /* A coupon waiting for its customer to join Yiji is looked up on a
+       schedule — at most daily (owner, 2026-10-07). One whose last look is
+       more than a day and a bit old means the sweep stopped asking. */
+    const stale = new Date(Date.now() - 26 * 3600_000).toISOString();
+    const r = await items('coupon_approvals', {
+      filter: JSON.stringify({
+        _and: [
+          { status: { _in: ['approved', 'edited'] } },
+          { awaiting_signup_at: { _nnull: true } },
+          { yiji_push_error: { _null: true } },
+          { signup_checked_at: { _lt: stale } },
+        ],
+      }),
+      fields: 'coupon_code,signup_checked_at',
+      limit: '20',
+    });
+    if (r.status !== 200) return { ok: false, detail: `HTTP ${r.status} ${r.error ?? ''}` };
+    const rows = r.data ?? [];
+    return {
+      ok: rows.length === 0,
+      detail: rows.length
+        ? rows.map((x) => `${x.coupon_code} last checked ${x.signup_checked_at}`).join('; ')
+        : '',
     };
   },
 );

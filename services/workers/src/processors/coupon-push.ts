@@ -23,7 +23,7 @@ import {
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
-import { couponOrderId } from '@yiji/shared-types';
+import { couponOrderId, signupCheck } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
 
@@ -925,13 +925,12 @@ async function recordFailure(
 export type PushOutcome =
   | 'delivered'
   /**
-   * Created on Yiji but belonging to NOBODY yet, because the customer has no
-   * app account. The agent sends them the code; redeeming it is what attaches
-   * the coupon to the account they then create. Honest as its own outcome: the
-   * coupon EXISTS and is spendable, but nobody holds it, so a report must not
-   * count it as received.
+   * The customer has no Yiji account YET (owner, 2026-10-07, EMA-49). The
+   * coupon is held in the CRM — `awaiting_signup_at` — and the delivery sweep
+   * looks the number up again on a tapering schedule (`signupCheck`), delivering
+   * the moment it resolves. Nothing is created on Yiji until then.
    */
-  | 'unassigned'
+  | 'awaiting-signup'
   | 'disabled'
   | 'not-approved'
   | 'already-assigned'
@@ -1056,6 +1055,67 @@ export async function runCouponDeliverySweep(deps: {
     );
   }
 
+  /*
+   * HELD COUPONS ARE ASKED ABOUT ON A SCHEDULE, NOT EVERY SWEEP (owner,
+   * 2026-10-07, EMA-49).
+   *
+   * A coupon waiting for its customer to join Yiji is still "owed" by the
+   * selection above, so without this it would be looked up every minute. Each
+   * one is kept only when `signupCheck` says it is due; one that outlived its
+   * coupon is recorded and never asked about again.
+   *
+   * A SEPARATE read, like the withheld one: it names columns that need a manual
+   * `apply:fields`, and a failure here must not stop any other coupon. Failing
+   * it, every held coupon is simply looked up this sweep, as before.
+   */
+  try {
+    const held = (await directus.request(
+      readItems(
+        'coupon_approvals' as never,
+        {
+          filter: {
+            status: { _in: ['approved', 'edited'] },
+            awaiting_signup_at: { _nnull: true },
+            yiji_coupon_user_id: { _null: true },
+            yiji_push_error: { _null: true },
+          },
+          fields: ['id', 'coupon_code', 'awaiting_signup_at', 'signup_checked_at', 'valid_to'],
+          limit: -1,
+        } as never,
+      ),
+    )) as unknown as Array<{
+      id: string;
+      coupon_code: string | null;
+      awaiting_signup_at: string;
+      signup_checked_at: string | null;
+      valid_to: string | null;
+    }>;
+    const skip = new Set<string>();
+    for (const h of held ?? []) {
+      const verdict = signupCheck({
+        awaitingSince: h.awaiting_signup_at,
+        lastChecked: h.signup_checked_at,
+        validTo: h.valid_to,
+      });
+      if (verdict === 'wait') skip.add(h.id);
+      if (verdict === 'expired') {
+        skip.add(h.id);
+        await recordFailure(
+          directus,
+          h.id,
+          'the customer did not join Yiji before the coupon expired — nothing was created',
+        );
+        logger.info({ id: h.id, code: h.coupon_code }, 'held coupon expired before signup');
+      }
+    }
+    rows = rows.filter((r) => !skip.has(r.id));
+  } catch (err) {
+    logger.error(
+      { err: describeError(err) },
+      'could not read coupons held for signup — is coupon_approvals.awaiting_signup_at applied?',
+    );
+  }
+
   let queued = 0;
   for (const row of rows) {
     try {
@@ -1101,91 +1161,41 @@ export async function runCouponDeliverySweep(deps: {
 }
 
 /**
- * Create a coupon on Yiji that belongs to nobody, redeemable by its code.
+ * HOLD A COUPON UNTIL ITS CUSTOMER JOINS YIJI (owner, 2026-10-07, EMA-49).
  *
- * For the customer who has no Yiji account: there is no order to attach the
- * coupon to and no user to grant it to, so both other paths are impossible by
- * definition and the compensation was previously never delivered at all.
+ * This replaced creating the coupon on Yiji UNASSIGNED, as a code the agent
+ * sent over WhatsApp: a code that anybody who learned it could redeem, never
+ * tied to the customer's number, and reported as "delivered" when nobody held
+ * it. Now nothing is created until the number exists on Yiji; then the ordinary
+ * order-less path creates the coupon and attaches it to the new account.
  *
- * The agent then sends the customer the code, the app link and how to redeem.
- * Yiji's own `AddCouponToUserByCode` is the other half of that journey, and the
- * customer walks it themselves when they install the app.
- *
- * ONE USE, deliberately. A code travelling over WhatsApp is bearer-like:
- * whoever types it first gets it. `reachLimit`, `limitForUser` and
- * `monthlyReachLimit` already carry the request's own usage limit (1 unless a
- * supervisor said otherwise), so the exposure is one grant of a known amount —
- * not an open cheque.
+ * `awaiting_signup_at` is stamped once (the start of the wait, kept afterwards
+ * as history); `signup_checked_at` on every look. The sweep reads both to
+ * decide when to look again (`signupCheck`). Read apart from the main row, like
+ * `yiji_coupon_id`: a field not yet applied must not 403 every coupon's read.
  */
-async function createUnassignedCoupon(args: {
+async function holdForSignup(args: {
   row: CouponApprovalRow;
   id: string;
   directus: YijiDirectusClient;
   logger: Logger;
-  postCoupon: YijiAdminPoster;
-  yijiTenantId: string;
-  phone: string;
 }): Promise<PushOutcome> {
-  const { row, id, directus, logger, postCoupon, yijiTenantId, phone } = args;
-  const payload = yijiCouponPayload(row, null, { unassigned: true });
-
-  let body: YijiCouponResponse;
-  try {
-    body = await postCoupon<YijiCouponResponse>(YIJI_UNASSIGNED_COUPON_PATH, payload, {
-      ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
-      /* Stable across retries of the same coupon, so a timeout that in fact
-         succeeded cannot mint a SECOND coupon carrying the same code. */
-      'idempotency-key': `unassigned:${row.coupon_code ?? id}`,
-    });
-  } catch (err) {
-    /* Same two-kinds-of-failure rule as the assigned path: a considered refusal
-       is recorded and not retried; an outage throws so BullMQ backs off. */
-    if (isYijiRefused(err)) {
-      const detail = describeRefusal(err.body);
-      await recordFailure(directus, id, `yiji refused the unassigned coupon: ${detail}`);
-      logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused the unassigned coupon');
-      return 'refused';
-    }
-    throw new Error(
-      `${isYijiUnavailable(err) ? 'yiji unavailable' : 'unassigned coupon create failed'}: ${describeError(err)}`,
-    );
-  }
-
-  /*
-   * A 200 IS NOT A YES, and `AddCoupon` reports differently from every other
-   * coupon call: the new id arrives in `exceptionMessage` as "couponId 73900"
-   * while `extendedProperties` is EMPTY. Reading it with `readCouponUserId`
-   * — which looks in `extendedProperties.CouponUserId` — would call a real
-   * creation a refusal. Confirmed twice against the live API.
-   */
-  const newCouponId = readNewCouponId(body);
-  if (newCouponId == null) {
-    const detail = describeRefusal(body);
-    await recordFailure(directus, id, `yiji refused the unassigned coupon: ${detail}`);
-    logger.warn({ id, code: row.coupon_code, err: detail }, 'unassigned coupon refused');
-    return 'refused';
-  }
-
-  /*
-   * `assigned`, not `delivered`: the coupon exists and is spendable, but nobody
-   * holds it until the customer redeems the code. `yiji_coupon_user_id` carries
-   * Yiji's receipt so the two systems can still be matched from either side.
-   */
+  const { row, id, directus, logger } = args;
+  const current = (await directus.request(
+    readItem('coupon_approvals' as never, id, { fields: ['awaiting_signup_at'] } as never),
+  )) as unknown as { awaiting_signup_at?: string | null };
+  const now = new Date().toISOString();
   await directus.request(
     updateItem('coupon_approvals' as never, id, {
-      status: 'assigned',
-      /* The COUPON id, not a coupon-user id: nobody holds it yet. It is still
-         the receipt that lets the two systems be matched from either side. */
-      yiji_coupon_user_id: String(newCouponId),
-      yiji_pushed_at: new Date().toISOString(),
-      yiji_push_error: null,
+      ...(current?.awaiting_signup_at ? {} : { awaiting_signup_at: now }),
+      signup_checked_at: now,
     } as never),
   );
   logger.info(
-    { id, code: row.coupon_code, phone, couponId: newCouponId },
-    'customer has no Yiji account — coupon created UNASSIGNED; send them the code to redeem',
+    { id, code: row.coupon_code, since: current?.awaiting_signup_at ?? now },
+    'customer has no Yiji account yet — coupon held until they sign up',
   );
-  return 'unassigned';
+  return 'awaiting-signup';
 }
 
 /**
@@ -1520,59 +1530,23 @@ export async function processCouponPushJob(
     }
     if (!compensationUserId) {
       /*
-       * "THIS PERSON HAS NO APP ACCOUNT" IS A SETTLED ANSWER, NOT A FAILURE.
+       * NO APP ACCOUNT YET: HOLD THE COUPON (owner, 2026-10-07, EMA-49).
        *
-       * This used to return without recording anything, which left
-       * `yiji_push_error` null — and the delivery sweep selects exactly the
-       * rows that are approved, unexcluded and carry no error. So the coupon
-       * was re-examined EVERY SWEEP (60s by default), asking Yiji the same
-       * question about the same number for ever: ~1,440 futile lookups a day,
-       * permanently, per coupon. One of the owner's own coupons
-       * (OPS-433RHNBB, 0536418952) is in exactly that state, and a number that
-       * resolves to nobody today will not resolve in sixty seconds.
+       * Not created on Yiji and not given up on. The coupon stays approved
+       * with `awaiting_signup_at` stamped, and the delivery sweep looks the
+       * number up again on a tapering schedule — every 10 min for a day,
+       * hourly for a week, then daily until the coupon expires (`signupCheck`)
+       * — never every sweep, which once meant ~1,440 futile lookups a day per
+       * coupon. When the number resolves, this same path grants it by user.
        *
-       * Recorded ONLY when a lookup was genuinely possible and genuinely
-       * answered "nobody". The two other ways to arrive here are not settled
-       * and must stay retryable:
+       * Only when a lookup actually RAN and answered "nobody". The two other
+       * ways here are not settled facts and stay plain `no-order`:
        *   - no `findCustomer`: the credential is absent, nothing was asked;
        *   - no phone at all: a supervisor may yet add one.
-       * A lookup that THREW is handled above — it rethrows, because an outage
-       * is the opposite of a settled answer.
-       *
-       * This is not a dead end: `yiji_push_error` is what the Retry control
-       * clears, so if the customer later installs the app a supervisor can
-       * release it with one click.
+       * A lookup that THREW rethrows above — an outage is not an answer.
        */
-      /*
-       * NO ACCOUNT IS NO LONGER A DEAD END — CREATE THE COUPON UNASSIGNED.
-       *
-       * The owner's process (2026-10-02): put the coupon ON Yiji without giving
-       * it to anybody, then have the agent send the customer the code, the app
-       * link and how to redeem it. When they install and enter the code, Yiji
-       * attaches it to the account they have just created.
-       *
-       * That is the only route left for this customer: no order to attach to,
-       * and no user to grant to. Before this they were simply never
-       * compensated through the app.
-       *
-       * Only when a lookup actually RAN and actually answered "nobody". The two
-       * other ways to reach this branch are not settled facts and must stay
-       * retryable rather than minting a coupon on a guess:
-       *   - no `findCustomer`: the credential is absent, nothing was asked;
-       *   - no phone at all: a supervisor may yet add one.
-       * A lookup that THREW rethrows above — an outage is the opposite of a
-       * settled answer.
-       */
-      if (findCustomer && phone && postCoupon) {
-        return await createUnassignedCoupon({
-          row,
-          id,
-          directus,
-          logger,
-          postCoupon,
-          yijiTenantId,
-          phone,
-        });
+      if (findCustomer && phone) {
+        return await holdForSignup({ row, id, directus, logger });
       }
       logger.warn(
         {

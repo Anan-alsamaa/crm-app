@@ -1051,7 +1051,9 @@
     "withheldRefused": "Not created on Yiji — Yiji said: {{why}}",
     "deliveryExcludedDefault": "marked never-send",
     "sendOnAppYes": "Send on app: Yes",
-    "sendOnAppNo": "Send on app: No"
+    "sendOnAppNo": "Send on app: No",
+    "awaitingSignup": "Waiting for the customer to join Yiji",
+    "awaitingSignupHint": "It is sent to their account automatically when they sign up with this number. Last checked {{when}}."
   },
   "complaintReport": {
     "any": "Any",

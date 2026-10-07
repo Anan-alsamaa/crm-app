@@ -13,6 +13,7 @@ export * from './yiji-impl.js';
 export * from './restaurants.js';
 export * from './store-notifications.js';
 export * from './coupon-approvals.js';
+export * from './signup-watch.js';
 export * from './socket.js';
 export * from './ai.js';
 export * from './queues.js';

@@ -793,6 +793,24 @@ export const collections: CollectionSpec[] = [
         type: 'string',
         note: 'Yiji coupon id of a WITHHELD coupon, created on Yiji unassigned (Private, no assignee). Never a customer grant — see yiji_coupon_user_id for those.',
       },
+      /*
+       * WAITING FOR THE CUSTOMER TO JOIN YIJI (owner, 2026-10-07, EMA-49).
+       *
+       * A coupon for a number with no Yiji account is HELD here instead of
+       * being created as an unassigned code: the delivery sweep re-checks the
+       * number on a tapering schedule and delivers the moment it resolves.
+       * Both need a manual `apply:fields` before the release that reads them.
+       */
+      {
+        field: 'awaiting_signup_at',
+        type: 'dateTime',
+        note: 'Since when this coupon is held because the customer has no Yiji account yet. Kept after delivery as history.',
+      },
+      {
+        field: 'signup_checked_at',
+        type: 'dateTime',
+        note: 'When the customer’s number was last looked up on Yiji while the coupon waited for them to sign up.',
+      },
       {
         field: 'yiji_push_error',
         type: 'text',

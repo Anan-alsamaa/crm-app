@@ -706,7 +706,9 @@
     "withholdReasonLabel": "سبب عدم الإرسال",
     "withholdReasonPlaceholder": "مثال: العميل طلب استرداد المبلغ بدلًا من ذلك",
     "sendOnAppYes": "الإرسال للتطبيق: نعم",
-    "sendOnAppNo": "الإرسال للتطبيق: لا"
+    "sendOnAppNo": "الإرسال للتطبيق: لا",
+    "awaitingSignup": "بانتظار انضمام العميل إلى ييجي",
+    "awaitingSignupHint": "سيُرسل الكوبون إلى حسابه تلقائياً عند تسجيله بهذا الرقم. آخر تحقق {{when}}."
   },
   "couponReport": {
     "noDecisions": "لم يُحسم شيء بعد",

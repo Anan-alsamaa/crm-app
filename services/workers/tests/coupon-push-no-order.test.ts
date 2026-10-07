@@ -196,69 +196,42 @@ describe('a coupon with no order', () => {
    * nobody today will not resolve in a minute.
    */
   /*
-   * THE OWNER'S PROCESS (2026-10-02). A customer with no Yiji account has no
-   * order to attach to and no user to grant to, so both other paths are
-   * impossible by definition. Rather than give up, the coupon is created ON
-   * Yiji belonging to NOBODY; the agent sends the code, the app link and how to
-   * redeem, and the customer attaches it themselves on install.
+   * NO YIJI ACCOUNT YET: HELD, NOT CREATED (owner, 2026-10-07, EMA-49).
+   *
+   * It used to be created on Yiji UNASSIGNED, as a code the agent sent over
+   * WhatsApp — redeemable by anyone who learned it, never tied to the number.
+   * Now nothing reaches Yiji; the coupon waits in the CRM and the sweep looks
+   * the number up again on a schedule until the customer signs up.
    */
-  it('creates an UNASSIGNED coupon when the customer has no Yiji account', async () => {
-    const {
-      deps: d,
-      postCoupon,
-      patches,
-    } = deps({
-      findCustomer: (async () => null) as never,
-    });
-    await expect(processCouponPushJob(job(), d)).resolves.toBe('unassigned');
-    // It goes to AddCoupon, not to either user-bound endpoint.
-    expect(postCoupon.mock.calls[0]![0]).toBe(YIJI_UNASSIGNED_COUPON_PATH);
-    /* `assigned` with Yiji's receipt: the coupon EXISTS and is spendable, and
-       the receipt is what lets the two systems be matched later. */
+  it('holds the coupon when the customer has no Yiji account', async () => {
+    const { deps: d, postCoupon, patches } = deps({ findCustomer: (async () => null) as never });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('awaiting-signup');
+    expect(postCoupon).not.toHaveBeenCalled();
     const patch = patches[0] as Record<string, unknown>;
-    expect(patch).toMatchObject({ status: 'assigned', yiji_push_error: null });
-    /* The COUPON id from `AddCoupon` (returned in `exceptionMessage`), not a
-       coupon-user id — nobody holds this coupon yet. */
-    expect(String(patch.yiji_coupon_user_id)).toBe('73900');
+    expect(patch.awaiting_signup_at).toEqual(expect.any(String));
+    expect(patch.signup_checked_at).toEqual(expect.any(String));
+    // Still owed: no status change, no refusal recorded.
+    expect(patch).not.toHaveProperty('status');
+    expect(patch).not.toHaveProperty('yiji_push_error');
   });
 
-  /* NOBODY IS NAMED. That is what makes the code redeemable by whoever enters
-     it — and what would be a privacy leak if a phone rode along. */
-  it('names no customer in the unassigned body', async () => {
-    const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
+  it('keeps when the wait STARTED on every later look', async () => {
+    const waiting = { ...NO_ORDER_ROW, awaiting_signup_at: '2026-10-01T10:00:00Z' };
+    const { deps: d, patches } = deps(
+      { findCustomer: (async () => null) as never },
+      waiting as unknown as CouponApprovalRow,
+    );
     await processCouponPushJob(job(), d);
-    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body).not.toHaveProperty('userId');
-    expect(body).not.toHaveProperty('customerPhone');
-    expect(body).not.toHaveProperty('couponUser');
-    // It IS the CouponVM: our code and the approved money travel with it.
-    expect(body.code).toBe('OPS-433RHNBB');
-    expect(body.discount).toBe(10);
+    const patch = patches[0] as Record<string, unknown>;
+    expect(patch).not.toHaveProperty('awaiting_signup_at');
+    expect(patch.signup_checked_at).toEqual(expect.any(String));
   });
 
-  /*
-   * GENERAL, NOT PRIVATE. A private coupon is bound to a person and this one
-   * has no person yet; it is also the type the mobile app can actually list
-   * (`GetAllGeneralCoupon` is its only coupon-listing endpoint).
-   */
-  /* Owner, 2026-10-06: the type is always the one the agent selected. */
-  it('creates it with the coupon type the agent selected', async () => {
-    const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
-    await processCouponPushJob(job(), d);
-    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.type).toBe(1); // the fixture row is Private
-  });
-
-  /* A code over WhatsApp is bearer-like, so the blast radius is one grant. */
-  /* Owner, 2026-10-06: reachLimit and orderMaximum are FIXED on every coupon;
-     the per-customer allowance stays the Number of uses. */
-  it('uses the fixed limits, with the allowance per customer', async () => {
-    const { deps: d, postCoupon } = deps({ findCustomer: (async () => null) as never });
-    await processCouponPushJob(job(), d);
-    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.reachLimit).toBe(10000);
-    expect(body.orderMaximum).toBe(1000000);
-    expect(body.limitForUser).toBe(1);
+  it('delivers to the new account once the number resolves', async () => {
+    const waiting = { ...NO_ORDER_ROW, awaiting_signup_at: '2026-10-01T10:00:00Z' };
+    const { deps: d, postCoupon } = deps({}, waiting as unknown as CouponApprovalRow);
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
+    expect(postCoupon.mock.calls[1]![1]).toMatchObject({ userId: 'yiji-user-abc' });
   });
 
   /* An old assertion kept honest: nothing is created when there is nothing to
