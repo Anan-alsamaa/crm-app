@@ -49,7 +49,26 @@ export class GeminiProvider implements AIProvider {
       try {
         const result = await model.generateContent(input.user);
         const text = result.response.text().trim();
-        return { text, model: this.model };
+        const meta = result.response.usageMetadata as
+          | {
+              promptTokenCount?: number;
+              candidatesTokenCount?: number;
+              thoughtsTokenCount?: number;
+            }
+          | undefined;
+        return {
+          text,
+          model: this.model,
+          ...(meta
+            ? {
+                usage: {
+                  inputTokens: meta.promptTokenCount ?? 0,
+                  outputTokens: meta.candidatesTokenCount ?? 0,
+                  thinkingTokens: meta.thoughtsTokenCount ?? 0,
+                },
+              }
+            : {}),
+        };
       } catch (err) {
         lastErr = err;
         const status = parseHttpStatus((err as Error).message ?? '');

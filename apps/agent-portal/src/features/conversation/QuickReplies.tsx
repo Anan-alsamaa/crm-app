@@ -235,7 +235,8 @@ export function QuickReplies({
     restaurant?: string | null;
   };
   /** Called with the filled text. The caller decides how to insert it. */
-  onPick: (text: string) => void;
+  /** The reply's id rides along so its use can be recorded (owner, 2026-10-07). */
+  onPick: (text: string, quickReplyId?: string) => void;
   /**
    * WHICH LIBRARY to offer. Defaults to the inbox's, so every existing caller
    * is unchanged. The late-order decision box passes its own two.
@@ -363,7 +364,7 @@ export function QuickReplies({
   if (total === 0) return null;
 
   const pick = (r: QuickReply) => {
-    onPick(fillPlaceholders(r.text, vars));
+    onPick(fillPlaceholders(r.text, vars), r.id);
     setOpen(false);
   };
 

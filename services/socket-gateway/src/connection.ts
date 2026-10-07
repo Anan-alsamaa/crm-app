@@ -1222,6 +1222,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         senderContact: data.kind === 'customer' ? data.contactId : undefined,
         content,
         attachments,
+        ...(data.kind === 'agent' && parsed.data.origin ? { origin: parsed.data.origin } : {}),
       });
       const payload: MessageNew = {
         id: saved.id,

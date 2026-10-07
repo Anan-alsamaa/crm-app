@@ -159,6 +159,8 @@ async function main(): Promise<void> {
 
   await registerAiRoutes(app, {
     provider,
+    // One row per AI call: tokens, estimated cost, latency (owner, 2026-10-07).
+    logAiCall: (row) => directus.logAiCall(row),
     directus,
     configStore,
     cache,

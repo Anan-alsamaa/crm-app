@@ -29,6 +29,18 @@ export const MessageSend = z
     content: z.string(),
     attachments: z.array(z.string()).optional(),
     clientMsgId: z.string(),
+    /**
+     * What the agent's composer inserted before this was sent (owner,
+     * 2026-10-07): a quick reply, an AI suggestion or an AI enhancement, and
+     * the exact text inserted. Recorded, never trusted for anything else.
+     */
+    origin: z
+      .object({
+        source: z.enum(['quick_reply', 'ai_suggestion', 'ai_enhance']),
+        quickReplyId: z.string().max(64).optional(),
+        text: z.string().max(20000),
+      })
+      .optional(),
   })
   .refine((d) => d.content.trim().length > 0 || (d.attachments?.length ?? 0) > 0, {
     message: 'message must have text or at least one attachment',

@@ -22,11 +22,21 @@ export interface AiRunInput {
   maxOutputTokens?: number;
 }
 
+/** Token counts reported by the provider, when it reports them. */
+export interface AiUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  /** "Thinking" tokens — billed as output by Gemini 2.5. */
+  thinkingTokens?: number;
+}
+
 export interface AiRunOutput {
   /** Raw model text. Already trimmed. */
   text: string;
   /** Provider model identifier (e.g. `gemini-1.5-flash`). */
   model: string;
+  /** Token usage, for the per-call log (owner, 2026-10-07). */
+  usage?: AiUsage;
 }
 
 export interface AIProvider {

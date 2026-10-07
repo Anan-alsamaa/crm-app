@@ -812,6 +812,8 @@ export const roles: RoleSpec[] = [
     permissions: [
       ...readOnly('conversations'),
       ...readOnly('messages'),
+      // Its own call log (owner, 2026-10-07) — append-only, it writes nothing else.
+      ...appendOnly('ai_calls'),
       // C-1: the gateway resolves which role ids are admin roles (to gate the AI
       // admin endpoints from the caller's VERIFIED Directus role). Needs read on
       // directus_roles via the service token.

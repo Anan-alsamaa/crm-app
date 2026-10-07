@@ -1,4 +1,5 @@
-import { readItems, readItem } from '@directus/sdk';
+import { readItems, readItem, createItem } from '@directus/sdk';
+import type { AiCallRow } from '../usage-log.js';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import {
   DEFAULT_LATE_DELIVERY_MINUTES,
@@ -226,6 +227,15 @@ export class GatewayDirectus {
    *      support session is a burst of messages; hours of silence in between is
    *      the customer going away and coming back with a NEW case.
    */
+  /** One row per AI call (owner, 2026-10-07). Never throws. */
+  async logAiCall(row: AiCallRow): Promise<void> {
+    try {
+      await this.client.request(createItem('ai_calls', row as never));
+    } catch {
+      /* The log is bookkeeping; an AI answer must not fail because of it. */
+    }
+  }
+
   async getConversation(
     conversationId: string,
     messageLimit = 50,

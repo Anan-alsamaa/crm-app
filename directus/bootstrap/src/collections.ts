@@ -440,6 +440,45 @@ export const collections: CollectionSpec[] = [
         type: 'text',
         note: 'Pre-edit/pre-delete wording, set once (audit).',
       },
+      /**
+       * WHERE THE WORDS CAME FROM (owner, 2026-10-07): recorded so the canned
+       * and AI-written replies agents actually send — and the situations they
+       * send them in — can be studied before any of it is automated. Set by
+       * the socket gateway only; the portal reports what it inserted, the
+       * gateway decides.
+       */
+      {
+        field: 'source',
+        type: 'string',
+        index: true,
+        choices: [
+          'customer',
+          'typed',
+          'quick_reply',
+          'ai_suggestion',
+          'ai_enhance',
+          'auto_welcome',
+          'internal_note',
+          'system',
+        ],
+        note: 'Origin of the text: typed by the agent, a quick reply, an AI suggestion/enhancement, the automatic welcome, etc.',
+      },
+      {
+        field: 'quick_reply_id',
+        type: 'string',
+        index: true,
+        note: 'The quick reply used, when source = quick_reply. A plain id, not a relation, so deleting the reply never touches the history.',
+      },
+      {
+        field: 'source_text',
+        type: 'text',
+        note: 'The text as inserted (quick reply / AI), before the agent edited it. Compare with content to see what agents change.',
+      },
+      {
+        field: 'source_edited',
+        type: 'boolean',
+        note: 'True when the agent changed the inserted text before sending.',
+      },
     ],
   },
   {
@@ -900,6 +939,34 @@ export const collections: CollectionSpec[] = [
         required: true,
       },
       { field: 'payload', type: 'json' },
+    ],
+  },
+  {
+    collection: 'ai_calls',
+    note: 'APPEND-ONLY log of every AI model call (owner, 2026-10-07): feature, model, tokens, estimated cost at list price, latency, outcome. Written by the AI gateway only.',
+    fields: [
+      { field: 'endpoint', type: 'string', required: true, index: true },
+      { field: 'provider', type: 'string' },
+      { field: 'model', type: 'string', index: true },
+      { field: 'status', type: 'string', choices: ['ok', 'error'], required: true },
+      { field: 'error_code', type: 'string' },
+      { field: 'input_tokens', type: 'integer' },
+      { field: 'output_tokens', type: 'integer' },
+      { field: 'thinking_tokens', type: 'integer', note: 'Billed as output by Gemini 2.5.' },
+      {
+        field: 'est_cost_usd',
+        type: 'float',
+        note: 'At the PAID list price, even on a free tier — what this call would cost.',
+      },
+      { field: 'latency_ms', type: 'integer' },
+      { field: 'user_id', type: 'string', index: true, note: 'The agent who asked.' },
+      { field: 'vendor_id', type: 'string' },
+      {
+        field: 'conversation_id',
+        type: 'string',
+        index: true,
+        note: 'Plain id, not a relation: deleting a chat must not erase its cost history.',
+      },
     ],
   },
   {

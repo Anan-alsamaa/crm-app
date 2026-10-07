@@ -8,11 +8,12 @@ import {
   readUsers,
 } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
-import type { SenderType } from '@yiji/shared-types';
+import type { ComposerOrigin, SenderType } from '@yiji/shared-types';
 import {
   cleanContactName,
   isAutomatedAgentMessage,
   isPhoneDerivedCustomerId,
+  messageSourceFields,
   phoneCustomerId,
 } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
@@ -849,6 +850,8 @@ export class GatewayDirectus {
     content: string;
     attachments?: string[];
     isInternalNote?: boolean;
+    /** What the agent's composer inserted, if anything (owner, 2026-10-07). */
+    origin?: ComposerOrigin;
   }): Promise<{
     id: string;
     createdAt: string;
@@ -876,6 +879,15 @@ export class GatewayDirectus {
         sender_contact: input.senderContact ?? null,
         content: input.content,
         is_internal_note: input.isInternalNote ?? false,
+        // Where the words came from — recorded for every message so agent use
+        // of canned and AI replies can be studied (owner, 2026-10-07).
+        ...messageSourceFields({
+          senderType: input.senderType,
+          senderUser: input.senderUser ?? null,
+          isInternalNote: input.isInternalNote ?? false,
+          content: input.content,
+          origin: input.origin ?? null,
+        }),
       } as never),
     )) as { id: string };
 

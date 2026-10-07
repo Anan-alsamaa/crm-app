@@ -28,6 +28,7 @@ import { redactDeep, unredact } from './redaction/index.js';
 import { prompts } from './prompts/index.js';
 import type { AIProvider } from './provider/types.js';
 import { AiProviderError } from './provider/types.js';
+import { conversationIdOf, estimateCostUsd, type AiCallRow, type AiCallSink } from './usage-log.js';
 import type { GatewayDirectus, ConversationContext } from './directus/index.js';
 
 export interface RouteDeps {
@@ -45,6 +46,8 @@ export interface RouteDeps {
    * perUserLimiter (RPM, anti-burst) — this is the anti-overuse control.
    */
   helpDailyQuota: DailyQuota;
+  /** Per-call log sink (owner, 2026-10-07). Optional so tests need not wire it. */
+  logAiCall?: AiCallSink;
 }
 
 type Json = Record<string, unknown>;
@@ -191,6 +194,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
   }
 
   async function runWith<T>(
+    meta: { caller: Caller; conversationId: string | null },
     endpoint: string,
     cacheKey: string,
     system: string,
@@ -200,10 +204,44 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
   ): Promise<T> {
     // PII redaction before the outbound call — this is the perimeter
     const { redacted, entries } = redactDeep({ system, user });
-    const out = await deps.provider.run({
-      endpoint,
-      system: redacted.system,
-      user: redacted.user,
+    const started = Date.now();
+    const log = (row: Partial<AiCallRow>) =>
+      void deps.logAiCall?.({
+        endpoint,
+        provider: deps.provider.name,
+        model: null,
+        status: 'ok',
+        error_code: null,
+        input_tokens: null,
+        output_tokens: null,
+        thinking_tokens: null,
+        est_cost_usd: null,
+        latency_ms: Date.now() - started,
+        user_id: meta.caller.userId,
+        vendor_id: meta.caller.vendorId,
+        conversation_id: meta.conversationId,
+        ...row,
+      });
+    let out: Awaited<ReturnType<AIProvider['run']>>;
+    try {
+      out = await deps.provider.run({
+        endpoint,
+        system: redacted.system,
+        user: redacted.user,
+      });
+    } catch (err) {
+      log({
+        status: 'error',
+        error_code: err instanceof AiProviderError ? err.code : 'internal',
+      });
+      throw err;
+    }
+    log({
+      model: out.model,
+      input_tokens: out.usage?.inputTokens ?? null,
+      output_tokens: out.usage?.outputTokens ?? null,
+      thinking_tokens: out.usage?.thinkingTokens ?? null,
+      est_cost_usd: estimateCostUsd(out.model, out.usage),
     });
     // ...and restored on the way back in. The placeholders exist to keep values
     // away from the PROVIDER, not from the user, who supplied them and is
@@ -245,6 +283,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const p = prompts.summarize(ctx, body.data.locale);
     try {
       const result: SummaryResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.summarizeConversation,
         cacheKey,
         p.system,
@@ -276,6 +315,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const p = prompts.suggestReply(ctx, body.data.draft, body.data.locale);
     try {
       const result: SuggestReplyResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.suggestReply,
         cacheKey,
         p.system,
@@ -310,6 +350,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     });
     try {
       const result: SentimentResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.analyzeSentiment,
         cacheKey,
         p.system,
@@ -343,6 +384,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const schema = z.object({ intent: z.string(), confidence: z.number() });
     try {
       const result: IntentResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.detectIntent,
         cacheKey,
         p.system,
@@ -376,6 +418,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     });
     try {
       const result: EntitiesResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.extractEntities,
         cacheKey,
         p.system,
@@ -451,6 +494,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     });
     try {
       const result: SemanticSearchResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.semanticSearch,
         cacheKey,
         ranking.system,
@@ -501,6 +545,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const schema = z.object({ score: z.number(), signals: z.array(z.string()) });
     try {
       const result: LeadScoreResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.scoreLead,
         cacheKey,
         p.system,
@@ -614,6 +659,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     });
     try {
       const result: HelpAssistantResponse = await runWith(
+        { caller, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.helpAssistant,
         cacheKey,
         p.system,

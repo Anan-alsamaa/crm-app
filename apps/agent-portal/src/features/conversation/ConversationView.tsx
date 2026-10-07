@@ -23,6 +23,7 @@ import {
   cleanContactName,
   displayContactName,
   isAutomatedAgentMessage,
+  type ComposerOrigin,
   type MessageDeleted,
   type MessageEdited,
   type MessageNew,
@@ -177,6 +178,7 @@ export function ConversationView({
     lastReadRef.current = null;
     setDraft('');
     lastQuickReplyRef.current = null;
+    originRef.current = null;
     setInternalNote(false);
     setDetailsOpen(false);
     setMentionMenu(null);
@@ -616,6 +618,10 @@ export function ConversationView({
         content,
         ...(attachmentIds.length > 0 ? { attachments: attachmentIds } : {}),
         clientMsgId: cmid,
+        // What the composer inserted, so the gateway can record whether this
+        // reply was a quick reply or AI text and how it was edited (owner,
+        // 2026-10-07).
+        ...(originRef.current ? { origin: originRef.current } : {}),
       });
       // Optimistic: render the reply instantly (id = clientMsgId, pending) so
       // the thread feels zero-latency. onNew reconciles it to the confirmed
@@ -641,6 +647,7 @@ export function ConversationView({
     }
     setDraft('');
     lastQuickReplyRef.current = null;
+    originRef.current = null;
     pending.forEach((p) => p.preview && URL.revokeObjectURL(p.preview));
     setPending([]);
     setMentionMenu(null);
@@ -725,6 +732,8 @@ export function ConversationView({
 
   const onDraftChange = (value: string, caret: number) => {
     setDraft(value);
+    // An emptied composer holds nothing that was inserted any more.
+    if (value.trim().length === 0) originRef.current = null;
     if (value.trim().length === 0) stopTyping();
     else signalTyping();
     const upTo = value.slice(0, caret);
@@ -784,6 +793,9 @@ export function ConversationView({
   const lastQuickReplyRef = useRef<string | null>(null);
   /** What the composer held before the last canned reply replaced it. */
   const replacedDraftRef = useRef<string | null>(null);
+  /** What the composer last INSERTED — a quick reply or AI text — sent with
+   *  the reply so its origin is recorded (owner, 2026-10-07). */
+  const originRef = useRef<ComposerOrigin | null>(null);
 
   /**
    * A canned reply REPLACES the draft. Always — typed text included.
@@ -842,7 +854,8 @@ export function ConversationView({
     });
   };
 
-  const insertQuickReply = (text: string) => {
+  const insertQuickReply = (text: string, quickReplyId?: string) => {
+    originRef.current = { source: 'quick_reply', text, ...(quickReplyId ? { quickReplyId } : {}) };
     setDraft((prev) => {
       const base = prev.trimEnd();
       // Remember only real work — not blank, and not a canned reply we put
@@ -892,7 +905,8 @@ export function ConversationView({
    *     worded reply. It reuses the canned reply's `replacedDraftRef` plus
    *     Ctrl+Z rather than inventing a second idea of undo.
    */
-  const applyEnhanced = (text: string) => {
+  const applyEnhanced = (text: string, source: 'ai_enhance' | 'ai_suggestion' = 'ai_enhance') => {
+    originRef.current = { source, text };
     const prior = draft;
     /* Only worth restoring if there was real work there. Enhance is disabled on
        an empty draft, so in practice there always is. */
@@ -928,6 +942,7 @@ export function ConversationView({
     if (prior === null) return false;
     replacedDraftRef.current = null;
     lastQuickReplyRef.current = null;
+    originRef.current = null;
     setDraft(prior);
     return true;
   };
@@ -1578,7 +1593,7 @@ export function ConversationView({
                 /* Through `applyEnhanced`, not `setDraft`: the panel's
                    suggestion lands in the same one-line composer and had the
                    same invisible-growth bug as the emoji button. */
-                onReplySuggested={applyEnhanced}
+                onReplySuggested={(text) => applyEnhanced(text, 'ai_suggestion')}
               />
             )}
 
