@@ -1286,6 +1286,141 @@
   }
 }
 
+/* --- Selecting an own message to edit / delete it (owner, 2026-10-07) ---
+   WhatsApp-style: the selected bubble is ringed, and a small icon bar sits
+   under its words. Icons are 32px targets so a thumb in the Yiji webview can
+   hit them; they inherit the bubble's ink so they read on the brand fill. */
+.yiji-msg.mine.yiji-msg-revealed {
+  box-shadow:
+    0 0 0 2px var(--yiji-surface),
+    0 0 0 4px color-mix(in oklab, var(--yiji-primary) 55%, transparent);
+}
+/* iOS raises its own copy/look-up callout on a long press, on top of ours. */
+.yiji-msg.mine {
+  -webkit-touch-callout: none;
+}
+.yiji-msg.mine:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--yiji-primary) 70%, black);
+  outline-offset: 2px;
+}
+.yiji-msg[data-editing='true'] {
+  opacity: 0.7;
+}
+.yiji-msg-tools {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.yiji-msg-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  color: currentColor;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.yiji-msg-tool svg {
+  width: 16px;
+  height: 16px;
+}
+.yiji-msg-tool:hover,
+.yiji-msg-tool:focus-visible {
+  background: rgba(255, 255, 255, 0.3);
+  outline: none;
+}
+.yiji-msg-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: 6px;
+  font-size: 12px;
+}
+.yiji-msg-confirm-actions {
+  display: flex;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+.yiji-msg-confirm button {
+  border: 0;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.18);
+  color: currentColor;
+}
+.yiji-msg-confirm .yiji-msg-confirm-yes {
+  background: #fff;
+  color: #b91c1c;
+}
+/* The bar above the composer while a message is being edited. */
+.yiji-editing {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 12px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--yiji-primary) 8%, var(--yiji-surface));
+  box-shadow: inset 3px 0 0 var(--yiji-primary);
+  font-size: 12px;
+  color: var(--yiji-ink);
+}
+[dir='rtl'] .yiji-editing {
+  box-shadow: inset -3px 0 0 var(--yiji-primary);
+}
+.yiji-editing-icon {
+  display: inline-flex;
+  width: 16px;
+  height: 16px;
+  color: var(--yiji-primary);
+  flex-shrink: 0;
+}
+.yiji-editing-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+.yiji-editing-label {
+  font-weight: 600;
+  color: var(--yiji-primary);
+}
+.yiji-editing-original {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--yiji-muted);
+}
+.yiji-editing-cancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--yiji-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.yiji-editing-cancel svg {
+  width: 12px;
+  height: 12px;
+}
+.yiji-editing-cancel:hover {
+  background: var(--yiji-surface-2);
+}
+
 /* A rating that could not be saved. Quiet, but impossible to miss under the
    button the customer just pressed. */
 .yiji-csat-error {

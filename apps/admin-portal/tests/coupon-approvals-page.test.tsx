@@ -154,6 +154,31 @@ describe('CouponApprovalsPage', () => {
     expect(screen.getAllByText(/Two items missing/).length).toBeGreaterThan(0);
   });
 
+  /* EMA-57 (operations, 2026-10-07): where the complaint came in, from the
+     ticket the agent filed. */
+  it('shows the ticket source the agent set on the ticket', async () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...pending, ticket: { ...pending.ticket, complaint_source: 'Comp. WhatsApp' } }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await expandFirst(user);
+    expect(screen.getByText('Ticket source')).toBeInTheDocument();
+    expect(screen.getByText('Comp. WhatsApp')).toBeInTheDocument();
+  });
+
+  it('labels a late-order coupon, which has no ticket, by its source', async () => {
+    api.useCouponApprovals.mockReturnValue({
+      data: [{ ...pending, ticket: null, order_id: '1330455' }],
+      isLoading: false,
+    });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getAllByRole('button', { expanded: false })[0]!);
+    expect(screen.getByText('Late orders')).toBeInTheDocument();
+  });
+
   it('offers no decision to a role without the coupon privilege', () => {
     // Approving is the last gate before a customer is promised money, so it is
     // its own privilege rather than something everyone who can SEE the queue

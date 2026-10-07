@@ -9,6 +9,7 @@ import {
   MessageEdit,
   MessageDelete,
   messageEditRefusal,
+  type MessageEditor,
   originalContentPatch,
   type MessageEdited,
   type MessageDeleted,
@@ -1497,8 +1498,10 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
 
   /*
    * EDIT OR DELETE A REPLY THE AGENT ALREADY SENT (owner, 2026-10-05 (EMA-33)).
+   * Since 2026-10-07 the CUSTOMER may do the same to their own messages — see
+   * `resolveEditor` below.
    *
-   * Agents only, their OWN non-note reply, within 15 minutes of sending. The
+   * Agents: their OWN non-note reply, within 15 minutes of sending. The
    * portal hides the buttons outside those rules, but the portal is not the
    * guard: the row is re-read here with the service token and judged by
    * `messageEditRefusal`, so a crafted payload cannot rewrite a colleague's
@@ -1520,22 +1523,66 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     edit_window_closed: 'messages can only be changed for 15 minutes after sending',
     already_deleted: 'that message was already deleted',
   };
+  /* A customer is told about THEIR messages, not "replies" (owner, 2026-10-07).
+     The widget shows its own translated wording by code; this is the fallback. */
+  const CUSTOMER_REFUSAL_TEXT: Record<string, string> = {
+    ...EDIT_REFUSAL_TEXT,
+    not_own_message: 'you can only change your own messages',
+  };
+  const refusalText = (code: string) =>
+    (data.kind === 'customer' ? CUSTOMER_REFUSAL_TEXT : EDIT_REFUSAL_TEXT)[code] ?? code;
+
+  /*
+   * WHO IS EDITING, AND MAY THEY ASK AT ALL (owner, 2026-10-07).
+   *
+   * Agents: unchanged — the `edit_own_messages` permission, then the row rules.
+   *
+   * CUSTOMERS may now edit and delete their OWN messages too ("the customer
+   * must have this option from their end"). A customer socket is pinned to
+   * exactly one conversation, so the conversation it names must BE that one —
+   * the same IDOR guard `message:send` applies. The row is then read inside
+   * the socket's own conversation and judged on the sender contact AND the
+   * conversation, so a crafted id can never reach another customer's words,
+   * an agent's reply, or this customer's own older thread.
+   *
+   * Returns the editor to judge the row with, or `null` after refusing.
+   */
+  const resolveEditor = (conversationId: string): MessageEditor | null => {
+    if (data.kind === 'agent') {
+      /* The `edit_own_messages` permission (owner, 2026-10-06). */
+      if (data.agentPrivileges && data.agentPrivileges.edit_own_messages !== true) {
+        refuseEdit('forbidden', 'your role does not include editing your messages');
+        return null;
+      }
+      return { kind: 'agent', agentId: data.agentId };
+    }
+    if (!data.conversationId || !data.contactId || conversationId !== data.conversationId) {
+      refuseEdit('forbidden', 'conversation not accessible');
+      return null;
+    }
+    return { kind: 'customer', contactId: data.contactId, conversationId: data.conversationId };
+  };
 
   socket.on(SOCKET_EVENTS.messageEdit, async (raw: unknown) => {
-    if (data.kind !== 'agent') return;
+    if (data.kind !== 'agent' && data.kind !== 'customer') return;
     if (!writeBucket.tryRemove()) return refuseEdit('rate_limited', 'too many edits, slow down');
-    /* The `edit_own_messages` permission (owner, 2026-10-06). */
-    if (data.agentPrivileges && data.agentPrivileges.edit_own_messages !== true)
-      return refuseEdit('forbidden', 'your role does not include editing your messages');
     const parsed = MessageEdit.safeParse(raw);
     if (!parsed.success) return refuseEdit('bad_payload', 'invalid message:edit');
     const { conversationId, messageId, content } = parsed.data;
+    const editor = resolveEditor(conversationId);
+    if (!editor) return;
     try {
       const row = await directus.getMessageForEdit(conversationId, messageId);
-      const refusal = messageEditRefusal(row, data.agentId, Date.now());
+      const refusal = messageEditRefusal(row, editor, Date.now());
       if (refusal || !row) {
         const code = refusal ?? 'not_found';
-        return refuseEdit(code, EDIT_REFUSAL_TEXT[code] ?? code);
+        return refuseEdit(code, refusalText(code));
+      }
+      /* Editing is for WORDS (owner, 2026-10-07): a customer's photo sent with
+         no text has nothing to correct — delete it instead. The agent path is
+         left exactly as it shipped. */
+      if (data.kind === 'customer' && !(row.content ?? '').trim()) {
+        return refuseEdit('not_editable', 'only the text of a message can be edited');
       }
       const editedAt = new Date().toISOString();
       await directus.updateAgentMessage(messageId, {
@@ -1549,31 +1596,32 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       // `silent`: refresh every inbox preview, but nothing NEW arrived, so no beep.
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId, silent: true });
     } catch (err) {
-      logger.error({ err, conversationId, messageId }, 'message:edit failed');
+      logger.error({ err, conversationId, messageId, kind: data.kind }, 'message:edit failed');
       refuseEdit('edit_failed', 'could not edit message');
     }
   });
 
   socket.on(SOCKET_EVENTS.messageDelete, async (raw: unknown) => {
-    if (data.kind !== 'agent') return;
+    if (data.kind !== 'agent' && data.kind !== 'customer') return;
     if (!writeBucket.tryRemove()) return refuseEdit('rate_limited', 'too many deletes, slow down');
-    /* The `edit_own_messages` permission (owner, 2026-10-06). */
-    if (data.agentPrivileges && data.agentPrivileges.edit_own_messages !== true)
-      return refuseEdit('forbidden', 'your role does not include editing your messages');
     const parsed = MessageDelete.safeParse(raw);
     if (!parsed.success) return refuseEdit('bad_payload', 'invalid message:delete');
     const { conversationId, messageId } = parsed.data;
+    const editor = resolveEditor(conversationId);
+    if (!editor) return;
     try {
       const row = await directus.getMessageForEdit(conversationId, messageId);
-      const refusal = messageEditRefusal(row, data.agentId, Date.now());
+      const refusal = messageEditRefusal(row, editor, Date.now());
       if (refusal || !row) {
         const code = refusal ?? 'not_found';
-        return refuseEdit(code, EDIT_REFUSAL_TEXT[code] ?? code);
+        return refuseEdit(code, refusalText(code));
       }
       const deletedAt = new Date().toISOString();
       // Soft delete: the row stays (thread order, audit, attachments junction),
       // but `content` is blanked so no reader downstream can re-show it. The
       // wording survives only in `original_content`, which no customer read selects.
+      // A deleted photo is hidden too: every reader drops the files of a
+      // deleted row (history, `attachment:get`, the portal's placeholder).
       await directus.updateAgentMessage(messageId, {
         content: '',
         deletedAt,
@@ -1584,7 +1632,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       // `silent`: refresh every inbox preview, but nothing NEW arrived, so no beep.
       io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId, silent: true });
     } catch (err) {
-      logger.error({ err, conversationId, messageId }, 'message:delete failed');
+      logger.error({ err, conversationId, messageId, kind: data.kind }, 'message:delete failed');
       refuseEdit('delete_failed', 'could not delete message');
     }
   });

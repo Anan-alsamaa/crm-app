@@ -6,6 +6,9 @@ import {
   type StoreMatch,
   DEFAULT_LATE_DELIVERY_MINUTES,
   lateOrderComplaintType,
+  LATE_ORDER_COMPLAINT_TYPE_KEY,
+  parseLateOrderComplaintTypeMap,
+  type LateOrderComplaintTypeMap,
   DEFAULT_COMPLAINT_SOURCE,
   type LateOrderQueue,
   type LateOrderRow,
@@ -389,6 +392,38 @@ export function useLateOrderCauses() {
   });
 }
 
+/**
+ * OPERATIONS' cause → complaint-type pairing (owner, 2026-10-07, EMA-32).
+ *
+ * Read once and cached: it changes only when somebody edits the Lists page.
+ * A failed or missing read resolves to `{}` — the built-in behaviour — rather
+ * than an error, because this must never block the late-orders page or the
+ * ticket it raises.
+ */
+export function useLateOrderComplaintTypes() {
+  return useQuery({
+    queryKey: ['app-setting', LATE_ORDER_COMPLAINT_TYPE_KEY],
+    staleTime: 5 * 60_000,
+    queryFn: async (): Promise<Record<string, string>> => {
+      try {
+        const rows = (await directus.request(
+          readItems(
+            'app_settings' as never,
+            {
+              filter: { key: { _eq: LATE_ORDER_COMPLAINT_TYPE_KEY } },
+              limit: 1,
+              fields: ['value'],
+            } as never,
+          ),
+        )) as unknown as Array<{ value: unknown }>;
+        return parseLateOrderComplaintTypeMap(rows[0]?.value);
+      } catch {
+        return {};
+      }
+    },
+  });
+}
+
 export interface RecordLateDecisionInput {
   row: LateOrderRow;
   /**
@@ -512,8 +547,14 @@ export function lateOrderTicket(opts: {
    * `brandName`), so there was never a reason not to resolve it.
    */
   storeMatch?: StoreMatch | null;
+  /**
+   * Operations' cause → complaint-type pairing, from
+   * `useLateOrderComplaintTypes` (owner, 2026-10-07). Absent means the built-in
+   * behaviour.
+   */
+  complaintTypes?: LateOrderComplaintTypeMap | null;
 }): Record<string, unknown> {
-  const complaintType = lateOrderComplaintType(opts.kind);
+  const complaintType = lateOrderComplaintType(opts.kind, opts.complaintTypes);
   return {
     subject: complaintType,
     description: opts.reason.trim(),

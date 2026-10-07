@@ -667,6 +667,20 @@ function Row({
                   .join(' · ') || '—'}
               </dd>
             </div>
+            {/* EMA-57 (operations, 2026-10-07): where the complaint came in —
+                CRM, WhatsApp, social media — exactly as the agent set it on
+                the ticket. A late-order coupon has no ticket, and says so. */}
+            <div className="flex min-w-0 items-baseline gap-2">
+              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponApprovals.ticketSource', { defaultValue: 'Ticket source' })}
+              </dt>
+              <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
+                {row.ticket?.complaint_source?.trim() ||
+                  (!row.ticket && row.order_id
+                    ? t('couponApprovals.sourceLateOrder', { defaultValue: 'Late orders' })
+                    : '—')}
+              </dd>
+            </div>
           </dl>
 
           {/* The COMPLETE terms, not the two that fit a summary: a supervisor is

@@ -78,6 +78,103 @@ describe('messageEditRefusal', () => {
   });
 });
 
+/*
+ * THE CUSTOMER MAY CHANGE THEIR OWN WORDS TOO (owner, 2026-10-07): only a
+ * message they sent, only in the conversation their widget is bound to, under
+ * the same 15-minute window — never an agent's reply or another customer's.
+ */
+describe('messageEditRefusal — customer', () => {
+  const mine = {
+    sender_type: 'customer',
+    sender_user: null,
+    sender_contact: 'contact-1',
+    conversation: 'conv-1',
+    is_internal_note: false,
+    date_created: SENT,
+    deleted_at: null,
+  };
+  const me = { kind: 'customer' as const, contactId: 'contact-1', conversationId: 'conv-1' };
+
+  it('allows their own message in their own conversation inside the window', () => {
+    expect(messageEditRefusal(mine, me, sentMs + 60_000)).toBeNull();
+    expect(canEditMessage(mine, me, sentMs + 60_000)).toBe(true);
+  });
+
+  it('accepts expanded relation objects', () => {
+    expect(
+      messageEditRefusal(
+        { ...mine, sender_contact: { id: 'contact-1' }, conversation: { id: 'conv-1' } },
+        me,
+        sentMs,
+      ),
+    ).toBeNull();
+  });
+
+  it("refuses another customer's message", () => {
+    expect(messageEditRefusal({ ...mine, sender_contact: 'contact-2' }, me, sentMs)).toBe(
+      'not_own_message',
+    );
+  });
+
+  it("refuses a message in another conversation, even the same contact's older thread", () => {
+    expect(messageEditRefusal({ ...mine, conversation: 'conv-old' }, me, sentMs)).toBe(
+      'not_own_message',
+    );
+    expect(messageEditRefusal(mine, { ...me, conversationId: null }, sentMs)).toBe(
+      'not_own_message',
+    );
+  });
+
+  it("refuses an agent's reply, a system line and the automatic welcome", () => {
+    expect(
+      messageEditRefusal({ ...mine, sender_type: 'agent', sender_user: 'agent-1' }, me, sentMs),
+    ).toBe('not_own_message');
+    expect(messageEditRefusal({ ...mine, sender_type: 'system' }, me, sentMs)).toBe(
+      'not_own_message',
+    );
+    expect(messageEditRefusal({ ...mine, sender_type: 'agent' }, me, sentMs)).toBe(
+      'not_own_message',
+    );
+  });
+
+  it('the same 15-minute window', () => {
+    expect(messageEditRefusal(mine, me, sentMs + MESSAGE_EDIT_WINDOW_MS)).toBeNull();
+    expect(messageEditRefusal(mine, me, sentMs + MESSAGE_EDIT_WINDOW_MS + 1)).toBe(
+      'edit_window_closed',
+    );
+  });
+
+  it('refuses an already deleted message', () => {
+    expect(messageEditRefusal({ ...mine, deleted_at: SENT }, me, sentMs)).toBe('already_deleted');
+  });
+
+  it('fails CLOSED on a row with no contact or conversation, or a missing contact id', () => {
+    expect(messageEditRefusal({ ...mine, sender_contact: null }, me, sentMs)).toBe(
+      'not_own_message',
+    );
+    expect(messageEditRefusal({ ...mine, conversation: undefined }, me, sentMs)).toBe(
+      'not_own_message',
+    );
+    expect(messageEditRefusal(mine, { ...me, contactId: undefined }, sentMs)).toBe(
+      'not_own_message',
+    );
+  });
+
+  it("an AGENT still cannot touch the customer's message", () => {
+    expect(messageEditRefusal(mine, 'agent-1', sentMs)).toBe('not_own_message');
+    expect(messageEditRefusal(mine, { kind: 'agent', agentId: 'agent-1' }, sentMs)).toBe(
+      'not_own_message',
+    );
+  });
+
+  it('the object form of an agent behaves exactly like the bare id', () => {
+    expect(messageEditRefusal(own, { kind: 'agent', agentId: 'agent-1' }, sentMs)).toBeNull();
+    expect(messageEditRefusal(own, { kind: 'agent', agentId: 'agent-2' }, sentMs)).toBe(
+      'not_own_message',
+    );
+  });
+});
+
 describe('originalContentPatch', () => {
   it('records the wording on the FIRST edit', () => {
     expect(originalContentPatch({ content: 'hello', original_content: null })).toBe('hello');

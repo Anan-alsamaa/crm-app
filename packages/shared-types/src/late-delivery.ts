@@ -204,18 +204,82 @@ export const LATE_ORDER_COMPLAINT_TYPE: Record<string, string> = {
 };
 
 /**
+ * The `app_settings` key holding OPERATIONS' cause → complaint-type pairing.
+ *
+ * One row whose value is a JSON object `{ "<cause as stored>": "<complaint_type
+ * value>" }` (owner, 2026-10-07, EMA-32). Operations renamed every cause in
+ * `late_order_cause`, so the two-entry map above stopped matching anything and
+ * late-order tickets were filed under types the dropdown does not have ("late
+ * preparation"). They now choose the type beside each reason, on the same Lists
+ * page where they edit the reasons — no schema change, no deploy.
+ */
+export const LATE_ORDER_COMPLAINT_TYPE_KEY = 'late_order_complaint_type';
+
+/** Cause → complaint type, as operations chose it. */
+export type LateOrderComplaintTypeMap = Readonly<Record<string, string>>;
+
+/**
+ * Read the pairing from whatever `app_settings.value` holds.
+ *
+ * TOTAL, like `lateDeliveryMinutes`: the column is `text`, so it normally
+ * arrives as a JSON string, but an already-parsed object is accepted too. A
+ * blank row, malformed JSON, an array or a non-string entry all resolve to "no
+ * pairing" for that entry rather than throwing — a broken setting must fall back
+ * to the built-in behaviour, never stop a late-order ticket being raised.
+ */
+export function parseLateOrderComplaintTypeMap(raw: unknown): Record<string, string> {
+  let value: unknown = raw;
+  if (typeof raw === 'string') {
+    const text = raw.trim();
+    if (!text) return {};
+    try {
+      value = JSON.parse(text);
+    } catch {
+      return {};
+    }
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [cause, type] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof type === 'string' && type.trim() && cause.trim()) out[cause] = type.trim();
+  }
+  return out;
+}
+
+/** Case- and spacing-insensitive form, so "Late  Preparation" finds "late preparation". */
+function looseKey(s: string): string {
+  return s.trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
  * The complaint type a cause files under.
  *
- * The map above covers the two causes that shipped in code. A cause ADDED to
- * the list has no entry, and falling back to `undefined` would write a ticket
- * with no `complaint_type` — which the breakdown report counts as incomplete
- * and flags, exactly the silent gap this codebase keeps producing.
+ * PRECEDENCE (owner, 2026-10-07):
  *
- * So a new cause files under its own stored name. Operations see the value they
- * typed rather than a blank, and can add it to `complaint_type` themselves if
- * they want it grouped with an existing category.
+ *   1. OPERATIONS' PAIRING from `app_settings` — exact match on the stored
+ *      cause, then a case/space-insensitive one (a pairing saved before a
+ *      cosmetic rename such as "late driver" → "Late driver" still applies).
+ *   2. The built-in map above, for the two causes that shipped in code.
+ *   3. The cause's OWN NAME.
+ *
+ * Why the last step rather than `undefined`: a ticket with no `complaint_type`
+ * is counted incomplete by the breakdown report and flagged — exactly the
+ * silent gap this codebase keeps producing. So an unpaired cause files under
+ * the value operations typed, visibly, and the fix is theirs to make on the
+ * Lists page by choosing its complaint type.
  */
-export function lateOrderComplaintType(cause: string): string {
+export function lateOrderComplaintType(
+  cause: string,
+  mapping?: LateOrderComplaintTypeMap | null,
+): string {
+  if (mapping) {
+    const exact = mapping[cause]?.trim();
+    if (exact) return exact;
+    const wanted = looseKey(cause);
+    for (const [key, type] of Object.entries(mapping)) {
+      if (looseKey(key) === wanted && type?.trim()) return type.trim();
+    }
+  }
   return LATE_ORDER_COMPLAINT_TYPE[cause] ?? cause;
 }
 

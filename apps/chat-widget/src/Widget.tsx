@@ -1,8 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { Socket } from 'socket.io-client';
-import { applyWidgetDelete, applyWidgetEdit, connectWidget, type WidgetMessage } from './socket.js';
+import {
+  applyWidgetDelete,
+  applyWidgetEdit,
+  connectWidget,
+  customerMessageActions,
+  type WidgetMessage,
+} from './socket.js';
 import { forgetConversation, recallConversation, rememberConversation } from './resume.js';
-import { t, isRtl, type WidgetLocale } from './i18n.js';
+import { t, isRtl, type WidgetLocale, type WidgetStrings } from './i18n.js';
 
 export interface WidgetConfig {
   gatewayUrl: string;
@@ -167,6 +173,21 @@ interface Branding {
   accent?: string;
 }
 
+/**
+ * The gateway's refusals of an edit/delete (owner, 2026-10-07) — answered with
+ * a notice, never by marking in-flight sends failed. `forbidden` and
+ * `rate_limited` are shared with sending, so they keep the send path.
+ */
+const EDIT_REFUSAL_CODES = new Set([
+  'not_found',
+  'not_own_message',
+  'edit_window_closed',
+  'already_deleted',
+  'not_editable',
+  'edit_failed',
+  'delete_failed',
+]);
+
 let msgSeq = 0;
 const clientId = () => `c${Date.now()}_${msgSeq++}`;
 
@@ -315,6 +336,41 @@ function DownloadIcon() {
   );
 }
 
+/* Edit / delete the customer's own message (owner, 2026-10-07) — icons, not
+   words, the way WhatsApp offers them once a message is selected. */
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
 /* Greeting illustration (in-bubble brand mark + dots). */
 function EmptyArt() {
   return (
@@ -337,10 +393,92 @@ function EmptyArt() {
   );
 }
 
+/**
+ * The icon bar on a selected own message (owner, 2026-10-07): pencil + trash,
+ * then a one-line confirm before a delete — it cannot be undone. Named by
+ * aria-label AND title, so a screen reader and a desktop hover both say what
+ * an icon does. Events stop here so a tap on an icon never toggles the bubble.
+ */
+export function OwnMessageTools({
+  can,
+  confirming,
+  tr,
+  onEdit,
+  onAskDelete,
+  onDelete,
+  onCancelDelete,
+}: {
+  can: { edit: boolean; delete: boolean };
+  confirming: boolean;
+  tr: WidgetStrings;
+  onEdit: () => void;
+  onAskDelete: () => void;
+  onDelete: () => void;
+  onCancelDelete: () => void;
+}) {
+  if (!can.edit && !can.delete) return null;
+  const stop = (e: Event) => e.stopPropagation();
+  if (confirming) {
+    return (
+      <div
+        className="yiji-msg-confirm"
+        role="group"
+        aria-label={tr.deleteConfirm}
+        onClick={stop}
+        onPointerDown={stop}
+      >
+        <span>{tr.deleteConfirm}</span>
+        <span className="yiji-msg-confirm-actions">
+          <button type="button" className="yiji-msg-confirm-yes" onClick={onDelete}>
+            {tr.msgDelete}
+          </button>
+          <button type="button" onClick={onCancelDelete}>
+            {tr.cancel}
+          </button>
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="yiji-msg-tools"
+      role="toolbar"
+      aria-label={tr.messageActions}
+      onClick={stop}
+      onPointerDown={stop}
+    >
+      {can.edit && (
+        <button
+          type="button"
+          className="yiji-msg-tool"
+          aria-label={tr.editMessage}
+          title={tr.editMessage}
+          onClick={onEdit}
+        >
+          <PencilIcon />
+        </button>
+      )}
+      <button
+        type="button"
+        className="yiji-msg-tool"
+        aria-label={tr.deleteMessage}
+        title={tr.deleteMessage}
+        onClick={onAskDelete}
+      >
+        <TrashIcon />
+      </button>
+    </div>
+  );
+}
+
 export function Widget({ config }: { config: WidgetConfig }) {
   const [locale, setLocale] = useState<WidgetLocale>(config.locale ?? 'en');
   const tr = t(locale);
   const rtl = isRtl(locale);
+  /* The mount-time socket handlers would otherwise keep the strings of the
+     language the widget OPENED in (owner, 2026-10-07: edit refusals). */
+  const trRef = useRef(tr);
+  trRef.current = tr;
 
   const [open, setOpen] = useState(config.autoOpen ?? false);
   const [status, setStatus] = useState<'connecting' | 'connected' | 'reconnecting' | 'error'>(
@@ -349,8 +487,24 @@ export function Widget({ config }: { config: WidgetConfig }) {
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
   /** Per-message send timeouts, so an echo can cancel its own. */
   const sendTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
-  /** Which failed message is showing its Retry/Delete actions. */
+  /**
+   * The SELECTED message: showing its time/state and — when it is the
+   * customer's own and still changeable — the edit/delete icons.
+   */
   const [openStatusFor, setOpenStatusFor] = useState<string | null>(null);
+  /*
+   * THE CUSTOMER CHANGING THEIR OWN MESSAGE (owner, 2026-10-07).
+   *
+   * `editing` puts the message's words in the composer (the draft the customer
+   * had is parked in `draftBeforeEdit` and given back after); `confirmDeleteFor`
+   * is the one bubble showing "Delete this message?". `now` ticks so the icons
+   * disappear when the 15-minute window closes without a reload — the gateway
+   * refuses a late attempt either way.
+   */
+  const [editing, setEditing] = useState<{ id: string; original: string } | null>(null);
+  const draftBeforeEdit = useRef('');
+  const [confirmDeleteFor, setConfirmDeleteFor] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   /** Why the rating did not go through, shown under the survey. */
   const [csatError, setCsatError] = useState<string | null>(null);
   /**
@@ -499,6 +653,29 @@ export function Widget({ config }: { config: WidgetConfig }) {
          * (so Retry/Delete appear) and states the cause in the thread.
          */
         onServerError: ({ code, message }) => {
+          /*
+           * A REFUSED EDIT OR DELETE IS NOT A FAILED SEND (owner, 2026-10-07).
+           * It must not turn an in-flight message red, and the customer gets
+           * our own translated words rather than the gateway's English.
+           */
+          if (EDIT_REFUSAL_CODES.has(code)) {
+            setMessages((prev) => [
+              ...prev,
+              {
+                id: clientId(),
+                conversationId: convoRef.current ?? '',
+                senderType: 'system',
+                content:
+                  code === 'edit_window_closed'
+                    ? trRef.current.editWindowClosed
+                    : trRef.current.editFailed,
+                localNotice: 'send-failed' as const,
+                attachments: [],
+                createdAt: new Date().toISOString(),
+              },
+            ]);
+            return;
+          }
           setMessages((prev) =>
             prev.map((m) => (m.status === 'sending' ? { ...m, status: 'failed' as const } : m)),
           );
@@ -736,6 +913,13 @@ export function Widget({ config }: { config: WidgetConfig }) {
     if (open) setUnread(0);
   }, [open]);
 
+  // The edit/delete icons expire 15 minutes after sending (owner, 2026-10-07).
+  useEffect(() => {
+    if (!open) return;
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, [open]);
+
   // Keep the thread pinned to the latest message. Also runs on `open` and when
   // attachments resolve (`resolved`): on first open the list mounts AFTER the
   // history is already in state, and images load async — without re-scrolling
@@ -853,10 +1037,20 @@ export function Widget({ config }: { config: WidgetConfig }) {
    * keyboard equivalent, and a mouse user should not have to hold still for
    * half a second to see a timestamp.
    */
+  /*
+   * SELECTING A MESSAGE (owner, 2026-10-07): the same hold / drag / tap now
+   * also offers edit and delete on the customer's own message, WhatsApp-style.
+   * `held` swallows the click a mouse fires on release after a hold, which
+   * used to toggle the selection straight back off.
+   */
+  const heldRef = useRef(false);
   const bubbleGesture = (id: string) => {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let startX = 0;
-    const open = () => setOpenStatusFor((cur) => (cur === id ? cur : id));
+    const open = () => {
+      heldRef.current = true;
+      setOpenStatusFor((cur) => (cur === id ? cur : id));
+    };
     const cancel = () => {
       if (timer) clearTimeout(timer);
       timer = null;
@@ -864,6 +1058,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
     return {
       onPointerDown: (e: { clientX: number }) => {
         startX = e.clientX;
+        heldRef.current = false;
         timer = setTimeout(open, 450);
       },
       onPointerMove: (e: { clientX: number }) => {
@@ -881,8 +1076,74 @@ export function Widget({ config }: { config: WidgetConfig }) {
       // Long-press on a touch screen otherwise raises the text-selection menu
       // over the top of what we are trying to show.
       onContextMenu: (e: { preventDefault: () => void }) => e.preventDefault(),
-      onClick: () => setOpenStatusFor((cur) => (cur === id ? null : id)),
+      onClick: () => {
+        if (heldRef.current) {
+          heldRef.current = false;
+          return;
+        }
+        setConfirmDeleteFor(null);
+        setOpenStatusFor((cur) => (cur === id ? null : id));
+      },
+      // Keyboard: the bubble is focusable when it can be selected.
+      onKeyDown: (e: KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          if (e.target !== e.currentTarget) return;
+          e.preventDefault();
+          setOpenStatusFor((cur) => (cur === id ? null : id));
+        } else if (e.key === 'Escape') {
+          setOpenStatusFor(null);
+          setConfirmDeleteFor(null);
+        }
+      },
     };
+  };
+
+  /*
+   * EDIT / DELETE THE CUSTOMER'S OWN MESSAGE (owner, 2026-10-07).
+   *
+   * Not optimistic, exactly like the agent side: the gateway re-checks every
+   * rule and broadcasts the change to the whole conversation room — this widget
+   * included — so the bubble changes when the server has agreed, and a refusal
+   * arrives as a notice instead of a change that silently reverts.
+   */
+  const startEdit = (m: WidgetMessage) => {
+    draftBeforeEdit.current = editing ? draftBeforeEdit.current : draft;
+    setEditing({ id: m.id, original: m.content });
+    setDraft(m.content);
+    setOpenStatusFor(null);
+    setConfirmDeleteFor(null);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    });
+  };
+  const cancelEdit = () => {
+    setEditing(null);
+    setDraft(draftBeforeEdit.current);
+    draftBeforeEdit.current = '';
+  };
+  const saveEdit = () => {
+    if (!editing) return;
+    const content = draft.trim();
+    // Saving the same words would stamp "edited" on a message nobody changed;
+    // emptying it is a delete, which has its own icon and confirm.
+    if (content && content !== editing.original.trim() && convoRef.current) {
+      socketRef.current?.emit('message:edit', {
+        conversationId: convoRef.current,
+        messageId: editing.id,
+        content,
+      });
+    }
+    cancelEdit();
+  };
+  const deleteOwnMessage = (id: string) => {
+    setConfirmDeleteFor(null);
+    setOpenStatusFor(null);
+    if (!convoRef.current) return;
+    socketRef.current?.emit('message:delete', { conversationId: convoRef.current, messageId: id });
+    if (editing?.id === id) cancelEdit();
   };
 
   /** Try a failed message again, exactly as it was first sent. */
@@ -903,6 +1164,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
   };
 
   const send = () => {
+    if (editing) return saveEdit();
     const content = draft.trim();
     /*
      * NEVER SEND A PLACEHOLDER ID.
@@ -1202,7 +1464,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
     const target = e.target as HTMLTextAreaElement;
     const value = target.value;
     setDraft(value);
-    if (value.trim().length === 0) stopTyping();
+    // Correcting an old message is not "typing a reply" (owner, 2026-10-07).
+    if (value.trim().length === 0 || editing) stopTyping();
     else signalTyping();
     // Auto-grow.
     target.style.height = 'auto';
@@ -1218,6 +1481,17 @@ export function Widget({ config }: { config: WidgetConfig }) {
       }) as Record<string, string>,
     [branding],
   );
+
+  /* Fresh at every render; `now` only exists to force one every 30s. */
+  const nowMs = Math.max(now, Date.now());
+
+  // The message being edited was deleted (here or elsewhere) or its window
+  // closed: there is nothing left to save, so give the draft back.
+  useEffect(() => {
+    if (!editing) return;
+    const m = messages.find((x) => x.id === editing.id);
+    if (!m || !customerMessageActions(m, Date.now()).edit) cancelEdit();
+  }, [messages, editing, now]);
 
   // A returning customer (known contact, not their first-ever connect) gets a
   // personalized greeting — in the header AND as the first chat bubble.
@@ -1410,8 +1684,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
                       openStatusFor === m.id ? ' yiji-msg-revealed' : ''
                     }${m.status === 'failed' ? ' yiji-msg-failed' : ''}`}
                     {...(m.senderType === 'customer' && m.id !== GREETING_ID
-                      ? bubbleGesture(m.id)
+                      ? { ...bubbleGesture(m.id), tabIndex: 0 }
                       : {})}
+                    data-editing={editing?.id === m.id ? 'true' : undefined}
                   >
                     {/* A withdrawn agent reply (EMA-33): placeholder only —
                         its words and files were cleared when it was deleted. */}
@@ -1510,6 +1785,24 @@ export function Widget({ config }: { config: WidgetConfig }) {
                           )}
                         </div>
                       )}
+                    {/*
+                     * EDIT / DELETE ICONS ON THE SELECTED OWN MESSAGE (owner,
+                     * 2026-10-07): "like WhatsApp, select a message and delete
+                     * or modify it". Only while it is still changeable (sent,
+                     * not deleted, inside 15 minutes); a photo offers delete
+                     * only. Clicks stop here so they do not toggle the bubble.
+                     */}
+                    {openStatusFor === m.id && m.id !== GREETING_ID && (
+                      <OwnMessageTools
+                        can={customerMessageActions(m, nowMs)}
+                        confirming={confirmDeleteFor === m.id}
+                        tr={tr}
+                        onEdit={() => startEdit(m)}
+                        onAskDelete={() => setConfirmDeleteFor(m.id)}
+                        onDelete={() => deleteOwnMessage(m.id)}
+                        onCancelDelete={() => setConfirmDeleteFor(null)}
+                      />
+                    )}
                   </div>
                 ))}
                 {agentTyping && (
@@ -1707,6 +2000,29 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   ))}
                 </div>
               )}
+              {/* Editing one of the customer's own messages (owner, 2026-10-07):
+                  its words are in the box below; send saves, X restores the
+                  draft they had. */}
+              {editing && (
+                <div className="yiji-editing" role="status">
+                  <span className="yiji-editing-icon" aria-hidden>
+                    <PencilIcon />
+                  </span>
+                  <span className="yiji-editing-text">
+                    <span className="yiji-editing-label">{tr.editingMessage}</span>
+                    <span className="yiji-editing-original">{editing.original}</span>
+                  </span>
+                  <button
+                    type="button"
+                    className="yiji-editing-cancel"
+                    onClick={cancelEdit}
+                    aria-label={tr.cancelEdit}
+                    title={tr.cancelEdit}
+                  >
+                    <CloseIcon />
+                  </button>
+                </div>
+              )}
               <div className="yiji-input">
                 {/*
                   `accept` so the phone's picker offers what the gateway will
@@ -1732,7 +2048,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     className="yiji-attach"
                     onClick={() => fileRef.current?.click()}
                     aria-label={tr.attach}
-                    disabled={!canSend || uploading}
+                    disabled={!canSend || uploading || !!editing}
                   >
                     <AttachIcon />
                   </button>
@@ -1742,6 +2058,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
                     placeholder={tr.placeholder}
                     onInput={onInput}
                     onKeyDown={(e) => {
+                      if (e.key === 'Escape' && editing) {
+                        e.preventDefault();
+                        cancelEdit();
+                        return;
+                      }
                       if (e.key === 'Enter' && !e.shiftKey) {
                         // Swallowed while offline rather than calling send():
                         // this is the path that used to bypass the disabled
@@ -1756,8 +2077,14 @@ export function Widget({ config }: { config: WidgetConfig }) {
                 <button
                   className="yiji-send"
                   onClick={send}
-                  aria-label={tr.send}
-                  disabled={!canSend || (draft.trim().length === 0 && pending.length === 0)}
+                  aria-label={editing ? tr.saveEdit : tr.send}
+                  title={editing ? tr.saveEdit : undefined}
+                  disabled={
+                    !canSend ||
+                    (editing
+                      ? draft.trim().length === 0
+                      : draft.trim().length === 0 && pending.length === 0)
+                  }
                 >
                   <SendIcon />
                 </button>

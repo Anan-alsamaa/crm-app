@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -12,6 +12,7 @@ import {
   Input,
   MeterBar,
   Pill,
+  SearchIcon,
   SectionCard,
   SelectMenu,
   Skeleton,
@@ -39,6 +40,10 @@ import {
   type ChatTimingRow,
   type PerformanceFilters,
 } from './api.js';
+import { ViewSwitch } from '../../components/ViewSwitch.js';
+import { matchesSearch } from './search.js';
+import { Tile } from './Tile.js';
+import { CouponsTab, TicketsTab } from './WorkTabs.js';
 
 /**
  * Agent performance: how much work arrived, how fast it was answered, and every
@@ -71,6 +76,23 @@ import {
 const DEFAULT_TARGET_MIN = 5;
 
 const countFmt = (v: number) => String(v);
+
+/**
+ * THREE SUB-PAGES (owner, 2026-10-07): Chats, Tickets and Coupons. A ticket
+ * raised from the Add-ticket page or a coupon sent for approval never touched
+ * a chat, so the chats-only page had nowhere to show them.
+ */
+const TABS = ['chats', 'tickets', 'coupons'] as const;
+type PerformanceTab = (typeof TABS)[number];
+const isTab = (v: unknown): v is PerformanceTab =>
+  typeof v === 'string' && (TABS as readonly string[]).includes(v);
+
+interface SavedView {
+  filters?: PerformanceFilters;
+  targetMin?: number;
+  tab?: PerformanceTab;
+  search?: string;
+}
 
 export function AgentPerformancePage() {
   const { t } = useTranslation();
@@ -109,7 +131,7 @@ export function AgentPerformancePage() {
   const saved = useMemo(() => {
     try {
       const raw = sessionStorage.getItem(filtersKey);
-      return raw ? (JSON.parse(raw) as { filters?: PerformanceFilters; targetMin?: number }) : null;
+      return raw ? (JSON.parse(raw) as SavedView) : null;
     } catch {
       return null;
     }
@@ -121,13 +143,44 @@ export function AgentPerformancePage() {
   const [targetMin, setTargetMin] = useState(saved?.targetMin ?? DEFAULT_TARGET_MIN);
   /** What is in the box WHILE typing — '' is a legal intermediate state. */
   const [targetDraft, setTargetDraft] = useState(String(saved?.targetMin ?? DEFAULT_TARGET_MIN));
+  /*
+   * THE TAB LIVES IN THE URL (`?tab=tickets`), so a link to one sub-page opens
+   * that sub-page; with no `?tab=` the tab this agent last had open in this
+   * browser tab is restored (owner, 2026-10-07).
+   */
+  const [params, setParams] = useSearchParams();
+  const urlTab = params.get('tab');
+  const tab: PerformanceTab = isTab(urlTab) ? urlTab : isTab(saved?.tab) ? saved.tab : 'chats';
+  const setTab = (next: PerformanceTab) =>
+    setParams(
+      (p) => {
+        const out = new URLSearchParams(p);
+        if (next === 'chats') out.delete('tab');
+        else out.set('tab', next);
+        return out;
+      },
+      { replace: true },
+    );
+  /*
+   * SEARCH (owner, 2026-10-07): "search by customer number, ticket id, or
+   * ticket title — especially for the Chat by chat table". Applies to the
+   * ACTIVE tab's table; the headline numbers keep counting the whole range.
+   * Lightly debounced so a long number does not re-filter on every digit.
+   */
+  const [searchDraft, setSearchDraft] = useState(saved?.search ?? '');
+  const [search, setSearch] = useState(saved?.search ?? '');
+  useEffect(() => {
+    const id = window.setTimeout(() => setSearch(searchDraft), 200);
+    return () => window.clearTimeout(id);
+  }, [searchDraft]);
   useEffect(() => {
     try {
-      sessionStorage.setItem(filtersKey, JSON.stringify({ filters, targetMin }));
+      const view: SavedView = { filters, targetMin, tab, search };
+      sessionStorage.setItem(filtersKey, JSON.stringify(view));
     } catch {
       /* private mode or full storage: the page still works, it just forgets */
     }
-  }, [filtersKey, filters, targetMin]);
+  }, [filtersKey, filters, targetMin, tab, search]);
 
   const timings = useChatTimings(filters);
   /**
@@ -205,7 +258,7 @@ export function AgentPerformancePage() {
    * not recent work, and giving them the top of a newest-first table would
    * claim they are the latest thing that happened.
    */
-  const breakdown = useMemo(
+  const breakdownAll = useMemo(
     () =>
       chats
         .map((c) => ({ chat: c, first: firstResponseSec(c), solve: timeToSolveSec(c) }))
@@ -218,6 +271,17 @@ export function AgentPerformancePage() {
           return bt - at;
         }),
     [chats],
+  );
+  /* The search narrows the TABLE only, never the tiles above it. */
+  const breakdown = useMemo(
+    () =>
+      breakdownAll.filter(({ chat }) =>
+        matchesSearch(search, {
+          phones: [chat.customerPhone, chat.customer],
+          text: [chat.conversationId, chat.ticketId, chat.orderId, chat.subject, chat.customer],
+        }),
+      ),
+    [breakdownAll, search],
   );
 
   /** Per-agent totals — the same shared rollup the admin console reports. */
@@ -272,6 +336,25 @@ export function AgentPerformancePage() {
           {t('performance.title', { defaultValue: 'Agent performance' })}
         </h1>
         <ToolbarSpacer />
+        {/* With the filters, at the top (owner, 2026-10-07). Sized on the
+            wrapper for the same reason as the date fields below. */}
+        <div className="relative w-[14rem] shrink-0">
+          <SearchIcon
+            size={14}
+            aria-hidden
+            className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            type="search"
+            className="h-8 ps-8"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            aria-label={t('performance.search', { defaultValue: 'Search' })}
+            placeholder={t('performance.searchPlaceholder', {
+              defaultValue: 'Customer number, ticket ID or title…',
+            })}
+          />
+        </div>
         <SelectMenu
           size="sm"
           className="w-[11rem] shrink-0"
@@ -308,645 +391,638 @@ export function AgentPerformancePage() {
             onChange={(v) => setFilters((f) => ({ ...f, to: v }))}
           />
         </div>
-        <label className="flex shrink-0 items-center gap-1.5 text-2xs text-muted-foreground">
-          {t('performance.targetShort', { defaultValue: 'Target' })}
-          <span className="w-[4.5rem]">
-            <Input
-              type="number"
-              min={1}
-              className="h-8"
-              aria-label={t('performance.target', { defaultValue: 'Answer within (minutes)' })}
-              value={targetDraft}
-              onChange={(e) => {
-                setTargetDraft(e.target.value);
-                const n = Number(e.target.value);
-                if (Number.isFinite(n) && n >= 1) setTargetMin(n);
-              }}
-              onBlur={() => {
-                // Only settle the value when the agent has finished. Clamping
-                // per keystroke made the field impossible to clear and edit
-                // from the keyboard — the spinner was the only way in.
-                const n = Number(targetDraft);
-                const settled = Number.isFinite(n) && n >= 1 ? Math.round(n) : DEFAULT_TARGET_MIN;
-                setTargetMin(settled);
-                setTargetDraft(String(settled));
-              }}
-            />
-          </span>
-          {t('performance.minutesShort', { defaultValue: 'min' })}
-        </label>
+        {/* The response target only means something for chats. */}
+        {tab === 'chats' && (
+          <label className="flex shrink-0 items-center gap-1.5 text-2xs text-muted-foreground">
+            {t('performance.targetShort', { defaultValue: 'Target' })}
+            <span className="w-[4.5rem]">
+              <Input
+                type="number"
+                min={1}
+                className="h-8"
+                aria-label={t('performance.target', { defaultValue: 'Answer within (minutes)' })}
+                value={targetDraft}
+                onChange={(e) => {
+                  setTargetDraft(e.target.value);
+                  const n = Number(e.target.value);
+                  if (Number.isFinite(n) && n >= 1) setTargetMin(n);
+                }}
+                onBlur={() => {
+                  // Only settle the value when the agent has finished. Clamping
+                  // per keystroke made the field impossible to clear and edit
+                  // from the keyboard — the spinner was the only way in.
+                  const n = Number(targetDraft);
+                  const settled = Number.isFinite(n) && n >= 1 ? Math.round(n) : DEFAULT_TARGET_MIN;
+                  setTargetMin(settled);
+                  setTargetDraft(String(settled));
+                }}
+              />
+            </span>
+            {t('performance.minutesShort', { defaultValue: 'min' })}
+          </label>
+        )}
       </Toolbar>
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div className="mx-auto max-w-6xl space-y-4">
-          {timings.isLoading || agents.isLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-[5.5rem] w-full rounded-2xl" />
-              <Skeleton className="h-56 w-full rounded-2xl" />
-              <Skeleton className="h-56 w-full rounded-2xl" />
-            </div>
-          ) : chats.length === 0 ? (
-            // Composed empty state on the card surface — a lone sentence in a
-            // 1152px column reads as a rendering gap, not as a quiet range.
-            <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-              <EmptyState
-                icon={<InboxIcon size={24} />}
-                title={t('performance.empty', { defaultValue: 'No chats match these filters.' })}
-              />
-            </div>
+          <ViewSwitch
+            value={tab}
+            onChange={setTab}
+            label={t('performance.tabs', { defaultValue: 'Performance views' })}
+            options={[
+              { value: 'chats', label: t('performance.tabChats', { defaultValue: 'Chats' }) },
+              { value: 'tickets', label: t('performance.tabTickets', { defaultValue: 'Tickets' }) },
+              { value: 'coupons', label: t('performance.tabCoupons', { defaultValue: 'Coupons' }) },
+            ]}
+          />
+          {tab === 'tickets' ? (
+            <TicketsTab filters={filters} search={search} agentNames={agentNames} />
+          ) : tab === 'coupons' ? (
+            <CouponsTab filters={filters} search={search} />
           ) : (
             <>
-              {/* 1 — the headline. Five numbers, no chrome around them.
+              {timings.isLoading || agents.isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-[5.5rem] w-full rounded-2xl" />
+                  <Skeleton className="h-56 w-full rounded-2xl" />
+                  <Skeleton className="h-56 w-full rounded-2xl" />
+                </div>
+              ) : chats.length === 0 ? (
+                // Composed empty state on the card surface — a lone sentence in a
+                // 1152px column reads as a rendering gap, not as a quiet range.
+                <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                  <EmptyState
+                    icon={<InboxIcon size={24} />}
+                    title={t('performance.empty', {
+                      defaultValue: 'No chats match these filters.',
+                    })}
+                  />
+                </div>
+              ) : (
+                <>
+                  {/* 1 — the headline. Five numbers, no chrome around them.
                   Named, so it is a landmark a screen-reader user can jump to
                   rather than five loose numbers before the charts. */}
-              <section
-                aria-label={t('performance.summary', { defaultValue: 'Summary' })}
-                className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-              >
-                <Tile
-                  label={t('performance.chats', { defaultValue: 'Chats' })}
-                  value={String(summary.chats)}
-                />
-                <Tile
-                  label={t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
-                  value={String(summary.unanswered)}
-                  tone={summary.unanswered > 0 ? 'bad' : 'plain'}
-                />
-                <Tile
-                  label={t('performance.metPct', { defaultValue: 'Answered in time' })}
-                  value={summary.metPct == null ? '—' : `${summary.metPct}%`}
-                  tone={summary.metPct == null ? 'plain' : summary.metPct >= 80 ? 'good' : 'bad'}
-                  meter={
-                    summary.metPct == null ? undefined : (
-                      <MeterBar
-                        value={summary.metPct}
-                        tone={summary.metPct >= 80 ? 'success' : 'destructive'}
-                        className="mt-2.5"
-                      />
-                    )
-                  }
-                />
-                <Tile
-                  label={t('performance.avgFirst', { defaultValue: 'First response' })}
-                  value={formatDuration(summary.avgFirstResponseSec) ?? '—'}
-                  hint={t('performance.average', { defaultValue: 'average' })}
-                />
-                <Tile
-                  label={t('performance.avgSolve', { defaultValue: 'Time to solve' })}
-                  value={formatDuration(summary.avgTimeToSolveSec) ?? '—'}
-                  hint={t('performance.average', { defaultValue: 'average' })}
-                />
-                {/* Picking up a chat nobody else answered is worth its own
+                  <section
+                    aria-label={t('performance.summary', { defaultValue: 'Summary' })}
+                    className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                  >
+                    <Tile
+                      label={t('performance.chats', { defaultValue: 'Chats' })}
+                      value={String(summary.chats)}
+                    />
+                    <Tile
+                      label={t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
+                      value={String(summary.unanswered)}
+                      tone={summary.unanswered > 0 ? 'bad' : 'plain'}
+                    />
+                    <Tile
+                      label={t('performance.metPct', { defaultValue: 'Answered in time' })}
+                      value={summary.metPct == null ? '—' : `${summary.metPct}%`}
+                      tone={
+                        summary.metPct == null ? 'plain' : summary.metPct >= 80 ? 'good' : 'bad'
+                      }
+                      meter={
+                        summary.metPct == null ? undefined : (
+                          <MeterBar
+                            value={summary.metPct}
+                            tone={summary.metPct >= 80 ? 'success' : 'destructive'}
+                            className="mt-2.5"
+                          />
+                        )
+                      }
+                    />
+                    <Tile
+                      label={t('performance.avgFirst', { defaultValue: 'First response' })}
+                      value={formatDuration(summary.avgFirstResponseSec) ?? '—'}
+                      hint={t('performance.average', { defaultValue: 'average' })}
+                    />
+                    <Tile
+                      label={t('performance.avgSolve', { defaultValue: 'Time to solve' })}
+                      value={formatDuration(summary.avgTimeToSolveSec) ?? '—'}
+                      hint={t('performance.average', { defaultValue: 'average' })}
+                    />
+                    {/* Picking up a chat nobody else answered is worth its own
                     number: it never shows in a response-time average, and it is
                     the one thing on this page a person can decide to do more
                     of. */}
-                {/* What the customer thought — the only measure here they do
+                    {/* What the customer thought — the only measure here they do
                     not control by working faster. */}
-                <Tile
-                  label={t('performance.csat', { defaultValue: 'Customer rating' })}
-                  value={csatOverall ? `${csatOverall.avg.toFixed(1)}/5` : '—'}
-                  tone={csatOverall == null ? 'plain' : csatOverall.avg >= 4 ? 'good' : 'bad'}
-                  hint={
-                    csatOverall
-                      ? t('performance.csatCount', {
-                          defaultValue: '{{n}} rated',
-                          n: csatOverall.n,
-                        })
-                      : undefined
-                  }
-                />
-                <Tile
-                  label={t('performance.commonChats', { defaultValue: 'Common chats taken' })}
-                  value={String(summary.commonChats)}
-                  tone={summary.commonChats > 0 ? 'good' : 'plain'}
-                />
-              </section>
+                    <Tile
+                      label={t('performance.csat', { defaultValue: 'Customer rating' })}
+                      value={csatOverall ? `${csatOverall.avg.toFixed(1)}/5` : '—'}
+                      tone={csatOverall == null ? 'plain' : csatOverall.avg >= 4 ? 'good' : 'bad'}
+                      hint={
+                        csatOverall
+                          ? t('performance.csatCount', {
+                              defaultValue: '{{n}} rated',
+                              n: csatOverall.n,
+                            })
+                          : undefined
+                      }
+                    />
+                    <Tile
+                      label={t('performance.commonChats', { defaultValue: 'Common chats taken' })}
+                      value={String(summary.commonChats)}
+                      tone={summary.commonChats > 0 ? 'good' : 'plain'}
+                    />
+                  </section>
 
-              {/* 1b — chats an AGENT started (owner, 2026-10-07). First
+                  {/* 1b — chats an AGENT started (owner, 2026-10-07). First
                   response is not a fair measure for them — the agent wrote
                   first — and time to solve depends on when the customer
                   answers, so they get their own numbers: did the customer
                   answer, how fast, and how long the chat took once they did. */}
-              {outreach.started > 0 && (
-                <section
-                  aria-label={t('performance.outreachTitle', {
-                    defaultValue: 'Chats started by an agent',
-                  })}
-                  className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-                >
-                  <Tile
-                    label={t('performance.outreachStarted', {
-                      defaultValue: 'Started by agent',
-                    })}
-                    value={String(outreach.started)}
-                  />
-                  <Tile
-                    label={t('performance.outreachReplied', {
-                      defaultValue: 'Customer replied',
-                    })}
-                    value={outreach.replyRatePct == null ? '—' : `${outreach.replyRatePct}%`}
-                    hint={t('performance.outreachRepliedHint', {
-                      defaultValue: '{{n}} of {{total}}',
-                      n: outreach.customerReplied,
-                      total: outreach.started,
-                    })}
-                  />
-                  <Tile
-                    label={t('performance.outreachReplyTime', {
-                      defaultValue: 'Customer reply time',
-                    })}
-                    value={formatDuration(outreach.medianCustomerReplySec) ?? '—'}
-                    hint={t('performance.median', { defaultValue: 'median' })}
-                  />
-                  <Tile
-                    label={t('performance.outreachHandling', {
-                      defaultValue: 'Solved after customer replied',
-                    })}
-                    value={formatDuration(outreach.medianHandlingSec) ?? '—'}
-                    hint={t('performance.outreachHandlingHint', {
-                      defaultValue: 'median · {{n}} closed without a reply',
-                      n: outreach.closedWithoutReply,
-                    })}
-                  />
-                </section>
-              )}
+                  {outreach.started > 0 && (
+                    <section
+                      aria-label={t('performance.outreachTitle', {
+                        defaultValue: 'Chats started by an agent',
+                      })}
+                      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+                    >
+                      <Tile
+                        label={t('performance.outreachStarted', {
+                          defaultValue: 'Started by agent',
+                        })}
+                        value={String(outreach.started)}
+                      />
+                      <Tile
+                        label={t('performance.outreachReplied', {
+                          defaultValue: 'Customer replied',
+                        })}
+                        value={outreach.replyRatePct == null ? '—' : `${outreach.replyRatePct}%`}
+                        hint={t('performance.outreachRepliedHint', {
+                          defaultValue: '{{n}} of {{total}}',
+                          n: outreach.customerReplied,
+                          total: outreach.started,
+                        })}
+                      />
+                      <Tile
+                        label={t('performance.outreachReplyTime', {
+                          defaultValue: 'Customer reply time',
+                        })}
+                        value={formatDuration(outreach.medianCustomerReplySec) ?? '—'}
+                        hint={t('performance.median', { defaultValue: 'median' })}
+                      />
+                      <Tile
+                        label={t('performance.outreachHandling', {
+                          defaultValue: 'Solved after customer replied',
+                        })}
+                        value={formatDuration(outreach.medianHandlingSec) ?? '—'}
+                        hint={t('performance.outreachHandlingHint', {
+                          defaultValue: 'median · {{n}} closed without a reply',
+                          n: outreach.closedWithoutReply,
+                        })}
+                      />
+                    </section>
+                  )}
 
-              {/* 2 — agent by agent. Hidden for a single agent: a bar chart of
+                  {/* 2 — agent by agent. Hidden for a single agent: a bar chart of
                   one person against themselves compares nothing. */}
-              {!oneAgent && (
-                <section className="grid gap-4 lg:grid-cols-2">
-                  <Card
-                    title={t('performance.whoTitle', { defaultValue: 'Who handled the chats' })}
-                    help={t('performance.whoHelp', {
-                      defaultValue: 'Chats assigned in this range',
-                    })}
-                  >
-                    <HBarChart
-                      rows={compare.map((r) => ({
-                        label: r.label,
-                        highlight: r.agentId === user?.id,
-                        values: r.values,
-                      }))}
-                      series={volumeSeries}
-                      format={countFmt}
-                      emptyLabel={nothingToChart}
-                    />
-                  </Card>
-                  <Card
-                    title={t('performance.commonTitle', {
-                      defaultValue: 'Chats picked up for the team',
-                    })}
-                    help={t('performance.commonHelp', {
-                      defaultValue: 'Chats answered after somebody else let them go',
-                    })}
-                  >
-                    <HBarChart
-                      rows={compare.map((r) => ({
-                        label: r.label,
-                        highlight: r.agentId === user?.id,
-                        values: r.values,
-                      }))}
-                      series={commonSeries}
-                      format={countFmt}
-                      emptyLabel={nothingToChart}
-                    />
-                  </Card>
-                  {/* Two series per agent — the widest chart of the three, and
+                  {!oneAgent && (
+                    <section className="grid gap-4 lg:grid-cols-2">
+                      <Card
+                        title={t('performance.whoTitle', { defaultValue: 'Who handled the chats' })}
+                        help={t('performance.whoHelp', {
+                          defaultValue: 'Chats assigned in this range',
+                        })}
+                      >
+                        <HBarChart
+                          rows={compare.map((r) => ({
+                            label: r.label,
+                            highlight: r.agentId === user?.id,
+                            values: r.values,
+                          }))}
+                          series={volumeSeries}
+                          format={countFmt}
+                          emptyLabel={nothingToChart}
+                        />
+                      </Card>
+                      <Card
+                        title={t('performance.commonTitle', {
+                          defaultValue: 'Chats picked up for the team',
+                        })}
+                        help={t('performance.commonHelp', {
+                          defaultValue: 'Chats answered after somebody else let them go',
+                        })}
+                      >
+                        <HBarChart
+                          rows={compare.map((r) => ({
+                            label: r.label,
+                            highlight: r.agentId === user?.id,
+                            values: r.values,
+                          }))}
+                          series={commonSeries}
+                          format={countFmt}
+                          emptyLabel={nothingToChart}
+                        />
+                      </Card>
+                      {/* Two series per agent — the widest chart of the three, and
                       the odd one out of a two-column grid. Spanning it stops the
                       row from carrying a dead empty cell beside it. */}
-                  <Card
-                    className="lg:col-span-2"
-                    title={t('performance.fastTitle', { defaultValue: 'How fast they replied' })}
-                    help={t('performance.fastHelp', {
-                      defaultValue: 'Averages per agent — shorter is better',
-                    })}
-                  >
-                    <HBarChart
-                      rows={compare.map((r) => ({
-                        label: r.label,
-                        note: r.note,
-                        highlight: r.agentId === user?.id,
-                        values: r.values,
-                      }))}
-                      series={timeSeries}
-                      format={durFmt}
-                      emptyLabel={nothingMeasured}
-                    />
-                  </Card>
-                </section>
-              )}
+                      <Card
+                        className="lg:col-span-2"
+                        title={t('performance.fastTitle', {
+                          defaultValue: 'How fast they replied',
+                        })}
+                        help={t('performance.fastHelp', {
+                          defaultValue: 'Averages per agent — shorter is better',
+                        })}
+                      >
+                        <HBarChart
+                          rows={compare.map((r) => ({
+                            label: r.label,
+                            note: r.note,
+                            highlight: r.agentId === user?.id,
+                            values: r.values,
+                          }))}
+                          series={timeSeries}
+                          format={durFmt}
+                          emptyLabel={nothingMeasured}
+                        />
+                      </Card>
+                    </section>
+                  )}
 
-              {/* 3 — the shape of the period. */}
-              <section className="grid gap-4 lg:grid-cols-2">
-                <Card
-                  title={t('performance.perDayTitle', { defaultValue: 'Chats per day' })}
-                  help={t('performance.perDayHelp', { defaultValue: 'How busy each day was' })}
-                >
-                  <TrendChart
-                    points={trend}
-                    series={volumeSeries}
-                    format={countFmt}
-                    emptyLabel={nothingToChart}
-                  />
-                </Card>
-                <Card
-                  title={t('performance.speedPerDayTitle', {
-                    defaultValue: 'Response times per day',
-                  })}
-                  help={t('performance.speedPerDayHelp', {
-                    defaultValue: 'A gap is a day nothing was measurable',
-                  })}
-                >
-                  <TrendChart
-                    points={trend}
-                    series={timeSeries}
-                    format={durFmt}
-                    emptyLabel={nothingMeasured}
-                  />
-                </Card>
-              </section>
+                  {/* 3 — the shape of the period. */}
+                  <section className="grid gap-4 lg:grid-cols-2">
+                    <Card
+                      title={t('performance.perDayTitle', { defaultValue: 'Chats per day' })}
+                      help={t('performance.perDayHelp', { defaultValue: 'How busy each day was' })}
+                    >
+                      <TrendChart
+                        points={trend}
+                        series={volumeSeries}
+                        format={countFmt}
+                        emptyLabel={nothingToChart}
+                      />
+                    </Card>
+                    <Card
+                      title={t('performance.speedPerDayTitle', {
+                        defaultValue: 'Response times per day',
+                      })}
+                      help={t('performance.speedPerDayHelp', {
+                        defaultValue: 'A gap is a day nothing was measurable',
+                      })}
+                    >
+                      <TrendChart
+                        points={trend}
+                        series={timeSeries}
+                        format={durFmt}
+                        emptyLabel={nothingMeasured}
+                      />
+                    </Card>
+                  </section>
 
-              {/* 4 — the chats themselves. An average nobody can drill into is
+                  {/* 4 — the chats themselves. An average nobody can drill into is
                   an accusation. */}
-              {/* Totals per agent — the shape the owner liked in the admin
+                  {/* Totals per agent — the shape the owner liked in the admin
                   console: an avatar beside the name, and the chat count drawn
                   as a share of the busiest agent so the workload spread is
                   visible without doing the division. Hidden when the page is
                   already filtered to one agent, where a one-row table of
                   totals says nothing the tiles above have not. */}
-              {!oneAgent && totals.length > 1 && (
-                <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-                  <header className="flex items-baseline justify-between gap-3  px-5 py-4">
-                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                      {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
-                    </h2>
-                    <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                      {t('performance.chatsCount', {
-                        defaultValue: '{{n}} chats',
-                        n: totals.reduce((sum, r) => sum + r.chats, 0),
-                      })}
-                    </span>
-                  </header>
-                  <div className="overflow-x-auto">
-                    <table
-                      className="w-full min-w-max text-sm"
-                      aria-label={t('performance.summaryTable', {
-                        defaultValue: 'Totals per agent',
-                      })}
-                    >
-                      <thead>
-                        <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                          <th className="h-10 px-5 text-start font-semibold">
-                            {t('performance.agent', { defaultValue: 'Agent' })}
-                          </th>
-                          <th className="h-10 px-5 text-start font-semibold">
-                            {t('performance.chats', { defaultValue: 'Chats' })}
-                          </th>
-                          <th className="h-10 px-5 text-end font-semibold">
-                            {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
-                          </th>
-                          <th className="h-10 px-5 text-end font-semibold">
-                            {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
-                          </th>
-                          <th className="h-10 px-5 text-end font-semibold">
-                            {t('performance.avgFirstCol', { defaultValue: 'First response (avg)' })}
-                          </th>
-                          <th className="h-10 px-5 text-end font-semibold">
-                            {t('performance.avgSolveCol', { defaultValue: 'Time to solve (avg)' })}
-                          </th>
-                          <th className="h-10 px-5 text-end font-semibold">
-                            {t('performance.csat', { defaultValue: 'Customer rating' })}
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y-0">
-                        {totals.map((r) => (
-                          <tr
-                            key={r.agentId ?? 'unassigned'}
-                            className="transition-colors duration-fast hover:bg-primary/[0.06]"
-                          >
-                            <td className="px-5 py-3">
-                              <span className="flex items-center gap-2.5">
-                                <Avatar name={r.agentName} size="sm" />
-                                <span className="truncate font-medium text-foreground">
-                                  {r.agentName}
-                                </span>
-                              </span>
-                            </td>
-                            <td className="px-5 py-3">
-                              <span className="flex items-center gap-2.5">
-                                <span className="w-6 text-end text-sm font-bold tabular-nums text-foreground">
-                                  {r.chats}
-                                </span>
-                                <MeterBar
-                                  value={
-                                    (r.chats / Math.max(1, ...totals.map((x) => x.chats))) * 100
-                                  }
-                                  tone="sky"
-                                  className="w-20"
-                                />
-                              </span>
-                            </td>
-                            <td className="px-5 py-3 text-end tabular-nums">
-                              {r.unanswered > 0 ? (
-                                <Pill tone="destructive" size="sm">
-                                  {r.unanswered}
-                                </Pill>
-                              ) : (
-                                <span className="text-muted-foreground">0</span>
-                              )}
-                            </td>
-                            <td className="px-5 py-3 text-end tabular-nums">
-                              {r.commonChats > 0 ? (
-                                <Pill tone="success" size="sm">
-                                  {r.commonChats}
-                                </Pill>
-                              ) : (
-                                <span className="text-muted-foreground">0</span>
-                              )}
-                            </td>
-                            <td className="px-5 py-3 text-end tabular-nums text-foreground">
-                              {formatDuration(r.avgFirstResponseSec) ?? '—'}
-                            </td>
-                            <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
-                              {formatDuration(r.avgTimeToSolveSec) ?? '—'}
-                            </td>
-                            <td className="px-5 py-3 text-end tabular-nums">
-                              {(() => {
-                                const c = csatByAgent.get(r.agentId ?? '');
-                                if (!c) return <span className="text-muted-foreground">—</span>;
-                                return (
-                                  <span
-                                    className={cn(
-                                      'font-semibold',
-                                      c.avg >= 4 ? 'text-success' : 'text-foreground',
-                                    )}
-                                  >
-                                    {c.avg.toFixed(1)}
-                                  </span>
-                                );
-                              })()}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </section>
-              )}
-
-              <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-                <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1  px-4 py-3">
-                  <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
-                    {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
-                  </h2>
-                  <span className="text-2xs text-muted-foreground">
-                    {t('performance.breakdownHelp', {
-                      defaultValue: 'Slowest first. Open one to see what happened.',
-                    })}
-                  </span>
-                  <span className="ms-auto text-2xs tabular-nums text-muted-foreground">
-                    {breakdown.length}
-                  </span>
-                </header>
-                <div className="max-h-[28rem] overflow-auto">
-                  <table
-                    className="w-full text-sm"
-                    aria-label={t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
-                  >
-                    <thead className="sticky top-0 z-10 bg-card">
-                      <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                        <th className="px-4 py-2.5 text-start font-semibold">
-                          {t('performance.subject', { defaultValue: 'Ticket / chat' })}
-                        </th>
-                        <th className="px-4 py-2.5 text-start font-semibold">
-                          {t('performance.customer', { defaultValue: 'Customer' })}
-                        </th>
-                        {!oneAgent && (
-                          <th className="px-4 py-2.5 text-start font-semibold">
-                            {t('performance.agent', { defaultValue: 'Agent' })}
-                          </th>
-                        )}
-                        <th className="px-4 py-2.5 text-start font-semibold">
-                          {t('performance.started', { defaultValue: 'Started' })}
-                        </th>
-                        <th className="px-4 py-2.5 text-start font-semibold">
-                          {t('performance.startedBy', { defaultValue: 'Started by' })}
-                        </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
-                          {t('performance.firstResponse', { defaultValue: 'First response' })}
-                        </th>
-                        <th className="px-4 py-2.5 text-end font-semibold">
-                          {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {breakdown.map(({ chat, first, solve }) => (
-                        <tr
-                          key={chat.conversationId}
-                          onClick={() =>
-                            navigate(`/?conv=${encodeURIComponent(chat.conversationId)}`)
-                          }
-                          className="cursor-pointer border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
+                  {!oneAgent && totals.length > 1 && (
+                    <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+                      <header className="flex items-baseline justify-between gap-3  px-5 py-4">
+                        <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                          {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
+                        </h2>
+                        <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                          {t('performance.chatsCount', {
+                            defaultValue: '{{n}} chats',
+                            n: totals.reduce((sum, r) => sum + r.chats, 0),
+                          })}
+                        </span>
+                      </header>
+                      <div className="overflow-x-auto">
+                        <table
+                          className="w-full min-w-max text-sm"
+                          aria-label={t('performance.summaryTable', {
+                            defaultValue: 'Totals per agent',
+                          })}
                         >
-                          <td className="max-w-[18rem] px-4 py-2.5 text-foreground">
-                            <span className="block truncate font-medium" title={chat.subject ?? ''}>
-                              {chat.subject ??
-                                t('performance.noSubject', { defaultValue: 'Chat (no ticket)' })}
-                            </span>
-                            {chat.orderId && (
-                              <span className="font-mono text-2xs text-muted-foreground">
-                                #{chat.orderId}
-                              </span>
+                          <thead>
+                            <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
+                              <th className="h-10 px-5 text-start font-semibold">
+                                {t('performance.agent', { defaultValue: 'Agent' })}
+                              </th>
+                              <th className="h-10 px-5 text-start font-semibold">
+                                {t('performance.chats', { defaultValue: 'Chats' })}
+                              </th>
+                              <th className="h-10 px-5 text-end font-semibold">
+                                {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
+                              </th>
+                              <th className="h-10 px-5 text-end font-semibold">
+                                {t('performance.commonChats', {
+                                  defaultValue: 'Common chats taken',
+                                })}
+                              </th>
+                              <th className="h-10 px-5 text-end font-semibold">
+                                {t('performance.avgFirstCol', {
+                                  defaultValue: 'First response (avg)',
+                                })}
+                              </th>
+                              <th className="h-10 px-5 text-end font-semibold">
+                                {t('performance.avgSolveCol', {
+                                  defaultValue: 'Time to solve (avg)',
+                                })}
+                              </th>
+                              <th className="h-10 px-5 text-end font-semibold">
+                                {t('performance.csat', { defaultValue: 'Customer rating' })}
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y-0">
+                            {totals.map((r) => (
+                              <tr
+                                key={r.agentId ?? 'unassigned'}
+                                className="transition-colors duration-fast hover:bg-primary/[0.06]"
+                              >
+                                <td className="px-5 py-3">
+                                  <span className="flex items-center gap-2.5">
+                                    <Avatar name={r.agentName} size="sm" />
+                                    <span className="truncate font-medium text-foreground">
+                                      {r.agentName}
+                                    </span>
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3">
+                                  <span className="flex items-center gap-2.5">
+                                    <span className="w-6 text-end text-sm font-bold tabular-nums text-foreground">
+                                      {r.chats}
+                                    </span>
+                                    <MeterBar
+                                      value={
+                                        (r.chats / Math.max(1, ...totals.map((x) => x.chats))) * 100
+                                      }
+                                      tone="sky"
+                                      className="w-20"
+                                    />
+                                  </span>
+                                </td>
+                                <td className="px-5 py-3 text-end tabular-nums">
+                                  {r.unanswered > 0 ? (
+                                    <Pill tone="destructive" size="sm">
+                                      {r.unanswered}
+                                    </Pill>
+                                  ) : (
+                                    <span className="text-muted-foreground">0</span>
+                                  )}
+                                </td>
+                                <td className="px-5 py-3 text-end tabular-nums">
+                                  {r.commonChats > 0 ? (
+                                    <Pill tone="success" size="sm">
+                                      {r.commonChats}
+                                    </Pill>
+                                  ) : (
+                                    <span className="text-muted-foreground">0</span>
+                                  )}
+                                </td>
+                                <td className="px-5 py-3 text-end tabular-nums text-foreground">
+                                  {formatDuration(r.avgFirstResponseSec) ?? '—'}
+                                </td>
+                                <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
+                                  {formatDuration(r.avgTimeToSolveSec) ?? '—'}
+                                </td>
+                                <td className="px-5 py-3 text-end tabular-nums">
+                                  {(() => {
+                                    const c = csatByAgent.get(r.agentId ?? '');
+                                    if (!c) return <span className="text-muted-foreground">—</span>;
+                                    return (
+                                      <span
+                                        className={cn(
+                                          'font-semibold',
+                                          c.avg >= 4 ? 'text-success' : 'text-foreground',
+                                        )}
+                                      >
+                                        {c.avg.toFixed(1)}
+                                      </span>
+                                    );
+                                  })()}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
+
+                  <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                    <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1  px-4 py-3">
+                      <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+                        {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
+                      </h2>
+                      <span className="text-2xs text-muted-foreground">
+                        {t('performance.breakdownHelp', {
+                          defaultValue: 'Slowest first. Open one to see what happened.',
+                        })}
+                      </span>
+                      <span className="ms-auto text-2xs tabular-nums text-muted-foreground">
+                        {breakdown.length === breakdownAll.length
+                          ? breakdown.length
+                          : `${breakdown.length} / ${breakdownAll.length}`}
+                      </span>
+                    </header>
+                    <div className="max-h-[28rem] overflow-auto">
+                      <table
+                        className="w-full text-sm"
+                        aria-label={t('performance.breakdownTitle', {
+                          defaultValue: 'Chat by chat',
+                        })}
+                      >
+                        <thead className="sticky top-0 z-10 bg-card">
+                          <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
+                            <th className="px-4 py-2.5 text-start font-semibold">
+                              {t('performance.subject', { defaultValue: 'Ticket / chat' })}
+                            </th>
+                            <th className="px-4 py-2.5 text-start font-semibold">
+                              {t('performance.customer', { defaultValue: 'Customer' })}
+                            </th>
+                            {!oneAgent && (
+                              <th className="px-4 py-2.5 text-start font-semibold">
+                                {t('performance.agent', { defaultValue: 'Agent' })}
+                              </th>
                             )}
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            <span className="block max-w-[12rem] truncate">
-                              {chat.customer ??
-                                t('performance.unknownCustomer', { defaultValue: 'Customer' })}
-                            </span>
-                          </td>
-                          {!oneAgent && (
-                            <td className="px-4 py-2.5 text-muted-foreground">{chat.agentName}</td>
+                            <th className="px-4 py-2.5 text-start font-semibold">
+                              {t('performance.started', { defaultValue: 'Started' })}
+                            </th>
+                            <th className="px-4 py-2.5 text-start font-semibold">
+                              {t('performance.startedBy', { defaultValue: 'Started by' })}
+                            </th>
+                            <th className="px-4 py-2.5 text-end font-semibold">
+                              {t('performance.firstResponse', { defaultValue: 'First response' })}
+                            </th>
+                            <th className="px-4 py-2.5 text-end font-semibold">
+                              {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {breakdown.length === 0 && (
+                            <tr>
+                              <td
+                                colSpan={oneAgent ? 6 : 7}
+                                className="px-4 py-8 text-center text-sm text-muted-foreground"
+                              >
+                                {t('performance.searchNoMatch', {
+                                  defaultValue: 'Nothing matches “{{q}}”.',
+                                  q: search.trim(),
+                                })}
+                              </td>
+                            </tr>
                           )}
-                          <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
-                            {chat.startedAt ? formatDateTime(chat.startedAt) : '—'}
-                          </td>
-                          <td className="px-4 py-2.5 text-muted-foreground">
-                            {chat.initiatedBy === 'agent'
-                              ? t('performance.byAgent', { defaultValue: 'Agent' })
-                              : t('performance.byCustomer', { defaultValue: 'Customer' })}
-                          </td>
-                          {/* "No reply" rather than a dash: the worst outcome on
+                          {breakdown.map(({ chat, first, solve }) => (
+                            <tr
+                              key={chat.conversationId}
+                              onClick={() =>
+                                navigate(`/?conv=${encodeURIComponent(chat.conversationId)}`)
+                              }
+                              className="cursor-pointer border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
+                            >
+                              <td className="max-w-[18rem] px-4 py-2.5 text-foreground">
+                                <span
+                                  className="block truncate font-medium"
+                                  title={chat.subject ?? ''}
+                                >
+                                  {chat.subject ??
+                                    t('performance.noSubject', {
+                                      defaultValue: 'Chat (no ticket)',
+                                    })}
+                                </span>
+                                {chat.orderId && (
+                                  <span className="font-mono text-2xs text-muted-foreground">
+                                    #{chat.orderId}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground">
+                                <span className="block max-w-[12rem] truncate">
+                                  {chat.customer ??
+                                    t('performance.unknownCustomer', { defaultValue: 'Customer' })}
+                                </span>
+                              </td>
+                              {!oneAgent && (
+                                <td className="px-4 py-2.5 text-muted-foreground">
+                                  {chat.agentName}
+                                </td>
+                              )}
+                              <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
+                                {chat.startedAt ? formatDateTime(chat.startedAt) : '—'}
+                              </td>
+                              <td className="px-4 py-2.5 text-muted-foreground">
+                                {chat.initiatedBy === 'agent'
+                                  ? t('performance.byAgent', { defaultValue: 'Agent' })
+                                  : t('performance.byCustomer', { defaultValue: 'Customer' })}
+                              </td>
+                              {/* "No reply" rather than a dash: the worst outcome on
                               the page must not read as missing data. */}
-                          <td
-                            className={cn(
-                              'px-4 py-2.5 text-end tabular-nums',
-                              chat.passedOn || awaitingCustomer(chat)
-                                ? 'text-muted-foreground'
-                                : first == null
-                                  ? 'font-semibold text-destructive'
-                                  : 'text-foreground',
-                            )}
-                          >
-                            {/* An agent-started chat the customer has not
+                              <td
+                                className={cn(
+                                  'px-4 py-2.5 text-end tabular-nums',
+                                  chat.passedOn || awaitingCustomer(chat)
+                                    ? 'text-muted-foreground'
+                                    : first == null
+                                      ? 'font-semibold text-destructive'
+                                      : 'text-foreground',
+                                )}
+                              >
+                                {/* An agent-started chat the customer has not
                                 answered has nothing to respond to yet. */}
-                            {awaitingCustomer(chat)
-                              ? t('performance.customerNotReplied', {
-                                  defaultValue: 'Customer hasn’t replied',
-                                })
-                              : first == null
-                                ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
-                                : formatDuration(first)}
-                            {/* Says WHY this row is not counted against the
+                                {awaitingCustomer(chat)
+                                  ? t('performance.customerNotReplied', {
+                                      defaultValue: 'Customer hasn’t replied',
+                                    })
+                                  : first == null
+                                    ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
+                                    : formatDuration(first)}
+                                {/* Says WHY this row is not counted against the
                                 target, rather than leaving a slow-looking
                                 number with no explanation beside it. */}
-                            {chat.passedOn && (
-                              <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                {t('performance.commonChat', { defaultValue: 'common' })}
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-4 py-2.5 text-end tabular-nums text-foreground">
-                            {solve == null ? (
-                              /* A CLOSED chat is never "Still open" — that was
+                                {chat.passedOn && (
+                                  <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {t('performance.commonChat', { defaultValue: 'common' })}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-end tabular-nums text-foreground">
+                                {solve == null ? (
+                                  /* A CLOSED chat is never "Still open" — that was
                                  the agent-started chat with no customer reply,
                                  which has no customer message to time from. */
-                              <span className="text-muted-foreground">
-                                {chat.solvedAt
-                                  ? awaitingCustomer(chat)
-                                    ? t('performance.closedNoReply', {
-                                        defaultValue: 'Closed — no customer reply',
-                                      })
-                                    : t('performance.closed', { defaultValue: 'Closed' })
-                                  : awaitingCustomer(chat)
-                                    ? t('performance.waitingCustomer', {
-                                        defaultValue: 'Waiting for customer',
-                                      })
-                                    : t('performance.stillOpen', { defaultValue: 'Still open' })}
-                              </span>
-                            ) : (
-                              formatDuration(solve)
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {/* Footer aggregate band — the table's totals live on the table,
+                                  <span className="text-muted-foreground">
+                                    {chat.solvedAt
+                                      ? awaitingCustomer(chat)
+                                        ? t('performance.closedNoReply', {
+                                            defaultValue: 'Closed — no customer reply',
+                                          })
+                                        : t('performance.closed', { defaultValue: 'Closed' })
+                                      : awaitingCustomer(chat)
+                                        ? t('performance.waitingCustomer', {
+                                            defaultValue: 'Waiting for customer',
+                                          })
+                                        : t('performance.stillOpen', {
+                                            defaultValue: 'Still open',
+                                          })}
+                                  </span>
+                                ) : (
+                                  formatDuration(solve)
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {/* Footer aggregate band — the table's totals live on the table,
                     in the board idiom, so the averages read next to their rows. */}
-                <footer className="flex h-11 flex-wrap items-center gap-x-6 gap-y-1 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground">
-                  <span className="tabular-nums">
-                    {t('performance.chatsCount', {
-                      defaultValue: '{{n}} chats',
-                      n: breakdown.length,
-                    })}
-                  </span>
-                  <span className="hidden items-baseline gap-1.5 sm:inline-flex">
-                    <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
-                      {t('performance.avgFirst', { defaultValue: 'First response' })}
-                    </span>
-                    <span className="font-semibold tabular-nums text-foreground">
-                      {formatDuration(summary.avgFirstResponseSec) ?? '—'}
-                    </span>
-                  </span>
-                  <span className="hidden items-baseline gap-1.5 sm:inline-flex">
-                    <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
-                      {t('performance.avgSolve', { defaultValue: 'Time to solve' })}
-                    </span>
-                    <span className="font-semibold tabular-nums text-foreground">
-                      {formatDuration(summary.avgTimeToSolveSec) ?? '—'}
-                    </span>
-                  </span>
-                </footer>
-              </section>
+                    <footer className="flex h-11 flex-wrap items-center gap-x-6 gap-y-1 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground">
+                      <span className="tabular-nums">
+                        {t('performance.chatsCount', {
+                          defaultValue: '{{n}} chats',
+                          n: breakdown.length,
+                        })}
+                      </span>
+                      <span className="hidden items-baseline gap-1.5 sm:inline-flex">
+                        <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+                          {t('performance.avgFirst', { defaultValue: 'First response' })}
+                        </span>
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {formatDuration(summary.avgFirstResponseSec) ?? '—'}
+                        </span>
+                      </span>
+                      <span className="hidden items-baseline gap-1.5 sm:inline-flex">
+                        <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+                          {t('performance.avgSolve', { defaultValue: 'Time to solve' })}
+                        </span>
+                        <span className="font-semibold tabular-nums text-foreground">
+                          {formatDuration(summary.avgTimeToSolveSec) ?? '—'}
+                        </span>
+                      </span>
+                    </footer>
+                  </section>
+                </>
+              )}
+
+              <p className="px-1 pb-2 text-2xs leading-relaxed text-muted-foreground">
+                {t('performance.commonBasis', {
+                  defaultValue:
+                    'A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.',
+                })}{' '}
+                {t('performance.basis', {
+                  defaultValue:
+                    'First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.',
+                })}{' '}
+                {t('performance.outreachBasis', {
+                  defaultValue:
+                    'A chat an agent started is measured from the customer’s reply: first response is the agent’s answer to it, and time to solve runs from it to closing. Until the customer replies, the chat is not counted as unanswered or late.',
+                })}
+              </p>
             </>
           )}
-
-          <p className="px-1 pb-2 text-2xs leading-relaxed text-muted-foreground">
-            {t('performance.commonBasis', {
-              defaultValue:
-                'A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.',
-            })}{' '}
-            {t('performance.basis', {
-              defaultValue:
-                'First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.',
-            })}{' '}
-            {t('performance.outreachBasis', {
-              defaultValue:
-                'A chat an agent started is measured from the customer’s reply: first response is the agent’s answer to it, and time to solve runs from it to closing. Until the customer replies, the chat is not counted as unanswered or late.',
-            })}
-          </p>
         </div>
       </div>
-    </div>
-  );
-}
-
-/** One headline number, in the board tile anatomy: extrabold numeral, tone dot
-    beside the uppercase micro-label, optional meter accent underneath. */
-function Tile({
-  label,
-  value,
-  hint,
-  tone = 'plain',
-  meter,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: 'plain' | 'good' | 'bad';
-  /** Optional data accent under the label — pass a `<MeterBar>`. */
-  meter?: ReactNode;
-}) {
-  return (
-    /* The surface carries the tone as well as the numeral. Unlike the hue-coded
-       KPI cards elsewhere, `tone` here means "is this metric healthy" — so a
-       tinted surface is information, not decoration, and it pulls the eye to
-       the two tiles that need attention instead of leaving seven identical
-       white boxes to be read one at a time. */
-    <div
-      className={cn(
-        'rounded-2xl px-4 py-3.5 shadow-soft ring-1',
-        tone === 'bad'
-          ? 'bg-gradient-to-br from-destructive-tint/70 to-card ring-destructive/15'
-          : tone === 'good'
-            ? 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15'
-            : 'bg-card ring-foreground/[0.06]',
-      )}
-    >
-      <div
-        className={cn(
-          'text-2xl font-extrabold leading-none tracking-[-0.03em] tabular-nums',
-          tone === 'bad'
-            ? 'text-destructive'
-            : tone === 'good'
-              ? 'text-success'
-              : 'text-foreground',
-        )}
-      >
-        {value}
-      </div>
-      <div className="mt-2 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {tone !== 'plain' && (
-          <span
-            aria-hidden
-            className={cn(
-              'h-1.5 w-1.5 shrink-0 rounded-full',
-              tone === 'bad' ? 'bg-destructive' : 'bg-success',
-            )}
-          />
-        )}
-        {/* Wraps rather than truncates: at six-up these micro-labels were
-            clipping to "COMMON CHATS TA…", which is not a label at all. */}
-        <span className="min-w-0 leading-snug">
-          {label}
-          {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
-        </span>
-      </div>
-      {meter}
     </div>
   );
 }

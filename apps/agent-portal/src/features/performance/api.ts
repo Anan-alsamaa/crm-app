@@ -34,6 +34,11 @@ export interface ChatTimingRow extends ChatTiming {
    * what was slow, which is the half a supervisor acts on.
    */
   subject: string | null;
+  /** The customer's number, kept apart from the name so the search box can
+      find a chat by phone even when the contact has a name (owner, 2026-10-07). */
+  customerPhone?: string | null;
+  /** The newest ticket raised from this chat, searchable by id (owner, 2026-10-07). */
+  ticketId?: string | null;
 }
 
 export interface PerformanceFilters {
@@ -115,10 +120,12 @@ export function useChatTimings(filters: PerformanceFilters) {
        * ticket, and a conversation with no ticket simply has none. Best-effort
        * — a permissions gap here must not empty the whole page. */
       const subjectOf = new Map<string, string>();
+      const ticketOf = new Map<string, string>();
       try {
         // Chunked: every conversation id in one query string is an HTTP 414
         // from CloudFront once the count grows. See readChunked.
         const linked = await readChunked<{
+          id: string | number;
           conversation: string | null;
           subject: string | null;
           complaint_type: string | null;
@@ -129,11 +136,12 @@ export function useChatTimings(filters: PerformanceFilters) {
               readItems('tickets', {
                 limit: -1,
                 filter: { conversation: { _in: ids } },
-                fields: ['conversation', 'subject', 'complaint_type'],
+                fields: ['id', 'conversation', 'subject', 'complaint_type'],
                 sort: ['-date_created'],
               }),
             ) as unknown as Promise<
               Array<{
+                id: string | number;
                 conversation: string | null;
                 subject: string | null;
                 complaint_type: string | null;
@@ -142,8 +150,9 @@ export function useChatTimings(filters: PerformanceFilters) {
         );
         for (const tk of linked) {
           if (!tk.conversation) continue;
-          const label = tk.complaint_type?.trim() || tk.subject?.trim();
           // Newest ticket wins; the sort above puts it first.
+          if (!ticketOf.has(tk.conversation)) ticketOf.set(tk.conversation, String(tk.id));
+          const label = tk.complaint_type?.trim() || tk.subject?.trim();
           if (label && !subjectOf.has(tk.conversation)) subjectOf.set(tk.conversation, label);
         }
       } catch {
@@ -231,6 +240,8 @@ export function useChatTimings(filters: PerformanceFilters) {
         customer: c.contact?.name ?? c.contact?.phone ?? null,
         orderId: c.last_order_id,
         subject: subjectOf.get(c.id) ?? null,
+        customerPhone: c.contact?.phone ?? null,
+        ticketId: ticketOf.get(c.id) ?? null,
         passedOn: handoffs.get(c.id)?.passedOn ?? false,
         takenBy: handoffs.get(c.id)?.takenBy ?? null,
         // Agent-started chats are measured from the customer's reply, and one
@@ -279,6 +290,263 @@ export function useCsatByConversation(filters: PerformanceFilters) {
         out.set(r.conversation, r.score);
       }
       return out;
+    },
+  });
+}
+
+/* ── Tickets and coupons (owner, 2026-10-07) ──────────────────────────────
+ *
+ * "Faisal assigned a coupon which came for admin approval, however in the
+ * Agent performance page I'm unable to find the ticket." The page measured
+ * CHATS only, so a ticket raised from the Add-ticket page, or a coupon request,
+ * had nowhere to appear. These two reads back the Tickets and Coupons tabs.
+ */
+
+/** A ticket in range, as the Tickets tab lists it. */
+export interface PerformanceTicketRow {
+  id: string;
+  subject: string | null;
+  complaintType: string | null;
+  orderId: string | null;
+  status: string | null;
+  assignedAgent: string | null;
+  /** Who raised it — an agent's own ticket counts even when it went elsewhere. */
+  createdBy: string | null;
+  createdAt: string | null;
+  resolvedAt: string | null;
+  contactName: string | null;
+  contactPhone: string | null;
+  customerPhone: string | null;
+  /** The newest coupon request linked to the ticket, when there is one. */
+  coupon: { code: string | null; status: string } | null;
+}
+
+interface TicketReadRow {
+  id: string | number;
+  subject: string | null;
+  complaint_type?: string | null;
+  order_id?: string | null;
+  status: string | null;
+  assigned_agent: string | null;
+  user_created: string | null;
+  date_created: string | null;
+  resolved_at: string | null;
+  closed_at: string | null;
+  customer_phone?: string | null;
+  contact: { id: string; name: string | null; phone: string | null } | null;
+}
+
+/**
+ * Tickets created in range that belong to the agent: ASSIGNED to them OR RAISED
+ * by them. Either alone misses half — an agent raises a ticket for the branch
+ * team, or is handed one somebody else opened.
+ */
+export function useTicketPerformance(filters: PerformanceFilters, enabled = true) {
+  return useQuery({
+    queryKey: ['performance-tickets', filters],
+    enabled,
+    // A refusal is an answer, not a blip — the tab renders it calmly.
+    retry: false,
+    queryFn: async (): Promise<PerformanceTicketRow[]> => {
+      const and: Array<Record<string, unknown>> = [];
+      if (filters.from) and.push({ date_created: { _gte: filters.from } });
+      if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
+      if (filters.agentId)
+        and.push({
+          _or: [
+            { assigned_agent: { _eq: filters.agentId } },
+            { user_created: { _eq: filters.agentId } },
+          ],
+        });
+      const tickets = (await directus.request(
+        readItems('tickets', {
+          limit: -1,
+          fields: [
+            'id',
+            'subject',
+            'complaint_type',
+            'order_id',
+            'status',
+            'assigned_agent',
+            'user_created',
+            'date_created',
+            'resolved_at',
+            'closed_at',
+            'customer_phone',
+            { contact: ['id', 'name', 'phone'] },
+          ],
+          sort: ['-date_created'],
+          ...(and.length ? { filter: { _and: and } } : {}),
+        } as never),
+      )) as unknown as TicketReadRow[];
+      if (tickets.length === 0) return [];
+
+      /* The coupon on each ticket. Best-effort: a role that cannot read the
+         coupon queue still gets its tickets, just without the coupon column. */
+      const couponOf = new Map<string, { code: string | null; status: string }>();
+      try {
+        type LinkedCoupon = {
+          ticket: string | number | null;
+          coupon_code: string | null;
+          status: string;
+        };
+        const coupons = await readChunked<LinkedCoupon>(
+          tickets.map((tk) => String(tk.id)),
+          (ids) =>
+            directus.request(
+              readItems(
+                'coupon_approvals' as never,
+                {
+                  limit: -1,
+                  filter: { ticket: { _in: ids } },
+                  fields: ['ticket', 'coupon_code', 'status'],
+                  sort: ['-date_created'],
+                } as never,
+              ),
+            ) as unknown as Promise<LinkedCoupon[]>,
+        );
+        for (const c of coupons) {
+          if (c.ticket == null) continue;
+          const key = String(c.ticket);
+          // Newest first, so the first one seen is the current request.
+          if (!couponOf.has(key)) couponOf.set(key, { code: c.coupon_code, status: c.status });
+        }
+      } catch {
+        /* no coupon read access — the column stays empty */
+      }
+
+      return tickets.map((tk) => ({
+        id: String(tk.id),
+        subject: tk.subject,
+        complaintType: tk.complaint_type ?? null,
+        orderId: tk.order_id ?? null,
+        status: tk.status,
+        assignedAgent: tk.assigned_agent,
+        createdBy: tk.user_created,
+        createdAt: tk.date_created,
+        resolvedAt: tk.resolved_at ?? tk.closed_at ?? null,
+        contactName: tk.contact?.name ?? null,
+        contactPhone: tk.contact?.phone ?? null,
+        customerPhone: tk.customer_phone ?? null,
+        coupon: couponOf.get(String(tk.id)) ?? null,
+      }));
+    },
+  });
+}
+
+/** A coupon request in range, as the Coupons tab lists it. */
+export interface PerformanceCouponRow {
+  id: string;
+  coupon_code: string | null;
+  coupon_value: number | null;
+  coupon_percent: number | null;
+  discount_category: string | null;
+  status: string;
+  date_created: string | null;
+  order_id: string | null;
+  customer_phone: string | null;
+  ticket: {
+    id: string | number;
+    subject: string | null;
+    order_id: string | null;
+    complaint_type?: string | null;
+  } | null;
+  contact: { id: string; name: string | null; phone: string | null } | null;
+  requested_by: { id: string; first_name: string | null; email: string | null } | null;
+  /** Read separately — see below. Undefined when the field could not be read. */
+  delivery_excluded?: boolean | null;
+  yiji_coupon_id?: string | null;
+  awaiting_signup_at?: string | null;
+  /**
+   * The ticket's id as STORED on the request. A role restricted to its own
+   * tickets gets `ticket: null` from the expansion above when the ticket went
+   * to somebody else — a related item you cannot read comes back NULL — and
+   * the row would lose the one link the owner asked for.
+   */
+  ticketId?: string | null;
+}
+
+type CouponExtraField = 'delivery_excluded' | 'yiji_coupon_id' | 'awaiting_signup_at' | 'ticket';
+
+/**
+ * Coupon requests RAISED by the agent in range (All agents = everyone).
+ *
+ * The three delivery fields are each read in their OWN best-effort query: on an
+ * environment where one of them was never bootstrapped, naming it would make
+ * Directus 403 the WHOLE read, and the tab would show nothing at all for want
+ * of one status nuance. The main read carries only long-standing columns.
+ */
+export function useCouponPerformance(filters: PerformanceFilters, enabled = true) {
+  return useQuery({
+    queryKey: ['performance-coupons', filters],
+    enabled,
+    retry: false,
+    queryFn: async (): Promise<PerformanceCouponRow[]> => {
+      const and: Array<Record<string, unknown>> = [];
+      if (filters.from) and.push({ date_created: { _gte: filters.from } });
+      if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
+      if (filters.agentId) and.push({ requested_by: { _eq: filters.agentId } });
+      const filter = and.length ? { filter: { _and: and } } : {};
+
+      const rows = (await directus.request(
+        readItems(
+          'coupon_approvals' as never,
+          {
+            limit: -1,
+            sort: ['-date_created'],
+            fields: [
+              'id',
+              'coupon_code',
+              'coupon_value',
+              'coupon_percent',
+              'discount_category',
+              'status',
+              'date_created',
+              'order_id',
+              'customer_phone',
+              { ticket: ['id', 'subject', 'order_id', 'complaint_type'] },
+              { contact: ['id', 'name', 'phone'] },
+              { requested_by: ['id', 'first_name', 'email'] },
+            ],
+            ...filter,
+          } as never,
+        ),
+      )) as unknown as PerformanceCouponRow[];
+      if (rows.length === 0) return [];
+
+      const extra = async (field: CouponExtraField) => {
+        try {
+          const got = (await directus.request(
+            readItems(
+              'coupon_approvals' as never,
+              { limit: -1, fields: ['id', field], ...filter } as never,
+            ),
+          )) as unknown as Array<Record<string, unknown> & { id: string }>;
+          return new Map(got.map((g) => [String(g.id), g[field]]));
+        } catch {
+          return null;
+        }
+      };
+      const [excluded, yijiId, awaiting, rawTicket] = await Promise.all([
+        extra('delivery_excluded'),
+        extra('yiji_coupon_id'),
+        extra('awaiting_signup_at'),
+        extra('ticket'),
+      ]);
+      const pick = <T>(m: Map<string, unknown> | null, id: string): T | null | undefined =>
+        m ? ((m.get(id) as T | null | undefined) ?? null) : undefined;
+      return rows.map((r) => ({
+        ...r,
+        delivery_excluded: pick<boolean>(excluded, String(r.id)),
+        yiji_coupon_id: pick<string>(yijiId, String(r.id)),
+        awaiting_signup_at: pick<string>(awaiting, String(r.id)),
+        ticketId:
+          r.ticket?.id != null
+            ? String(r.ticket.id)
+            : ((v) => (v == null ? null : String(v)))(
+                pick<string | number>(rawTicket, String(r.id)),
+              ),
+      }));
     },
   });
 }

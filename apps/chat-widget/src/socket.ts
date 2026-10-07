@@ -44,14 +44,15 @@ export interface WidgetMessage {
    */
   localNotice?: 'agents-offline' | 'send-failed' | 'attach-failed';
   /**
-   * The agent corrected this reply after sending it (owner, 2026-10-05
-   * (EMA-33)) — shown as a small "edited" label so the customer knows the
-   * wording changed under them.
+   * The message was corrected after sending (owner, 2026-10-05 (EMA-33)) —
+   * an agent's reply, or since 2026-10-07 the customer's own message. Shown as
+   * a small "edited" label so nobody reads changed wording as the original.
    */
   editedAt?: string;
   /**
-   * The agent withdrew this reply. Its content and attachments are already
-   * empty; it renders as an italic "This message was deleted" placeholder.
+   * The message was withdrawn — by the agent, or by the customer (2026-10-07).
+   * Its content and attachments are already empty; it renders as an italic
+   * "This message was deleted" placeholder.
    */
   deletedAt?: string;
   /**
@@ -63,7 +64,7 @@ export interface WidgetMessage {
   automated?: boolean;
 }
 
-/** An agent's correction, as the gateway broadcasts it (EMA-33). */
+/** A correction (agent's or the customer's own), as the gateway broadcasts it (EMA-33). */
 export interface WidgetMessageEdited {
   conversationId: string;
   messageId: string;
@@ -71,7 +72,7 @@ export interface WidgetMessageEdited {
   editedAt: string;
 }
 
-/** An agent's withdrawal, as the gateway broadcasts it (EMA-33). */
+/** A withdrawal (agent's or the customer's own), as the gateway broadcasts it (EMA-33). */
 export interface WidgetMessageDeleted {
   conversationId: string;
   messageId: string;
@@ -87,6 +88,38 @@ export function applyWidgetEdit(list: WidgetMessage[], e: WidgetMessageEdited): 
     return { ...m, content: e.content, editedAt: e.editedAt };
   });
   return changed ? next : list;
+}
+
+/**
+ * How long after sending the customer may still change a message (owner,
+ * 2026-10-07). A DELIBERATE COPY of `MESSAGE_EDIT_WINDOW_MS` in
+ * @yiji/shared-types — this bundle does not import the workspace packages (see
+ * `waNumber` in Widget.tsx). The gateway enforces the real rule; this only
+ * decides when to stop OFFERING the icons, so a drift would show icons that get
+ * refused, never let an edit through.
+ */
+export const CUSTOMER_EDIT_WINDOW_MS = 15 * 60_000;
+
+/**
+ * May the customer be OFFERED edit/delete on this bubble right now?
+ *
+ * Only their own message, only once the gateway has confirmed it (a bubble
+ * still `sending`, or `failed`, has no server id to name), never our local
+ * notices or the greeting, never one already deleted, and only inside the
+ * 15-minute window. `edit` additionally needs words — a photo has nothing to
+ * correct, so it offers delete alone.
+ */
+export function customerMessageActions(
+  m: WidgetMessage,
+  nowMs: number,
+): { edit: boolean; delete: boolean } {
+  const none = { edit: false, delete: false };
+  if (m.senderType !== 'customer' || m.localNotice || m.deletedAt) return none;
+  if (m.status === 'sending' || m.status === 'failed') return none;
+  if (m.clientMsgId && m.id === m.clientMsgId) return none;
+  const sent = Date.parse(m.createdAt);
+  if (!Number.isFinite(sent) || nowMs - sent > CUSTOMER_EDIT_WINDOW_MS) return none;
+  return { edit: m.content.trim().length > 0, delete: true };
 }
 
 /** Apply a live delete: the bubble stays, its words and files go. */
@@ -124,9 +157,9 @@ export interface SocketCallbacks {
     agentInitiated?: boolean;
   }) => void;
   onMessage: (msg: WidgetMessage) => void;
-  /** An agent edited one of their replies (EMA-33). */
+  /** A message was edited — an agent's reply or the customer's own (EMA-33). */
   onMessageEdited?: (e: WidgetMessageEdited) => void;
-  /** An agent deleted one of their replies (EMA-33). */
+  /** A message was deleted — an agent's reply or the customer's own (EMA-33). */
   onMessageDeleted?: (e: WidgetMessageDeleted) => void;
   /** Existing thread pushed by the gateway on (re)connect, so a returning
    *  customer sees their history instead of a blank panel. */

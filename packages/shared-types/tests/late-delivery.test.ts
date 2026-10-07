@@ -3,7 +3,10 @@ import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   isLiveOrderStatus,
   LATE_ORDER_COMPLAINT_TYPE,
+  LATE_ORDER_COMPLAINT_TYPE_KEY,
   lateDeliveryMinutes,
+  lateOrderComplaintType,
+  parseLateOrderComplaintTypeMap,
   LateOrderDecision,
   minutesSince,
   parseYijiTimestamp,
@@ -78,6 +81,83 @@ describe('LATE_ORDER_COMPLAINT_TYPE', () => {
   it('uses ticket types that already exist', () => {
     expect(LATE_ORDER_COMPLAINT_TYPE.late_preparation).toBe('Instore preparation late order');
     expect(LATE_ORDER_COMPLAINT_TYPE.late_delivery).toBe('Late order');
+  });
+});
+
+/*
+ * EMA-32 (owner, 2026-10-07): operations renamed every cause, so the built-in
+ * map matched nothing and tickets filed under "late preparation" — a type the
+ * dropdown does not have. Operations now pair each cause with a complaint type.
+ */
+describe('lateOrderComplaintType', () => {
+  const mapping = {
+    'late preparation': 'Instore preparation late order',
+    'Late Customer': 'Late order',
+  };
+
+  it('uses operations’ pairing first, on an exact match', () => {
+    expect(lateOrderComplaintType('late preparation', mapping)).toBe(
+      'Instore preparation late order',
+    );
+  });
+
+  it('then matches ignoring case and spacing', () => {
+    expect(lateOrderComplaintType('  Late   PREPARATION ', mapping)).toBe(
+      'Instore preparation late order',
+    );
+    expect(lateOrderComplaintType('late customer', mapping)).toBe('Late order');
+  });
+
+  it('prefers the pairing over the built-in map', () => {
+    expect(lateOrderComplaintType('late_delivery', { late_delivery: 'Driver issue' })).toBe(
+      'Driver issue',
+    );
+  });
+
+  it('falls back to the built-in map when the cause is unpaired', () => {
+    expect(lateOrderComplaintType('late_preparation', mapping)).toBe(
+      'Instore preparation late order',
+    );
+    expect(lateOrderComplaintType('late_delivery')).toBe('Late order');
+    expect(lateOrderComplaintType('late_delivery', null)).toBe('Late order');
+  });
+
+  it('falls back to the cause’s own name last, never blank', () => {
+    expect(lateOrderComplaintType('Exceptional order', mapping)).toBe('Exceptional order');
+    expect(lateOrderComplaintType('Exceptional order', { 'Exceptional order': '  ' })).toBe(
+      'Exceptional order',
+    );
+  });
+});
+
+describe('parseLateOrderComplaintTypeMap', () => {
+  it('reads a JSON string (the text column) and an object alike', () => {
+    expect(parseLateOrderComplaintTypeMap('{"late driver":"Late order"}')).toEqual({
+      'late driver': 'Late order',
+    });
+    expect(parseLateOrderComplaintTypeMap({ 'late driver': 'Late order' })).toEqual({
+      'late driver': 'Late order',
+    });
+  });
+
+  it.each([
+    ['null', null],
+    ['blank', '  '],
+    ['malformed', '{oops'],
+    ['an array', '["Late order"]'],
+    ['a number', 42],
+  ])('treats %s as no pairing', (_label, raw) => {
+    expect(parseLateOrderComplaintTypeMap(raw)).toEqual({});
+  });
+
+  it('drops non-string and blank entries', () => {
+    expect(parseLateOrderComplaintTypeMap({ a: 'Late order', b: 3, c: '', d: null })).toEqual({
+      a: 'Late order',
+    });
+  });
+
+  it('uses the agreed app_settings key', () => {
+    expect(LATE_ORDER_COMPLAINT_TYPE_KEY).toBe('late_order_complaint_type');
   });
 });
 

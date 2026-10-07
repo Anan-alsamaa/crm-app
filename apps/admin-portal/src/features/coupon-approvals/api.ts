@@ -91,6 +91,8 @@ export interface CouponApprovalRow {
     id: string;
     subject: string | null;
     complaint_type: string | null;
+    /** Where the complaint came in (CRM, WhatsApp, social media…) — EMA-57. */
+    complaint_source?: string | null;
     description: string | null;
     order_id: string | null;
     priority: string | null;
@@ -160,6 +162,9 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
                   'id',
                   'subject',
                   'complaint_type',
+                  // EMA-57 (2026-10-07): the ticket's source, to review where
+                  // the complaint came from before approving.
+                  'complaint_source',
                   'description',
                   'order_id',
                   'priority',

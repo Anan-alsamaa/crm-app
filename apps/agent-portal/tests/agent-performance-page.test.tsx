@@ -23,7 +23,10 @@ vi.mock('react-i18next', () => ({
 }));
 
 const navigate = vi.hoisted(() => vi.fn());
-vi.mock('react-router-dom', () => ({ useNavigate: () => navigate }));
+vi.mock('react-router-dom', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('react-router-dom')>()),
+  useNavigate: () => navigate,
+}));
 
 const inbox = vi.hoisted(() => ({ useAgents: vi.fn() }));
 vi.mock('../src/features/inbox/api.js', () => inbox);
@@ -37,15 +40,21 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
 const perf = vi.hoisted(() => ({
   useChatTimings: vi.fn(),
   useCsatByConversation: vi.fn(() => ({ data: new Map<string, number>() })),
+  // The Tickets and Coupons tabs (owner, 2026-10-07) — not opened here.
+  useTicketPerformance: vi.fn(() => ({ data: [], isLoading: false })),
+  useCouponPerformance: vi.fn(() => ({ data: [], isLoading: false })),
 }));
 vi.mock('../src/features/performance/api.js', () => perf);
 
+import { MemoryRouter } from 'react-router-dom';
 import { AgentPerformancePage } from '../src/features/performance/AgentPerformancePage.js';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{children}</MemoryRouter>
+    </QueryClientProvider>
   );
   return render(<AgentPerformancePage />, { wrapper: Wrapper });
 }

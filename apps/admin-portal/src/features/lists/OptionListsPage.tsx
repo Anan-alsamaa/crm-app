@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem, deleteItem, readItems, updateItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
-import { LATE_ORDER_CAUSE_LIST } from '@yiji/shared-types';
+import {
+  LATE_ORDER_CAUSE_LIST,
+  LATE_ORDER_COMPLAINT_TYPE_KEY,
+  parseLateOrderComplaintTypeMap,
+} from '@yiji/shared-types';
 import {
   Button,
   ChevronDownIcon,
@@ -122,6 +126,51 @@ function useOptionRows() {
   });
 }
 
+/** Case- and spacing-insensitive, matching `lateOrderComplaintType`'s fallback. */
+const loose = (s: string) => s.trim().replace(/\s+/g, ' ').toLowerCase();
+
+/**
+ * The complaint type a cause is paired with, as `lateOrderComplaintType` would
+ * find it: the exact key first, then a case/space-insensitive one.
+ */
+function pairedType(map: Record<string, string>, cause: string): string {
+  if (map[cause]) return map[cause];
+  const hit = Object.entries(map).find(([k]) => loose(k) === loose(cause));
+  return hit?.[1] ?? '';
+}
+
+/** Read the app_settings row holding the pairing — id too, so a save can update it. */
+async function readComplaintTypeRow(): Promise<{ id: string; value: unknown } | null> {
+  const rows = (await directus.request(
+    readItems(
+      'app_settings' as never,
+      {
+        filter: { key: { _eq: LATE_ORDER_COMPLAINT_TYPE_KEY } },
+        limit: 1,
+        fields: ['id', 'value'],
+      } as never,
+    ),
+  )) as unknown as Array<{ id: string; value: unknown }>;
+  return rows[0] ?? null;
+}
+
+/**
+ * WHICH COMPLAINT TYPE EACH LATE-ORDER CAUSE FILES UNDER (owner, 2026-10-07,
+ * EMA-32).
+ *
+ * Operations renamed every cause, so the two-entry map in code matched nothing
+ * and tickets were filed under the raw cause — "late preparation", a type the
+ * ticket dropdown does not have. The pairing is theirs to choose now, beside
+ * the causes they already edit, stored as ONE `app_settings` row of JSON.
+ */
+function useComplaintTypeMap(enabled: boolean) {
+  return useQuery({
+    queryKey: ['app-setting', LATE_ORDER_COMPLAINT_TYPE_KEY],
+    enabled,
+    queryFn: async () => parseLateOrderComplaintTypeMap((await readComplaintTypeRow())?.value),
+  });
+}
+
 export function OptionListsPage() {
   const { t } = useTranslation();
   const qc = useQueryClient();
@@ -168,6 +217,18 @@ export function OptionListsPage() {
       return;
     }
     patch.mutate({ id: renaming.id, body: { value: trimmed } });
+    /* A renamed cause keeps its complaint type. The pairing is keyed by the
+       stored spelling, so without this a rename would silently drop the cause
+       back to filing under its own name. */
+    const paired = groupedList ? pairedType(complaintTypeMap.data ?? {}, renaming.value) : '';
+    if (paired) {
+      const from = renaming.value;
+      saveComplaintType.mutate((map) => {
+        for (const k of Object.keys(map)) if (loose(k) === loose(from)) delete map[k];
+        map[trimmed] = paired;
+        return map;
+      });
+    }
     closeRename();
   };
 
@@ -203,6 +264,45 @@ export function OptionListsPage() {
     onSuccess: invalidate,
     onError: fail,
   });
+  /*
+   * MERGE, never overwrite: the row is read FRESH at save time and only this
+   * cause's entry changes, so a second admin's pairing saved a minute ago is
+   * not wiped by a stale copy in this tab.
+   */
+  const complaintTypeMap = useComplaintTypeMap(groupedList);
+  const saveComplaintType = useMutation({
+    mutationFn: async (edit: (map: Record<string, string>) => Record<string, string>) => {
+      const row = await readComplaintTypeRow();
+      const value = JSON.stringify(edit({ ...parseLateOrderComplaintTypeMap(row?.value) }));
+      if (row) {
+        await directus.request(
+          updateItem('app_settings' as never, row.id as never, { value } as never),
+        );
+        return;
+      }
+      await directus.request(
+        createItem('app_settings' as never, { key: LATE_ORDER_COMPLAINT_TYPE_KEY, value } as never),
+      );
+    },
+    onSuccess: () =>
+      void qc.invalidateQueries({ queryKey: ['app-setting', LATE_ORDER_COMPLAINT_TYPE_KEY] }),
+    onError: fail,
+  });
+  /** Pair `cause` with `type` — or unpair it when `type` is blank. */
+  const setComplaintType = (cause: string, type: string) =>
+    saveComplaintType.mutate((map) => {
+      /* Drop every spelling of this cause first, so a loose-matching older key
+         cannot outlive the choice made now. */
+      for (const k of Object.keys(map)) if (loose(k) === loose(cause)) delete map[k];
+      if (type) map[cause] = type;
+      return map;
+    });
+  /** The ACTIVE ticket types — what the ticket form itself offers. */
+  const complaintTypes = useMemo(
+    () => (rows.data ?? []).filter((r) => r.list === 'complaint_type' && r.active),
+    [rows.data],
+  );
+
   const remove = useMutation({
     mutationFn: (id: string) => directus.request(deleteItem('option_lists' as never, id)),
     onSuccess: invalidate,
@@ -411,6 +511,14 @@ export function OptionListsPage() {
                     {t('lists.add', { defaultValue: 'Add' })}
                   </Button>
                 </div>
+                {groupedList && (
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    {t('lists.filesUnderHint', {
+                      defaultValue:
+                        'When a reason raises a ticket, the ticket is filed under the complaint type chosen beside it. Left not set, it is filed under the reason’s own name — which the ticket form does not offer.',
+                    })}
+                  </p>
+                )}
               </SectionCard>
 
               {rows.isLoading ? (
@@ -458,9 +566,25 @@ export function OptionListsPage() {
                         <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-secondary text-2xs font-semibold tabular-nums text-muted-foreground">
                           {i + 1}
                         </span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                          {row.value}
-                        </span>
+                        <div className="flex min-w-0 flex-1 flex-col items-start gap-0.5">
+                          <span className="w-full truncate text-sm font-medium text-foreground">
+                            {row.value}
+                          </span>
+                          {/* WHICH TICKET TYPE THIS REASON FILES UNDER (owner,
+                              2026-10-07). Under the name rather than in the
+                              action cluster: it describes the reason, and the
+                              row has no room left for a second field-width
+                              control. */}
+                          {groupedList && (
+                            <ComplaintTypeSelect
+                              cause={row.value}
+                              value={pairedType(complaintTypeMap.data ?? {}, row.value)}
+                              types={complaintTypes}
+                              disabled={complaintTypeMap.isLoading || complaintTypeMap.isError}
+                              onChange={(type) => setComplaintType(row.value, type)}
+                            />
+                          )}
+                        </div>
                         {/* THE OWNER, editable in place. It decides whether this
                             cause files a ticket, so it has to be visible on the
                             row rather than hidden behind an edit dialog — and
@@ -659,5 +783,61 @@ export function OptionListsPage() {
         onCancel={() => setDeleting(null)}
       />
     </div>
+  );
+}
+
+/**
+ * "Files under complaint type", beside one late-order reason.
+ *
+ * The options are the ACTIVE ticket types — the same ones the ticket form
+ * offers — so a pairing can only name a type an agent could have chosen. A type
+ * retired AFTER it was paired is still shown (marked retired) rather than
+ * reading as "not set": the tickets keep filing under it, and the screen must
+ * say so.
+ */
+function ComplaintTypeSelect({
+  cause,
+  value,
+  types,
+  disabled,
+  onChange,
+}: {
+  cause: string;
+  value: string;
+  types: ReadonlyArray<{ value: string }>;
+  disabled?: boolean;
+  onChange: (type: string) => void;
+}) {
+  const { t } = useTranslation();
+  const options = [
+    {
+      value: '',
+      label: t('lists.filesUnderNotSet', {
+        defaultValue: '(not set — uses the reason’s own name)',
+      }),
+    },
+    ...types.map((c) => ({ value: c.value, label: c.value })),
+  ];
+  if (value && !types.some((c) => c.value === value)) {
+    options.push({
+      value,
+      label: t('lists.filesUnderRetired', { value, defaultValue: '{{value}} (retired)' }),
+    });
+  }
+  return (
+    <SelectMenu
+      size="sm"
+      variant="ghost"
+      className="-ms-2.5 max-w-full"
+      value={value}
+      disabled={disabled}
+      onChange={onChange}
+      leading={t('lists.filesUnder', { defaultValue: 'Files under complaint type' })}
+      aria-label={t('lists.filesUnderFor', {
+        value: cause,
+        defaultValue: 'Files under complaint type for {{value}}',
+      })}
+      options={options}
+    />
   );
 }

@@ -11,7 +11,7 @@ vi.mock('react-i18next', () => ({
 
 import {
   InlineMessageEditor,
-  OwnMessageActions,
+  MessageActions,
 } from '../src/features/conversation/MessageEditControls.js';
 import {
   applyMessageDeleted,
@@ -83,6 +83,27 @@ describe('applying live edits to the thread', () => {
     expect(out[0]!.content).toBe('');
   });
 
+  /* The customer may change their own words too (owner, 2026-10-07): the same
+     broadcast lands here, and must render the same way. */
+  it("applies the CUSTOMER's own edit and delete the same way", () => {
+    const theirs = msg({
+      id: 'c1',
+      sender_type: 'customer',
+      sender_user: null,
+      content: 'order 1234',
+    });
+    const [edited] = applyMessageEdited([theirs], {
+      messageId: 'c1',
+      content: 'order 1235',
+      editedAt: 'T1',
+    });
+    expect(edited).toMatchObject({ content: 'order 1235', edited_at: 'T1' });
+    const [deleted] = applyMessageDeleted([theirs], { messageId: 'c1', deletedAt: 'T2' });
+    expect(deleted).toMatchObject({ content: '', attachments: [], deleted_at: 'T2' });
+    // ...and an agent is never offered Edit/Delete on the customer's words.
+    expect(canOfferMessageActions(theirs, 'agent-1', sentMs)).toBe(false);
+  });
+
   it('returns the SAME list when the message is not in it (no needless re-render)', () => {
     const list = [msg()];
     expect(applyMessageEdited(list, { messageId: 'x', content: 'y', editedAt: 'T' })).toBe(list);
@@ -130,21 +151,56 @@ describe('InlineMessageEditor', () => {
   });
 });
 
-describe('OwnMessageActions', () => {
-  it('offers Edit and Delete', () => {
+/*
+ * ICONS, NOT WORDS — SELECT, THEN ACT (owner, 2026-10-07): "instead of 2
+ * buttons let there be icons — like WhatsApp".
+ */
+describe('MessageActions', () => {
+  it('offers copy, edit and delete as named ICONS with no visible words', () => {
+    const onCopy = vi.fn();
     const onEdit = vi.fn();
     const onDelete = vi.fn();
-    render(<OwnMessageActions canEdit onEdit={onEdit} onDelete={onDelete} />);
+    render(<MessageActions selected onCopy={onCopy} onEdit={onEdit} onDelete={onDelete} />);
+    for (const name of ['Copy message', 'Edit message', 'Delete message']) {
+      const btn = screen.getByRole('button', { name });
+      expect(btn.textContent).toBe('');
+      expect(btn.querySelector('svg')).not.toBeNull();
+      expect(btn.getAttribute('title')).toBe(name);
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Copy message' }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit message' }));
     fireEvent.click(screen.getByRole('button', { name: 'Delete message' }));
+    expect(onCopy).toHaveBeenCalled();
     expect(onEdit).toHaveBeenCalled();
     expect(onDelete).toHaveBeenCalled();
   });
 
+  it("someone else's message (or a closed window) offers Copy only", () => {
+    render(<MessageActions selected={false} onCopy={vi.fn()} />);
+    expect(screen.getByRole('button', { name: 'Copy message' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Delete message' })).toBeNull();
+  });
+
   it('an attachment-only reply offers Delete only', () => {
-    render(<OwnMessageActions canEdit={false} onEdit={vi.fn()} onDelete={vi.fn()} />);
+    render(<MessageActions selected={false} onDelete={vi.fn()} />);
     expect(screen.queryByRole('button', { name: 'Edit message' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Delete message' })).toBeTruthy();
+  });
+
+  it('stays visible while SELECTED, hover-only otherwise', () => {
+    const { rerender } = render(<MessageActions selected={false} onCopy={vi.fn()} />);
+    const bar = screen.getByRole('toolbar', { name: 'Message actions' });
+    expect(bar.className).toContain('opacity-0');
+    rerender(<MessageActions selected onCopy={vi.fn()} />);
+    expect(screen.getByRole('toolbar', { name: 'Message actions' }).className).toContain(
+      'opacity-100',
+    );
+  });
+
+  it('renders nothing with no actions', () => {
+    const { container } = render(<MessageActions selected />);
+    expect(container.innerHTML).toBe('');
   });
 });
 
@@ -179,6 +235,15 @@ describe('ConversationView wiring', () => {
   it('maps senderUserId so own live replies are editable', () => {
     // Null only for the automatic welcome (owner, 2026-10-06); see auto-welcome-rendering.
     expect(VIEW).toMatch(/sender_user:\s*msg\.senderUserId \?\?/);
+  });
+
+  it('a click SELECTS a message and pins its icon bar; edit/delete stay gated', () => {
+    expect(VIEW).toContain('toggleSelected(m.id)');
+    expect(VIEW).toContain('selected={selectedId === m.id}');
+    expect(VIEW).toContain("can('edit_own_messages')");
+    expect(VIEW).toMatch(/onEdit=\{\s*ownActions/);
+    expect(VIEW).toMatch(/onDelete=\{\s*ownActions/);
+    expect(VIEW).not.toContain('OwnMessageActions');
   });
 
   it('shows the edited label and the deleted placeholder, and confirms a delete', () => {

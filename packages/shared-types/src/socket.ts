@@ -51,7 +51,8 @@ export type NoteDelete = z.infer<typeof NoteDelete>;
 
 /**
  * Agent → server: correct a reply they sent (owner, 2026-10-05 (EMA-33)).
- * The gateway re-reads the row and enforces own-message + the 15-minute window
+ * Since 2026-10-07 the customer widget sends it too, for the customer's own
+ * messages (owner: "the customer must have this option too"). The gateway re-reads the row and enforces own-message + the 15-minute window
  * (see message-edit.ts); this schema only shapes the request. Trimmed and
  * non-empty, because an edit to nothing is a delete and has its own event.
  */
@@ -62,7 +63,7 @@ export const MessageEdit = z.object({
 });
 export type MessageEdit = z.infer<typeof MessageEdit>;
 
-/** Agent → server: withdraw a reply they sent (soft delete). */
+/** Agent or customer → server: withdraw a message they sent (soft delete). */
 export const MessageDelete = z.object({
   conversationId: idSchema,
   messageId: idSchema,
@@ -108,7 +109,7 @@ export const MessageNew = z.object({
 });
 export type MessageNew = z.infer<typeof MessageNew>;
 
-/** Server → conversation room (agents AND the customer): a reply was edited. */
+/** Server → conversation room (agents AND the customer): a message was edited. */
 export const MessageEdited = z.object({
   conversationId: idSchema,
   messageId: idSchema,

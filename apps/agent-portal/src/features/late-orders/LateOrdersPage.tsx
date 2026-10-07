@@ -58,6 +58,7 @@ import {
   resolveLateOrderContact,
   useLateOrders,
   useLateOrderCauses,
+  useLateOrderComplaintTypes,
   useLateOrderDecisions,
   useRecordLateDecision,
   useOrderEventTimes,
@@ -729,6 +730,10 @@ export function LateOrdersPage() {
    * is what decides whether the decision also files a ticket.
    */
   const causes = useLateOrderCauses();
+  /* Which complaint type each cause files under — operations' choice, beside
+     the causes on the Lists page (owner, 2026-10-07). `{}` until it loads or
+     if it cannot be read, which is the built-in behaviour, never a block. */
+  const complaintTypes = useLateOrderComplaintTypes();
   /* `fetchQuery`, not a hook: the order is wanted at the MOMENT of deciding,
      which is an event, not a render. Going through the cache means a row whose
      cart was already opened costs nothing. */
@@ -981,6 +986,7 @@ export function LateOrdersPage() {
               vendorId: soleVendorId,
               agentId: user?.id ?? null,
               storeMatch,
+              complaintTypes: complaintTypes.data,
             }) as never,
           ),
         )) as { id: string };
@@ -1954,7 +1960,7 @@ export function LateOrdersPage() {
                   ) && (
                     <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs leading-relaxed">
                       {t('lateOrders.willRaiseTicket', {
-                        type: lateOrderComplaintType(kindOf(draft.row)),
+                        type: lateOrderComplaintType(kindOf(draft.row), complaintTypes.data),
                         defaultValue: 'A "{{type}}" ticket will be raised for this order.',
                       })}
                     </p>

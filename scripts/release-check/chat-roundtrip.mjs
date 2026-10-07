@@ -11,6 +11,8 @@
  *   customer session → customer sends text → agent receives it
  *   agent replies → customer receives it
  *   agent edits / deletes the reply → customer sees it live (EMA-33)
+ *   customer edits / deletes THEIR OWN message → agent sees it live, and the
+ *   customer cannot touch the agent's reply (owner, 2026-10-07)
  *   customer uploads a photo exactly as a browser does: CORS preflight first,
  *   then POST /chat/attachment, then sends it → agent receives it and can open
  *   the file (EMA-50 — photos were refused at the preflight, twice)
@@ -218,6 +220,52 @@ try {
   await deletedP;
   step('customer sees the delete live', true);
 
+  // ── the CUSTOMER edits / deletes their own message (owner, 2026-10-07) ──
+  const custEditedP = waitFor(
+    agent,
+    'message:edited',
+    (e) => String(e.messageId) === String(seen.id),
+  );
+  customer.emit('message:edit', {
+    conversationId,
+    messageId: seen.id,
+    content: `${stamp} — customer second (edited by customer)`,
+  });
+  const custEdited = await custEditedP;
+  step(
+    "agent sees the customer's edit live",
+    String(custEdited.content).includes('(edited by customer)'),
+  );
+
+  const agentGetsThird = waitFor(
+    agent,
+    'message:new',
+    (m) => m.senderType === 'customer' && String(m.content).includes('customer third'),
+  );
+  customer.emit('message:send', {
+    conversationId,
+    content: `${stamp} — customer third (to delete)`,
+    clientMsgId: `c4-${Date.now()}`,
+  });
+  const third = await agentGetsThird;
+  const custDeletedP = waitFor(
+    agent,
+    'message:deleted',
+    (e) => String(e.messageId) === String(third.id),
+  );
+  customer.emit('message:delete', { conversationId, messageId: third.id });
+  await custDeletedP;
+  step("agent sees the customer's delete live", true);
+
+  /* Never someone else's words: the customer trying to change the AGENT's
+     reply is refused by the gateway, whatever the widget shows. */
+  const refusedP = waitFor(customer, 'error', (e) => e?.code === 'not_own_message', 10_000).catch(
+    () => null,
+  );
+  customer.emit('message:edit', { conversationId, messageId: reply.id, content: 'tamper' });
+  const refused = await refusedP;
+  step("customer cannot edit the agent's reply", !!refused, refused ? '' : 'no refusal received');
+
   // ── photo upload, as a BROWSER does it (EMA-50) ─────────────────────────
   const pre = await fetch(`${API}/chat/attachment?filename=check.png&type=image%2Fpng`, {
     method: 'OPTIONS',
@@ -295,6 +343,23 @@ try {
     'history after reconnect keeps the deleted reply hidden',
     !!deletedRow && !deletedRow.content && !!(deletedRow.deletedAt ?? deletedRow.deleted_at),
     deletedRow ? '' : 'reply not found in history',
+  );
+  const find = (id) => (Array.isArray(rows) ? rows.find((m) => String(m.id) === String(id)) : null);
+  const custEditedRow = find(seen.id);
+  step(
+    "history after reconnect keeps the customer's edit (with its marker)",
+    !!custEditedRow &&
+      String(custEditedRow.content).includes('(edited by customer)') &&
+      !!(custEditedRow.editedAt ?? custEditedRow.edited_at),
+    custEditedRow ? '' : 'edited message not found in history',
+  );
+  const custDeletedRow = find(third.id);
+  step(
+    "history after reconnect keeps the customer's deleted message hidden",
+    !!custDeletedRow &&
+      !custDeletedRow.content &&
+      !!(custDeletedRow.deletedAt ?? custDeletedRow.deleted_at),
+    custDeletedRow ? '' : 'deleted message not found in history',
   );
 } catch (err) {
   step('round trip completed', false, err instanceof Error ? err.message : String(err));

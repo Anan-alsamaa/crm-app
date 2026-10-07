@@ -1008,16 +1008,159 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         expect((await err).code).toBe('bad_payload');
       });
 
-      it('a CUSTOMER socket cannot edit or delete anything', async () => {
-        const getMessageForEdit = vi.fn(async () => ownRow());
-        harness = await startGateway(makeStubs({ getMessageForEdit }));
+      /*
+       * THE CUSTOMER'S OWN MESSAGES (owner, 2026-10-07). Same window, same soft
+       * delete, same broadcast — so the agent sees it live — but only a message
+       * this customer sent, in the one conversation their socket is bound to.
+       */
+      const customerRow = (over: Record<string, unknown> = {}) => ({
+        id: 'msg-c1',
+        sender_type: 'customer',
+        sender_user: null,
+        sender_contact: 'contact-1',
+        conversation: 'conv-1',
+        is_internal_note: false,
+        date_created: new Date(Date.now() - 60_000).toISOString(),
+        deleted_at: null,
+        content: 'my order is 1234',
+        original_content: null,
+        ...over,
+      });
+
+      it('a customer edits their OWN message and the AGENT is told live', async () => {
+        const updateAgentMessage = vi.fn(async () => undefined);
+        const getMessageForEdit = vi.fn(async () => customerRow());
+        harness = await startGateway(makeStubs({ getMessageForEdit, updateAgentMessage }));
+        const agent = await connectedAgent();
         const customer = await connectCustomerReady(harness.port, sockets);
+        const got = waitFor<{ messageId: string; content: string; editedAt: string }>(
+          agent,
+          SOCKET_EVENTS.messageEdited,
+        );
+        customer.emit(SOCKET_EVENTS.messageEdit, {
+          conversationId: 'conv-1',
+          messageId: 'msg-c1',
+          content: ' my order is 1235 ',
+        });
+        const evt = await got;
+        expect(evt).toMatchObject({ messageId: 'msg-c1', content: 'my order is 1235' });
+        expect(getMessageForEdit).toHaveBeenCalledWith('conv-1', 'msg-c1');
+        expect(updateAgentMessage).toHaveBeenCalledWith(
+          'msg-c1',
+          expect.objectContaining({
+            content: 'my order is 1235',
+            originalContent: 'my order is 1234',
+          }),
+        );
+      });
+
+      it('a customer deletes their OWN message (photo too) and the AGENT is told live', async () => {
+        const updateAgentMessage = vi.fn(async () => undefined);
+        harness = await startGateway(
+          makeStubs({
+            getMessageForEdit: vi.fn(async () => customerRow({ content: '' })),
+            updateAgentMessage,
+          }),
+        );
+        const agent = await connectedAgent();
+        const customer = await connectCustomerReady(harness.port, sockets);
+        const got = waitFor<Record<string, unknown>>(agent, SOCKET_EVENTS.messageDeleted);
         customer.emit(SOCKET_EVENTS.messageDelete, {
           conversationId: 'conv-1',
-          messageId: 'msg-9',
+          messageId: 'msg-c1',
         });
-        await expectNoEvent(customer, SOCKET_EVENTS.messageDeleted);
+        const evt = await got;
+        expect(evt).toMatchObject({ conversationId: 'conv-1', messageId: 'msg-c1' });
+        expect(evt).not.toHaveProperty('content');
+        expect(updateAgentMessage).toHaveBeenCalledWith(
+          'msg-c1',
+          expect.objectContaining({ content: '', deletedAt: expect.any(String) }),
+        );
+      });
+
+      it.each([
+        [
+          "an agent's reply",
+          { sender_type: 'agent', sender_user: 'agent-1', sender_contact: null },
+        ],
+        ["another customer's message", { sender_contact: 'contact-2' }],
+        ['a message from another conversation', { conversation: 'conv-other' }],
+      ])('a customer cannot change %s', async (_label, over) => {
+        const updateAgentMessage = vi.fn(async () => undefined);
+        harness = await startGateway(
+          makeStubs({
+            getMessageForEdit: vi.fn(async () => customerRow(over)),
+            updateAgentMessage,
+          }),
+        );
+        const customer = await connectCustomerReady(harness.port, sockets);
+        const err = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
+        customer.emit(SOCKET_EVENTS.messageEdit, {
+          conversationId: 'conv-1',
+          messageId: 'msg-c1',
+          content: 'changed',
+        });
+        expect((await err).code).toBe('not_own_message');
+        const err2 = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
+        customer.emit(SOCKET_EVENTS.messageDelete, {
+          conversationId: 'conv-1',
+          messageId: 'msg-c1',
+        });
+        expect((await err2).code).toBe('not_own_message');
+        expect(updateAgentMessage).not.toHaveBeenCalled();
+      });
+
+      it('a customer naming ANOTHER conversation is refused before any read', async () => {
+        const getMessageForEdit = vi.fn(async () => customerRow({ conversation: 'conv-x' }));
+        harness = await startGateway(makeStubs({ getMessageForEdit }));
+        const customer = await connectCustomerReady(harness.port, sockets);
+        const err = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
+        customer.emit(SOCKET_EVENTS.messageDelete, {
+          conversationId: 'conv-x',
+          messageId: 'msg-c1',
+        });
+        expect((await err).code).toBe('forbidden');
         expect(getMessageForEdit).not.toHaveBeenCalled();
+      });
+
+      it('a customer cannot change a message after 15 minutes', async () => {
+        const updateAgentMessage = vi.fn(async () => undefined);
+        harness = await startGateway(
+          makeStubs({
+            getMessageForEdit: vi.fn(async () =>
+              customerRow({ date_created: new Date(Date.now() - 16 * 60_000).toISOString() }),
+            ),
+            updateAgentMessage,
+          }),
+        );
+        const customer = await connectCustomerReady(harness.port, sockets);
+        const err = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
+        customer.emit(SOCKET_EVENTS.messageEdit, {
+          conversationId: 'conv-1',
+          messageId: 'msg-c1',
+          content: 'late',
+        });
+        expect((await err).code).toBe('edit_window_closed');
+        expect(updateAgentMessage).not.toHaveBeenCalled();
+      });
+
+      it('a customer cannot EDIT a photo-only message (there is no text)', async () => {
+        const updateAgentMessage = vi.fn(async () => undefined);
+        harness = await startGateway(
+          makeStubs({
+            getMessageForEdit: vi.fn(async () => customerRow({ content: '' })),
+            updateAgentMessage,
+          }),
+        );
+        const customer = await connectCustomerReady(harness.port, sockets);
+        const err = waitFor<{ code: string }>(customer, SOCKET_EVENTS.error);
+        customer.emit(SOCKET_EVENTS.messageEdit, {
+          conversationId: 'conv-1',
+          messageId: 'msg-c1',
+          content: 'caption',
+        });
+        expect((await err).code).toBe('not_editable');
+        expect(updateAgentMessage).not.toHaveBeenCalled();
       });
 
       it('reports edit_failed when the write throws', async () => {

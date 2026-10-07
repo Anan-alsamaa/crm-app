@@ -7,79 +7,119 @@ import { cn } from '@yiji/ui';
  *
  * Kept out of ConversationView so the behaviour — Enter saves, Esc cancels,
  * an empty edit cannot be saved — can be tested by rendering, not by reading
- * source. Who may see these buttons is decided by the caller
+ * source. Who may see these actions is decided by the caller
  * (`canOfferMessageActions`); the gateway enforces it either way.
  */
 
 /*
- * ON HOVER OF THAT ONE MESSAGE, IN PLACE OF COPY (owner, 2026-10-06).
+ * SELECT A MESSAGE, THEN ICONS — LIKE WHATSAPP (owner, 2026-10-07).
  *
- * First they were faint icons BESIDE Copy and nobody found them; then always
- * visible under every recent reply. The owner's call: they replace the Copy
- * button on the agent's own changeable reply and, like Copy, appear only while
- * that specific message is hovered. Labelled, so the hover shows a word rather
- * than an icon to guess at. Keyboard focus still reveals them.
+ * History: first faint icons beside Copy that nobody found (10-05), then the
+ * words "Edit" / "Delete" on hover in place of Copy (10-06). The owner's call
+ * now: "instead of 2 buttons let there be icons — like WhatsApp, they can
+ * select a message and delete or modify it."
+ *
+ * So a click on the bubble SELECTS it and pins a compact icon bar beside it:
+ * copy for any message, plus pencil and trash on the agent's own reply while
+ * it is still changeable. Hover still previews the bar on desktop, keyboard
+ * focus reveals it, and every icon is named by aria-label AND title, so a
+ * screen reader and a hovering mouse both say what it does.
  */
 const ICON_BUTTON =
-  'inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-md px-1.5 text-2xs font-medium text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/msg:opacity-100';
+  'inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50';
 
-/** Hover actions beside an own reply: Edit (only when it has text) and Delete. */
-export function OwnMessageActions({
-  canEdit,
+function Glyph({ d }: { d: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5"
+      aria-hidden
+    >
+      <path d={d} />
+    </svg>
+  );
+}
+
+const COPY_PATH =
+  'M7 5.5h5A1.5 1.5 0 0 1 13.5 7v5a1.5 1.5 0 0 1-1.5 1.5H7A1.5 1.5 0 0 1 5.5 12V7A1.5 1.5 0 0 1 7 5.5zM10.5 5.5V3.5A1.5 1.5 0 0 0 9 2H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2';
+const PENCIL_PATH = 'M11 2.5l2.5 2.5L6 12.5H3.5V10z';
+const TRASH_PATH =
+  'M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6';
+
+/**
+ * The icon bar beside a message. Each action is offered only when its handler
+ * is given: copy for any message with words, edit/delete only where the caller
+ * (`canOfferMessageActions` + `edit_own_messages`) allows. The gateway
+ * enforces the rules either way.
+ */
+export function MessageActions({
+  selected,
+  onCopy,
   onEdit,
   onDelete,
 }: {
-  /** False for an attachment-only reply: there is no wording to correct. */
-  canEdit: boolean;
-  onEdit: () => void;
-  onDelete: () => void;
+  /** The message is selected: the bar stays visible, not only on hover. */
+  selected: boolean;
+  onCopy?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }) {
   const { t } = useTranslation();
+  if (!onCopy && !onEdit && !onDelete) return null;
+  const copyLabel = t('conversation.copyMessage', { defaultValue: 'Copy message' });
+  const editLabel = t('conversation.editMessage', { defaultValue: 'Edit message' });
+  const deleteLabel = t('conversation.deleteMessage', { defaultValue: 'Delete message' });
   return (
-    <>
-      {canEdit && (
+    <div
+      role="toolbar"
+      aria-label={t('conversation.messageActions', { defaultValue: 'Message actions' })}
+      data-selected={selected ? 'true' : undefined}
+      // A click on an icon must not toggle the bubble's selection.
+      onClick={(e) => e.stopPropagation()}
+      className={cn(
+        'flex shrink-0 items-center gap-0.5 rounded-full bg-card/90 p-0.5 shadow-soft ring-1 ring-foreground/[0.06] transition-opacity duration-fast ease-out',
+        selected ? 'opacity-100' : 'opacity-0 focus-within:opacity-100 group-hover/msg:opacity-100',
+      )}
+    >
+      {onCopy && (
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label={copyLabel}
+          title={copyLabel}
+          className={ICON_BUTTON}
+        >
+          <Glyph d={COPY_PATH} />
+        </button>
+      )}
+      {onEdit && (
         <button
           type="button"
           onClick={onEdit}
-          aria-label={t('conversation.editMessage', { defaultValue: 'Edit message' })}
+          aria-label={editLabel}
+          title={editLabel}
           className={ICON_BUTTON}
         >
-          <svg
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="h-3.5 w-3.5"
-            aria-hidden
-          >
-            <path d="M11 2.5l2.5 2.5L6 12.5H3.5V10z" />
-          </svg>
-          <span aria-hidden>{t('conversation.editShort', { defaultValue: 'Edit' })}</span>
+          <Glyph d={PENCIL_PATH} />
         </button>
       )}
-      <button
-        type="button"
-        onClick={onDelete}
-        aria-label={t('conversation.deleteMessage', { defaultValue: 'Delete message' })}
-        className={cn(ICON_BUTTON, 'hover:text-destructive')}
-      >
-        <svg
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="h-3.5 w-3.5"
-          aria-hidden
+      {onDelete && (
+        <button
+          type="button"
+          onClick={onDelete}
+          aria-label={deleteLabel}
+          title={deleteLabel}
+          className={cn(ICON_BUTTON, 'hover:text-destructive')}
         >
-          <path d="M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M4 4.5l.7 8.6a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.6" />
-        </svg>
-        <span aria-hidden>{t('conversation.deleteShort', { defaultValue: 'Delete' })}</span>
-      </button>
-    </>
+          <Glyph d={TRASH_PATH} />
+        </button>
+      )}
+    </div>
   );
 }
 

@@ -50,10 +50,29 @@ export interface WidgetStrings {
   msgFailed: string;
   msgRetry: string;
   msgDelete: string;
-  /** An agent corrected this reply after sending it (EMA-33). */
+  /** A message was corrected after sending (EMA-33) — agent's or the customer's own. */
   msgEdited: string;
-  /** Placeholder for a reply the agent withdrew (EMA-33). */
+  /** Placeholder for a withdrawn message (EMA-33) — agent's or the customer's own. */
   msgDeleted: string;
+  /*
+   * The customer changing their OWN message (owner, 2026-10-07): select it,
+   * then the pencil / trash icons, WhatsApp-style. Icons carry these as
+   * aria-label + title so they are named for screen readers and on hover.
+   */
+  messageActions: string;
+  editMessage: string;
+  deleteMessage: string;
+  /** Short confirm before a delete — it cannot be undone. */
+  deleteConfirm: string;
+  cancel: string;
+  /** The bar above the composer while a message is being edited. */
+  editingMessage: string;
+  saveEdit: string;
+  cancelEdit: string;
+  /** The gateway refused an edit/delete because 15 minutes had passed. */
+  editWindowClosed: string;
+  /** Any other refused or failed edit/delete. */
+  editFailed: string;
   offlineCallLabel: string;
   offlineWhatsappLabel: string;
   /** The language switch: names the OTHER language, in that language. */
@@ -114,6 +133,16 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     msgDelete: 'Delete',
     msgEdited: 'edited',
     msgDeleted: 'This message was deleted',
+    messageActions: 'Message options',
+    editMessage: 'Edit message',
+    deleteMessage: 'Delete message',
+    deleteConfirm: 'Delete this message for everyone?',
+    cancel: 'Cancel',
+    editingMessage: 'Editing message',
+    saveEdit: 'Save changes',
+    cancelEdit: 'Cancel editing',
+    editWindowClosed: 'Messages can only be changed within 15 minutes of sending.',
+    editFailed: "Couldn't change that message. Please try again.",
     offlineCallLabel: 'Call us',
     offlineWhatsappLabel: 'WhatsApp',
     switchLanguage: 'العربية',
@@ -160,6 +189,16 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     msgDelete: 'حذف',
     msgEdited: 'معدّلة',
     msgDeleted: 'تم حذف هذه الرسالة',
+    messageActions: 'خيارات الرسالة',
+    editMessage: 'تعديل الرسالة',
+    deleteMessage: 'حذف الرسالة',
+    deleteConfirm: 'حذف هذه الرسالة لدى الجميع؟',
+    cancel: 'إلغاء',
+    editingMessage: 'جارٍ تعديل الرسالة',
+    saveEdit: 'حفظ التعديل',
+    cancelEdit: 'إلغاء التعديل',
+    editWindowClosed: 'يمكن تعديل الرسائل أو حذفها خلال ١٥ دقيقة فقط من إرسالها.',
+    editFailed: 'تعذّر تعديل الرسالة. حاول مرة أخرى.',
     offlineCallLabel: 'اتصل بنا',
     offlineWhatsappLabel: 'واتساب',
     switchLanguage: 'English',

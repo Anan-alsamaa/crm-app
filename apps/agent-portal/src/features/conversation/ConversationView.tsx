@@ -48,7 +48,7 @@ import { QuickReplies } from './QuickReplies.js';
 import { EnhanceButton } from './EnhanceButton.js';
 import { PushUnreachableNotice } from './PushUnreachableNotice.js';
 import { resolveMentions } from './mentions.js';
-import { InlineMessageEditor, OwnMessageActions } from './MessageEditControls.js';
+import { InlineMessageEditor, MessageActions } from './MessageEditControls.js';
 import {
   applyMessageDeleted,
   applyMessageEdited,
@@ -125,6 +125,17 @@ export function ConversationView({
   const canEditOwn = can('edit_own_messages');
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  /*
+   * The SELECTED message (owner, 2026-10-07): a click on a bubble pins its
+   * icon bar (copy; pencil + trash on an own changeable reply), WhatsApp-style.
+   * A second click, Escape, or opening the editor clears it.
+   */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const toggleSelected = (id: string) => {
+    // Dragging to select text is reading, not choosing the message.
+    if (window.getSelection?.()?.toString()) return;
+    setSelectedId((cur) => (cur === id ? null : id));
+  };
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -1330,9 +1341,29 @@ export function ConversationView({
                                   )}
                                 >
                                   <div
+                                    role="button"
+                                    tabIndex={0}
+                                    aria-pressed={selectedId === m.id}
+                                    onClick={(e) => {
+                                      // A link inside the bubble opens; it does not select.
+                                      if ((e.target as HTMLElement).closest('a')) return;
+                                      toggleSelected(m.id);
+                                    }}
+                                    onKeyDown={(e) => {
+                                      if (e.target !== e.currentTarget) return;
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        toggleSelected(m.id);
+                                      } else if (e.key === 'Escape') {
+                                        setSelectedId(null);
+                                      }
+                                    }}
                                     className={cn(
-                                      'px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
-                                      'motion-safe:animate-message-in',
+                                      'cursor-pointer px-4 py-2.5 text-[15px] leading-relaxed break-words text-start max-w-fit',
+                                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                                      // Selected (owner, 2026-10-07): ringed like WhatsApp's highlight.
+                                      selectedId === m.id &&
+                                        'ring-2 ring-primary/40 ring-offset-2 ring-offset-card',
                                       // Board bubbles: outgoing = solid jade,
                                       // incoming = token bubble surface with a
                                       // hairline ring. One rounding everywhere.
@@ -1372,43 +1403,27 @@ export function ConversationView({
                                     )}
                                   </div>
                                   {/*
-                                    COPY, OR EDIT — never both (owner, 2026-10-06).
-                                    On the agent's own reply that can still be
-                                    changed, the hover button IS Edit (with
-                                    Delete); on everything else it stays Copy.
-                                    Either way it appears only while that one
-                                    message is hovered.
+                                    ICONS, NOT WORDS (owner, 2026-10-07): copy on
+                                    every message; pencil + trash as well on the
+                                    agent's own reply while it can still change.
+                                    Pinned while the message is selected, a
+                                    preview on hover.
                                   */}
-                                  {ownActions ? (
-                                    <OwnMessageActions
-                                      canEdit
-                                      onEdit={() => setEditing({ id: m.id, text: m.content ?? '' })}
-                                      onDelete={() => setConfirmDeleteId(m.id)}
-                                    />
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => copyMessage(m.content ?? '')}
-                                      aria-label={t('conversation.copyMessage', {
-                                        defaultValue: 'Copy message',
-                                      })}
-                                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 group-hover/msg:opacity-100"
-                                    >
-                                      <svg
-                                        viewBox="0 0 16 16"
-                                        fill="none"
-                                        stroke="currentColor"
-                                        strokeWidth="1.5"
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        className="h-3.5 w-3.5"
-                                        aria-hidden
-                                      >
-                                        <rect x="5.5" y="5.5" width="8" height="8" rx="1.5" />
-                                        <path d="M10.5 5.5V3.5a1.5 1.5 0 0 0-1.5-1.5H3.5A1.5 1.5 0 0 0 2 3.5V9a1.5 1.5 0 0 0 1.5 1.5h2" />
-                                      </svg>
-                                    </button>
-                                  )}
+                                  <MessageActions
+                                    selected={selectedId === m.id}
+                                    onCopy={() => copyMessage(m.content ?? '')}
+                                    onEdit={
+                                      ownActions
+                                        ? () => {
+                                            setSelectedId(null);
+                                            setEditing({ id: m.id, text: m.content ?? '' });
+                                          }
+                                        : undefined
+                                    }
+                                    onDelete={
+                                      ownActions ? () => setConfirmDeleteId(m.id) : undefined
+                                    }
+                                  />
                                 </div>
                               )}
                               {/* Only rendered when there ARE files, so an empty
@@ -1424,11 +1439,12 @@ export function ConversationView({
                                     attachments={m.attachments}
                                     align={isAgent ? 'end' : 'start'}
                                   />
-                                  {/* An attachment-only reply can still be withdrawn. */}
+                                  {/* An attachment-only reply can still be withdrawn
+                                      (a click on a file opens it, so the bar shows
+                                      on hover / focus here). */}
                                   {ownActions && !hasContent && (
-                                    <OwnMessageActions
-                                      canEdit={false}
-                                      onEdit={() => undefined}
+                                    <MessageActions
+                                      selected={false}
                                       onDelete={() => setConfirmDeleteId(m.id)}
                                     />
                                   )}

@@ -1198,7 +1198,12 @@
       "discountCategory": "Coupons: Discount category",
       "aiAction": "Inbox: AI assistance",
       "lateOrderCause": "Late orders: Source of delay"
-    }
+    },
+    "filesUnder": "Files under complaint type",
+    "filesUnderFor": "Files under complaint type for {{value}}",
+    "filesUnderNotSet": "(not set — uses the reason’s own name)",
+    "filesUnderRetired": "{{value}} (retired)",
+    "filesUnderHint": "When a reason raises a ticket, the ticket is filed under the complaint type chosen beside it. Left not set, it is filed under the reason’s own name — which the ticket form does not offer."
   },
   "roles": {
     "title": "Roles & privileges",

@@ -1096,7 +1096,7 @@ export class GatewayDirectus {
   /**
    * The row an edit/delete is judged on (owner, 2026-10-05 (EMA-33)).
    *
-   * Read with the service token and scoped to the conversation the agent named,
+   * Read with the service token and scoped to the conversation the sender named,
    * so a crafted message id from another thread answers "not found" rather than
    * being judged at all. The rules themselves live in `messageEditRefusal`.
    */
@@ -1107,6 +1107,8 @@ export class GatewayDirectus {
     id: string;
     sender_type: string | null;
     sender_user: string | null;
+    sender_contact: string | null;
+    conversation: string | null;
     is_internal_note: boolean | null;
     date_created: string | null;
     deleted_at: string | null;
@@ -1120,6 +1122,10 @@ export class GatewayDirectus {
           'id',
           'sender_type',
           'sender_user',
+          /* The customer's identity and thread (owner, 2026-10-07): a customer
+             edit is judged on BOTH, see `messageEditRefusal`. */
+          'sender_contact',
+          'conversation',
           'is_internal_note',
           'date_created',
           'deleted_at',
@@ -1132,6 +1138,8 @@ export class GatewayDirectus {
       id: string;
       sender_type: string | null;
       sender_user: string | null;
+      sender_contact: string | null;
+      conversation: string | null;
       is_internal_note: boolean | null;
       date_created: string | null;
       deleted_at: string | null;
@@ -1142,7 +1150,8 @@ export class GatewayDirectus {
   }
 
   /**
-   * Write an agent's edit or soft delete. The caller has already applied the
+   * Write an edit or soft delete — an agent's, or since 2026-10-07 a
+   * customer's own message (the name predates that). The caller has already applied the
    * rules; this only writes. `originalContent` is omitted once it has been set,
    * so the audit keeps the wording the customer first received.
    */
