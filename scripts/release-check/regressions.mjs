@@ -43,7 +43,20 @@ const report = (status, id, name, detail = '') => {
   results.push({ status, id, name });
   console.log(`${status.padEnd(4)}  [${id}] ${name}${detail ? ` — ${detail}` : ''}`);
 };
+/* SKIP_CHECKS=ID,ID — for a targeted re-run; a skipped check is reported as
+   SKIP, never as a pass. */
+const SKIP_CHECKS = new Set(
+  (process.env.SKIP_CHECKS ?? '')
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean),
+);
 async function check(id, name, fn) {
+  if (SKIP_CHECKS.has(id)) {
+    results.push({ status: 'SKIP', id, name });
+    console.log(`SKIP  [${id}] ${name} — skipped by SKIP_CHECKS`);
+    return;
+  }
   try {
     const r = await fn();
     if (r === 'skip') report('SKIP', id, name, 'credentials not provided');
