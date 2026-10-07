@@ -334,6 +334,68 @@ describe('CouponApprovalsPage', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });
 
+  /* OPS-SGVAVXW6 (2026-10-07): 56 SAR asked for, a supervisor typed 28 into a
+     free "Maximum discount" box, the save wrote the cap alone, and the record
+     then failed its own terms check — Approve stayed disabled with no word why. */
+  describe('an amount coupon whose ceiling is the amount (OPS-SGVAVXW6)', () => {
+    const stuck = {
+      ...pending,
+      discount_category: 'Amount',
+      coupon_value: 56,
+      max_discount: '28.00000',
+    };
+
+    it('says in words why Approve is disabled', async () => {
+      api.useCouponApprovals.mockReturnValue({ data: [stuck], isLoading: false });
+      const user = userEvent.setup();
+      renderPage();
+      await expandFirst(user);
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+      expect(screen.getByRole('alert')).toHaveTextContent(/maximum discount is below/i);
+    });
+
+    it('offers no separate ceiling to type for an amount', async () => {
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+      expect(screen.queryByLabelText(/maximum discount/i)).toBeNull();
+    });
+
+    it('saves the ceiling WITH the amount, so the two can never disagree', async () => {
+      const saveMutate = vi.fn();
+      api.useSaveCouponTerms.mockReturnValue({ mutate: saveMutate, isPending: false });
+      api.useCouponApprovals.mockReturnValue({
+        data: [{ ...stuck, max_discount: '56.00000' }],
+        isLoading: false,
+      });
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+      await user.type(screen.getByLabelText(/reason for the change/i), 'One pasta only.');
+      const amount = screen.getByLabelText(/coupon value/i);
+      await user.clear(amount);
+      await user.type(amount, '28');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(saveMutate.mock.calls[0]![0].edits).toMatchObject({
+        coupon_value: 28,
+        max_discount: 28,
+      });
+    });
+
+    it('repairs an existing mismatch on the next save, even with the amount unchanged', async () => {
+      const saveMutate = vi.fn();
+      api.useSaveCouponTerms.mockReturnValue({ mutate: saveMutate, isPending: false });
+      api.useCouponApprovals.mockReturnValue({ data: [stuck], isLoading: false });
+      const user = userEvent.setup();
+      renderPage();
+      await user.click(screen.getByRole('button', { name: 'Edit' }));
+      await user.type(screen.getByLabelText(/reason for the change/i), 'Keep 56.');
+      await user.click(screen.getByRole('button', { name: 'Save' }));
+      expect(saveMutate.mock.calls[0]![0].edits).toMatchObject({ max_discount: 56 });
+      expect(saveMutate.mock.calls[0]![0].edits).not.toHaveProperty('coupon_value');
+    });
+  });
+
   it('says the queue is clear rather than showing an empty box', () => {
     api.useCouponApprovals.mockReturnValue({ data: [], isLoading: false });
     renderPage();

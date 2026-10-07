@@ -215,21 +215,25 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
       out.coupon_percent = null;
     }
   }
-  const cap = Number(e.max_discount);
-  if (
-    e.max_discount.trim() !== '' &&
-    Number.isFinite(cap) &&
-    cap >= 0 &&
-    cap !== (row.max_discount ?? null)
-  ) {
-    out.max_discount = cap;
-  }
-  // For a flat amount the ceiling is the amount. A supervisor who raises the
-  // value must not leave the old, lower cap behind it — that is how 568 came to
-  // be approved with a 55 cap, and only one of those two numbers could have
-  // been what the customer was told.
-  if (!pct && typeof out.coupon_value === 'number') {
-    out.max_discount = out.coupon_value;
+  // Stored as a decimal STRING ("28.00000"), so compare as numbers — a strict
+  // compare against the string called every save a cap change.
+  const storedCap = row.max_discount == null ? null : Number(row.max_discount);
+  if (pct) {
+    const cap = Number(e.max_discount);
+    if (e.max_discount.trim() !== '' && Number.isFinite(cap) && cap >= 0 && cap !== storedCap) {
+      out.max_discount = cap;
+    }
+  } else {
+    // For a flat amount the ceiling IS the amount, always, and is never typed.
+    // OPS-SGVAVXW6 (2026-10-07): a supervisor typed 28 into a free "Maximum
+    // discount" box on a 56 SAR coupon; the save wrote the cap alone, and the
+    // record then failed its own terms check, so Approve stayed disabled. An
+    // existing mismatch is repaired by the next save too.
+    const value =
+      typeof out.coupon_value === 'number' ? out.coupon_value : Number(row.coupon_value ?? NaN);
+    if (Number.isFinite(value) && value > 0 && value !== storedCap) {
+      out.max_discount = value;
+    }
   }
   const u = Number(e.usage_limit);
   if (
@@ -1148,12 +1152,16 @@ function Row({
                         value={edits.valid_to}
                         onChange={(v) => setEdit('valid_to', v)}
                       />
-                      <EditField
-                        label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-                        type="number"
-                        value={edits.max_discount}
-                        onChange={(v) => setEdit('max_discount', v)}
-                      />
+                      {/* Only a percentage has a ceiling to type: an amount's
+                          ceiling is the amount itself (OPS-SGVAVXW6). */}
+                      {isPercentageCategory(edits.discount_category) && (
+                        <EditField
+                          label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+                          type="number"
+                          value={edits.max_discount}
+                          onChange={(v) => setEdit('max_discount', v)}
+                        />
+                      )}
                       <EditField
                         label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
                         type="number"
@@ -1358,6 +1366,17 @@ function Row({
                         >
                           {t('couponApprovals.approve', { defaultValue: 'Approve' })}
                         </Button>
+                      )}
+                      {/* Said in words, not only in a hover title: a greyed-out
+                          Approve with no visible reason is how OPS-SGVAVXW6 was
+                          reported as a bug (2026-10-07). */}
+                      {canDecide && termsProblems.length > 0 && (
+                        <span role="alert" className="text-2xs text-destructive">
+                          {termsProblems[0]?.message}{' '}
+                          {t('couponApprovals.fixWithEdit', {
+                            defaultValue: 'Use Edit to correct it.',
+                          })}
+                        </span>
                       )}
                       {canDecide && (
                         <Button
