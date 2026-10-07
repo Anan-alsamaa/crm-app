@@ -683,16 +683,19 @@ async function main(): Promise<void> {
   const requirePrivilege = async (
     req: FastifyRequest,
     reply: FastifyReply,
-    key: string,
+    key: string | readonly string[],
   ): Promise<{ id: string; role: string | null } | null> => {
+    const keys = typeof key === 'string' ? [key] : key;
     const token = bearerToken(req);
     if (!token) {
       await reply.code(401).send({ ok: false, error: 'missing bearer token' });
       return null;
     }
     const identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
-    if (!identity || identity.privileges[key] !== true) {
-      await reply.code(403).send({ ok: false, error: `your role does not include ${key}` });
+    if (!identity || !keys.some((k) => identity.privileges[k] === true)) {
+      await reply
+        .code(403)
+        .send({ ok: false, error: `your role does not include ${keys.join(' or ')}` });
       return null;
     }
     return identity;
@@ -745,7 +748,20 @@ async function main(): Promise<void> {
   // derives the recipient (its current assigned_agent) and the copy itself.
   // Self-assignment and unassigned entities enqueue nothing.
   app.post('/jobs/notify-assignment', async (req, reply) => {
-    const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
+    /*
+     * BY PERMISSION (owner, 2026-10-07). STAFF_ROLES named only Admin,
+     * Administrator and the long-gone `Agent`, so every WeCare user — the
+     * people who actually assign work — was refused, and a colleague handed a
+     * chat or a ticket by hand was never told. Anyone who may assign a chat or
+     * create/edit a ticket may ask for the assignee to be notified; the body
+     * still names only an entity, re-read here with the service token.
+     */
+    const identity = await requirePrivilege(req, reply, [
+      'assign_chats',
+      'create_tickets',
+      'edit_tickets',
+      'edit_all_tickets',
+    ]);
     if (!identity) return reply;
     const outcome = await notifyAssignment(
       {
@@ -779,7 +795,10 @@ async function main(): Promise<void> {
    * from — so this leaks nothing the caller could not already ask for.
    */
   app.get('/teams/:teamId/least-loaded', async (req, reply) => {
-    const identity = await requireRole(req, reply, STAFF_ROLES, 'agent role required');
+    /* Whoever may hand a chat to a team (owner, 2026-10-07): STAFF_ROLES
+       refused every WeCare user, so the portal fell back to its own estimate,
+       which cannot see colleagues' chats. */
+    const identity = await requirePrivilege(req, reply, 'assign_chats');
     if (!identity) return reply;
     const { teamId } = req.params as { teamId?: string };
     if (!teamId) return reply.code(400).send({ ok: false, error: 'teamId required' });

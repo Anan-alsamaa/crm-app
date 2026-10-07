@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import Fastify from 'fastify';
 import type { NotificationJob } from '@yiji/shared-types';
+import { rolePrivileges } from '../src/auth/agent-jwt.js';
 import {
   notifyAssignment,
   assignmentJobId,
@@ -208,9 +209,20 @@ describe('buildAssignmentNotification — copy fallbacks', () => {
  * caller must be rejected BEFORE any entity read or enqueue happens.
  */
 describe('POST /jobs/notify-assignment — auth gate', () => {
-  const STAFF_ROLES = new Set(['Admin', 'Administrator', 'Agent']);
+  /*
+   * BY PERMISSION since 2026-10-07: STAFF_ROLES named only Admin,
+   * Administrator and the long-gone `Agent`, so every WeCare user was refused
+   * and a colleague assigned by hand was never told. The privileges come from
+   * the same `rolePrivileges` the gateway uses (stored row + defaults).
+   */
+  const MAY_NOTIFY = ['assign_chats', 'create_tickets', 'edit_tickets', 'edit_all_tickets'];
 
-  function buildApp(identityByToken: Record<string, { id: string; role: string | null }>) {
+  function buildApp(
+    identityByToken: Record<
+      string,
+      { id: string; role: string | null; stored?: Record<string, boolean> | null }
+    >,
+  ) {
     const enqueue = vi.fn(async (_job: NotificationJob, jobId: string) => jobId);
     const loadEntity = vi.fn(async () => ({
       id: 'tkt-1',
@@ -224,8 +236,11 @@ describe('POST /jobs/notify-assignment — auth gate', () => {
       const token = header.toLowerCase().startsWith('bearer ') ? header.slice(7).trim() : '';
       if (!token) return reply.code(401).send({ ok: false, error: 'missing bearer token' });
       const identity = identityByToken[token];
-      if (!identity || !identity.role || !STAFF_ROLES.has(identity.role)) {
-        return reply.code(403).send({ ok: false, error: 'agent role required' });
+      const privileges = identity
+        ? rolePrivileges(identity.role, identity.stored ? { privileges: identity.stored } : null)
+        : {};
+      if (!identity || !MAY_NOTIFY.some((k) => privileges[k] === true)) {
+        return reply.code(403).send({ ok: false, error: 'not allowed' });
       }
       const out = await notifyAssignment(
         { loadEntity, enqueueNotification: enqueue, logger: silentLogger },
@@ -271,6 +286,40 @@ describe('POST /jobs/notify-assignment — auth gate', () => {
       method: 'POST',
       url: '/jobs/notify-assignment',
       headers: { authorization: 'Bearer svc' },
+      payload,
+    });
+    expect(res.statusCode).toBe(403);
+    expect(enqueue).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('accepts a WeCare Agent — the people who actually assign work', async () => {
+    const { app, enqueue } = buildApp({
+      tok: {
+        id: CALLER,
+        role: 'WeCare Agent',
+        stored: { use_chat: true, create_tickets: true, edit_tickets: true },
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/jobs/notify-assignment',
+      headers: { authorization: 'Bearer tok' },
+      payload,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it('refuses a role that can neither assign chats nor work tickets', async () => {
+    const { app, enqueue } = buildApp({
+      tok: { id: CALLER, role: 'Okashi Area Manager', stored: { view_all_tickets: true } },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/jobs/notify-assignment',
+      headers: { authorization: 'Bearer tok' },
       payload,
     });
     expect(res.statusCode).toBe(403);
