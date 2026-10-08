@@ -376,6 +376,28 @@ describe('runWarning + runBreach (T067)', () => {
     expect(q.notifications[0]?.opts?.jobId).toBe('slanotif-sla_breach-t1-resolution-user-1');
   });
 
+  /* 2026-10-08: deadlines were recomputed for new working hours; a job queued
+     for the OLD deadline must not breach (and escalate) the ticket. */
+  it('stands down when the deadline moved after the job was scheduled', async () => {
+    const moved = { ...baseTicket, resolution_due_at: '2026-10-08T06:02:00.000Z' };
+    const { repo, events } = makeRepo([moved], [POLICY]);
+    const q = makeQueues();
+    const deps: SlaDeps = {
+      tickets: repo,
+      teams: makeTeams(),
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    };
+    await runBreach(deps, 't1', 'resolution', '2026-10-08T03:35:00.000Z');
+    await runWarning(deps, 't1', 'resolution', '2026-10-08T03:35:00.000Z');
+    expect(events).toEqual([]);
+    expect(q.notifications).toEqual([]);
+    // ...and a job for the CURRENT deadline still fires.
+    await runBreach(deps, 't1', 'resolution', '2026-10-08T06:02:00.000Z');
+    expect(events[0]).toMatchObject({ type: 'sla_breached' });
+  });
+
   it('no-op when first-response warning fires after the agent has already responded', async () => {
     const responded = { ...baseTicket, first_responded_at: new Date().toISOString() };
     const { repo, events } = makeRepo([responded], [POLICY]);

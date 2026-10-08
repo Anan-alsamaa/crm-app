@@ -594,14 +594,43 @@ export async function runChatReconcile(deps: SlaDeps): Promise<void> {
 }
 
 // ---------------- warning / breach ----------------
+
+/**
+ * A JOB SCHEDULED FOR A DEADLINE THAT HAS SINCE MOVED IS STALE (2026-10-08).
+ *
+ * Warning and breach jobs are queued for the deadline as it was when the sweep
+ * scheduled them, under a stable jobId. When the deadline moves (the owner set
+ * working hours, 09:00-04:00, and previous deadlines were recomputed) the old
+ * job still fires at the OLD time - and a breach escalates the ticket to
+ * urgent. So the job re-reads the ticket's current deadline and stands down if
+ * it no longer matches; once it completes, the next sweep queues the job again
+ * for the deadline as it now is.
+ */
+function isStaleJob(
+  deps: SlaDeps,
+  t: TicketRow,
+  deadline: Deadline,
+  scheduledDueAt: string | undefined,
+): boolean {
+  if (deadline !== 'resolution' || !scheduledDueAt || !t.resolution_due_at) return false;
+  const drift = Math.abs(Date.parse(t.resolution_due_at) - Date.parse(scheduledDueAt));
+  if (!(drift >= 1000)) return false;
+  deps.logger.info(
+    { ticketId: t.id, scheduledDueAt, currentDueAt: t.resolution_due_at },
+    'sla job was scheduled for a deadline that has since moved — standing down',
+  );
+  return true;
+}
 export async function runWarning(
   deps: SlaDeps,
   ticketId: string,
   deadline: Deadline,
+  scheduledDueAt?: string,
 ): Promise<void> {
   const t = await deps.tickets.getTicket(ticketId);
   if (!t || isDone(t)) return;
   if (deadline === 'first_response' && t.first_responded_at) return;
+  if (isStaleJob(deps, t, deadline, scheduledDueAt)) return;
 
   /*
    * WARN ONCE PER (TICKET, DEADLINE) — the same ledger the breach already has.
@@ -662,10 +691,12 @@ export async function runBreach(
   deps: SlaDeps,
   ticketId: string,
   deadline: Deadline,
+  scheduledDueAt?: string,
 ): Promise<void> {
   const t = await deps.tickets.getTicket(ticketId);
   if (!t || isDone(t)) return;
   if (deadline === 'first_response' && t.first_responded_at) return;
+  if (isStaleJob(deps, t, deadline, scheduledDueAt)) return;
 
   // Idempotency gate for the WHOLE breach side-effect set (FR-017). Breach jobs
   // are at-least-once; without this a retry appends a duplicate sla_breached
@@ -751,8 +782,9 @@ export async function processSlaJob(
     return;
   }
   const deadline = (job.data.deadline ?? 'first_response') as Deadline;
-  if (kind === 'warning') return runWarning(deps, job.data.ticketId, deadline);
-  if (kind === 'breach') return runBreach(deps, job.data.ticketId, deadline);
+  const scheduledDueAt = (job.data as { dueAt?: string }).dueAt;
+  if (kind === 'warning') return runWarning(deps, job.data.ticketId, deadline, scheduledDueAt);
+  if (kind === 'breach') return runBreach(deps, job.data.ticketId, deadline, scheduledDueAt);
   deps.logger.warn({ kind }, 'unknown sla job kind');
 }
 
