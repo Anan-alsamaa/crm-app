@@ -239,9 +239,20 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   const crud = (c) => ['create', 'read', 'update', 'delete'].map((a) => g(c, a));
   const readOnly = (c) => [g(c, 'read')];
 
+  /**
+   * VENDORS ARE THE ADMINISTRATOR'S (MV-5, EMA-74) — mirrors
+   * `VENDOR_PUBLIC_FIELDS` in directus/bootstrap/src/roles.ts.
+   *
+   * A custom role READS a vendor's display fields only (which vendor a chat
+   * belongs to) and can never WRITE one: no CATALOG block names `vendors`, so
+   * no tick on the Roles page can grant it. The integration settings stay
+   * readable by admin_access alone.
+   */
+  const VENDOR_PUBLIC_FIELDS = ['id', 'name', 'logo', 'colors', 'status', 'yiji_vendor_id'];
+
   /** What EVERY app role gets: the reads the portal shell cannot render without. */
   const BASELINE = [
-    ...readOnly('vendors'),
+    g('vendors', 'read', {}, VENDOR_PUBLIC_FIELDS),
     ...readOnly('teams'),
     ...readOnly('brands'),
     ...readOnly('stores'),

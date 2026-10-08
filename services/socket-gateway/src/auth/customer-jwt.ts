@@ -29,11 +29,25 @@ const blankToUndefined = (v: unknown): unknown =>
    assumes. Two copies of "1" would drift the moment one of them changed. */
 export const DEFAULT_VENDOR_ID = process.env.DEFAULT_VENDOR_ID?.trim() || '1';
 
+/**
+ * The vendor a token CLAIMS, normalised exactly as the schema below does.
+ *
+ * MV-3: the claim picks the SECRET the token is verified with, so it has to be
+ * read before the signature is checked — and read the same way the parsed
+ * claims will report it, or a token could be verified as one vendor and served
+ * as another.
+ *
+ * A token with no `vendor_id` (the legacy Yiji app, which never learned our
+ * vendor numbering) is the DEFAULT vendor — Yiji. That default applies ONLY to
+ * a token that names no vendor; one that names a vendor is held to it.
+ */
+export function claimedVendorId(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  return s || DEFAULT_VENDOR_ID;
+}
+
 export const CustomerClaims = z.object({
-  vendor_id: z.preprocess((v) => {
-    const s = typeof v === 'string' ? v.trim() : '';
-    return s || DEFAULT_VENDOR_ID;
-  }, z.string().min(1)),
+  vendor_id: z.preprocess(claimedVendorId, z.string().min(1)),
   /**
    * Who this is, in Yiji's own numbering.
    *
@@ -88,11 +102,16 @@ export type CustomerClaims = z.infer<typeof CustomerClaims>;
 export class CustomerTokenError extends Error {}
 
 export interface CustomerVerifier {
+  verify(token: string): CustomerClaims | Promise<CustomerClaims>;
+}
+
+/** HS256 with ONE shared secret — synchronous. */
+export interface SyncCustomerVerifier extends CustomerVerifier {
   verify(token: string): CustomerClaims;
 }
 
-/** HS256 shared-secret verifier (default). */
-export function createHs256Verifier(secret: string): CustomerVerifier {
+/** HS256 shared-secret verifier (one vendor's secret). */
+export function createHs256Verifier(secret: string): SyncCustomerVerifier {
   return {
     verify(token: string): CustomerClaims {
       let decoded: unknown;
@@ -114,6 +133,46 @@ export function createHs256Verifier(secret: string): CustomerVerifier {
         throw new CustomerTokenError('token must include a phone number');
       }
       return parsed.data;
+    },
+  };
+}
+
+/**
+ * PER-VENDOR VERIFIER (MV-3, EMA-72).
+ *
+ * The token is verified with the secret of the vendor it CLAIMS
+ * (`vendor_id`), so a token signed with Yiji's secret that claims vendor B is
+ * checked against B's secret and fails — no vendor can open a session as
+ * another. A vendor with no configured secret (`secretFor` answers null) is
+ * refused outright; there is no fallback to Yiji's secret.
+ *
+ * The claim is read UNVERIFIED only to choose the key; nothing else from the
+ * payload is trusted until the signature has passed. For a Yiji token
+ * (`vendor_id` absent or the default) this is the same single HS256 check as
+ * before, with the same error messages — `resolveCustomerClaims` relies on the
+ * "invalid signature" wording to recognise an app-issued Yiji session token.
+ */
+export function createVendorVerifier(
+  secretFor: (vendorId: string) => Promise<string | null>,
+): CustomerVerifier {
+  return {
+    async verify(token: string): Promise<CustomerClaims> {
+      const peeked = jwt.decode(token);
+      const vendorId = claimedVendorId(
+        peeked && typeof peeked === 'object' ? (peeked as { vendor_id?: unknown }).vendor_id : '',
+      );
+      let secret: string | null;
+      try {
+        secret = await secretFor(vendorId);
+      } catch {
+        throw new CustomerTokenError('token invalid: vendor could not be resolved');
+      }
+      if (!secret) throw new CustomerTokenError('token invalid: vendor not configured');
+      const claims = createHs256Verifier(secret).verify(token);
+      /* Belt and braces: the claims are served as the vendor whose key verified them. */
+      if (claims.vendor_id !== vendorId)
+        throw new CustomerTokenError('token invalid: vendor mismatch');
+      return claims;
     },
   };
 }

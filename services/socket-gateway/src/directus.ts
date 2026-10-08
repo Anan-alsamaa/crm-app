@@ -103,6 +103,35 @@ export class GatewayDirectus {
   }
 
   /**
+   * The `webhook_path_key` of an ACTIVE vendor named by its platform id (MV-3)
+   * — which secret its customer tokens are verified with. Null when no such
+   * vendor or it has no key. Throws on a read failure (the caller refuses).
+   */
+  async vendorKeyById(yijiVendorId: string): Promise<string | null> {
+    const rows = (await this.client.request(
+      readItems('vendors', {
+        filter: { yiji_vendor_id: { _eq: yijiVendorId }, status: { _eq: 'active' } },
+        fields: ['webhook_path_key'],
+        limit: 1,
+      } as never),
+    )) as Array<{ webhook_path_key: string | null }>;
+    return rows[0]?.webhook_path_key?.trim() || null;
+  }
+
+  /** The ACTIVE vendor whose `webhook_path_key` is `key` (MV-3 webhooks), or null. */
+  async vendorByWebhookKey(key: string): Promise<{ id: string; yijiVendorId: string } | null> {
+    const rows = (await this.client.request(
+      readItems('vendors', {
+        filter: { webhook_path_key: { _eq: key }, status: { _eq: 'active' } },
+        fields: ['id', 'yiji_vendor_id'],
+        limit: 1,
+      } as never),
+    )) as Array<{ id: string; yiji_vendor_id: string }>;
+    const row = rows[0];
+    return row ? { id: row.id, yijiVendorId: row.yiji_vendor_id } : null;
+  }
+
+  /**
    * THE WELCOME MESSAGE, FROM THE EDITABLE LIBRARY.
    *
    * Asked for by operations (2026-10-04): the automatic message a customer sees

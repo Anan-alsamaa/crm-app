@@ -12,6 +12,7 @@ export * from './yiji.js';
 export * from './yiji-impl.js';
 export * from './connector.js';
 export * from './vendor-records.js';
+export * from './vendor-secrets.js';
 export * from './restaurants.js';
 export * from './store-notifications.js';
 export * from './coupon-approvals.js';

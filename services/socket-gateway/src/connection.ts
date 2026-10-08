@@ -342,7 +342,7 @@ export async function resolveCustomerClaims(
   logger: Logger,
 ): Promise<CustomerClaims> {
   try {
-    return verifier.verify(token);
+    return await verifier.verify(token);
   } catch (ourError) {
     /* Only a SIGNATURE failure is worth a second look. A malformed token, an
        expired one of ours, or a missing phone are all answered correctly by the
