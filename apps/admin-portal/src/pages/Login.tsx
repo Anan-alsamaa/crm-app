@@ -171,7 +171,7 @@ export function Login() {
       <div className="absolute start-6 top-5 z-10 flex items-center">
         {/* The supplied lockup. A real asset rather than the traced vector: the
             auth pages have room for the full artwork, so they show it. */}
-        <img src="/sara-crm-lockup.png" alt="Sara CRM" className="h-8 w-auto" />
+        <img src="/sara-crm-lockup.svg" alt="Sara CRM" className="h-8 w-auto" />
       </div>
 
       {/* Centered board card — elevated surface, hairline ring, deep shadow. */}
@@ -181,7 +181,7 @@ export function Login() {
             {/* Top brand panel inside the card — the logo sits in a tinted tile
                 chip, the board's icon-chip move at welcome scale. */}
             <div className="flex flex-col items-center gap-3 px-8 pb-2 pt-8 text-center">
-              <img src="/sara-crm-lockup.png" alt="Sara CRM" className="h-12 w-auto" />
+              <img src="/sara-crm-lockup.svg" alt="Sara CRM" className="h-12 w-auto" />
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
                   {view === 'signin'

@@ -133,10 +133,10 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
         {/* The tile NAMES the product, so nothing beside it repeats it. What
             stays is which portal you are in, which the logo cannot tell you. */}
         {isCollapsed ? (
-          <img src="/sara-crm-icon.png" alt="Sara CRM" className="h-8 w-8 shrink-0 rounded-lg" />
+          <img src="/sara-crm-icon.svg" alt="Sara CRM" className="h-8 w-8 shrink-0 rounded-lg" />
         ) : (
           <div className="flex min-w-0 items-center gap-2.5 leading-tight">
-            <img src="/sara-crm-icon.png" alt="Sara CRM" className="h-9 w-9 shrink-0 rounded-lg" />
+            <img src="/sara-crm-icon.svg" alt="Sara CRM" className="h-9 w-9 shrink-0 rounded-lg" />
             <div className="min-w-0 truncate text-2xs text-rail-foreground/75">
               {t('app.workspace', { defaultValue: 'User workspace' })}
             </div>
@@ -312,7 +312,7 @@ function MobileBrand() {
      * pixels rather than taking any.
      */
     <img
-      src="/sara-crm-icon.png"
+      src="/sara-crm-icon.svg"
       alt="Sara CRM"
       /* No `rounded-*`: the artwork's corners are already cut and its radius is
          transparent, so rounding the element clips them a second time. */
