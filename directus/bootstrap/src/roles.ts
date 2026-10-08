@@ -831,6 +831,14 @@ export const roles: RoleSpec[] = [
        * change the business rule unattended.
        */
       ...readOnly('app_settings'),
+      /*
+       * The commerce connector registry (MV-2) resolves the vendor each
+       * portal request names — by CRM UUID or by `yiji_vendor_id`, since the
+       * portals send both — from this table. Without it the read 403s and the
+       * gateway falls back to the env vendor ('1') with a warning, so a UUID
+       * request answers 404 `unknown_vendor`.
+       */
+      ...readOnly('vendors'),
     ],
   },
 ];

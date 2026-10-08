@@ -2,11 +2,9 @@ import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import {
   QUEUES,
-  createYijiAdminPoster,
-  createYijiCustomerFinder,
-  createYijiUserCouponFinder,
-  createYijiOrderReader,
-  createYijiLatestBrandReader,
+  asYijiConnector,
+  createEnvConnectorRegistry,
+  isUnknownVendor,
   type QueueName,
   type NotificationJob,
   type SlaJob,
@@ -136,55 +134,45 @@ const redirectCouponsTo = stagingOnlyPhone('COUPON_REDIRECT_PHONE');
 const redirectPushTo = stagingOnlyPhone('PUSH_REDIRECT_PHONE');
 
 /**
- * Reads Yiji's own record of an order, for the coupon payload.
+ * THE COMMERCE CONNECTORS (MV-2), built ONCE for the process.
  *
- * Built once alongside the poster. Read-only, and the coupon push treats a
- * failure here as "less corroboration", never as a reason not to deliver.
- */
-const yijiOrderReader = createYijiOrderReader({
-  apiUrl: process.env.YIJI_API_URL ?? '',
-  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
-  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
-  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
-});
-
-const yijiLatestBrandReader = createYijiLatestBrandReader({
-  apiUrl: process.env.YIJI_API_URL ?? '',
-  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
-  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
-  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
-});
-
-/*
- * Finds the Yiji customer behind a phone number, for a coupon with NO order.
+ * Once, because the connector's admin poster CACHES ITS TOKEN: rebuilt per job
+ * it would sign into Yiji again on every coupon - a login per delivery, and a
+ * burst of them the moment a supervisor approves a batch. The registry keeps
+ * one connector per vendor, so that stays true per vendor.
  *
- * Null when the admin credential is absent, in which case an order-less coupon
- * simply stays `approved` exactly as it did before this path existed.
+ * Today ONE Yiji vendor (`YIJI_VENDOR_ID`, default '1'), from exactly the env
+ * the five Yiji readers/posters were built from before - no order-API token,
+ * as before. Inside the connector each capability is still built by its own
+ * `createYiji*` factory, so:
+ *  - `readCouponOrderContext` reads Yiji's own record of an order for the
+ *    coupon payload (a failure is "less corroboration", never a reason not to
+ *    deliver);
+ *  - `findCustomerIdByPhone` finds the customer for a coupon with NO order,
+ *    null without the admin credential (the coupon then stays `approved`);
+ *  - `findCustomerCoupon` reads back whether a customer HOLDS a code before a
+ *    refusal is recorded (OPS-54R27RS7, 2026-10-07);
+ *  - `adminPost` is the one signed-in poster coupon AND push share.
  */
-const yijiCustomerFinder = createYijiCustomerFinder({
-  apiUrl: process.env.YIJI_API_URL ?? '',
-  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
-  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
-  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
-});
-
-/*
- * Reads back whether a customer HOLDS a coupon code — consulted before any
- * refusal is recorded, because Yiji has answered with an error after granting
- * the coupon (OPS-54R27RS7, 2026-10-07).
- */
-const yijiUserCouponFinder = createYijiUserCouponFinder({
-  apiUrl: process.env.YIJI_API_URL ?? '',
-  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
-  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
-  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
-});
-
-const yijiAdminPoster = createYijiAdminPoster({
-  apiUrl: process.env.YIJI_API_URL ?? '',
-  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
-  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
-  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+const connectors = createEnvConnectorRegistry({
+  vendorId: process.env.YIJI_VENDOR_ID,
+  yiji: {
+    client: {
+      apiUrl: process.env.YIJI_API_URL ?? '',
+      adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+      adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+      adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+    },
+    tenantId: process.env.YIJI_TENANT_ID,
+    brandId: process.env.YIJI_BRAND_ID,
+    push: {
+      notifyUrl: process.env.YIJI_NOTIFY_URL,
+      notifyTopic: process.env.YIJI_NOTIFY_TOPIC,
+      notifyTitle: process.env.YIJI_NOTIFY_TITLE,
+      openChatAction: process.env.YIJI_OPEN_CHAT_ACTION,
+      apiKey: process.env.YIJI_API_KEY,
+    },
+  },
 });
 
 export const processors: Record<QueueName, Processor> = {
@@ -330,6 +318,14 @@ export const processors: Record<QueueName, Processor> = {
     });
   },
   [QUEUES.coupons]: async (job, deps) => {
+    /*
+     * TODO(MV-1): `coupon_approvals` has no vendor column, so every coupon
+     * (and the signup watch that rides on this job) is the single legacy Yiji
+     * vendor's. MV-1 adds the column and this resolves the ROW's vendor.
+     */
+    const yiji = asYijiConnector(
+      await connectors.connectorFor(await connectors.defaultVendorForLegacyRecords()),
+    );
     await processCouponPushJob(job as Job<CouponPushJob>, {
       directus: deps.directus,
       logger: deps.logger,
@@ -344,59 +340,85 @@ export const processors: Record<QueueName, Processor> = {
        * it expires. `null` when the credential is absent, which leaves the
        * request `approved` rather than pretending it was delivered.
        */
-      postCoupon: (couponDeliveryEnabled ? yijiAdminPoster : null) ?? undefined,
-      readOrder: yijiOrderReader ?? undefined,
+      postCoupon: (couponDeliveryEnabled ? yiji.adminPost : null) ?? undefined,
+      readOrder: yiji.readCouponOrderContext ?? undefined,
       /* Only consulted for a coupon with NO order, and gated on the same
          delivery switch as the poster: a deployment with coupon delivery off
          must not start resolving customers either. */
-      findCustomer: (couponDeliveryEnabled ? yijiCustomerFinder : null) ?? undefined,
-      findUserCoupon: (couponDeliveryEnabled ? yijiUserCouponFinder : null) ?? undefined,
+      findCustomer: (couponDeliveryEnabled ? yiji.findCustomerIdByPhone : null) ?? undefined,
+      findUserCoupon: (couponDeliveryEnabled ? yiji.findCustomerCoupon : null) ?? undefined,
       // Yiji's API is multi-tenant and routes on this header. Defaulted to the
       // tenant the captured request used rather than left blank: a missing
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind
       // of failure to read.
-      yijiTenantId: process.env.YIJI_TENANT_ID ?? '1',
+      yijiTenantId: yiji.settings.tenantId ?? '1',
       // Staging only; refused outright in production — see above.
       ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
     });
   },
   [QUEUES.customerPush]: async (job, deps) => {
-    await processCustomerPushJob(job as Job<CustomerPushJob>, {
+    /*
+     * The CONVERSATION's vendor picks the connector. A job queued before the
+     * gateway stamped it (or a conversation with no vendor) is the legacy
+     * vendor's - TODO(MV-1): drop that fallback once every job carries one.
+     *
+     * An unknown vendor is NOT retried and NOT sent through Yiji: retrying
+     * cannot make the vendor known, and another vendor's customer must never
+     * be pushed through this one's credential.
+     */
+    const pushJob = job as Job<CustomerPushJob>;
+    let yiji: ReturnType<typeof asYijiConnector>;
+    try {
+      yiji = asYijiConnector(
+        await connectors.connectorFor(
+          pushJob.data.vendorId ?? (await connectors.defaultVendorForLegacyRecords()),
+        ),
+      );
+    } catch (err) {
+      if (!isUnknownVendor(err)) throw err;
+      deps.logger.error(
+        { jobId: job.id, vendorId: pushJob.data.vendorId, reason: err.reason },
+        'customer push for a vendor with no connector - not sent',
+      );
+      return;
+    }
+    const push = yiji.settings.push ?? {};
+    await processCustomerPushJob(pushJob, {
       logger: deps.logger,
       // Blank disables delivery and logs the payload — the concrete thing to
       // hand the mobile developer when agreeing the contract.
-      yijiNotifyUrl: process.env.YIJI_NOTIFY_URL ?? '',
+      yijiNotifyUrl: push.notifyUrl ?? '',
       /* The `prop1` action the app matches on to open CRM chat. Defaults to
          the agreed `crm.openchat`; an env var so a change on their side costs
          a config edit, not a release. */
-      ...(process.env.YIJI_OPEN_CHAT_ACTION?.trim()
-        ? { openChatAction: process.env.YIJI_OPEN_CHAT_ACTION.trim() }
-        : {}),
+      ...(push.openChatAction?.trim() ? { openChatAction: push.openChatAction.trim() } : {}),
       // Staging only; refused outright against production Directus.
       ...(redirectPushTo ? { redirectPushTo } : {}),
-      yijiApiKey: process.env.YIJI_API_KEY ?? '',
+      yijiApiKey: push.apiKey ?? '',
       // Which of Yiji's notification templates means "a support agent replied".
       // Unset until they name it; see the note on CustomerPushDeps.
-      yijiNotifyTopic: process.env.YIJI_NOTIFY_TOPIC ? Number(process.env.YIJI_NOTIFY_TOPIC) : null,
+      yijiNotifyTopic: push.notifyTopic ? Number(push.notifyTopic) : null,
       // Yiji's tenant. 1 for Yiji; configurable so a second platform is a
       // setting rather than an edit.
-      yijiTenantId: process.env.YIJI_TENANT_ID ? Number(process.env.YIJI_TENANT_ID) : 1,
+      yijiTenantId: yiji.settings.tenantId ? Number(yiji.settings.tenantId) : 1,
       // Yiji resolves the Firebase credential from the brand, so it is required.
-      yijiBrandId: process.env.YIJI_BRAND_ID ? Number(process.env.YIJI_BRAND_ID) : 1,
+      yijiBrandId: yiji.settings.brandId ? Number(yiji.settings.brandId) : 1,
       /* The brand of the customer's LATEST ORDER picks the credential; the
          default above is only for a customer with no order history. */
-      latestBrandName: yijiLatestBrandReader ?? undefined,
-      yijiVendorId: process.env.YIJI_VENDOR_ID || '1',
+      latestBrandName: yiji.latestOrderBrandName
+        ? (_vendorId, externalCustomerId) => yiji.latestOrderBrandName!(externalCustomerId)
+        : undefined,
+      yijiVendorId: yiji.vendor.platformVendorId,
       // The notification's heading. The agent's words are the body, so this
       // names who is speaking rather than repeating the message.
-      yijiNotifyTitle: process.env.YIJI_NOTIFY_TITLE || 'Yiji Support',
+      yijiNotifyTitle: push.notifyTitle || 'Yiji Support',
       /* Where the tap lands: the CRM chat, opened from inside the Yiji app.
          Falls back to the production chat host so a missing setting does not
          send a notification nobody can act on. */
       crmChatUrl: process.env.CRM_CHAT_URL || 'https://crm.anan.sa',
       /* Signed in as the service, the same way the coupon push is — no pasted
          bearer token to rotate, and nothing goes silent when one lapses. */
-      postNotification: yijiAdminPoster ?? undefined,
+      postNotification: yiji.adminPost ?? undefined,
       /*
        * Records "this handset cannot be rung" where an AGENT can see it.
        *

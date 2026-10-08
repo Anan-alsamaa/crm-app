@@ -652,23 +652,30 @@ export class GatewayDirectus {
    * real name or the contact may have been linked to a Yiji id since the
    * session opened, and a notification should use what is true now.
    */
-  async loadConversationContact(
-    conversationId: string,
-  ): Promise<{ phone: string | null; externalCustomerId: string | null } | null> {
+  async loadConversationContact(conversationId: string): Promise<{
+    phone: string | null;
+    externalCustomerId: string | null;
+    /** The conversation's vendor's platform id (`yiji_vendor_id`), when it has one. */
+    platformVendorId: string | null;
+  } | null> {
     const rows = (await this.client.request(
       readItems('conversations', {
         filter: { id: { _eq: conversationId } },
-        fields: ['contact.phone', 'contact.external_customer_id'],
+        // `vendor.yiji_vendor_id`: which vendor's connector delivers the push
+        // (MV-2). The gateway already reads `vendors` (see resolveVendor).
+        fields: ['contact.phone', 'contact.external_customer_id', 'vendor.yiji_vendor_id'],
         limit: 1,
       }),
     )) as Array<{
       contact?: { phone?: string | null; external_customer_id?: string | null } | null;
+      vendor?: { yiji_vendor_id?: string | null } | null;
     }>;
     const contact = rows[0]?.contact;
     if (!contact) return null;
     return {
       phone: contact.phone ?? null,
       externalCustomerId: contact.external_customer_id ?? null,
+      platformVendorId: rows[0]?.vendor?.yiji_vendor_id?.trim() || null,
     };
   }
 

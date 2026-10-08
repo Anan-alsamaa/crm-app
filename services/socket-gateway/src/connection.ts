@@ -18,7 +18,6 @@ import {
   CsatSubmit,
   type MessageNew,
   type YijiUserReader,
-  type YijiLatestOrderReader,
   normalizePhone,
   cleanContactName,
   detectLocale,
@@ -64,6 +63,8 @@ function isRoutable(data: {
 interface SocketData {
   kind: 'customer' | 'agent';
   vendorId?: string; // CRM vendor UUID
+  /** The vendor's id on its commerce platform (`yiji_vendor_id`), from the claims. */
+  platformVendorId?: string;
   vendorColors?: unknown;
   vendorName?: string | null;
   contactId?: string;
@@ -150,12 +151,16 @@ export interface ConnectionDeps {
    */
   yijiUsers?: YijiUserReader | null;
   /**
-   * The customer's most recent Yiji order id, for the WhatsApp fallback.
+   * The customer's most recent order id, for the WhatsApp fallback — asked of
+   * the connector of the session's vendor (`vendorKey` = its platform id).
    *
-   * Null when YIJI_API_URL is unset, in which case the prefilled message simply
-   * carries no order line — the link still works.
+   * Answers null when the vendor's connector has no order API configured, in
+   * which case the prefilled message simply carries no order line — the link
+   * still works.
    */
-  yijiLatestOrder?: YijiLatestOrderReader | null;
+  latestOrderLookup?:
+    | ((vendorKey: string, externalCustomerId: string) => Promise<string | null>)
+    | null;
   /**
    * Cross-instance presence, used by auto-assignment. Optional: without Redis
    * there is no shared presence and no routing, and the gateway still works as a
@@ -460,6 +465,7 @@ export function registerConnection(deps: ConnectionDeps): void {
       const contact = await directus.upsertContact(vendor.id, claims);
       data.kind = 'customer';
       data.vendorId = vendor.id;
+      data.platformVendorId = claims.vendor_id;
       data.vendorColors = vendor.colors;
       data.vendorName = vendor.name;
       data.contactId = contact.id;
@@ -954,10 +960,11 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
    * line, which is what it does today.
    */
   const externalId = data.contactExternalId;
-  if (externalId && deps.yijiLatestOrder) {
+  const platformVendorId = data.platformVendorId;
+  if (externalId && platformVendorId && deps.latestOrderLookup) {
     void (async () => {
       try {
-        const orderId = await deps.yijiLatestOrder!(externalId);
+        const orderId = await deps.latestOrderLookup!(platformVendorId, externalId);
         if (orderId) socket.emit(SOCKET_EVENTS.customerLatestOrder, { orderId });
       } catch (err) {
         logger.warn({ err, externalId }, 'latest order lookup failed');
@@ -1372,6 +1379,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
               // One line, not the thread — see CustomerPushJob.
               preview: content.replace(/\s+/g, ' ').trim().slice(0, 140),
               sentAt: saved.createdAt,
+              // The conversation's own vendor picks the connector (MV-2).
+              ...(contact?.platformVendorId ? { vendorId: contact.platformVendorId } : {}),
             });
           } catch (err) {
             // A missed notification must never fail the send. The message is
