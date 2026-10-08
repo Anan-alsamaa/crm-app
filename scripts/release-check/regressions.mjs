@@ -746,14 +746,15 @@ await check(
 );
 
 // ── no delivered coupon silently vanishes (2026-10-08) ────────────────────────
-await check('COUPON-VANISHED', 'every coupon delivered in the last 7 days is held, used or expired', async () => {
+await check('COUPON-VANISHED', 'coupons delivered in the last 7 days: held, used, expired, or removed on Yiji (listed)', async () => {
   if (!yijiToken) return 'skip';
   if (ENV !== 'prod') return { ok: true, detail: 'production only - staging coupons go to the test handset' };
   /* Found 2026-10-08: 9 coupons granted 1-3 Oct had left their customers'
      wallets unused and unexpired (3 deleted on Yiji outright). The CRM's Yiji
-     role cannot remove coupons (403), so it happened on Yiji's side - and
-     nothing noticed for a week. This looks at a rolling week so a new case
-     surfaces at the next release, not by accident. */
+     role cannot remove coupons (403), so it happened on Yiji's side.
+     OWNER, 2026-10-08: that is real production behaviour - never re-grant,
+     recreate or raise it with Yiji. So this REPORTS such coupons and never
+     fails a release; it fails only if Yiji cannot be read at all. */
   const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
   const r = await items('coupon_approvals', {
     filter: JSON.stringify({
@@ -772,8 +773,11 @@ await check('COUPON-VANISHED', 'every coupon delivered in the last 7 days is hel
   }
   const n = (r.data ?? []).length;
   return {
-    ok: gone.length === 0,
-    detail: gone.length ? gone.join('; ') : `${n} delivered this week: ${n - spent} held, ${spent} used or expired`,
+    ok: true,
+    detail:
+      `${n} delivered this week: ${n - spent - gone.length} held, ${spent} used or expired, ` +
+      `${gone.length} no longer in the customer's wallet (Yiji side, left as is)` +
+      (gone.length ? ` - ${gone.map((g) => g.split(' ')[0]).join(', ')}` : ''),
   };
 });
 
