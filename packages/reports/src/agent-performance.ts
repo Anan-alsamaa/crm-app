@@ -21,6 +21,8 @@
  *    and one over three hundred must not look identical on a dashboard.
  */
 
+import { businessSecondsBetween, type SlaBusinessHours } from '@yiji/shared-types';
+
 /** One chat, reduced to the timestamps these measures need. */
 export interface ChatTiming {
   conversationId: string;
@@ -66,6 +68,28 @@ export interface ChatTiming {
   initiatedBy?: 'agent' | 'customer' | null;
   /** For an agent-started chat: when the agent's first message went out. */
   firstOutreachAt?: string | null;
+  /**
+   * WORKING HOURS the agent-side durations count in (owner, 2026-10-08) — the
+   * chat SLA policy's `business_hours`, so a report reads a chat the way the
+   * SLA engine does: a customer who wrote at 05:35 and was answered at 08:52,
+   * before the 09:00 shift, waited 0 working minutes, not 3h17m.
+   *
+   * Absent or null = round the clock, the behaviour before this existed. Every
+   * function below also takes an optional `hours` argument that, when given,
+   * overrides this for the whole population.
+   */
+  businessHours?: SlaBusinessHours | null;
+}
+
+/**
+ * The population with `hours` stamped on every chat — or untouched when the
+ * caller passed none, so each chat keeps whatever it already carries.
+ */
+export function withBusinessHours<T extends ChatTiming>(
+  chats: readonly T[],
+  hours: SlaBusinessHours | null | undefined,
+): readonly T[] {
+  return hours === undefined ? chats : chats.map((c) => ({ ...c, businessHours: hours }));
 }
 
 export interface AgentPerformanceRow {
@@ -110,16 +134,19 @@ export interface AgentPerformanceRow {
   medianTimeToSolveSec: number | null;
 }
 
-const secondsBetween = (from: string, to: string): number | null => {
-  const a = new Date(from).getTime();
-  const b = new Date(to).getTime();
-  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
-  const d = (b - a) / 1000;
-  // A negative duration means the timestamps disagree about order — a clock
-  // skew or a repaired row. Reporting it as a fast reply would be a lie in the
-  // flattering direction, so it is discarded rather than clamped to zero.
-  return d < 0 ? null : d;
-};
+/**
+ * Seconds from `from` to `to`, counting only working hours when `hours` is
+ * given (null = round the clock).
+ *
+ * A negative duration means the timestamps disagree about order — a clock skew
+ * or a repaired row. Reporting it as a fast reply would be a lie in the
+ * flattering direction, so it is discarded (null) rather than clamped to zero.
+ */
+const secondsBetween = (
+  from: string,
+  to: string,
+  hours: SlaBusinessHours | null | undefined = null,
+): number | null => businessSecondsBetween(from, to, hours);
 
 const mean = (xs: number[]): number | null =>
   xs.length === 0 ? null : xs.reduce((a, b) => a + b, 0) / xs.length;
@@ -144,10 +171,18 @@ export function awaitingCustomer(c: ChatTiming): boolean {
   return c.initiatedBy === 'agent' && !c.firstCustomerAt;
 }
 
-/** First response for one chat, or null when it cannot be measured. */
-export function firstResponseSec(c: ChatTiming): number | null {
+/**
+ * First response for one chat, or null when it cannot be measured.
+ *
+ * In WORKING seconds when the chat (or the `hours` argument) carries working
+ * hours — see `ChatTiming.businessHours`.
+ */
+export function firstResponseSec(
+  c: ChatTiming,
+  hours: SlaBusinessHours | null | undefined = c.businessHours,
+): number | null {
   if (!c.firstCustomerAt || !c.firstAgentAt) return null;
-  return positiveOrNull(secondsBetween(c.firstCustomerAt, c.firstAgentAt));
+  return positiveOrNull(secondsBetween(c.firstCustomerAt, c.firstAgentAt, hours));
 }
 
 /**
@@ -164,10 +199,16 @@ function positiveOrNull(sec: number | null): number | null {
   return sec == null || sec < 0 ? null : sec;
 }
 
-/** Time to solve for one chat, or null when it is unsolved or unmeasurable. */
-export function timeToSolveSec(c: ChatTiming): number | null {
+/**
+ * Time to solve for one chat, or null when it is unsolved or unmeasurable.
+ * Working seconds when working hours are known, like `firstResponseSec`.
+ */
+export function timeToSolveSec(
+  c: ChatTiming,
+  hours: SlaBusinessHours | null | undefined = c.businessHours,
+): number | null {
   if (!c.firstCustomerAt || !c.solvedAt) return null;
-  return positiveOrNull(secondsBetween(c.firstCustomerAt, c.solvedAt));
+  return positiveOrNull(secondsBetween(c.firstCustomerAt, c.solvedAt, hours));
 }
 
 /**
@@ -177,8 +218,12 @@ export function timeToSolveSec(c: ChatTiming): number | null {
  * Returning "unknown" for those would let the worst cases sit outside both
  * populations and quietly improve the met-rate.
  */
-export function metFirstResponse(c: ChatTiming, targetSec: number): boolean {
-  const sec = firstResponseSec(c);
+export function metFirstResponse(
+  c: ChatTiming,
+  targetSec: number,
+  hours: SlaBusinessHours | null | undefined = c.businessHours,
+): boolean {
+  const sec = firstResponseSec(c, hours);
   if (sec === null) return false;
   return sec <= targetSec;
 }
@@ -204,8 +249,17 @@ function responder(c: ChatTiming): string {
   return c.firstAgentBy ?? c.takenBy ?? c.agentId ?? '';
 }
 
-/** Group chats by agent and reduce each group to one row. */
-export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformanceRow[] {
+/**
+ * Group chats by agent and reduce each group to one row.
+ *
+ * `hours` (optional): working hours every duration counts in, overriding what
+ * each chat carries. Omitted = each chat's own `businessHours` (none = wall clock).
+ */
+export function agentPerformance(
+  population: readonly ChatTiming[],
+  hours?: SlaBusinessHours | null,
+): AgentPerformanceRow[] {
+  const chats = withBusinessHours(population, hours);
   const groups = new Map<string, ChatTiming[]>();
   for (const c of chats) {
     // Unassigned chats are their own row rather than being dropped: work nobody
@@ -257,7 +311,7 @@ export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformance
     const agentId = key === '' ? null : key;
     const own = group.filter((c) => responder(c) === key);
     const responses = responsesBy.get(key) ?? [];
-    const solves = group.map(timeToSolveSec).filter((n): n is number => n !== null);
+    const solves = group.map((c) => timeToSolveSec(c)).filter((n): n is number => n !== null);
     rows.push({
       agentId,
       /* Never blank: a row whose agent has no name is unreadable, and the
@@ -298,13 +352,17 @@ export function agentPerformance(chats: readonly ChatTiming[]): AgentPerformance
 export function splitBySla(
   chats: readonly ChatTiming[],
   targetSec: number,
+  hours?: SlaBusinessHours | null,
 ): { met: ChatTiming[]; missed: ChatTiming[] } {
   const met: ChatTiming[] = [];
   const missed: ChatTiming[] = [];
   for (const c of chats) {
     // Nothing to answer yet: neither in time nor late.
     if (awaitingCustomer(c)) continue;
-    (metFirstResponse(c, targetSec) ? met : missed).push(c);
+    (metFirstResponse(c, targetSec, hours === undefined ? c.businessHours : hours)
+      ? met
+      : missed
+    ).push(c);
   }
   return { met, missed };
 }
@@ -337,7 +395,11 @@ export interface AgentInitiatedSummary {
  * agent-started chat is the agent's reply AFTER the customer's reply, which
  * `firstResponseSec` already measures.
  */
-export function agentInitiatedSummary(chats: readonly ChatTiming[]): AgentInitiatedSummary {
+export function agentInitiatedSummary(
+  population: readonly ChatTiming[],
+  hours?: SlaBusinessHours | null,
+): AgentInitiatedSummary {
+  const chats = withBusinessHours(population, hours);
   const started = chats.filter((c) => c.initiatedBy === 'agent');
   const replied = started.filter((c) => !!c.firstCustomerAt);
   const replyTimes = replied
@@ -347,7 +409,7 @@ export function agentInitiatedSummary(chats: readonly ChatTiming[]): AgentInitia
         : null,
     )
     .filter((n): n is number => n !== null);
-  const handling = replied.map(timeToSolveSec).filter((n): n is number => n !== null);
+  const handling = replied.map((c) => timeToSolveSec(c)).filter((n): n is number => n !== null);
   return {
     started: started.length,
     customerReplied: replied.length,

@@ -1,7 +1,14 @@
-import { displayContactName, normaliseTicketStatus, TicketStatus } from '@yiji/shared-types';
+import {
+  businessSecondsBetween,
+  displayContactName,
+  normaliseTicketStatus,
+  TicketStatus,
+  type SlaBusinessHours,
+} from '@yiji/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
+import { loadSlaHours } from '../../lib/sla-hours.js';
 
 /**
  * Ticket operations report — a lifecycle/backlog view of tickets, computed
@@ -105,9 +112,18 @@ function median(nums: number[]): number | null {
   return s.length % 2 ? s[mid]! : (s[mid - 1]! + s[mid]!) / 2;
 }
 
-function minutesBetween(from: string | null, to: string | null): number | null {
-  if (!from || !to) return null;
-  return (new Date(to).getTime() - new Date(from).getTime()) / 60_000;
+/**
+ * Minutes from `from` to `to` — WORKING minutes when the ticket SLA policy
+ * carries business hours, as the SLA engine counts them (owner, 2026-10-08).
+ * Null when either stamp is missing, or when the clock ran backwards.
+ */
+function minutesBetween(
+  from: string | null,
+  to: string | null,
+  hours: SlaBusinessHours | null,
+): number | null {
+  const sec = businessSecondsBetween(from, to, hours);
+  return sec == null ? null : sec / 60;
 }
 
 export function useTicketOps(days: number) {
@@ -118,7 +134,7 @@ export function useTicketOps(days: number) {
       const since = new Date(Date.now() - days * 86_400_000).toISOString();
       const now = Date.now();
 
-      const [tickets, users, teams] = await Promise.all([
+      const [tickets, users, teams, slaHours] = await Promise.all([
         directus.request(
           readItems('tickets', {
             filter: { date_created: { _gte: since } },
@@ -161,6 +177,8 @@ export function useTicketOps(days: number) {
         directus.request(readItems('teams', { fields: ['id', 'name'], limit: -1 })) as Promise<
           Array<{ id: string; name: string | null }>
         >,
+        // Never throws: null hours = the wall clock.
+        loadSlaHours(),
       ]);
 
       const userName = new Map(
@@ -188,8 +206,8 @@ export function useTicketOps(days: number) {
           firstRespondedAt: t.first_responded_at,
           resolvedAt: t.resolved_at,
           closedAt: t.closed_at,
-          responseMinutes: minutesBetween(t.date_created, t.first_responded_at),
-          resolutionMinutes: minutesBetween(t.date_created, t.resolved_at),
+          responseMinutes: minutesBetween(t.date_created, t.first_responded_at, slaHours.ticket),
+          resolutionMinutes: minutesBetween(t.date_created, t.resolved_at, slaHours.ticket),
           overdue,
           ageHours:
             !isDone && t.date_created

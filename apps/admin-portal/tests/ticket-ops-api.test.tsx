@@ -28,7 +28,10 @@ beforeEach(() => {
   vi.spyOn(Date, 'now').mockReturnValue(NOW);
 });
 
-/** Queue the three directus.request calls (tickets, users, teams) in order. */
+/**
+ * Queue the four directus.request calls (tickets, users, teams, sla_policies)
+ * in order. No policies by default = no working hours = the wall clock.
+ */
 function mockData(
   tickets: unknown[],
   users: unknown[] = [
@@ -36,8 +39,13 @@ function mockData(
     { id: 'u2', first_name: 'Bo', last_name: 'Ray', email: 'bo@x.com' },
   ],
   teams: unknown[] = [{ id: 'tm1', name: 'Tier 1' }],
+  policies: unknown[] = [],
 ) {
-  request.mockResolvedValueOnce(tickets).mockResolvedValueOnce(users).mockResolvedValueOnce(teams);
+  request
+    .mockResolvedValueOnce(tickets)
+    .mockResolvedValueOnce(users)
+    .mockResolvedValueOnce(teams)
+    .mockResolvedValueOnce(policies);
 }
 
 function raw(over: Record<string, unknown> = {}) {
@@ -138,11 +146,12 @@ function fullWindow() {
 }
 
 describe('ticket-ops api — useTicketOps', () => {
-  it('queries tickets, users and teams and returns empty aggregates for no tickets', async () => {
+  it('queries tickets, users, teams and the SLA hours; empty aggregates for no tickets', async () => {
     mockData([]);
     const data = await load();
 
-    expect(request).toHaveBeenCalledTimes(3);
+    // tickets + users + teams + sla_policies (the working hours).
+    expect(request).toHaveBeenCalledTimes(4);
     expect(data.rows).toEqual([]);
     expect(data.totals).toEqual({
       total: 0,
@@ -210,6 +219,52 @@ describe('ticket-ops api — useTicketOps', () => {
     const res = data.rows.find((r) => r.id === 't-res')!;
     expect(res.ageHours).toBeNull(); // resolved -> no age
     expect(res.resolutionMinutes).toBe(120); // created 20h ago, resolved 18h ago
+  });
+
+  it('counts WORKING minutes when the ticket policy has business hours (owner, 2026-10-08)', async () => {
+    const shift = [
+      ['00:00', '04:00'],
+      ['09:00', '24:00'],
+    ];
+    const hours = {
+      timezone: 'Asia/Riyadh',
+      days: Object.fromEntries(['0', '1', '2', '3', '4', '5', '6'].map((d) => [d, shift])),
+    };
+    mockData(
+      [
+        raw({
+          id: 'early',
+          status: 'closed',
+          // 05:35 Riyadh; answered 08:52 (before the shift), resolved 09:30.
+          date_created: '2026-07-01T02:35:00.000Z',
+          first_responded_at: '2026-07-01T05:52:00.000Z',
+          resolved_at: '2026-07-01T06:30:00.000Z',
+        }),
+      ],
+      undefined,
+      undefined,
+      [
+        {
+          id: 'p1',
+          name: 'Ticket resolution',
+          governs: 'ticket',
+          active: true,
+          business_hours: hours,
+        },
+        // A chat policy's hours never leak onto tickets.
+        {
+          id: 'p2',
+          name: 'Chat first response',
+          governs: 'chat',
+          active: true,
+          business_hours: null,
+        },
+      ],
+    );
+    const data = await load();
+    const row = data.rows.find((r) => r.id === 'early')!;
+    expect(row.responseMinutes).toBe(0);
+    expect(row.resolutionMinutes).toBe(30);
   });
 
   it('reports a median that differs from the average resolution time', async () => {

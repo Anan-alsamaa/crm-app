@@ -71,7 +71,8 @@ describe('dashboard api', () => {
     expect(d.topVendors).toEqual([]);
     // conversations, tickets, csat, users, vendors, stores — the dashboard is
     // one round trip per collection and this pins that it stays that way.
-    expect(request).toHaveBeenCalledTimes(6);
+    // ...plus the SLA policies' working hours (owner, 2026-10-08).
+    expect(request).toHaveBeenCalledTimes(7);
   });
 
   it('aggregates conversation volume, status breakdown, day series and top vendors', async () => {

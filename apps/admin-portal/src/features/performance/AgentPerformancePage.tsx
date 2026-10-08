@@ -45,6 +45,7 @@ import {
   awaitingCustomer,
 } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
+import { useSlaHours } from '../../lib/sla-hours.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -362,11 +363,17 @@ export function AgentPerformancePage() {
   }, [filters]);
 
   const timings = useChatTimings(filters);
+  /* WORKING HOURS (owner, 2026-10-08): every duration on this page counts only
+     the chat SLA policy's working hours, as the SLA engine does. Stamped on each
+     chat so every shared function below reads the same clock. */
+  const slaHours = useSlaHours();
+  const chatHours = slaHours.data?.chat ?? null;
   // Names attached here, not in the query — see the note on useChatTimings.
   const chats = useMemo<AdminChatTiming[]>(
     () =>
       (timings.data ?? []).map((c) => ({
         ...c,
+        businessHours: chatHours,
         // NEVER the raw id. A 36-character uuid beside real names is not a
         // degraded label, it is an unreadable one — and it happens for real:
         // the router can assign a chat to an account `useAgents` filters out,
@@ -377,7 +384,7 @@ export function AgentPerformancePage() {
             t('performance.unknownAgent', { defaultValue: 'Unknown agent' }))
           : t('performance.unassigned', { defaultValue: 'Unassigned' }),
       })),
-    [timings.data, agentNames, t],
+    [timings.data, agentNames, t, chatHours],
   );
 
   const volumeSeries: ChartSeries[] = [
@@ -621,7 +628,7 @@ export function AgentPerformancePage() {
             </Field>
           </div>
 
-          {timings.isLoading || agents.isLoading ? (
+          {timings.isLoading || agents.isLoading || slaHours.isLoading ? (
             <div className="space-y-4">
               <Skeleton className="h-[5.5rem] w-full rounded-2xl" />
               <Skeleton className="h-56 w-full rounded-2xl" />

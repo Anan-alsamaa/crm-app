@@ -1,7 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
-import { normaliseTicketStatus } from '@yiji/shared-types';
+import { businessSecondsBetween, normaliseTicketStatus } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { loadSlaHours } from '../../lib/sla-hours.js';
 
 /**
  * SLA reports — interactive, drill-down analytics over ticket SLA performance,
@@ -43,7 +44,11 @@ export interface TicketSla {
   created: string | null;
   firstResponse: SlaCell;
   resolution: SlaCell;
-  /** Minutes from creation to first response (null if not yet responded). */
+  /**
+   * WORKING minutes from creation to first response (null if not yet
+   * responded) — the ticket policy's business hours, as the SLA engine counts
+   * them (owner, 2026-10-08). Wall clock when the policy has none.
+   */
   responseMinutes: number | null;
 }
 
@@ -150,7 +155,7 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
           }),
         ) as Promise<RawTicket[]>;
 
-      const [tickets, chats, users] = await Promise.all([
+      const [tickets, chats, users, slaHours] = await Promise.all([
         /*
          * WHEN THE COMPLAINT HAPPENED, falling back to creation — the same
          * window the ticket breakdown uses (owner, 2026-10-05).
@@ -204,6 +209,8 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
             email: string | null;
           }>
         >,
+        // Never throws: null hours = the wall clock, the old numbers.
+        loadSlaHours(),
       ]);
 
       const userName = new Map(
@@ -228,11 +235,9 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
         // zero rather than silently dropping a field other code may read.
         firstResponse: classify(t.first_response_due_at, t.first_responded_at, now),
         resolution: classify(t.resolution_due_at, t.resolved_at, now),
-        responseMinutes:
-          t.date_created && t.first_responded_at
-            ? (new Date(t.first_responded_at).getTime() - new Date(t.date_created).getTime()) /
-              60_000
-            : null,
+        responseMinutes: ((sec) => (sec == null ? null : sec / 60))(
+          businessSecondsBetween(t.date_created, t.first_responded_at, slaHours.ticket),
+        ),
       }));
 
       // Group per agent (unassigned tickets bucket under a single "Unassigned" row).

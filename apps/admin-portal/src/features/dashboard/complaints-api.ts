@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { aggregate, readItems, readUsers } from '@directus/sdk';
 import {
   buildStoreIndex,
+  businessMsBetween,
   HUMAN_AGENT_MESSAGE_FILTER,
   matchStore,
   normaliseConversationStatus,
@@ -9,6 +10,7 @@ import {
   type StoreSnapshot,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { loadSlaHours } from '../../lib/sla-hours.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 
 /**
@@ -110,7 +112,7 @@ export interface AgentPerformance {
   logged: number;
   solved: number;
   solvedPct: number | null;
-  /** Mean hours from raised to closed, over the ones actually closed. */
+  /** Mean WORKING hours (ticket SLA policy) from raised to closed, over the ones actually closed. */
   avgHoursToClose: number | null;
   /** Still not closed — what a supervisor chases. */
   open: number;
@@ -466,6 +468,10 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
             }
           : null;
 
+      /* The ticket SLA policy's working hours, read beside everything else (it
+         never throws; null = wall clock). Hours-to-close count only working
+         time, as the SLA engine does (owner, 2026-10-08). */
+      const slaHoursRead = loadSlaHours();
       const [tickets, storeRows, users, csat, conversations, routing, messageCounts] =
         await Promise.all([
           directus.request(
@@ -726,6 +732,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
 
       // ── KPIs ────────────────────────────────────────────────────────────
       const now = Date.now();
+      const ticketHours = (await slaHoursRead).ticket;
       let open = 0;
       let overdue = 0;
       let closed = 0;
@@ -865,8 +872,13 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           a.solved += 1;
           const end = r.closed_at ?? r.resolved_at;
           if (r.date_created && end) {
-            const h = (new Date(end).getTime() - new Date(r.date_created).getTime()) / 3_600_000;
-            if (Number.isFinite(h) && h >= 0) a.hours.push(h);
+            const from = new Date(r.date_created);
+            const to = new Date(end);
+            // Working hours only; a backwards pair (to < from) stays excluded.
+            if (to.getTime() >= from.getTime()) {
+              const h = businessMsBetween(from, to, ticketHours) / 3_600_000;
+              if (Number.isFinite(h)) a.hours.push(h);
+            }
           }
         } else {
           a.open += 1;
