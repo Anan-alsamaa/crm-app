@@ -820,3 +820,37 @@ describe('runWarning — warns once, not once a minute', () => {
     expect(events.filter((e) => e.type === 'sla_warning')).toHaveLength(2);
   });
 });
+
+describe('runReconcile — vendor-scoped policies (MV-4)', () => {
+  const run = async (ticket: TicketRow, policies: SlaPolicyRow[]) => {
+    const { repo, patched } = makeRepo([{ ...ticket }], policies);
+    const q = makeQueues();
+    await runReconcile({
+      tickets: repo,
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    });
+    return patched.find((p) => p.patch.sla_policy)?.patch.sla_policy ?? null;
+  };
+  // The vendor policy is LESS specific and named later, so only the vendor
+  // preference can make it win.
+  const SHARED: SlaPolicyRow = { ...POLICY, id: 'shared', name: 'A shared' };
+  const OWN: SlaPolicyRow = { ...POLICY, id: 'own', name: 'Z own', vendor: 'v1' };
+  const OTHER: SlaPolicyRow = { ...POLICY, id: 'other', name: 'B other', vendor: 'v2' };
+
+  it("attaches the ticket's own vendor policy before the shared one", async () => {
+    expect(await run({ ...baseTicket, vendor: 'v1' }, [SHARED, OWN, OTHER])).toBe('own');
+  });
+
+  it('uses the shared policy for a vendor with none, and never another vendor policy', async () => {
+    expect(await run({ ...baseTicket, vendor: 'v3' }, [SHARED, OWN, OTHER])).toBe('shared');
+    expect(await run({ ...baseTicket, vendor: 'v3' }, [OWN, OTHER])).toBeNull();
+    expect(await run({ ...baseTicket }, [OWN])).toBeNull();
+  });
+
+  it('is unchanged with one vendor and shared policies only', async () => {
+    expect(await run({ ...baseTicket, vendor: 'v1' }, [SHARED])).toBe('shared');
+    expect(await run({ ...baseTicket }, [SHARED])).toBe('shared');
+  });
+});

@@ -1548,6 +1548,9 @@ export function ConversationView({
                     restaurant: c?.last_order_snapshot?.restaurantName ?? null,
                   }}
                   onPick={insertQuickReply}
+                  /* Only this chat's vendor's replies, plus the shared ones
+                     (MV-4). A chat with no vendor recorded is not narrowed. */
+                  vendorId={aiVendorId || undefined}
                 />
                 {/* ENHANCE — improve what the agent already wrote (ops,
                     2026-10-04). Beside Quick replies, because those are the two

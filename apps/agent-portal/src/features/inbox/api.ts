@@ -133,6 +133,11 @@ export interface InboxFilters {
   currentUserId?: string;
   /** The viewer's team, so a shift handover lands in their working view too. */
   currentTeamId?: string | null;
+  /**
+   * Only this vendor's chats (MV-4). Offered only when 2+ vendors are active;
+   * empty/undefined = every vendor, which is all there is with one.
+   */
+  vendor?: string;
 }
 
 /* EXPORTED so the visibility rule is testable. Who can see which chat is not a
@@ -155,6 +160,7 @@ export function buildFilter(f: InboxFilters): Record<string, unknown> | undefine
   // chats it was counting — a tile whose filter disagrees with its own number
   // is worse than a tile that does nothing.
   if (f.unread) and.push({ unread_count_agent: { _gt: 0 } });
+  if (f.vendor) and.push({ vendor: { _eq: f.vendor } });
   if (f.assignment === 'mine' && f.currentUserId) {
     // Mine, nobody's, or MY TEAM's.
     //
@@ -482,6 +488,9 @@ export function useConversations(filters: InboxFilters = {}) {
               ],
             },
             { tags: ['id', { tags_id: ['id', 'name', 'color'] }] },
+            // The chat's own vendor, for the badge shown when 2+ vendors are
+            // live (MV-4). A bare id — the name comes from the vendor directory.
+            'vendor',
           ],
           sort,
           ...(filter ? { filter } : {}),

@@ -31,6 +31,8 @@ export interface TicketRow {
    * raised, so moving a branch to another brand today must not retroactively
    * change which promise last month's tickets were held to. */
   store_snapshot?: { brandName?: string | null } | null;
+  /** The ticket's vendor (MV-4): a vendor-scoped SLA policy governs only its own. */
+  vendor?: string | null;
 }
 
 export interface SlaPolicyRow extends SlaPolicyScope {
@@ -44,6 +46,12 @@ export interface SlaPolicyRow extends SlaPolicyScope {
   warning_threshold_percent: number;
   business_hours: import('../lib/sla-clock.js').BusinessHours | null;
   active: boolean;
+  /**
+   * The vendor this policy is for (MV-1/MV-4). NULL = every vendor. Absent on
+   * an environment whose `sla_policies.vendor` field was not applied yet, which
+   * reads exactly like NULL.
+   */
+  vendor?: string | null;
   /**
    * When the policy was written — the earliest moment it can promise anything.
    *
@@ -91,6 +99,8 @@ export interface ConversationRow {
    * session start, and on every row written before the field existed.
    */
   session_started_at?: string | null;
+  /** The chat's vendor (MV-4): a vendor-scoped SLA policy governs only its own. */
+  vendor?: string | null;
   /**
    * When Yiji last said this customer's handset cannot be rung, and why.
    *

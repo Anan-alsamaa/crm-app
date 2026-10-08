@@ -37,6 +37,7 @@ import { CouponSpend, useCouponSpend } from './CouponSpend.js';
 import { couponWorth } from '@yiji/reports';
 import { CustomerReach } from './CustomerReach.js';
 import { lastMonth } from '../../lib/date-range.js';
+import { ReportVendorFilter } from '../../lib/report-vendor.js';
 
 /**
  * The operations manager's Dashboard, rebuilt on our data.
@@ -1118,6 +1119,8 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             ]}
           />
         </label>
+        {/* Vendor (MV-4) — only with 2+ vendors active; applies at once. */}
+        <ReportVendorFilter />
         {/* `ms-auto` pins the actions to the END of the filter row rather than
             letting them wrap to a new line at the start. They read as what you
             do TO the filters, so they belong beside them, not under them. */}

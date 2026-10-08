@@ -14,9 +14,12 @@ import type { FastifyRequest } from 'fastify';
  * token and asserted its own identity/role via X-Yiji-* headers — anyone who
  * extracted the bundled token could call every endpoint and self-grant admin.
  *
- * `X-Yiji-Vendor` is still read, but ONLY as the per-vendor monthly-cap bucket
- * (a cost-accounting hint, not an access-control boundary): a verified agent may
- * act on any conversation in the shared inbox, so the cap bucket is non-security.
+ * `X-Yiji-Vendor` is still read, but ONLY as a FALLBACK cost bucket (a
+ * cost-accounting hint, not an access-control boundary): a verified agent may
+ * act on any conversation in the shared inbox. Since MV-4 every endpoint that
+ * names a conversation re-scopes the caller to THAT conversation's vendor, read
+ * from the database (`scopeCallerToVendor`), so the monthly-cap bucket, the
+ * per-vendor AI config and the search scope follow the data, not the header.
  */
 
 export interface Caller {
@@ -63,4 +66,19 @@ export async function verifyCaller(req: FastifyRequest, deps: CallerVerifierDeps
   const isAdmin = who.role ? (await deps.adminRoleIds()).has(who.role) : false;
   const vendorId = (req.headers['x-yiji-vendor'] as string | undefined) ?? '';
   return { userId: who.id, vendorId, isAdmin };
+}
+
+/**
+ * The caller, re-scoped to the vendor of the conversation being worked on
+ * (MV-4, EMA-73). The conversation's vendor comes from the database and wins
+ * over the client header; a conversation with no vendor recorded keeps the
+ * header's bucket, which is what every request did before.
+ */
+export function scopeCallerToVendor(
+  caller: Caller,
+  conversationVendor: string | { id?: string | null } | null | undefined,
+): Caller {
+  const v =
+    typeof conversationVendor === 'string' ? conversationVendor : (conversationVendor?.id ?? '');
+  return v ? { ...caller, vendorId: v } : caller;
 }

@@ -319,3 +319,65 @@ describe('runChatReconcile — a policy cannot promise backwards', () => {
     expect(patches.length).toBeGreaterThan(0);
   });
 });
+
+/*
+ * PER VENDOR (MV-4, EMA-73). The same agents serve every vendor, but each
+ * vendor may promise its own first-response time. A policy naming a vendor
+ * governs only that vendor's chats; NULL governs every vendor; the vendor's own
+ * policy wins over the shared one; another vendor's policy is never used.
+ */
+describe('runChatReconcile — vendor-scoped policies', () => {
+  const created = new Date('2026-08-24T10:00:00.000Z').toISOString();
+  const SHARED = { ...CHAT_POLICY, id: 'shared', name: 'Shared', first_response_minutes: 5 };
+  const V1 = {
+    ...CHAT_POLICY,
+    id: 'v1',
+    name: 'V1',
+    vendor: 'vendor-1',
+    first_response_minutes: 2,
+  };
+  const V2 = {
+    ...CHAT_POLICY,
+    id: 'v2',
+    name: 'V2',
+    vendor: 'vendor-2',
+    first_response_minutes: 30,
+  };
+
+  it("uses the chat's own vendor policy over the shared one", async () => {
+    const { deps, patches } = harness(
+      [chat({ date_created: created, vendor: 'vendor-1' })],
+      [SHARED, V1, V2],
+    );
+    await runChatReconcile(deps);
+    expect(patches[0]?.patch.first_response_due_at).toBe('2026-08-24T10:02:00.000Z');
+  });
+
+  it('falls back to the shared (NULL) policy for a vendor with none of its own', async () => {
+    const { deps, patches } = harness(
+      [chat({ date_created: created, vendor: 'vendor-3' })],
+      [SHARED, V1, V2],
+    );
+    await runChatReconcile(deps);
+    expect(patches[0]?.patch.first_response_due_at).toBe('2026-08-24T10:05:00.000Z');
+  });
+
+  it("never applies another vendor's policy", async () => {
+    const { deps, patches } = harness([chat({ date_created: created, vendor: 'vendor-3' })], [V1]);
+    await runChatReconcile(deps);
+    expect(patches).toHaveLength(0);
+    // A chat with no vendor recorded is not shown to belong to vendor-1 either.
+    const legacy = harness([chat({ date_created: created })], [V1]);
+    await runChatReconcile(legacy.deps);
+    expect(legacy.patches).toHaveLength(0);
+  });
+
+  it('is the old behaviour with one vendor and only shared policies', async () => {
+    const { deps, patches } = harness(
+      [chat({ date_created: created, vendor: 'vendor-1' })],
+      [SHARED],
+    );
+    await runChatReconcile(deps);
+    expect(patches[0]?.patch.first_response_due_at).toBe('2026-08-24T10:05:00.000Z');
+  });
+});

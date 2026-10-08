@@ -76,6 +76,8 @@ export interface TicketRow extends Partial<TicketComplaintFields> {
   /** Branch the complaint is about (`stores` id), when one was recorded. */
   store?: string | null;
   contact: { id: string; name: string | null; email: string | null; phone: string | null } | null;
+  /** The ticket's vendor id (MV-4) — a badge when 2+ vendors are live. */
+  vendor?: string | null;
   first_response_due_at: string | null;
   resolution_due_at: string | null;
   first_responded_at: string | null;
@@ -225,6 +227,8 @@ export function useTicket(id: string | null) {
             'order_snapshot',
             'store',
             'customer_phone',
+            // Whose customer (MV-4). Predates MV-1, so always present.
+            'vendor',
             ...COMPLAINT_FIELDS,
             // Expanded, not the bare id: "changed by 3f2a…" names nobody a
             // supervisor could follow up with.

@@ -28,6 +28,7 @@ import {
 } from './api.js';
 import { CouponRequestDialog } from './CouponRequestDialog.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useRecordVendorIds, useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
 /* Every agent, service accounts excluded — the same list the inbox offers
    for assignment, so the two can never disagree about who exists. */
 import { useAgents } from '../inbox/api.js';
@@ -101,6 +102,11 @@ export function MyCouponsPage() {
   /** The pending request being corrected, if any. */
   const [editing, setEditing] = useState<CouponRequestRow | null>(null);
   const updateRequest = useUpdatePendingCouponRequest();
+  /* Which vendor each coupon is for (MV-4) — read, and shown, only when 2+
+     vendors are live. A separate read so the queue never names the MV-1
+     column itself. */
+  const vendors = useVendorDirectory();
+  const couponVendors = useRecordVendorIds('coupon_approvals', vendors.show);
 
   // "approved" is every APPROVED decision — 'edited' and 'assigned' included.
   // Naming only 'assigned' here left an amended approval in no tab at all.
@@ -312,6 +318,10 @@ export function MyCouponsPage() {
                         <Pill tone={TONE[r.status]} size="sm">
                           {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
                         </Pill>
+                        <VendorBadge
+                          vendor={couponVendors.data?.get(r.id) ?? null}
+                          directory={vendors}
+                        />
                       </div>
                       {/* `truncate` removed: it hid the order id and the agent
                           on a narrow rail, which are two of the four things

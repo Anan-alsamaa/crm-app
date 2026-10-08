@@ -20,7 +20,7 @@ import {
   type LeadScoreResponse,
 } from '@yiji/shared-types';
 import { z } from 'zod';
-import { verifyCaller, AuthError, type Caller } from './auth/index.js';
+import { verifyCaller, AuthError, scopeCallerToVendor, type Caller } from './auth/index.js';
 import { AiConfigStore, FEATURE_BY_ENDPOINT } from './aiconfig/index.js';
 import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
@@ -124,8 +124,9 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     cacheKey: string,
     clientIp?: string,
   ): Promise<{ cached?: unknown } | null> {
-    // Feature flag
-    const config = await deps.configStore.get();
+    // Feature flag — the caller's (conversation-resolved) vendor's config,
+    // which is the global config unless that vendor has an override.
+    const config = await deps.configStore.get(caller.vendorId);
     const flag = FEATURE_BY_ENDPOINT[endpoint];
     if (flag && !config[flag]) {
       void reply.code(403).send({ error: 'feature_disabled', endpoint });
@@ -272,18 +273,20 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
+    // MV-4: the cap bucket and AI config are the CONVERSATION's vendor's.
+    const scoped = scopeCallerToVendor(caller, ctx.vendor);
 
     // The language is part of the question. Without it in the key, the first
     // agent to summarise in English served every later Arabic request too.
     const cacheKey = `summary:${body.data.conversationId}:${ctx.messages.length}:${body.data.locale ?? ''}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.summarizeConversation, cacheKey, req.ip);
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.summarizeConversation, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SummaryResponse);
 
     const p = prompts.summarize(ctx, body.data.locale);
     try {
       const result: SummaryResponse = await runWith(
-        { caller, conversationId: conversationIdOf(req.body) },
+        { caller: scoped, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.summarizeConversation,
         cacheKey,
         p.system,
@@ -306,16 +309,18 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
+    // MV-4: the cap bucket and AI config are the CONVERSATION's vendor's.
+    const scoped = scopeCallerToVendor(caller, ctx.vendor);
 
     const cacheKey = `reply:${body.data.conversationId}:${ctx.messages.length}:${body.data.draft ?? ''}:${body.data.locale ?? ''}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.suggestReply, cacheKey, req.ip);
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.suggestReply, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SuggestReplyResponse);
 
     const p = prompts.suggestReply(ctx, body.data.draft, body.data.locale);
     try {
       const result: SuggestReplyResponse = await runWith(
-        { caller, conversationId: conversationIdOf(req.body) },
+        { caller: scoped, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.suggestReply,
         cacheKey,
         p.system,
@@ -337,9 +342,11 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
+    // MV-4: the cap bucket and AI config are the CONVERSATION's vendor's.
+    const scoped = scopeCallerToVendor(caller, ctx.vendor);
 
     const cacheKey = `sentiment:${body.data.conversationId}:${ctx.messages.length}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.analyzeSentiment, cacheKey, req.ip);
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.analyzeSentiment, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SentimentResponse);
 
@@ -350,7 +357,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     });
     try {
       const result: SentimentResponse = await runWith(
-        { caller, conversationId: conversationIdOf(req.body) },
+        { caller: scoped, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.analyzeSentiment,
         cacheKey,
         p.system,
@@ -372,11 +379,13 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
+    // MV-4: the cap bucket and AI config are the CONVERSATION's vendor's.
+    const scoped = scopeCallerToVendor(caller, ctx.vendor);
 
     // The candidate list is part of the question, so it is part of the key —
     // editing the complaint types must not keep serving the old answer.
     const cacheKey = `intent:${body.data.conversationId}:${ctx.messages.length}:${(body.data.candidates ?? []).join('|')}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.detectIntent, cacheKey, req.ip);
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.detectIntent, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as IntentResponse);
 
@@ -384,7 +393,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const schema = z.object({ intent: z.string(), confidence: z.number() });
     try {
       const result: IntentResponse = await runWith(
-        { caller, conversationId: conversationIdOf(req.body) },
+        { caller: scoped, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.detectIntent,
         cacheKey,
         p.system,
@@ -406,9 +415,11 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
+    // MV-4: the cap bucket and AI config are the CONVERSATION's vendor's.
+    const scoped = scopeCallerToVendor(caller, ctx.vendor);
 
     const cacheKey = `entities:${body.data.conversationId}:${ctx.messages.length}:${body.data.locale ?? ''}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.extractEntities, cacheKey, req.ip);
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.extractEntities, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as EntitiesResponse);
 
@@ -418,7 +429,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     });
     try {
       const result: EntitiesResponse = await runWith(
-        { caller, conversationId: conversationIdOf(req.body) },
+        { caller: scoped, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.extractEntities,
         cacheKey,
         p.system,
@@ -439,15 +450,25 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const body = SemanticSearchRequest.safeParse(req.body);
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
 
-    // Caller's verified vendor scope wins over the (client-supplied) body value.
-    // An empty scope means "search everything this session can already see" —
-    // consistent with auth/index.ts, where the vendor header is a cost bucket,
-    // not an access boundary.
-    const vendorId = caller.vendorId || body.data.vendorId || '';
+    /*
+     * THE SEARCH SCOPE (MV-4). When the search is made FROM a conversation, its
+     * vendor is resolved here from the database and wins over anything the
+     * client sent — vendors must never mix, and a header or body value is just
+     * a claim. Without a conversation the old order applies: the vendor header
+     * (the cost bucket), then the body. An empty scope means "search everything
+     * this session can already see" — the agents serve every vendor.
+     */
+    let vendorId = caller.vendorId || body.data.vendorId || '';
+    if (body.data.conversationId) {
+      const resolved = await deps.directus.getConversationVendor(body.data.conversationId);
+      if (resolved === undefined) return reply.code(404).send({ error: 'conversation_not_found' });
+      if (resolved) vendorId = resolved;
+    }
+    const scoped: Caller = { ...caller, vendorId };
     // Vendor is part of the cache key so one vendor's ranking can never be
     // served to another.
     const cacheKey = `search:${vendorId}:${body.data.query}:${body.data.limit}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.semanticSearch, cacheKey, req.ip);
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.semanticSearch, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SemanticSearchResponse);
 
@@ -494,7 +515,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     });
     try {
       const result: SemanticSearchResponse = await runWith(
-        { caller, conversationId: conversationIdOf(req.body) },
+        { caller: scoped, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.semanticSearch,
         cacheKey,
         ranking.system,
@@ -535,9 +556,11 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!body.success) return reply.code(400).send({ error: 'invalid_body' });
     const ctx = await deps.directus.getConversation(body.data.conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
+    // MV-4: the cap bucket and AI config are the CONVERSATION's vendor's.
+    const scoped = scopeCallerToVendor(caller, ctx.vendor);
 
     const cacheKey = `lead:${body.data.conversationId}:${ctx.messages.length}`;
-    const gateRes = await gate(caller, reply, AI_ENDPOINTS.scoreLead, cacheKey, req.ip);
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.scoreLead, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as LeadScoreResponse);
 
@@ -545,7 +568,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const schema = z.object({ score: z.number(), signals: z.array(z.string()) });
     try {
       const result: LeadScoreResponse = await runWith(
-        { caller, conversationId: conversationIdOf(req.body) },
+        { caller: scoped, conversationId: conversationIdOf(req.body) },
         AI_ENDPOINTS.scoreLead,
         cacheKey,
         p.system,
@@ -634,7 +657,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     // (A request rejected here has already ticked the vendor monthly cap in
     // gate(). That over-counts by one, which fails safe — the cap only ever
     // gets stricter — so it is left alone rather than adding a refund path.)
-    const config = await deps.configStore.get();
+    const config = await deps.configStore.get(caller.vendorId);
     const quota = await deps.helpDailyQuota.tryConsume(caller.userId, config.helpDailyPerUser);
     if (!quota.allowed) {
       app.log.warn(
@@ -694,12 +717,21 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
   });
 
-  /* ── Admin: GET / PUT config ─────────────────────────────────── */
+  /* ── Admin: GET / PUT / DELETE config ──────────────────────────── */
+  /*
+   * `?vendorId=<CRM vendor id>` addresses that vendor's OVERRIDE (MV-4): GET
+   * answers the config that vendor's chats actually get (override over global),
+   * PUT writes the override, DELETE removes it so the vendor follows the global
+   * config again. Without it, the global config — exactly as before.
+   */
+  const vendorParam = (req: FastifyRequest): string =>
+    ((req.query as { vendorId?: string } | undefined)?.vendorId ?? '').trim();
+
   app.get('/admin/config', async (req, reply) => {
     const caller = await authOrReply(req, reply);
     if (!caller) return;
     if (!caller.isAdmin) return reply.code(403).send({ error: 'admin_required' });
-    return reply.send(await deps.configStore.get());
+    return reply.send(await deps.configStore.get(vendorParam(req) || undefined));
   });
 
   app.put('/admin/config', async (req, reply) => {
@@ -707,11 +739,24 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!caller) return;
     if (!caller.isAdmin) return reply.code(403).send({ error: 'admin_required' });
     try {
-      const next = await deps.configStore.set(req.body);
+      const vendor = vendorParam(req);
+      const next = vendor
+        ? await deps.configStore.setForVendor(vendor, req.body)
+        : await deps.configStore.set(req.body);
       return reply.send(next);
     } catch (err) {
       return reply.code(400).send({ error: 'invalid_config', message: (err as Error).message });
     }
+  });
+
+  app.delete('/admin/config', async (req, reply) => {
+    const caller = await authOrReply(req, reply);
+    if (!caller) return;
+    if (!caller.isAdmin) return reply.code(403).send({ error: 'admin_required' });
+    const vendor = vendorParam(req);
+    if (!vendor) return reply.code(400).send({ error: 'vendor_required' });
+    await deps.configStore.clearVendor(vendor);
+    return reply.send(await deps.configStore.get(vendor));
   });
 
   // Used by the admin UI to show current usage against the monthly cap. The
@@ -722,7 +767,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     if (!caller.isAdmin) return reply.code(403).send({ error: 'admin_required' });
     const vendorId = (req.query as { vendorId?: string } | undefined)?.vendorId ?? caller.vendorId;
     const used = await deps.monthlyCap.currentUsage(`vendor:${vendorId}`);
-    const config = await deps.configStore.get();
+    const config = await deps.configStore.get(vendorId);
     return reply.send({ used, cap: config.monthlyCap });
   });
 }

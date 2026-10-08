@@ -255,6 +255,25 @@ export class GatewayDirectus {
     }
   }
 
+  /**
+   * The vendor of one conversation (MV-4): its CRM vendor id, `null` when the
+   * conversation exists with no vendor recorded, `undefined` when it does not
+   * exist (or cannot be read). Used to scope a search made from a chat to that
+   * chat's vendor instead of trusting the client.
+   */
+  async getConversationVendor(conversationId: string): Promise<string | null | undefined> {
+    try {
+      const conv = (await this.client.request(
+        readItem('conversations', conversationId, { fields: ['id', 'vendor'] }),
+      )) as { id?: string; vendor?: string | { id?: string | null } | null } | null;
+      if (!conv?.id) return undefined;
+      const v = conv.vendor;
+      return (typeof v === 'string' ? v : v?.id) || null;
+    } catch {
+      return undefined;
+    }
+  }
+
   async getConversation(
     conversationId: string,
     messageLimit = 50,

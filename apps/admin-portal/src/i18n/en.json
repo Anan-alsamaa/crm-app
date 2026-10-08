@@ -214,7 +214,8 @@
     "cron": "Cron expression",
     "cronHint": "Five fields: minute hour day-of-month month day-of-week.",
     "scheduleSummary": "Sent to {{who}} — {{when}}.",
-    "scheduleNoRecipients": "It will run on schedule, but with no recipients nobody receives it."
+    "scheduleNoRecipients": "It will run on schedule, but with no recipients nobody receives it.",
+    "allVendors": "All vendors"
   },
   "customFields": {
     "title": "Custom fields",

@@ -249,7 +249,13 @@
     "bulkStatusDone_one": "Updated {{count}} chat.",
     "bulkStatusDone_other": "Updated {{count}} chats.",
     "bulkTagDone_one": "Tagged {{count}} chat.",
-    "bulkTagDone_other": "Tagged {{count}} chats."
+    "bulkTagDone_other": "Tagged {{count}} chats.",
+    "allVendors": "All vendors",
+    "startChat": {
+      "vendor": "Vendor",
+      "pickVendor": "Choose a vendor",
+      "needVendorPick": "Choose the vendor."
+    }
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",
@@ -486,7 +492,9 @@
     "customerPhone": "Customer phone number",
     "noContactsForNumber": "Nobody in the CRM has this number.",
     "addCustomerWithNumber": "Add {{phone}} as a new customer",
-    "addCustomerFailed": "Could not add the customer. Please try again."
+    "addCustomerFailed": "Could not add the customer. Please try again.",
+    "vendorLabel": "Vendor",
+    "anyVendor": "All vendors"
   },
   "notifications": {
     "title": "Notifications",

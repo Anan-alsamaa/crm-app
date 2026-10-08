@@ -91,6 +91,7 @@ import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
 import { useRequestCouponApproval, useTicketCoupons } from '../coupons/api.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
 import { formatBytes, isImage, isUnknownType } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
 import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
@@ -200,6 +201,11 @@ export function TicketsPage() {
     max: 520,
   });
   const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
+  /* Vendor (MV-4): a filter and a badge only when 2+ vendors are live. */
+  const vendors = useVendorDirectory();
+  const [vendorChoice, setVendorChoice] = useState('');
+  const vendorFilter =
+    vendors.show && vendors.options.some((v) => v.id === vendorChoice) ? vendorChoice : '';
 
   // Deep-link support: open a specific ticket from /tickets?id=<id> (command
   // palette, AI search) or /tickets/<id> (notification "View" links).
@@ -238,7 +244,10 @@ export function TicketsPage() {
 
   // The search runs over the SAME filter the manager's report uses, so "find
   // order 946641" behaves identically on both sides of the product.
-  const searched = useMemo(() => filterTickets(list, criteria), [list, criteria]);
+  const searched = useMemo(() => {
+    const rows = filterTickets(list, criteria);
+    return vendorFilter ? rows.filter((r) => r.vendor === vendorFilter) : rows;
+  }, [list, criteria, vendorFilter]);
   const typesInRange = useMemo(() => distinctValues(list, 'complaintType'), [list]);
 
   const filtered = useMemo(() => {
@@ -398,6 +407,22 @@ export function TicketsPage() {
                     })),
                   ]}
                 />
+                {vendors.show && (
+                  <SelectMenu
+                    size="sm"
+                    className="w-full"
+                    value={vendorFilter}
+                    onChange={setVendorChoice}
+                    aria-label={t('tickets.vendorLabel', { defaultValue: 'Vendor' })}
+                    options={[
+                      {
+                        value: '',
+                        label: t('tickets.anyVendor', { defaultValue: 'All vendors' }),
+                      },
+                      ...vendors.options.map((v) => ({ value: v.id, label: v.name })),
+                    ]}
+                  />
+                )}
                 <SelectMenu
                   size="sm"
                   className="w-full"
@@ -560,8 +585,11 @@ export function TicketsPage() {
                           </span>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-baseline justify-between gap-2">
-                              <span className="truncate text-sm font-semibold text-foreground">
-                                {r.subject}
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate text-sm font-semibold text-foreground">
+                                  {r.subject}
+                                </span>
+                                <VendorBadge vendor={r.vendor} directory={vendors} />
                               </span>
                               <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
                                 {r.date}
@@ -932,6 +960,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   const orderContact = useContact(ticket.data?.contact?.id ?? '');
   const orderVendorId = orderContact.data?.vendor?.yiji_vendor_id ?? null;
   const { user } = useAuth();
+  const vendors = useVendorDirectory();
   const [note, setNote] = useState('');
   const [uploading, setUploading] = useState(false);
   const [showChatMedia, setShowChatMedia] = useState(false);
@@ -1089,6 +1118,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             <div className="flex items-start justify-between gap-3">
               <h2 className="min-w-0 flex-1 text-2xl font-bold text-display tracking-[-0.02em] text-balance">
                 {tk.subject}
+                {/* Whose customer (MV-4) — only with 2+ vendors live. */}
+                <VendorBadge vendor={tk.vendor} directory={vendors} className="ms-2 align-middle" />
               </h2>
               {/* `normaliseTicketStatus`, not `!== 'solved'`: 1,671 historical
                   rows still store `closed` and would otherwise be offered a

@@ -59,7 +59,7 @@ import {
   useLateOrderCoupons,
   type LateOrderRegisterRow,
 } from './api.js';
-import { useVendors } from '../vendors/api.js';
+import { useVendorDirectory } from '../vendors/api.js';
 
 /**
  * Rows per page. The same ladder the ticket reports use, 1000 included — a
@@ -531,7 +531,7 @@ export function LateOrdersReportPage() {
    *     component falls back to its cart-and-timeline pair, which is keyed by
    *     order id alone and needs no vendor.
    */
-  const vendors = useVendors();
+  const vendors = useVendorDirectory();
   const yijiVendorId = vendors.data?.[0]?.yiji_vendor_id;
 
   const exportByAgent = () => {
