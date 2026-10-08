@@ -367,7 +367,7 @@ await check('EMA-23', 'Yiji accepts our coupon endpoint (probe that creates noth
  */
 const PIPE_SINCE = '2026-10-06T10:00:00Z';
 const PIPE_FIELDS =
-  'coupon_code,coupon_type,discount_category,coupon_value,coupon_percent,max_discount,usage_limit,reason,customer_phone,contact.phone,order_id,ticket.order_id,yiji_coupon_id,yiji_pushed_at';
+  'yiji_coupon_user_id,valid_to,coupon_code,coupon_type,discount_category,coupon_value,coupon_percent,max_discount,usage_limit,reason,customer_phone,contact.phone,order_id,ticket.order_id,yiji_coupon_id,yiji_pushed_at';
 const plusPhone = (row) => {
   const d = String(row.customer_phone || row.contact?.phone || '').replace(/\D/g, '');
   return d ? `+966${d.replace(/^(966|0)/, '')}` : null;
@@ -412,7 +412,28 @@ async function yijiHeldBy(row) {
   const r = await fetch(`${Y}/api/CouponUser/GetCouponByUser/${userId}?PageNumber=1&PageSize=500`, { headers: YH });
   const list = r.ok ? await r.json() : [];
   const held = (list ?? []).find((x) => x.couponCode === row.coupon_code);
-  return held?.coupon ? { coupon: held.coupon } : { error: 'the customer does NOT hold it on Yiji' };
+  if (held?.coupon) return { coupon: held.coupon };
+  return (await spentOrExpired(row, userId, YH)) ?? { error: 'the customer does NOT hold it on Yiji' };
+}
+/*
+ * A COUPON THE CUSTOMER SPENT LEAVES THEIR WALLET (OPS-HL2WJQ2N, 2026-10-08).
+ *
+ * Yiji's GetCouponByUser lists only coupons still to be used, so a customer
+ * who redeemed one the same evening looked exactly like one who never got it,
+ * and the release went red over a coupon that had worked perfectly. An order
+ * carries the GRANT id it used (`couponId` = the CRM's yiji_coupon_user_id),
+ * and an expired coupon drops out too, so both are checked before "missing".
+ */
+async function spentOrExpired(row, userId, YH) {
+  if (row.yiji_coupon_user_id) {
+    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderByUser/${userId}`, { headers: YH });
+    const orders = o.ok ? ((await o.json()) ?? []) : [];
+    const used = orders.find((x) => String(x.couponId) === String(row.yiji_coupon_user_id));
+    if (used) return { spent: `used in order ${used.orderNumber ?? used.id} on ${String(used.creationTime).slice(0, 10)}` };
+  }
+  if (row.valid_to && Date.parse(`${String(row.valid_to).slice(0, 10)}T23:59:59+03:00`) < Date.now())
+    return { spent: `expired ${String(row.valid_to).slice(0, 10)}` };
+  return null;
 }
 async function pipelineCheck(id, name, filter, fetchCoupon) {
   await check(id, name, async () => {
@@ -427,9 +448,11 @@ async function pipelineCheck(id, name, filter, fetchCoupon) {
     if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
     if (!r.data?.length) return { ok: true, detail: 'no coupon on this path since the fixes yet' };
     const problems = [];
+    const notes = [];
     for (const row of r.data) {
       const got = await fetchCoupon(row);
       if (got.error) problems.push(`${row.coupon_code}: ${got.error}`);
+      else if (got.spent) notes.push(`${row.coupon_code} ${got.spent}`);
       else {
         const bad = compareCoupon(row, got.coupon);
         if (bad.length) problems.push(`${row.coupon_code}: ${bad.join(', ')}`);
@@ -437,7 +460,9 @@ async function pipelineCheck(id, name, filter, fetchCoupon) {
     }
     return {
       ok: problems.length === 0,
-      detail: problems.length ? problems.join('; ') : `${r.data.map((x) => x.coupon_code).join(', ')} all match`,
+      detail: problems.length
+        ? problems.join('; ')
+        : `${r.data.map((x) => x.coupon_code).join(', ')} all good${notes.length ? ` (${notes.join('; ')})` : ''}`,
     };
   });
 }
@@ -663,27 +688,48 @@ await check(
       limit: '-1',
     });
     if (crm.status !== 200) return { ok: false, detail: `CRM HTTP ${crm.status}` };
-    /* Yiji's list fails a whole page when ONE coupon in it cannot be
-       serialised (HTTP 500), so such a page is re-read position by position;
-       only a position that still fails is skipped, and it is counted. */
-    const list = (n, size) =>
-      fetch(`https://admin.yiji-app.com/api/Coupon/GetAllCoupons?PageNumber=${n}&PageSize=${size}`, {
-        headers: { authorization: `Bearer ${token}` },
-      });
+    /* BY ID, not by Yiji's coupon list: the list (GetAllCoupons) hung for
+       every request on 2026-10-08 while single-coupon reads answered in under
+       a second. Ids are sequential, so the newest ~150 are read from the
+       newest id the CRM knows, after probing upward for anything newer. */
+    const byId = async (id) => {
+      for (let t = 0; t < 2; t++) {
+        try {
+          const r = await fetch(`https://admin.yiji-app.com/api/Coupon/GetCoupon/id/${id}`, {
+            headers: { authorization: `Bearer ${token}` },
+            signal: AbortSignal.timeout(15000),
+          });
+          if (r.status === 401 || r.status === 403) return { denied: r.status };
+          if (r.ok) return await r.json();
+          if (r.status < 500) return null;
+        } catch {
+          /* retry once */
+        }
+      }
+      return undefined;
+    };
+    const ids = await items('coupon_approvals', {
+      filter: JSON.stringify({ yiji_coupon_id: { _nnull: true } }),
+      fields: 'yiji_coupon_id',
+      limit: '-1',
+    });
+    let top = Math.max(0, ...(ids.data ?? []).map((x) => Number(x.yiji_coupon_id) || 0));
+    if (!top) return { ok: false, detail: 'no CRM coupon records its Yiji id yet - nothing to start from' };
+    for (let misses = 0, id = top + 1; misses < 15; id++) {
+      const c = await byId(id);
+      if (c?.denied) return { ok: false, detail: `Yiji GetCoupon HTTP ${c.denied} - the admin token in .env.yiji-admin expired` };
+      if (c && c.code) {
+        top = id;
+        misses = 0;
+      } else misses += 1;
+    }
     const yiji = [];
     let unreadable = 0;
-    for (const page of [1, 2, 3, 4]) {
-      const r = await list(page, 25);
-      if (r.status === 401 || r.status === 403)
-        return { ok: false, detail: `Yiji coupon list HTTP ${r.status} — the admin token in .env.yiji-admin expired` };
-      if (r.status === 200) {
-        yiji.push(...((await r.json()) ?? []));
-        continue;
-      }
-      for (let i = 1; i <= 25; i++) {
-        const one = await list((page - 1) * 25 + i, 1);
-        if (one.status === 200) yiji.push(...((await one.json()) ?? []));
-        else unreadable += 1;
+    const range = Array.from({ length: 150 }, (_, i) => top - i);
+    for (let i = 0; i < range.length; i += 6) {
+      for (const c of await Promise.all(range.slice(i, i + 6).map(byId))) {
+        if (c === undefined) unreadable += 1;
+        else if (c?.code) yiji.push(c);
       }
     }
     const want = Object.fromEntries(
@@ -694,10 +740,42 @@ await check(
       ok: wrong.length === 0,
       detail: wrong.length
         ? wrong.map((c) => `${c.code} (#${c.id}) Yiji type ${c.type}, agent chose ${want[c.code]}`).join('; ')
-        : `${yiji.filter((c) => want[c.code] !== undefined).length} CRM coupons among Yiji's newest 100, all match${unreadable ? ` (${unreadable} list positions Yiji could not return)` : ''}`,
+        : `${yiji.filter((c) => want[c.code] !== undefined).length} CRM coupons among Yiji's newest 150 (ids ${top - 149}-${top}), all match${unreadable ? ` (${unreadable} ids unreadable)` : ''}`,
     };
   },
 );
+
+// ── no delivered coupon silently vanishes (2026-10-08) ────────────────────────
+await check('COUPON-VANISHED', 'every coupon delivered in the last 7 days is held, used or expired', async () => {
+  if (!yijiToken) return 'skip';
+  if (ENV !== 'prod') return { ok: true, detail: 'production only - staging coupons go to the test handset' };
+  /* Found 2026-10-08: 9 coupons granted 1-3 Oct had left their customers'
+     wallets unused and unexpired (3 deleted on Yiji outright). The CRM's Yiji
+     role cannot remove coupons (403), so it happened on Yiji's side - and
+     nothing noticed for a week. This looks at a rolling week so a new case
+     surfaces at the next release, not by accident. */
+  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const r = await items('coupon_approvals', {
+    filter: JSON.stringify({
+      _and: [{ status: { _eq: 'assigned' } }, { delivery_excluded: { _neq: true } }, { yiji_pushed_at: { _gte: since } }],
+    }),
+    fields: PIPE_FIELDS,
+    limit: '-1',
+  });
+  if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
+  const gone = [];
+  let spent = 0;
+  for (const row of r.data ?? []) {
+    const got = await yijiHeldBy(row);
+    if (got.error) gone.push(`${row.coupon_code} (grant ${row.yiji_coupon_user_id}): ${got.error}`);
+    else if (got.spent) spent += 1;
+  }
+  const n = (r.data ?? []).length;
+  return {
+    ok: gone.length === 0,
+    detail: gone.length ? gone.join('; ') : `${n} delivered this week: ${n - spent} held, ${spent} used or expired`,
+  };
+});
 
 // ── recording (owner, 2026-10-07) ────────────────────────────────────────────
 await check('REC-SOURCE', 'every new message records where its words came from', async () => {
