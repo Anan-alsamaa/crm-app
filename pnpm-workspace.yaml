@@ -3,3 +3,4 @@ packages:
   - 'services/*'
   - 'packages/*'
   - 'directus/bootstrap'
+  - 'tools/crm-mcp'

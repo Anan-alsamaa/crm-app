@@ -1,0 +1,26 @@
+{
+  "name": "@yiji/crm-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "READ-ONLY MCP server for the PRODUCTION Sara/Yiji CRM (crm-api.anan.sa), for Claude Code.",
+  "bin": {
+    "crm-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "smoke": "node scripts/smoke.mjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "typescript": "^5.7.2",
+    "vitest": "^3.2.6"
+  }
+}
