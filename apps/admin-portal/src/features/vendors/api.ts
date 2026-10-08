@@ -68,6 +68,27 @@ export const VENDOR_INTEGRATION_FIELDS = [
   'webhook_path_key',
 ] as const;
 
+/**
+ * Vendors with DISPLAY fields only, for every page that is not the owner-only
+ * Vendors page. Since MV-5 a non-Administrator may read only these fields, and
+ * Directus refuses a whole query that names one more - so the late-orders
+ * report (WeCare Admin) must not borrow the Vendors page's full read.
+ */
+export function useVendorDirectory() {
+  return useQuery({
+    queryKey: ['vendors', 'display'],
+    queryFn: () =>
+      directus.request(
+        readItems('vendors', {
+          fields: ['id', 'name', 'yiji_vendor_id', 'status'],
+          sort: ['name'],
+          limit: -1,
+        }),
+      ) as Promise<Array<Pick<VendorRow, 'id' | 'name' | 'yiji_vendor_id' | 'status'>>>,
+  });
+}
+
+/** Owner-only: every field, including integration settings (Vendors page). */
 export function useVendors() {
   return useQuery({
     queryKey: ['vendors'],
