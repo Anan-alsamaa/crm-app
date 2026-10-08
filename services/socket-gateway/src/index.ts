@@ -37,10 +37,12 @@ import {
   isDialablePhone,
   WalkInSessionRequest,
   createEnvConnectorRegistry,
+  createEnvVendorSecrets,
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
-import { createHs256Verifier, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
+import { createVendorVerifier, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
+import { createVendorJwtSecrets, registerVendorWebhooks } from './vendor-auth.js';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
@@ -62,7 +64,6 @@ import {
 } from './connection.js';
 import { Registry } from './metrics.js';
 import { parseAttachmentPolicy, sanitizeFilename } from './attachments.js';
-import { verifyWebhookSignature } from './webhook.js';
 import { notifyAssignment } from './assignment-notify.js';
 
 /**
@@ -272,7 +273,26 @@ async function main(): Promise<void> {
   }
 
   const directus = new GatewayDirectus(config.DIRECTUS_INTERNAL_URL, config.SVC_GATEWAY_TOKEN);
-  const verifier = createHs256Verifier(config.YIJI_JWT_SECRET);
+  /*
+   * PER-VENDOR SECRETS (MV-3). Read from service configuration by the naming
+   * convention in docs/VENDOR-SECRETS.md: the Yiji vendor keeps YIJI_JWT_SECRET
+   * / YIJI_WEBHOOK_SECRET (the validated config values, so nothing about Yiji
+   * changes); any other vendor needs VENDOR_<KEY>_JWT_SECRET /
+   * VENDOR_<KEY>_WEBHOOK_SECRET or it is refused — never given Yiji's.
+   */
+  const vendorSecrets = createEnvVendorSecrets({
+    ...process.env,
+    YIJI_JWT_SECRET: config.YIJI_JWT_SECRET,
+    YIJI_WEBHOOK_SECRET: config.YIJI_WEBHOOK_SECRET,
+  });
+  const vendorJwtSecret = createVendorJwtSecrets({
+    secrets: vendorSecrets,
+    defaultVendorId: DEFAULT_VENDOR_ID,
+    lookupKey: (id) => directus.vendorKeyById(id),
+  });
+  /* A customer token is verified with the secret of the vendor it CLAIMS. A
+     token with no vendor claim (the legacy Yiji app) is the default vendor. */
+  const verifier = createVendorVerifier(vendorJwtSecret);
   const producer = createProducer(
     { redisEnabled: config.REDIS_ENABLED, redisUrl: config.REDIS_URL },
     logger,
@@ -625,29 +645,15 @@ async function main(): Promise<void> {
     reply.header('content-type', metrics.contentType);
     return metrics.render();
   });
-  // Inbound webhook receiver (e.g. Yiji platform events). Rejects anything
-  // without a valid HMAC signature + fresh timestamp. Disabled (503) until a
-  // secret is configured, so it is never an unauthenticated open endpoint.
-  app.post('/webhooks/yiji', async (req, reply) => {
-    if (!config.YIJI_WEBHOOK_SECRET) {
-      return reply.code(503).send({ status: 'webhooks-not-configured' });
-    }
-    const result = verifyWebhookSignature({
-      secret: config.YIJI_WEBHOOK_SECRET,
-      rawBody: (req as { rawBody?: string }).rawBody ?? '',
-      signature: req.headers['x-yiji-signature'] as string | undefined,
-      timestamp: req.headers['x-yiji-timestamp'] as string | undefined,
-      toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
-    });
-    if (!result.valid) {
-      logger.warn({ reason: result.reason }, 'webhook signature rejected');
-      return reply.code(401).send({ status: 'invalid-signature' });
-    }
-    const event = (req.body as { type?: string } | undefined)?.type ?? 'unknown';
-    logger.info({ event }, 'webhook accepted');
-    // Signature verified. Downstream processing (fan-out / enqueue) is wired by
-    // the consuming pipeline; we acknowledge receipt here.
-    return reply.code(202).send({ status: 'accepted', event });
+  // Inbound webhook receivers: `/webhooks/yiji` (unchanged) and one route per
+  // vendor, `/webhooks/<webhook_path_key>`, each verified with THAT vendor's
+  // secret (MV-3). See vendor-auth.ts.
+  registerVendorWebhooks(app, {
+    yijiWebhookSecret: config.YIJI_WEBHOOK_SECRET,
+    secrets: vendorSecrets,
+    findVendorByKey: (key) => directus.vendorByWebhookKey(key),
+    toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
+    logger,
   });
 
   // Admin-triggered job enqueue (admin portal → gateway). "Import CSV" and
@@ -833,8 +839,8 @@ async function main(): Promise<void> {
    *
    * A customer standing in a branch scans a printed code, types their phone
    * number, and is handed a widget token. The token is minted HERE, server
-   * side, because it is signed with YIJI_JWT_SECRET — the same secret that
-   * authenticates every in-app customer. Shipping that secret to a public page
+   * side, because it is signed with the vendor's chat-login secret (Yiji:
+   * YIJI_JWT_SECRET) — the one that authenticates every in-app customer. Shipping that secret to a public page
    * so the browser could sign its own token would let anyone mint a token for
    * any customer, which is the whole game.
    *
@@ -1034,6 +1040,16 @@ async function main(): Promise<void> {
 
       const vendor = await directus.resolveVendor(vendorId).catch(() => null);
       if (!vendor) return reply.code(404).send({ ok: false, error: 'unknown or inactive vendor' });
+      /*
+       * SIGNED WITH THIS VENDOR'S OWN SECRET (MV-3) — the same one the socket
+       * verifies it with. Yiji: YIJI_JWT_SECRET, as before. A vendor with no
+       * configured secret cannot open chats (never signed with Yiji's).
+       */
+      const signingSecret = await vendorJwtSecret(vendorId).catch(() => null);
+      if (!signingSecret) {
+        logger.warn({ vendorId }, 'walk-in refused: vendor has no chat-login secret configured');
+        return reply.code(503).send({ ok: false, error: 'chat is not available for this vendor' });
+      }
 
       /*
        * NORMALISE before anything is derived from it.
@@ -1086,7 +1102,7 @@ async function main(): Promise<void> {
              real id downstream. */
           ...(orderId ? { order_id: orderId } : {}),
         },
-        config.YIJI_JWT_SECRET,
+        signingSecret,
         /*
          * TWELVE HOURS, NOT TWO — long enough to outlive the visit.
          *

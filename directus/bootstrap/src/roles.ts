@@ -54,8 +54,29 @@ const appendOnly = (collection: string): PermissionSpec[] => [
   { collection, action: 'read' },
 ];
 
+/**
+ * VENDORS ARE THE ADMINISTRATOR'S (MV-5, EMA-74).
+ *
+ * Only the Administrator (the owner, admin_access) may create, edit or delete
+ * a vendor, so `vendors` is NOT in ALL_BUSINESS and no role below holds a
+ * write on it. Everyone else READS — an agent needs to see which vendor a chat
+ * belongs to — but only these display fields. The integration settings
+ * (platform, api_base_url, admin_api_url, tenant_id, brand_id,
+ * notify_settings, webhook_path_key) and support_settings are readable only by
+ * admin_access and the service account that uses one (see each svc-* below).
+ *
+ * A field restriction is enforced by Directus: a query that NAMES a field
+ * outside the list is refused whole (403), it is not silently trimmed, so a
+ * service that starts reading an integration field must be granted it here in
+ * the same change.
+ */
+export const VENDOR_PUBLIC_FIELDS = ['id', 'name', 'logo', 'colors', 'status', 'yiji_vendor_id'];
+/** Read on `vendors` limited to the display fields, plus `extra` for a service that needs them. */
+const vendorsRead = (extra: string[] = []): PermissionSpec[] => [
+  { collection: 'vendors', action: 'read', fields: [...VENDOR_PUBLIC_FIELDS, ...extra] },
+];
+
 const ALL_BUSINESS = [
-  'vendors',
   'teams',
   // Restaurant master data (brands + their branches). Admins maintain these by
   // hand and via CSV import; every other role only reads them.
@@ -285,6 +306,8 @@ export const roles: RoleSpec[] = [
     adminAccess: false,
     permissions: [
       ...ALL_BUSINESS.flatMap(crud),
+      // Read only, display fields only — vendors are the Administrator's (MV-5).
+      ...vendorsRead(),
       ...crud('directus_users'),
       /* Change history = Directus's own activity + revisions. The Admin role
        * has no admin_access, so the system tables need explicit grants.
@@ -359,7 +382,7 @@ export const roles: RoleSpec[] = [
     appAccess: true,
     adminAccess: false,
     permissions: [
-      ...readOnly('vendors'),
+      ...vendorsRead(),
       ...readOnly('teams'),
       // Read-only so the agent inbox can show which branch an order came from
       // without letting agents edit the operations team's master data.
@@ -712,7 +735,10 @@ export const roles: RoleSpec[] = [
       // to a colleague). The gateway never writes tickets.
       { collection: 'tickets', action: 'read' },
       ...readOnly('directus_users'),
-      ...readOnly('vendors'),
+      /* Display fields (resolveVendor: id, name, colors) + `webhook_path_key`:
+         MV-3 picks a vendor's webhook / chat-login secret by that key
+         (vendorKeyById, vendorByWebhookKey). */
+      ...vendorsRead(['webhook_path_key']),
       ...readOnly('teams'),
     ],
   },
@@ -807,9 +833,12 @@ export const roles: RoleSpec[] = [
        * the grant the read 403s, the registry falls back to the env vendor
        * ('1') with a logged warning, the UUID is unknown, and the coupon stays
        * `approved` (never sent to a guessed platform) until the grant exists.
-       * Read-only: vendors are the Administrator's to manage.
+       * Read-only: vendors are the Administrator's to manage. Display fields
+       * only — the registry reads id, yiji_vendor_id, status, name. (MV-4: add
+       * `platform` and the integration fields here when the connector reads
+       * them, or that read 403s.)
        */
-      ...readOnly('vendors'),
+      ...vendorsRead(),
     ],
   },
   {
@@ -845,9 +874,10 @@ export const roles: RoleSpec[] = [
        * portal request names — by CRM UUID or by `yiji_vendor_id`, since the
        * portals send both — from this table. Without it the read 403s and the
        * gateway falls back to the env vendor ('1') with a warning, so a UUID
-       * request answers 404 `unknown_vendor`.
+       * request answers 404 `unknown_vendor`. Display fields only — it reads
+       * id, yiji_vendor_id, status, name (MV-4: widen with the connector).
        */
-      ...readOnly('vendors'),
+      ...vendorsRead(),
     ],
   },
 ];

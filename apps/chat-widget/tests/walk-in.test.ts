@@ -185,6 +185,23 @@ describe('walk-in submit', () => {
     expect(JSON.parse(String(init.body))).toMatchObject({ phone: '0501234567' });
   });
 
+  /* MV-3: one page, many vendors — the vendor rides on the QR link. */
+  it('opens the chat for the vendor named in the link (?vendor=)', async () => {
+    await loadPage('?vendor=7');
+    type('0501234567');
+    await send();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ vendorId: '7' });
+  });
+
+  it('falls back to the build-time vendor when the link names none (every printed code)', async () => {
+    await loadPage();
+    type('0501234567');
+    await send();
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toMatchObject({ vendorId: '1' });
+  });
+
   it('hands the token over in sessionStorage, never in the URL', async () => {
     // A URL carrying a customer token lands in history and in referrers.
     await loadPage();

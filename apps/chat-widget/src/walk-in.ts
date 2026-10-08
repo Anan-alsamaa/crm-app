@@ -51,9 +51,14 @@
  */
 import { applyDocumentLocale, resolveLocale, storeLocale } from './locale.js';
 import { walkInStrings } from './walk-in-strings.js';
+import { walkInVendorId } from './walk-in-vendor.js';
 
 const GATEWAY_HTTP = (import.meta.env.VITE_GATEWAY_HTTP_URL as string | undefined) ?? '';
-const VENDOR_ID = (import.meta.env.VITE_WALK_IN_VENDOR_ID as string | undefined) ?? '1';
+/* The vendor from the link (`?vendor=`), else the build-time value — see walk-in-vendor.ts. */
+const VENDOR_ID = walkInVendorId(
+  window.location.search ?? '',
+  import.meta.env.VITE_WALK_IN_VENDOR_ID as string | undefined,
+);
 /** The chat page this hands off to — same origin, so `/` is the whole answer. */
 const CHAT_URL = (import.meta.env.VITE_WALK_IN_CHAT_URL as string | undefined) ?? '/';
 
