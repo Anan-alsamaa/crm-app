@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { aggregate, readItems, readRevisions, readUsers } from '@directus/sdk';
 import { formatDateTime } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 import { commerce } from '../../lib/commerce-client.js';
 import {
   businessSecondsBetween,
@@ -495,11 +496,14 @@ export function useAgentReportData(
 ) {
   const from = range?.from?.trim() || '';
   const to = range?.to?.trim() || '';
+  /* The shared report vendor filter (MV-4); '' = every vendor, always so with one. */
+  const vendor = useReportVendorFilter();
+  const labelsAndVendor = [labels.unassigned, labels.noSubject, vendor];
   return useQuery({
     // The key carries everything the data resolved against — a range missing
     // from here serves the previous range's rows under the new dates. The kind
     // too: an Agent summary result has no ticket rows to lend a breakdown.
-    queryKey: ['agent-reports', kind ?? 'all', days, from, to, labels.unassigned, labels.noSubject],
+    queryKey: ['agent-reports', kind ?? 'all', days, from, to, ...labelsAndVendor],
     /* Five minutes, not one (2026-10-05). These are reports over weeks or
        months of history, not a live queue; refetching all of it every time a
        tab regained focus was a large share of the waiting. The changes made
@@ -509,7 +513,7 @@ export function useAgentReportData(
     staleTime: 5 * 60_000,
     queryFn: async (): Promise<AgentReportData> => {
       try {
-        return await loadAgentReport(days, labels, { from, to }, kind);
+        return await loadAgentReport(days, labels, { from, to }, kind, vendor);
       } catch (err) {
         // Report the cause. A generic "could not load" on a page that made
         // twenty successful requests sends whoever is looking hunting through
@@ -560,6 +564,8 @@ async function loadAgentReport(
   labels: { unassigned: string; noSubject: string },
   range?: { from?: string; to?: string },
   kind?: AgentReportKind,
+  /** Only this vendor's records (MV-4); '' or absent = every vendor. */
+  vendor = '',
 ): Promise<AgentReportData> {
   {
     {
@@ -615,12 +621,18 @@ async function loadAgentReport(
        * complaint-date field existed have none, and matching only on
        * `complaint_date` would silently drop every one of them.
        */
-      const ticketWindow = {
-        _or: [
-          inRange('complaint_date'),
-          { _and: [{ complaint_date: { _null: true } }, inRange('date_created')] },
-        ],
-      };
+      const ticketWindow = withVendor(
+        {
+          _or: [
+            inRange('complaint_date'),
+            { _and: [{ complaint_date: { _null: true } }, inRange('date_created')] },
+          ],
+        },
+        vendor,
+      );
+      /* The same vendor clause on every other read (MV-4): a chat or a rating
+         belongs to its conversation's vendor. */
+      const byVendor = (f: unknown, path?: readonly string[]) => withVendor(f, vendor, path);
       const readTickets = async (): Promise<RawTicket[]> => {
         if (!needs.ticketRows) return [];
         const query = (fields: readonly unknown[], filter: unknown) =>
@@ -644,7 +656,7 @@ async function loadAgentReport(
           // No complaint schema here: neither the fields nor the window that
           // reads `complaint_date` can work, so both fall back together.
           complaintFieldsAvailable = false;
-          return await query(BASE_TICKET_FIELDS, inRange('date_created'));
+          return await query(BASE_TICKET_FIELDS, byVendor(inRange('date_created')));
         }
       };
       /*
@@ -674,7 +686,7 @@ async function loadAgentReport(
         try {
           rows = await query(ticketWindow);
         } catch {
-          rows = await query(inRange('date_created'));
+          rows = await query(byVendor(inRange('date_created')));
         }
         for (const r of rows) {
           const id = r.assigned_agent ?? null;
@@ -709,7 +721,7 @@ async function loadAgentReport(
         needs.chats
           ? (directus.request(
               readItems('conversations', {
-                filter: inRange('date_created'),
+                filter: byVendor(inRange('date_created')) as never,
                 fields: [
                   'id',
                   'status',
@@ -733,7 +745,7 @@ async function loadAgentReport(
         needs.agentKpi
           ? (directus.request(
               readItems('csat_responses', {
-                filter: inRange('submitted_at'),
+                filter: byVendor(inRange('submitted_at'), ['conversation', 'vendor']) as never,
                 fields: ['id', 'score', 'comment', 'submitted_at', 'conversation'],
                 limit: -1,
               }),
@@ -762,6 +774,7 @@ async function loadAgentReport(
                 'coupon_approvals' as never,
                 {
                   fields: ['id', 'ticket', 'order_id', 'status', 'compensation'],
+                  ...(vendor ? { filter: { vendor: { _eq: vendor } } } : {}),
                   limit: -1,
                 } as never,
               ),
@@ -773,7 +786,7 @@ async function loadAgentReport(
               () =>
                 directus.request(
                   readItems('routing_events' as never, {
-                    filter: inRange('date_created'),
+                    filter: byVendor(inRange('date_created'), ['conversation', 'vendor']) as never,
                     fields: ['conversation', 'agent', 'outcome', 'stage'],
                     limit: -1,
                   }) as never,
@@ -857,7 +870,7 @@ async function loadAgentReport(
                     {
                       aggregate: { count: '*', min: 'complaint_date', max: 'complaint_date' },
                       query: {
-                        filter: {
+                        filter: byVendor({
                           _and: [
                             inRange('date_created'),
                             { complaint_date: { _nnull: true } },
@@ -873,7 +886,7 @@ async function loadAgentReport(
                                 : [{ complaint_date: { _lt: since } }],
                             },
                           ],
-                        },
+                        }),
                       },
                     } as never,
                   ),

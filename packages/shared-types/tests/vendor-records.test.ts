@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { pickRecordVendor, soleActiveVendorId, vendorIdOf, vendorsFromRows } from '../src/index.js';
+import {
+  activeVendorsOf,
+  pickRecordVendor,
+  preferVendorScoped,
+  showVendorUi,
+  soleActiveVendorId,
+  vendorIdOf,
+  vendorScopeMatches,
+  vendorsFromRows,
+} from '../src/index.js';
 
 describe('pickRecordVendor (MV-1)', () => {
   const one = [{ id: 'v-yiji', status: 'active' }];
@@ -52,5 +61,53 @@ describe('vendorsFromRows honours vendors.platform (MV-1)', () => {
       { id: 'd', yiji_vendor_id: '4', status: 'active', platform: 'other' },
     ]);
     expect(vs.map((v) => v.platform)).toEqual(['yiji', 'yiji', 'yiji', 'other']);
+  });
+});
+
+describe('vendor UI visibility (MV-4)', () => {
+  it('is hidden with one active vendor, shown with two', () => {
+    expect(showVendorUi([{ id: 'a', status: 'active' }])).toBe(false);
+    expect(
+      showVendorUi([
+        { id: 'a', status: 'active' },
+        { id: 'b', status: 'inactive' },
+      ]),
+    ).toBe(false);
+    expect(
+      showVendorUi([
+        { id: 'a', status: 'active' },
+        { id: 'b', status: null },
+      ]),
+    ).toBe(true);
+    expect(showVendorUi(null)).toBe(false);
+    expect(activeVendorsOf([{ id: 'a' }, { id: 'b', status: 'inactive' }])).toEqual([{ id: 'a' }]);
+  });
+});
+
+describe('vendor-scoped settings (MV-4)', () => {
+  it('NULL applies to every vendor; a named vendor only to its own', () => {
+    expect(vendorScopeMatches(null, 'v1')).toBe(true);
+    expect(vendorScopeMatches(null, null)).toBe(true);
+    expect(vendorScopeMatches('v1', 'v1')).toBe(true);
+    expect(vendorScopeMatches({ id: 'v1' }, { id: 'v1' })).toBe(true);
+    expect(vendorScopeMatches('v1', 'v2')).toBe(false);
+    expect(vendorScopeMatches('v1', null)).toBe(false);
+  });
+
+  it('prefers the vendor own rows, else the shared ones, never another vendor', () => {
+    const rows = [
+      { id: 'shared', vendor: null },
+      { id: 'v1-only', vendor: 'v1' },
+      { id: 'v2-only', vendor: { id: 'v2' } },
+    ];
+    expect(preferVendorScoped(rows, 'v1').map((r) => r.id)).toEqual(['v1-only']);
+    expect(preferVendorScoped(rows, 'v2').map((r) => r.id)).toEqual(['v2-only']);
+    expect(preferVendorScoped(rows, 'v3').map((r) => r.id)).toEqual(['shared']);
+    expect(preferVendorScoped(rows, null).map((r) => r.id)).toEqual(['shared']);
+    // One vendor, no scoped rows: unchanged behaviour.
+    expect(preferVendorScoped([{ id: 'a' }, { id: 'b' }], 'v1').map((r) => r.id)).toEqual([
+      'a',
+      'b',
+    ]);
   });
 });

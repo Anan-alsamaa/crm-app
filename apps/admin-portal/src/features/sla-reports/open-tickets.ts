@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
+import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 import {
   normaliseTicketStatus,
   UNSOLVED_TICKET_STATUSES_STORED,
@@ -172,16 +173,21 @@ const FIELDS_PLAIN = ['id', 'status', 'priority', 'assigned_agent', 'resolution_
 
 /** The page names the null buckets itself (translated), keyed on `key === null`. */
 export function useOpenTicketStats() {
+  /* The shared report vendor filter (MV-4); '' = every vendor. */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['sla-open-tickets'],
+    queryKey: ['sla-open-tickets', vendor],
     staleTime: 60_000,
     queryFn: async (): Promise<OpenTicketStats> => {
-      const filter = {
-        _or: [
-          { status: { _in: [...UNSOLVED_TICKET_STATUSES_STORED] } },
-          { status: { _null: true } },
-        ],
-      };
+      const filter = withVendor(
+        {
+          _or: [
+            { status: { _in: [...UNSOLVED_TICKET_STATUSES_STORED] } },
+            { status: { _null: true } },
+          ],
+        },
+        vendor,
+      );
       const read = (fields: unknown[]) =>
         directus.request(
           readItems('tickets', { filter: filter as never, fields: fields as never, limit: -1 }),

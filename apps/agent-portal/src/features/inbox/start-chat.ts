@@ -50,12 +50,21 @@ export interface StartChatResult {
  */
 export async function lookupContactByPhone(
   phone: string,
+  /**
+   * The CRM vendor the chat will be with (MV-4). Contacts are per vendor, so
+   * with 2+ vendors the same number can be two different customers; naming
+   * another vendor's customer here would greet the wrong person. Omitted with
+   * one vendor — unchanged.
+   */
+  vendor?: string | null,
 ): Promise<{ id: string; name: string | null } | null> {
   const rows = (await directus.request(
     readItems(
       'contacts' as never,
       {
-        filter: { phone: { _eq: phone } },
+        filter: vendor
+          ? { phone: { _eq: phone }, vendor: { _eq: vendor } }
+          : { phone: { _eq: phone } },
         fields: ['id', 'name'],
         limit: 1,
       } as never,

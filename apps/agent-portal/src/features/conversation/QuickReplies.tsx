@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
 import { cn, DISMISS_FIRST_ATTR } from '@yiji/ui';
+import { vendorScopeMatches, type VendorRef } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -68,11 +69,28 @@ export interface QuickReply {
   text: string;
   lang: 'en' | 'ar';
   kind?: QuickReplyKind | null;
+  /** The vendor this reply is for (MV-1/MV-4). NULL = every vendor. */
+  vendor?: VendorRef;
 }
 
-export function useQuickReplies(kind: QuickReplyKind = 'chat') {
+/**
+ * The replies a chat of `vendorId` may use (MV-4): the all-vendor ones (NULL)
+ * plus the ones written for that vendor — never another vendor's wording.
+ * `undefined` = the vendor is not known here (e.g. a chat not started yet), and
+ * nothing is narrowed, which with one vendor is every reply anyway.
+ */
+export function repliesForVendor(
+  rows: readonly QuickReply[],
+  vendorId: string | null | undefined,
+): QuickReply[] {
+  if (vendorId === undefined) return [...rows];
+  return rows.filter((r) => vendorScopeMatches(r.vendor, vendorId));
+}
+
+export function useQuickReplies(kind: QuickReplyKind = 'chat', vendorId?: string | null) {
   return useQuery({
     queryKey: ['quick-replies', kind],
+    select: (rows: QuickReply[]) => repliesForVendor(rows, vendorId),
     // The library changes when operations edit it, which is rarely.
     staleTime: 5 * 60_000,
     queryFn: async () => {
@@ -91,18 +109,29 @@ export function useQuickReplies(kind: QuickReplyKind = 'chat') {
        * it returns rows whose `kind` is undefined, which the fallback below
        * reads as `chat` — where every existing row came from.
        */
-      try {
-        const rows = (await directus.request(
+      const read = async (fields: string[]) =>
+        (await directus.request(
           readItems(
             'quick_replies' as never,
             {
               filter: { active: { _eq: true } },
-              fields: ['id', 'label', 'text', 'lang', 'kind'],
+              fields,
               sort: ['sort', 'label'],
               limit: -1,
             } as never,
           ),
         )) as unknown as QuickReply[];
+      try {
+        /* `vendor` (MV-1) is asked for FIRST and dropped on refusal, for the
+           same reason as `kind` below: a field that has not reached this
+           environment must not empty the library. Without it every reply
+           reads as all-vendor, which is what every row was before MV-1. */
+        let rows: QuickReply[];
+        try {
+          rows = await read(['id', 'label', 'text', 'lang', 'kind', 'vendor']);
+        } catch {
+          rows = await read(['id', 'label', 'text', 'lang', 'kind']);
+        }
         return rows.filter((r) => (r.kind ?? 'chat') === kind);
       } catch {
         /*
@@ -215,6 +244,7 @@ export function QuickReplies({
   className,
   dismissSearchOnOutside = false,
   floatAbove = false,
+  vendorId,
 }: {
   /** What the customer has written, for language ranking. */
   customerText: string;
@@ -262,9 +292,14 @@ export function QuickReplies({
    * list stays in the flow and never covers the input.
    */
   floatAbove?: boolean;
+  /**
+   * The chat's vendor (MV-4): replies written for ANOTHER vendor are hidden.
+   * Omitted where no chat exists yet — then nothing is narrowed.
+   */
+  vendorId?: string | null;
 }) {
   const { t, i18n } = useTranslation();
-  const replies = useQuickReplies(kind);
+  const replies = useQuickReplies(kind, vendorId);
   const [open, setOpen] = useState(false);
   /** The whole control — trigger, language toggle and panel — for click-outside. */
   const wrap = useRef<HTMLDivElement>(null);

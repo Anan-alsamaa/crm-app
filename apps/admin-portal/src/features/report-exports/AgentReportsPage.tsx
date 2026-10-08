@@ -63,6 +63,7 @@ import { ColumnScroller } from '../../components/ColumnScroller.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { ReportVendorFilter } from '../../lib/report-vendor.js';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
 import { formatDuration } from '@yiji/reports';
 import { TicketHistoryDrawer } from './TicketHistoryDrawer.js';
@@ -1379,6 +1380,8 @@ function ComplaintsReport({
               <RangePreset range={range} />
             </div>
           </label>
+          {/* Vendor (MV-4) — also changes what is fetched; only with 2+ vendors. */}
+          <ReportVendorFilter />
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <FilterSelect
@@ -2056,6 +2059,7 @@ function AgentKpiReport({
       </ReportKpiStrip>
 
       <ReportFilterBar
+        vendorFilter
         searchLabel={t('agentReports.searchAgent', { defaultValue: 'Search agent' })}
         searchPlaceholder={t('agentReports.searchAgentHint', {
           defaultValue: 'Agent name',
@@ -2553,6 +2557,7 @@ function ConversationReport({
           from the other two views, which is where a reader changes them. */}
       {view !== 'breakdown' && (
         <ReportFilterBar
+          vendorFilter
           searchLabel={t('agentReports.searchConversations', {
             defaultValue: 'Search customer, phone, agent or order',
           })}

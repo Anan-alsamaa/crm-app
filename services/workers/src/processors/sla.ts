@@ -4,6 +4,7 @@ import {
   normaliseTicketStatus,
   pickSlaPolicy,
   QUEUES,
+  vendorIdOf,
   type NotificationJob,
   type Priority,
   type SlaJob,
@@ -82,15 +83,17 @@ export interface SlaDeps {
  *     an empty list and now the coded one.
  */
 function pickPolicy(ticket: TicketRow, policies: SlaPolicyRow[]): SlaPolicyRow | null {
-  return pickSlaPolicy(
-    policies.filter((p) => p.active),
-    {
-      priority: ticket.priority,
-      complaintType: ticket.complaint_type,
-      complaintSource: ticket.complaint_source,
-      brandName: ticket.store_snapshot?.brandName ?? null,
-    },
-    'ticket',
+  return pickVendorPolicy(policies, ticket.vendor, (candidates) =>
+    pickSlaPolicy(
+      candidates,
+      {
+        priority: ticket.priority,
+        complaintType: ticket.complaint_type,
+        complaintSource: ticket.complaint_source,
+        brandName: ticket.store_snapshot?.brandName ?? null,
+      },
+      'ticket',
+    ),
   );
 }
 
@@ -105,11 +108,32 @@ function pickPolicy(ticket: TicketRow, policies: SlaPolicyRow[]): SlaPolicyRow |
  * the honest answer rather than a promise made on a blank.
  */
 function pickChatPolicy(c: ConversationRow, policies: SlaPolicyRow[]): SlaPolicyRow | null {
-  return pickSlaPolicy(
-    policies.filter((p) => p.active),
-    { priority: c.priority ?? null },
-    'chat',
+  return pickVendorPolicy(policies, c.vendor, (candidates) =>
+    pickSlaPolicy(candidates, { priority: c.priority ?? null }, 'chat'),
   );
+}
+
+/**
+ * PER VENDOR (MV-4, EMA-73): a policy that names a vendor governs only that
+ * vendor's tickets and chats; a policy with no vendor governs every vendor.
+ *
+ * The vendor's OWN policies are tried first, and only when none of them covers
+ * the record do the shared (NULL) ones get a turn — "prefer specific, else
+ * general". Another vendor's policy is never a candidate, so one vendor's
+ * five-minute promise can never be attached to another vendor's customer.
+ *
+ * With one vendor and every policy NULL (today) this is exactly the old pick.
+ */
+function pickVendorPolicy(
+  policies: SlaPolicyRow[],
+  recordVendor: string | null | undefined,
+  pick: (candidates: SlaPolicyRow[]) => SlaPolicyRow | null,
+): SlaPolicyRow | null {
+  const active = policies.filter((p) => p.active);
+  const vendor = vendorIdOf(recordVendor);
+  const own = vendor ? active.filter((p) => vendorIdOf(p.vendor) === vendor) : [];
+  const shared = active.filter((p) => !vendorIdOf(p.vendor));
+  return (own.length > 0 ? pick(own) : null) ?? pick(shared);
 }
 
 /*

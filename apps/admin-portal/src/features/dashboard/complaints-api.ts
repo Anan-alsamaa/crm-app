@@ -10,6 +10,7 @@ import {
   type StoreSnapshot,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 import { loadSlaHours } from '../../lib/sla-hours.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 
@@ -435,8 +436,10 @@ export function useComplaintYears() {
 }
 
 export function useComplaintMetrics(filters: ComplaintFilters) {
+  /* The shared report vendor filter (MV-4); '' = every vendor, always so with one. */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['complaint-metrics', filters],
+    queryKey: ['complaint-metrics', filters, vendor],
     staleTime: 60_000,
     queryFn: async (): Promise<ComplaintMetrics> => {
       // Date bounds go to the server; everything else needs the store join or a
@@ -458,7 +461,7 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
        * none of it. Tickets raised before `complaint_date` existed have none,
        * so the `_and` branch keeps them, dated from creation.
        */
-      const ticketWindow =
+      const dateWindow =
         filters.from || filters.to
           ? {
               _or: [
@@ -467,6 +470,11 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
               ],
             }
           : null;
+      /* Vendor (MV-4): tickets and chats carry it; ratings, routing and
+         messages through their conversation. */
+      const ticketWindow = vendor ? withVendor(dateWindow ?? {}, vendor) : dateWindow;
+      const chatScope = (path: readonly string[]) =>
+        vendor ? { filter: withVendor({}, vendor, path) } : {};
 
       /* The ticket SLA policy's working hours, read beside everything else (it
          never throws; null = wall clock). Hours-to-close count only working
@@ -540,21 +548,27 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
           // satisfied % below reports its own denominator instead of pretending
           // to cover every closed complaint.
           directus.request(
-            readItems('csat_responses', { fields: ['id', 'score', 'conversation'], limit: -1 }),
+            readItems('csat_responses', {
+              fields: ['id', 'score', 'conversation'],
+              ...chatScope(['conversation', 'vendor']),
+              limit: -1,
+            } as never),
           ) as Promise<Array<{ id: string; score: number | null; conversation: string | null }>>,
           directus.request(
             readItems('conversations', {
               fields: ['id', 'status', 'assigned_agent'],
+              ...chatScope(['vendor']),
               limit: -1,
-            }),
+            } as never),
           ) as Promise<Array<{ id: string; status: string; assigned_agent: string | null }>>,
           // How routing actually went: who was offered what, who answered, who
           // let it time out, and how long the customer waited.
           directus.request(
             readItems('routing_events', {
               fields: ['id', 'agent', 'outcome', 'seconds_held'],
+              ...chatScope(['conversation', 'vendor']),
               limit: -1,
-            }),
+            } as never),
           ) as Promise<
             Array<{
               id: string;
@@ -574,7 +588,12 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
                 groupBy: ['sender_user'],
                 /* People only: the automatic welcome (owner, 2026-10-06) has no
                    sender and is no agent's work. */
-                query: { filter: { ...HUMAN_AGENT_MESSAGE_FILTER } },
+                query: {
+                  filter: withVendor({ ...HUMAN_AGENT_MESSAGE_FILTER }, vendor, [
+                    'conversation',
+                    'vendor',
+                  ]),
+                },
               }),
             )
             .catch(() => [] as unknown) as Promise<

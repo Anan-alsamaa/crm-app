@@ -676,6 +676,7 @@ function TicketTable({
           unbroken scroll, where the only way to find a breach was the browser's
           own find-in-page. */}
       <ReportFilterBar
+        vendorFilter
         searchLabel={t('slaReports.search', { defaultValue: 'Search subject or agent' })}
         searchPlaceholder={t('slaReports.searchHint', {
           defaultValue: 'Ticket subject, agent or id',

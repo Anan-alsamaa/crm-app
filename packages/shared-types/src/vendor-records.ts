@@ -63,3 +63,58 @@ export function soleActiveVendorId(
   const active = (vendors ?? []).filter((v) => v.id && (v.status ?? 'active') === 'active');
   return active.length === 1 ? active[0]!.id : null;
 }
+
+/* ── MV-4 (EMA-73): one set of agents, many vendors, data never mixed ───── */
+
+/** The vendors that are ACTIVE (a row with no status counts as active). */
+export function activeVendorsOf<T extends { id: string; status?: string | null }>(
+  vendors: ReadonlyArray<T> | null | undefined,
+): T[] {
+  return (vendors ?? []).filter((v) => !!v.id && (v.status ?? 'active') === 'active');
+}
+
+/**
+ * Whether the portals show vendor badges and vendor filters at all.
+ *
+ * Only when TWO OR MORE vendors are active (owner, MV-4): with one vendor a
+ * badge on every chat names the only possible answer, and a filter with one
+ * choice is clutter. So the whole vendor UI is invisible until a second vendor
+ * goes live.
+ */
+export function showVendorUi(
+  vendors: ReadonlyArray<{ id: string; status?: string | null }> | null | undefined,
+): boolean {
+  return activeVendorsOf(vendors).length >= 2;
+}
+
+/**
+ * Does a vendor-SCOPED setting (a quick reply, an SLA policy) apply to a record
+ * of `recordVendor`?
+ *
+ * The setting's own vendor NULL means "every vendor" — true for any record. A
+ * setting that names a vendor applies ONLY to that vendor's records; a record
+ * whose vendor is unknown is not shown to satisfy it, so it is not covered
+ * (guessing would hand one vendor's wording or promise to another's customer).
+ */
+export function vendorScopeMatches(settingVendor: VendorRef, recordVendor: VendorRef): boolean {
+  const scope = vendorIdOf(settingVendor);
+  if (!scope) return true;
+  return scope === vendorIdOf(recordVendor);
+}
+
+/**
+ * Narrow vendor-scoped rows for a record: the rows written FOR its vendor when
+ * any exist, else the all-vendor (NULL) rows. Never another vendor's rows.
+ *
+ * "Prefer specific, else general" rather than a union: a vendor that has its
+ * own SLA policies has replaced the shared ones for itself, not added to them.
+ */
+export function preferVendorScoped<T extends { vendor?: VendorRef }>(
+  rows: ReadonlyArray<T>,
+  recordVendor: VendorRef,
+): T[] {
+  const id = vendorIdOf(recordVendor);
+  const own = id ? rows.filter((r) => vendorIdOf(r.vendor) === id) : [];
+  if (own.length > 0) return own;
+  return rows.filter((r) => !vendorIdOf(r.vendor));
+}

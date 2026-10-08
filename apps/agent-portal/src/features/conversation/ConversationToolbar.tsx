@@ -21,6 +21,7 @@ import {
 } from '../inbox/api.js';
 import { getSocket } from '../../lib/socket.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
@@ -86,6 +87,8 @@ export function ConversationToolbar({
   useEffect(() => setPromptDismissed(false), [conversation.id]);
 
   const vendorId = conversationVendorId(conversation);
+  /* Whose customer this is (MV-4) — a badge only when 2+ vendors are live. */
+  const vendors = useVendorDirectory();
 
   const patch = async (p: Parameters<typeof update.mutateAsync>[0]['patch']) => {
     try {
@@ -280,7 +283,10 @@ export function ConversationToolbar({
             />
           </span>
           <div className="min-w-0">
-            <div className="truncate text-sm font-semibold text-foreground">{primaryLabel}</div>
+            <div className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate text-sm font-semibold text-foreground">{primaryLabel}</span>
+              <VendorBadge vendor={conversation.vendor} directory={vendors} />
+            </div>
             {statusLine && (
               <div className="truncate text-xs text-muted-foreground">{statusLine}</div>
             )}

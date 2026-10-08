@@ -3,6 +3,7 @@ import { readItems, readUsers } from '@directus/sdk';
 import { businessSecondsBetween, normaliseTicketStatus } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { loadSlaHours } from '../../lib/sla-hours.js';
+import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 
 /**
  * SLA reports — interactive, drill-down analytics over ticket SLA performance,
@@ -122,8 +123,10 @@ function classify(dueAt: string | null, doneAt: string | null, now: number): Sla
 export function useSlaReports(days: number, range?: { from?: string; to?: string }) {
   const from = range?.from?.trim() || '';
   const to = range?.to?.trim() || '';
+  /* The shared report vendor filter (MV-4); '' = every vendor, always so with one. */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['sla-reports', days, from, to],
+    queryKey: ['sla-reports', days, from, to, vendor],
     staleTime: 60_000,
     queryFn: async (): Promise<SlaReport> => {
       const since = from
@@ -171,12 +174,17 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
          * the unknown field, so it falls back to the old creation-date window
          * rather than taking the SLA page down.
          */
-        readTickets({
-          _or: [
-            { complaint_date: dateFilter },
-            { _and: [{ complaint_date: { _null: true } }, { date_created: dateFilter }] },
-          ],
-        }).catch(() => readTickets({ date_created: dateFilter })),
+        readTickets(
+          withVendor(
+            {
+              _or: [
+                { complaint_date: dateFilter },
+                { _and: [{ complaint_date: { _null: true } }, { date_created: dateFilter }] },
+              ],
+            },
+            vendor,
+          ),
+        ).catch(() => readTickets(withVendor({ date_created: dateFilter }, vendor))),
         /*
          * The chats whose first-response promise falls in this window.
          *
@@ -188,7 +196,10 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
          */
         directus.request(
           readItems('conversations', {
-            filter: { date_created: dateFilter, first_response_due_at: { _nnull: true } },
+            filter: withVendor(
+              { date_created: dateFilter, first_response_due_at: { _nnull: true } },
+              vendor,
+            ) as never,
             fields: ['id', 'first_response_due_at', 'first_responded_at'],
             limit: -1,
           }),

@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { Button, Input, Modal, Spinner, Textarea, cn } from '@yiji/ui';
+import { Button, Input, Modal, SelectMenu, Spinner, Textarea, cn } from '@yiji/ui';
 import { cleanContactName, isDialablePhone, normalizePhone } from '@yiji/shared-types';
 import { useQuery } from '@tanstack/react-query';
 import { lookupContactByPhone, soleYijiVendorId, startChatWithCustomer } from './start-chat.js';
 import { QuickReplies } from '../conversation/QuickReplies.js';
+import { useVendorDirectory } from '../../lib/vendors.js';
 
 /**
  * AN AGENT OPENS A CHAT WITH A CUSTOMER WHO HAS NOT WRITTEN TO US (EMA-10).
@@ -63,7 +64,16 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
     staleTime: 5 * 60_000,
     queryFn: soleYijiVendorId,
   });
-  const vendorId = vendor.data ?? undefined;
+  /*
+   * WITH 2+ VENDORS THE AGENT SAYS WHICH (MV-4). The same agents serve every
+   * vendor, and "the sole vendor" no longer exists — so the dialog asks, and
+   * nothing is sent until it is answered. With one vendor there is no picker
+   * and the sole vendor is used, exactly as before.
+   */
+  const vendors = useVendorDirectory();
+  const [pickedVendor, setPickedVendor] = useState('');
+  const picked = vendors.show ? vendors.options.find((v) => v.id === pickedVendor) : undefined;
+  const vendorId = vendors.show ? (picked?.platformId ?? undefined) : (vendor.data ?? undefined);
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
   const [lookup, setLookup] = useState<Lookup>({ state: 'idle' });
@@ -78,6 +88,7 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
     setMessage('');
     setLookup({ state: 'idle' });
     setError(null);
+    setPickedVendor('');
   }, [open]);
 
   const canonical = normalizePhone(phone);
@@ -97,7 +108,7 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
     }
     setLookup({ state: 'checking' });
     try {
-      const found = await lookupContactByPhone(canonical);
+      const found = await lookupContactByPhone(canonical, picked?.id);
       setLookup(
         found
           ? // A stored name that is only the number is no name (owner, 2026-10-07).
@@ -139,6 +150,33 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
       title={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
     >
       <div className="space-y-4 px-5 py-4">
+        {vendors.show && (
+          <label className="block space-y-1.5">
+            <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              {t('inbox.startChat.vendor', { defaultValue: 'Vendor' })}
+            </span>
+            <SelectMenu
+              size="md"
+              className="w-full"
+              value={pickedVendor}
+              aria-label={t('inbox.startChat.vendor', { defaultValue: 'Vendor' })}
+              onChange={(v) => {
+                setPickedVendor(v);
+                // A customer found under another vendor is not this one's.
+                setLookup({ state: 'idle' });
+              }}
+              options={[
+                {
+                  value: '',
+                  label: t('inbox.startChat.pickVendor', { defaultValue: 'Choose a vendor' }),
+                },
+                ...vendors.options
+                  .filter((v) => v.platformId)
+                  .map((v) => ({ value: v.id, label: v.name })),
+              ]}
+            />
+          </label>
+        )}
         {/* THE NUMBER. `inputMode="tel"` so a phone keyboard appears, and the
             canonical form is shown back once it resolves — an agent who typed
             `+966 50 …` should see the `05…` the CRM actually stores. */}
@@ -228,7 +266,9 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
               ? t('inbox.startChat.needPhone', { defaultValue: 'Enter a valid mobile number.' })
               : !message.trim()
                 ? t('inbox.startChat.needMessage', { defaultValue: 'Write the first message.' })
-                : t('inbox.startChat.needVendor', { defaultValue: 'No vendor is configured.' })}
+                : vendors.show
+                  ? t('inbox.startChat.needVendorPick', { defaultValue: 'Choose the vendor.' })
+                  : t('inbox.startChat.needVendor', { defaultValue: 'No vendor is configured.' })}
           </p>
         )}
         <Button type="button" variant="ghost" onClick={onClose} disabled={start.isPending}>

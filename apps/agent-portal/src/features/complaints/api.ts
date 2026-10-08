@@ -38,6 +38,8 @@ export interface AgentComplaintRow extends ComplaintReportRow {
   subject: string;
   firstRespondedAt: string | null;
   firstResponseDueAt: string | null;
+  /** The ticket's vendor id (MV-4) — badge + filter when 2+ vendors are live. */
+  vendor?: string | null;
 }
 
 interface TicketRow {
@@ -68,6 +70,7 @@ interface TicketRow {
   order_id: string | null;
   store_snapshot: StoreSnapshot | null;
   contact: { name: string | null; phone: string | null } | null;
+  vendor?: string | { id?: string | null } | null;
 }
 
 /** Numeric cell that tolerates the sheet's `-`, `""` and `"102.85 SR"`. */
@@ -112,6 +115,8 @@ const FIELDS = [
   'order_id',
   'store_snapshot',
   { contact: ['name', 'phone'] },
+  // Whose customer (MV-4). `tickets.vendor` predates MV-1, so it is safe here.
+  'vendor',
 ] as const;
 
 /**
@@ -126,6 +131,7 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
   const snap = t.order_snapshot ?? null;
   return {
     id: t.id,
+    vendor: typeof t.vendor === 'string' ? t.vendor : (t.vendor?.id ?? null),
     ...when,
     // Store-derived columns are filled by joinComplaintStores on the page,
     // which owns the store index. Blank here rather than guessed, so an

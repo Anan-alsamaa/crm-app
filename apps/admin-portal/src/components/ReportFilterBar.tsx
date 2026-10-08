@@ -3,6 +3,11 @@ import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, DateField, Input, SelectMenu } from '@yiji/ui';
 import { todayBusinessDay } from '../lib/date-range.js';
+import {
+  clearReportVendor,
+  ReportVendorFilter,
+  useReportVendorFilter,
+} from '../lib/report-vendor.js';
 
 /**
  * The filter bar every report wears.
@@ -105,6 +110,12 @@ export interface ReportFilterBarProps {
    * that writes fields you cannot see is a control you have to test to trust.
    */
   rangePreset?: ReactNode;
+  /**
+   * Offer the shared VENDOR filter (MV-4) — only for a report whose data
+   * honours it (its loader reads `useReportVendorFilter`). Renders nothing unless 2+
+   * vendors are active; Clear resets it with everything else.
+   */
+  vendorFilter?: boolean;
 }
 
 export function ReportFilterBar({
@@ -123,8 +134,10 @@ export function ReportFilterBar({
   defaultTo,
   actions,
   rangePreset,
+  vendorFilter = false,
 }: ReportFilterBarProps): JSX.Element {
   const { t } = useTranslation();
+  const reportVendor = useReportVendorFilter();
 
   /*
    * What is typed but not yet asked for.
@@ -196,6 +209,7 @@ export function ReportFilterBar({
     setDraftFrom('');
     setDraftTo('');
     setDraftSelects({});
+    if (vendorFilter) clearReportVendor();
     onClear();
   };
 
@@ -213,7 +227,7 @@ export function ReportFilterBar({
    */
   const rangeNarrowing =
     from !== (defaultFrom ?? fallbackRange.from) || to !== (defaultTo ?? fallbackRange.to);
-  const narrowing = filtering || rangeNarrowing;
+  const narrowing = filtering || rangeNarrowing || (vendorFilter && !!reportVendor);
 
   const hasSecondRow = selects.length > 0;
 
@@ -259,6 +273,7 @@ export function ReportFilterBar({
           <DateField className="w-[9.5rem]" value={draftTo} onChange={setDraftTo} />
         </label>
         {rangePreset && <div className="flex w-36 items-end">{rangePreset}</div>}
+        {vendorFilter && <ReportVendorFilter />}
         {!hasSecondRow && (
           <FilterActions {...{ dirty, filtering: narrowing, apply, clear, actions, t }} />
         )}

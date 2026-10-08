@@ -47,6 +47,7 @@ import {
 import { ConversationView } from '../features/conversation/ConversationView.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
 import { getSocket } from '../lib/socket.js';
+import { useVendorDirectory, VendorBadge } from '../lib/vendors.js';
 
 const STATUSES: ConversationStatus[] = ['open', 'solved'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -248,9 +249,18 @@ export function Inbox() {
   /* `assignment` is deliberately NOT counted: it is always 'mine' and cannot
      be cleared, so counting it would render "Clear filters" permanently and
      offer to clear something that is not a choice. */
+  /* Vendor (MV-4): offered, and applied, only when 2+ vendors are active. A
+     choice left over from when a second vendor was live must not keep
+     narrowing the inbox once it is gone. */
+  const vendors = useVendorDirectory();
+  const vendorFilter =
+    vendors.show && filters.vendor && vendors.options.some((v) => v.id === filters.vendor)
+      ? filters.vendor
+      : undefined;
   const anyFilterOn =
     (filters.status ?? 'all') !== 'all' ||
     (filters.priority ?? 'all') !== 'all' ||
+    !!vendorFilter ||
     !!filters.search?.trim();
 
   // Order-id search runs as its own query because the order lives on the
@@ -270,6 +280,7 @@ export function Inbox() {
   });
   const conversations = useConversations({
     ...filters,
+    vendor: vendorFilter,
     orderConversationIds: orderMatches.data ?? [],
     currentUserId: user?.id,
     // So a chat handed to this agent's SHIFT shows up in "mine", not only in
@@ -674,6 +685,20 @@ export function Inbox() {
                   })),
                 ]}
               />
+              {vendors.show && (
+                <GhostSelect
+                  size="sm"
+                  value={vendorFilter ?? 'all'}
+                  aria-label={t('inbox.allVendors', { defaultValue: 'All vendors' })}
+                  onChange={(v) =>
+                    setFilters((f) => ({ ...f, vendor: v === 'all' ? undefined : v }))
+                  }
+                  options={[
+                    { value: 'all', label: t('inbox.allVendors', { defaultValue: 'All vendors' }) },
+                    ...vendors.options.map((v) => ({ value: v.id, label: v.name })),
+                  ]}
+                />
+              )}
               <GhostSelect
                 size="sm"
                 value={filters.sort ?? 'recent'}
@@ -886,6 +911,8 @@ export function Inbox() {
                                 >
                                   {displayName}
                                 </span>
+                                {/* Whose customer (MV-4) — only with 2+ vendors. */}
+                                <VendorBadge vendor={c.vendor} directory={vendors} />
                                 {/* Jade unread dot — glows on the dark canvas. */}
                                 {unread && (
                                   <span
@@ -988,6 +1015,7 @@ export function Inbox() {
                         ...f,
                         status: 'all',
                         priority: 'all',
+                        vendor: undefined,
                         /* NOT assignment: clearing filters must not hand
                            somebody the whole inbox. The queue is not a filter. */
                         query: '',

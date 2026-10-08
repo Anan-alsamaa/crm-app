@@ -118,33 +118,49 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
             'complaint_type',
             'complaint_source',
             'store_snapshot',
+            // MV-4: which vendor's SLA policies may govern it.
+            'vendor',
           ],
           limit: -1,
         }),
       )) as TicketRow[];
     },
     async listActiveSlaPolicies() {
-      return (await client.request(
-        readItems('sla_policies', {
-          filter: { active: { _eq: true } },
-          fields: [
-            'id',
-            'name',
-            'applies_to_priority',
-            'applies_to_type',
-            'applies_to_source',
-            'applies_to_brand',
-            'governs',
-            'first_response_minutes',
-            'resolution_minutes',
-            'warning_threshold_percent',
-            'business_hours',
-            'active',
-            'date_created',
-          ],
-          limit: -1,
-        }),
-      )) as SlaPolicyRow[];
+      const base = [
+        'id',
+        'name',
+        'applies_to_priority',
+        'applies_to_type',
+        'applies_to_source',
+        'applies_to_brand',
+        'governs',
+        'first_response_minutes',
+        'resolution_minutes',
+        'warning_threshold_percent',
+        'business_hours',
+        'active',
+        'date_created',
+      ];
+      const read = (fields: string[]) =>
+        client.request(
+          readItems('sla_policies', {
+            filter: { active: { _eq: true } },
+            fields,
+            limit: -1,
+          }),
+        ) as Promise<SlaPolicyRow[]>;
+      /*
+       * THE VENDOR COLUMN IS ASKED FOR, NOT ASSUMED (MV-4). `sla_policies.vendor`
+       * is an MV-1 field and a field does not travel with a deploy; Directus
+       * 403s a WHOLE query that names a missing column, and this read failing
+       * would stop every SLA clock. So: with it, else without — a policy read
+       * without its vendor is a NULL-vendor policy, which is the old behaviour.
+       */
+      try {
+        return await read([...base, 'vendor']);
+      } catch {
+        return await read(base);
+      }
     },
     async getTicket(id: string) {
       const rows = (await client.request(
@@ -248,6 +264,8 @@ export function createConversationRepo(client: YijiDirectusClient): Conversation
                it would silently fall back to `date_created` and breach every
                reopened chat on sight. */
             'session_started_at',
+            // MV-4: which vendor's SLA policies may govern it.
+            'vendor',
           ],
           limit: -1,
         }),

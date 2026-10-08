@@ -152,7 +152,14 @@ describe('who the agent is about to message', () => {
      contact and invite a duplicate. */
   it('normalises the number before matching', () => {
     expect(DIALOG).toMatch(/const canonical = normalizePhone\(phone\)/);
-    expect(CLIENT).toMatch(/filter: \{ phone: \{ _eq: phone \} \}/);
+    expect(CLIENT).toMatch(/\{ phone: \{ _eq: phone \} \}/);
+  });
+
+  /* MV-4: with 2+ vendors the same number can be two customers, so the lookup
+     is narrowed to the vendor the agent picked — and only then. */
+  it("matches within the chosen vendor's customers when one is picked", () => {
+    expect(CLIENT).toMatch(/\{ phone: \{ _eq: phone \}, vendor: \{ _eq: vendor \} \}/);
+    expect(DIALOG).toMatch(/lookupContactByPhone\(canonical, picked\?\.id\)/);
   });
 });
 

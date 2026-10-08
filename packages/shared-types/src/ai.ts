@@ -82,6 +82,12 @@ export type EntitiesResponse = z.infer<typeof EntitiesResponse>;
 export const SemanticSearchRequest = z.object({
   query: z.string().min(1),
   vendorId: z.string().optional(),
+  /**
+   * The chat the search is made from (MV-4). When given, the gateway scopes the
+   * search to THAT conversation's vendor, resolved server-side — it wins over
+   * `vendorId` and the vendor header, which are only claims.
+   */
+  conversationId: z.string().optional(),
   limit: z.number().int().positive().default(10),
 });
 export type SemanticSearchRequest = z.infer<typeof SemanticSearchRequest>;

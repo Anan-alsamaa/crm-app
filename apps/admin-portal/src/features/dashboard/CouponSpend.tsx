@@ -5,6 +5,7 @@ import { readItems } from '@directus/sdk';
 import { couponWorth, type CouponValueFact } from '@yiji/reports';
 import { cn, formatDate, HBarChart, ProgressRing, SplitBar, TrendChart } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { useReportVendorFilter } from '../../lib/report-vendor.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -72,11 +73,13 @@ function num(v: number | string | null | undefined): number | null {
  * both from one fetch.
  */
 export function useCouponSpend(from: string, to: string, enabled: boolean) {
+  /* The shared report vendor filter (MV-4); '' = every vendor, always so with one. */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['coupon-spend', from, to],
+    queryKey: ['coupon-spend', from, to, vendor],
     enabled,
     queryFn: async (): Promise<CouponValueFact[]> => {
-      const filter: Record<string, unknown> = {};
+      const filter: Record<string, unknown> = vendor ? { vendor: { _eq: vendor } } : {};
       /* BUSINESS days (owner, 2026-09-30): the window runs 08:00 to 04:00 the
          next morning, so a coupon raised at 01:00 counts under the night it
          belongs to rather than the calendar date it carries. */
