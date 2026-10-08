@@ -282,7 +282,22 @@
     "status": "Status",
     "previewGreeting": "Hi there",
     "previewSub": "We're here to help.",
-    "heroSubtitle": "Every brand you support, with the colors and logo that drive its customer chat widget. Select a vendor to edit its branding or status."
+    "heroSubtitle": "Every brand you support, with the colors and logo that drive its customer chat widget. Select a vendor to edit its branding or status.",
+    "sectionIntegration": "Integration",
+    "sectionIntegrationHint": "How the CRM reaches this vendor’s commerce platform. Non-secret settings only: passwords and API keys stay in the service configuration.",
+    "platform": "Platform",
+    "apiBaseUrl": "Order API URL",
+    "adminApiUrl": "Admin API URL",
+    "tenantId": "Tenant ID",
+    "brandId": "Fallback brand ID",
+    "brandIdHint": "Used for a customer push when the customer has no order yet.",
+    "webhookKey": "Webhook path key",
+    "webhookKeyHint": "The <vendor> part of this vendor’s /webhooks/<vendor> address.",
+    "notifyUrl": "Push notification URL",
+    "notifyTopic": "Push topic",
+    "notifyTitle": "Push title",
+    "openChatAction": "Open-chat action",
+    "secretsNote": "Credentials (admin email and password, API keys) are not stored here. They stay in the service configuration until secret storage is decided."
   },
   "aiConfig": {
     "title": "AI assistance",
@@ -774,7 +789,8 @@
     "loadErrorHint": "Check your connection and try again.",
     "colBrand": "Brand",
     "colYiji": "Yiji sends",
-    "colStatus": "Status"
+    "colStatus": "Status",
+    "colVendor": "Vendor"
   },
   "stores": {
     "title": "Stores",
@@ -836,7 +852,8 @@
     "importError": "Import failed.",
     "yijiRestaurantIdLocked": "Only the Administrator can change this. It is the join key to the order feed: a wrong value does not error, it silently reports tickets against the wrong branch.",
     "importUpdated": "{{n}} updated",
-    "importExisting": "{{n}} unchanged"
+    "importExisting": "{{n}} unchanged",
+    "colVendor": "Vendor"
   },
   "complaintDash": {
     "tableTotal": "Total",

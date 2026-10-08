@@ -357,15 +357,19 @@ export interface VendorRow {
   yiji_vendor_id: string | null;
   status: string | null;
   name?: string | null;
+  /** `vendors.platform` (MV-1). Absent/NULL = yiji, every vendor before MV-1. */
+  platform?: string | null;
 }
 
 /**
  * `vendors` rows as connector vendors.
  *
- * Every vendor is on the Yiji platform today — the table has no platform
- * column yet (MV-1 adds one), and before MV-2 every vendor's commerce request
- * was answered by Yiji. A row without a platform id is skipped: there is no id
- * to call the platform with.
+ * A row with no `platform` is a Yiji vendor: before MV-1 the column did not
+ * exist and every vendor's commerce request was answered by Yiji. A platform
+ * the CRM has no connector for is carried through as named, so resolving it
+ * is a typed `unsupported_platform` refusal rather than a silent Yiji call. A
+ * row without a platform id is skipped: there is no id to call the platform
+ * with.
  */
 export function vendorsFromRows(rows: readonly VendorRow[]): ConnectorVendor[] {
   const out: ConnectorVendor[] = [];
@@ -375,7 +379,7 @@ export function vendorsFromRows(rows: readonly VendorRow[]): ConnectorVendor[] {
     out.push({
       crmId: r.id,
       platformVendorId,
-      platform: 'yiji',
+      platform: (r.platform?.trim() || 'yiji') as CommercePlatform,
       status: r.status ?? '',
       ...(r.name ? { name: r.name } : {}),
     });
@@ -536,10 +540,13 @@ export class ConnectorRegistry {
   /**
    * THE ONLY ALLOWED DEFAULT VENDOR: for records that carry no vendor yet.
    *
-   * TODO(MV-1): `coupon_approvals`, the late-orders queue, the cart and the
-   * service-time batch have no vendor column / parameter today. MV-1 adds one
-   * and every caller of this helper must pass the record's vendor instead —
-   * then this method is deleted.
+   * MV-1 gave `coupon_approvals` a vendor column and the late-orders queue,
+   * the cart, the service-time batch and customer-exists an optional
+   * `vendorId`. What still lands here is only what predates that: a coupon
+   * row written before MV-1 and not yet backfilled, a request from a portal
+   * bundle still parked behind "Update now", and a customer-push job queued
+   * without a vendor. Once those are gone (backfill run, portals promoted)
+   * this method is deleted.
    *
    * With `legacyVendorKey` (the services pass today's env vendor, '1'): that
    * vendor, which must exist and be active — it is the vendor every

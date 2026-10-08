@@ -24,6 +24,17 @@ const GATEWAY_URL = resolveUrl(
   'http://localhost:8081',
 );
 
+/**
+ * The OPTIONAL vendor of the four routes that took none before MV-1 (cart,
+ * late orders, service times, customer-exists). Omitted entirely when unknown,
+ * so the request is byte-identical to the old one and the gateway answers for
+ * the legacy vendor.
+ */
+function vendorParam(vendorId: string | null | undefined): { vendorId?: string } {
+  const v = vendorId?.trim();
+  return v ? { vendorId: v } : {};
+}
+
 async function get<T>(path: string, params: Record<string, string>): Promise<T> {
   const token = await auth.getToken();
   const qs = new URLSearchParams(params).toString();
@@ -45,8 +56,12 @@ export const commerce = {
    * coupon. Without this the report can only ever show orders that were
    * already acted on, which is the opposite of what "pending" means.
    */
-  getLateOrders: (range: { from: string; to: string }) =>
-    get<LateOrderQueue>('/commerce/late-orders', { from: range.from, to: range.to }),
+  getLateOrders: (range: { from: string; to: string }, vendorId?: string | null) =>
+    get<LateOrderQueue>('/commerce/late-orders', {
+      from: range.from,
+      to: range.to,
+      ...vendorParam(vendorId),
+    }),
   /**
    * Event times for a batch of orders — `orderId -> { status: timestamp }`.
    *
@@ -65,14 +80,15 @@ export const commerce = {
    * `configured: false` means nothing was asked (no admin credential), which is
    * NOT the same as "they do not exist" and must not render a warning.
    */
-  customerExists: (phone: string) =>
+  customerExists: (phone: string, vendorId?: string | null) =>
     get<{ configured: boolean; exists: boolean; customerId: string | null }>(
       '/commerce/customer-exists',
-      { phone },
+      { phone, ...vendorParam(vendorId) },
     ),
-  getOrderEventTimes: (orderIds: string[]) =>
+  getOrderEventTimes: (orderIds: string[], vendorId?: string | null) =>
     get<Record<string, Record<string, string | null>>>('/commerce/service-times', {
       orderIds: orderIds.join(','),
+      ...vendorParam(vendorId),
     }),
   getPurchaseActivity: (vendorId: string, customerId: string) =>
     get<YijiPurchaseActivity | null>('/commerce/activity', { vendorId, customerId }),
@@ -98,10 +114,12 @@ export const commerce = {
    * simply missing the two calls, which is why the admin panel had to be
    * written as a different, smaller thing.
    *
-   * `getOrderCart` takes the ORDER alone — it is keyed by order id and needs no
-   * vendor, which is what lets it answer even when the order lookup cannot.
+   * `getOrderCart` is keyed by order id and needs no order lookup, which is
+   * what lets it answer even when the order lookup cannot; the optional
+   * `vendorId` (MV-1) picks whose platform.
    */
-  getOrderCart: (orderId: string) => get<YijiOrderCart | null>('/commerce/cart', { orderId }),
+  getOrderCart: (orderId: string, vendorId?: string | null) =>
+    get<YijiOrderCart | null>('/commerce/cart', { orderId, ...vendorParam(vendorId) }),
   getOrderTimeline: (vendorId: string, orderId: string) =>
     get<YijiOrderTimeline | null>('/commerce/tracking', { vendorId, orderId }),
 };

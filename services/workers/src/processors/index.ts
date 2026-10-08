@@ -1,10 +1,14 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
+import { readItems } from '@directus/sdk';
 import {
   QUEUES,
   asYijiConnector,
   createEnvConnectorRegistry,
   isUnknownVendor,
+  vendorsFromRows,
+  type ConnectorRegistry,
+  type VendorRow,
   type QueueName,
   type NotificationJob,
   type SlaJob,
@@ -30,6 +34,7 @@ import {
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
 import { processCouponPushJob } from './coupon-push.js';
+import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 export { runCouponDeliverySweep } from './coupon-push.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
@@ -141,9 +146,14 @@ const redirectPushTo = stagingOnlyPhone('PUSH_REDIRECT_PHONE');
  * burst of them the moment a supervisor approves a batch. The registry keeps
  * one connector per vendor, so that stays true per vendor.
  *
- * Today ONE Yiji vendor (`YIJI_VENDOR_ID`, default '1'), from exactly the env
- * the five Yiji readers/posters were built from before - no order-API token,
- * as before. Inside the connector each capability is still built by its own
+ * Settings are today's env for every Yiji vendor (`YIJI_VENDOR_ID`, default
+ * '1', owns the legacy records) - exactly the env the five Yiji
+ * readers/posters were built from before, no order-API token, as before.
+ * Since MV-1 the VENDORS come from the `vendors` table (read with the
+ * workers' own token, cached), because a coupon row names its vendor by CRM
+ * UUID; while that read fails the env vendor still answers, with a warning.
+ * Built on the first job, which is the first moment a Directus client exists.
+ * Inside the connector each capability is still built by its own
  * `createYiji*` factory, so:
  *  - `readCouponOrderContext` reads Yiji's own record of an order for the
  *    coupon payload (a failure is "less corroboration", never a reason not to
@@ -154,26 +164,49 @@ const redirectPushTo = stagingOnlyPhone('PUSH_REDIRECT_PHONE');
  *    refusal is recorded (OPS-54R27RS7, 2026-10-07);
  *  - `adminPost` is the one signed-in poster coupon AND push share.
  */
-const connectors = createEnvConnectorRegistry({
-  vendorId: process.env.YIJI_VENDOR_ID,
-  yiji: {
-    client: {
-      apiUrl: process.env.YIJI_API_URL ?? '',
-      adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
-      adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
-      adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+let registry: ConnectorRegistry | null = null;
+function connectorsFor(deps: Pick<ProcessorDeps, 'directus' | 'logger'>): ConnectorRegistry {
+  registry ??= buildConnectors(deps);
+  return registry;
+}
+const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
+  createEnvConnectorRegistry({
+    vendorId: process.env.YIJI_VENDOR_ID,
+    loadVendors: async () =>
+      vendorsFromRows(
+        (await deps.directus.request(
+          readItems(
+            'vendors' as never,
+            {
+              fields: ['id', 'yiji_vendor_id', 'status', 'name'],
+              limit: -1,
+            } as never,
+          ),
+        )) as unknown as VendorRow[],
+      ),
+    onDirectoryFallback: (err) =>
+      deps.logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'vendors read failed - commerce connectors fall back to the env vendor',
+      ),
+    yiji: {
+      client: {
+        apiUrl: process.env.YIJI_API_URL ?? '',
+        adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+        adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+        adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+      },
+      tenantId: process.env.YIJI_TENANT_ID,
+      brandId: process.env.YIJI_BRAND_ID,
+      push: {
+        notifyUrl: process.env.YIJI_NOTIFY_URL,
+        notifyTopic: process.env.YIJI_NOTIFY_TOPIC,
+        notifyTitle: process.env.YIJI_NOTIFY_TITLE,
+        openChatAction: process.env.YIJI_OPEN_CHAT_ACTION,
+        apiKey: process.env.YIJI_API_KEY,
+      },
     },
-    tenantId: process.env.YIJI_TENANT_ID,
-    brandId: process.env.YIJI_BRAND_ID,
-    push: {
-      notifyUrl: process.env.YIJI_NOTIFY_URL,
-      notifyTopic: process.env.YIJI_NOTIFY_TOPIC,
-      notifyTitle: process.env.YIJI_NOTIFY_TITLE,
-      openChatAction: process.env.YIJI_OPEN_CHAT_ACTION,
-      apiKey: process.env.YIJI_API_KEY,
-    },
-  },
-});
+  });
 
 export const processors: Record<QueueName, Processor> = {
   [QUEUES.sla]: async (job, deps) => {
@@ -319,13 +352,21 @@ export const processors: Record<QueueName, Processor> = {
   },
   [QUEUES.coupons]: async (job, deps) => {
     /*
-     * TODO(MV-1): `coupon_approvals` has no vendor column, so every coupon
-     * (and the signup watch that rides on this job) is the single legacy Yiji
-     * vendor's. MV-1 adds the column and this resolves the ROW's vendor.
+     * The ROW's vendor picks the connector (MV-1) - for the coupon and the
+     * signup watch that rides on this job. A row with no vendor is a pre-MV-1
+     * row and goes to the legacy Yiji vendor, logged; a vendor with no
+     * connector gets nothing and the coupon stays `approved`. See
+     * `resolveCouponConnector`.
      */
-    const yiji = asYijiConnector(
-      await connectors.connectorFor(await connectors.defaultVendorForLegacyRecords()),
-    );
+    const couponApprovalId = (job.data as CouponPushJob).couponApprovalId;
+    const connector = await resolveCouponConnector({
+      connectors: connectorsFor(deps),
+      couponApprovalId,
+      vendor: await readCouponVendor(deps.directus, couponApprovalId, deps.logger),
+      logger: deps.logger,
+    });
+    if (!connector) return;
+    const yiji = asYijiConnector(connector);
     await processCouponPushJob(job as Job<CouponPushJob>, {
       directus: deps.directus,
       logger: deps.logger,
@@ -360,13 +401,16 @@ export const processors: Record<QueueName, Processor> = {
     /*
      * The CONVERSATION's vendor picks the connector. A job queued before the
      * gateway stamped it (or a conversation with no vendor) is the legacy
-     * vendor's - TODO(MV-1): drop that fallback once every job carries one.
+     * vendor's. LEGACY: the gateway stamps the vendor on every job since MV-2,
+     * so this fallback serves only older jobs and vendor-less conversations -
+     * remove it together with `defaultVendorForLegacyRecords`.
      *
      * An unknown vendor is NOT retried and NOT sent through Yiji: retrying
      * cannot make the vendor known, and another vendor's customer must never
      * be pushed through this one's credential.
      */
     const pushJob = job as Job<CustomerPushJob>;
+    const connectors = connectorsFor(deps);
     let yiji: ReturnType<typeof asYijiConnector>;
     try {
       yiji = asYijiConnector(

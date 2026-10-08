@@ -83,12 +83,20 @@ export async function registerCommerceRoutes(
     deps.connectors.connectorFor(vendorKey);
 
   /*
-   * TODO(MV-1): the late-orders queue, the cart, the service-time batch and
-   * the customer-exists check carry no vendor today, so they are answered by
-   * the single legacy Yiji vendor. MV-1 gives them one and this goes.
+   * The late-orders queue, the cart, the service-time batch and the
+   * customer-exists check take an OPTIONAL `vendorId` (MV-1). Named, it is
+   * honoured exactly like every other route's - an unknown one is a 404, never
+   * another vendor's data. Absent, the request comes from a portal bundle
+   * still parked behind "Update now" (or a screen with no vendor to name) and
+   * is answered by the legacy Yiji vendor, as before MV-1.
    */
-  const legacyConnector = async (): Promise<VendorConnector> =>
-    deps.connectors.connectorFor(await deps.connectors.defaultVendorForLegacyRecords());
+  const connectorForOptional = async (vendorId: string): Promise<VendorConnector> =>
+    vendorId
+      ? connectorFor(vendorId)
+      : deps.connectors.connectorFor(await deps.connectors.defaultVendorForLegacyRecords());
+  /* The cache key gains the vendor ONLY when one is named, so an old bundle's
+     request keeps hitting the entry it always did. */
+  const vendorKeyPart = (vendorId: string): string[] => (vendorId ? ['v', vendorId] : []);
 
   /** Require a verified Directus agent session; replies + returns false on fail. */
   async function requireAgent(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
@@ -196,9 +204,10 @@ export async function registerCommerceRoutes(
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;
     const phone = str(q.phone);
+    const vendorId = str(q.vendorId);
     if (!phone) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'customer-exists', phone }, async () => {
-      const findCustomer = (await legacyConnector()).findCustomerIdByPhone;
+    return answering(reply, { route: 'customer-exists', phone, vendorId }, async () => {
+      const findCustomer = (await connectorForOptional(vendorId)).findCustomerIdByPhone;
       const id = findCustomer ? await findCustomer(phone) : null;
       /* `configured: false` is NOT "they do not exist" — without the credential
          nothing was asked, and the caller must not render a warning off it. */
@@ -389,44 +398,51 @@ export async function registerCommerceRoutes(
      * day it is asking about, and nothing else changes.
      */
     const live = str(q.live) === '1';
+    const vendorId = str(q.vendorId);
     const ttl = history && !live ? COMMERCE_TTL.order : COMMERCE_TTL.lateOrders;
-    return answering(reply, { route: 'late-orders', thresholdMinutes, from, to }, async () => {
-      // TODO(MV-1): the queue is not per-vendor yet - see `legacyConnector`.
-      const connector = await legacyConnector();
-      const rows = await cached(
-        /* `live` is part of the KEY: the same dates asked for both ways are two
+    return answering(
+      reply,
+      { route: 'late-orders', thresholdMinutes, from, to, vendorId },
+      async () => {
+        const connector = await connectorForOptional(vendorId);
+        const rows = await cached(
+          /* `live` is part of the KEY: the same dates asked for both ways are two
            different cache entries, so a long-lived historical answer can never
            be served to the live view or vice versa. */
-        [
-          'late-orders',
-          String(thresholdMinutes),
-          from || 'today',
-          to || 'today',
-          live ? 'live' : 'hist',
-        ],
-        ttl,
-        () => connector.getLateDeliveryOrders(thresholdMinutes, opts),
-      );
-      return { rows, thresholdMinutes, builtAt: new Date().toISOString() };
-    });
+          [
+            'late-orders',
+            String(thresholdMinutes),
+            from || 'today',
+            to || 'today',
+            live ? 'live' : 'hist',
+            ...vendorKeyPart(vendorId),
+          ],
+          ttl,
+          () => connector.getLateDeliveryOrders(thresholdMinutes, opts),
+        );
+        return { rows, thresholdMinutes, builtAt: new Date().toISOString() };
+      },
+    );
   });
 
   /**
    * The order's CART: every line with the choices behind it.
    *
    * Cached for the order TTL — a placed order's contents do not change, so
-   * this is the cheapest thing here to hold. Takes no vendor: the cart lives
-   * on the admin API, which is keyed by order id alone.
+   * this is the cheapest thing here to hold. The cart is keyed by order id
+   * alone on the admin API; the optional `vendorId` picks WHOSE admin API.
    */
   app.get('/commerce/cart', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;
     const orderId = str(q.orderId);
+    const vendorId = str(q.vendorId);
     if (!orderId) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'cart', orderId }, async () => {
-      // TODO(MV-1): the portal names no vendor for a cart - see `legacyConnector`.
-      const connector = await legacyConnector();
-      return cached(['cart', orderId], COMMERCE_TTL.order, () => connector.getOrderCart(orderId));
+    return answering(reply, { route: 'cart', orderId, vendorId }, async () => {
+      const connector = await connectorForOptional(vendorId);
+      return cached(['cart', orderId, ...vendorKeyPart(vendorId)], COMMERCE_TTL.order, () =>
+        connector.getOrderCart(orderId),
+      );
     });
   });
 
@@ -456,15 +472,17 @@ export async function registerCommerceRoutes(
       .map((x) => x.trim())
       .filter(Boolean)
       .slice(0, 50);
+    const vendorId = str(q.vendorId);
     if (ids.length === 0) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'service-times', count: ids.length }, async () => {
-      // TODO(MV-1): the batch names no vendor - see `legacyConnector`.
-      const connector = await legacyConnector();
+    return answering(reply, { route: 'service-times', count: ids.length, vendorId }, async () => {
+      const connector = await connectorForOptional(vendorId);
       const entries = await Promise.all(
         ids.map(async (orderId) => {
           try {
-            const timeline = await cached(['timeline', orderId], COMMERCE_TTL.order, () =>
-              connector.getOrderTimeline(orderId),
+            const timeline = await cached(
+              ['timeline', orderId, ...vendorKeyPart(vendorId)],
+              COMMERCE_TTL.order,
+              () => connector.getOrderTimeline(orderId),
             );
             /*
              * THE WHOLE HISTORY, flattened to `status -> first timestamp`.

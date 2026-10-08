@@ -24,6 +24,17 @@ const GATEWAY_URL = resolveUrl(
   'http://localhost:8081',
 );
 
+/**
+ * The OPTIONAL vendor of the four routes that took none before MV-1 (cart,
+ * late orders, service times, customer-exists). Omitted entirely when unknown,
+ * so the request is byte-identical to the old one and the gateway answers for
+ * the legacy vendor.
+ */
+function vendorParam(vendorId: string | null | undefined): { vendorId?: string } {
+  const v = vendorId?.trim();
+  return v ? { vendorId: v } : {};
+}
+
 async function get<T>(path: string, params: Record<string, string>): Promise<T> {
   const token = await auth.getToken();
   const qs = new URLSearchParams(params).toString();
@@ -101,22 +112,26 @@ export const commerce = {
    * Late orders. No dates = today's LIVE queue; a range = the register,
    * which includes orders that have since finished.
    */
-  getLateOrders: (range?: { from: string; to: string }, live = false) =>
+  getLateOrders: (range?: { from: string; to: string }, live = false, vendorId?: string | null) =>
     get<LateOrderQueue>(
       '/commerce/late-orders',
       /* `live` marks a range that is the CURRENT business day rather than a past
          window, so the gateway caches it for 20s instead of 300 — see the note
          there. Omitted entirely when false, so existing callers are unchanged. */
-      range ? { from: range.from, to: range.to, ...(live ? { live: '1' } : {}) } : {},
+      {
+        ...(range ? { from: range.from, to: range.to, ...(live ? { live: '1' } : {}) } : {}),
+        ...vendorParam(vendorId),
+      },
     ),
   /**
    * The order's cart — every line and the choices behind it.
    *
-   * No vendor argument: the cart lives on Yiji's admin API, keyed by order id
-   * alone. Returns null when no service credential is configured, which the
+   * Keyed by order id on the platform's admin API; the optional `vendorId`
+   * (MV-1) picks whose platform, omitted = the legacy vendor. Returns null when no service credential is configured, which the
    * panel renders as "unavailable" rather than as an empty cart.
    */
-  getOrderCart: (orderId: string) => get<YijiOrderCart | null>('/commerce/cart', { orderId }),
+  getOrderCart: (orderId: string, vendorId?: string | null) =>
+    get<YijiOrderCart | null>('/commerce/cart', { orderId, ...vendorParam(vendorId) }),
   /**
    * Event times for a batch of orders — one call, not one per row.
    *
@@ -130,9 +145,10 @@ export const commerce = {
    * turns into hundreds of calls against Yiji's production API. The gateway caps
    * the batch at 50.
    */
-  getOrderEventTimes: (orderIds: string[]) =>
+  getOrderEventTimes: (orderIds: string[], vendorId?: string | null) =>
     get<Record<string, Record<string, string | null>>>('/commerce/service-times', {
       orderIds: orderIds.join(','),
+      ...vendorParam(vendorId),
     }),
 };
 

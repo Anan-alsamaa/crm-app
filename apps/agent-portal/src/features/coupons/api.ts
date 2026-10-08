@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem, readItems, updateItems } from '@directus/sdk';
 import type { CouponApprovalStatus, CouponFields } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { vendorField } from '../../lib/record-vendor.js';
 
 /**
  * Every compensation/coupon request, from every agent.
@@ -158,6 +159,12 @@ export interface CreateCouponRequestInput extends CouponFields {
   /* Resolved from the ticket's order, never chosen in the form. */
   brand_id?: string | null;
   restaurant_id?: string | null;
+  /**
+   * The vendor this coupon is for (MV-1) — the platform it is delivered to.
+   * Usually left out: the mutation takes it from the ticket, else the
+   * customer, else the single active vendor. See `resolveRecordVendor`.
+   */
+  vendor?: string | null;
 }
 
 /**
@@ -170,8 +177,19 @@ export interface CreateCouponRequestInput extends CouponFields {
 export function useRequestCouponApproval() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateCouponRequestInput) =>
-      directus.request(createItem('coupon_approvals' as never, input as never)),
+    mutationFn: async (input: CreateCouponRequestInput) => {
+      /* THE VENDOR, so the worker delivers it through that vendor's platform
+         (MV-1). Best-effort: a coupon request is never lost to this lookup. */
+      const { vendor: explicit, ...rest } = input;
+      const vendor = await vendorField({
+        explicit,
+        ticket: input.ticket ?? null,
+        contact: input.contact,
+      });
+      return directus.request(
+        createItem('coupon_approvals' as never, { ...rest, ...vendor } as never),
+      );
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
     },

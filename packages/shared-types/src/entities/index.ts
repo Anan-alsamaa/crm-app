@@ -42,6 +42,19 @@ export const Vendor = z.object({
   support_settings: z.record(z.unknown()).nullable().optional(),
   yiji_vendor_id: z.string(),
   status: VendorStatus.default('active'),
+  /* MV-1: NON-SECRET integration settings, all optional (credentials stay in
+     service configuration until MV-3). */
+  platform: z.enum(['yiji']).nullable().optional(),
+  api_base_url: z.string().nullable().optional(),
+  admin_api_url: z.string().nullable().optional(),
+  tenant_id: z.string().nullable().optional(),
+  brand_id: z.string().nullable().optional(),
+  notify_settings: z.record(z.unknown()).nullable().optional(),
+  webhook_path_key: z
+    .string()
+    .regex(/^[a-z0-9-]+$/)
+    .nullable()
+    .optional(),
 });
 export type Vendor = z.infer<typeof Vendor>;
 

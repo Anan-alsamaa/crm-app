@@ -512,7 +512,17 @@ export function useCreateTicketFromConversation() {
       let storeNotify: StoreNotifyOutcome = 'skip' in decision ? decision.skip : 'queued';
       if ('draft' in decision) {
         try {
-          await directus.request(createItem('store_notifications' as never, decision.draft));
+          /* The ticket's vendor rides along (MV-1): the branch notified is that
+             vendor's branch. Omitted when the ticket has none. */
+          await directus.request(
+            createItem(
+              'store_notifications' as never,
+              {
+                ...decision.draft,
+                ...(ticket.vendor ? { vendor: ticket.vendor } : {}),
+              } as never,
+            ),
+          );
         } catch {
           // The ticket is saved and must stay saved. A queue entry that could
           // not be written is reported back so the agent is told the branch

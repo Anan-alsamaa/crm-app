@@ -391,7 +391,10 @@ function Row({
    * such row, cached for the session, so opening the queue does not become a
    * burst of lookups.
    */
-  const reach = useCustomerReachable(!hasOrder && !row.delivery_excluded ? deliveryPhone : '');
+  const reach = useCustomerReachable(
+    !hasOrder && !row.delivery_excluded ? deliveryPhone : '',
+    row.vendor,
+  );
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
