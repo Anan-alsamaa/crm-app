@@ -46,6 +46,13 @@ const perf = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/performance/api.js', () => perf);
 
+/* The SLA policies' working hours (owner, 2026-10-08). None by default, so
+   every other test here reads the wall clock exactly as before. */
+const sla = vi.hoisted(() => ({
+  useSlaHours: vi.fn(() => ({ data: { chat: null, ticket: null }, isLoading: false })),
+}));
+vi.mock('../src/lib/sla-hours.js', () => sla);
+
 import { MemoryRouter } from 'react-router-dom';
 import { AgentPerformancePage } from '../src/features/performance/AgentPerformancePage.js';
 
@@ -113,6 +120,7 @@ beforeEach(() => {
     data: [{ id: 'a1', first_name: 'Sara', email: 'sara@yiji.test' }],
   });
   perf.useChatTimings.mockReturnValue({ data: timings, isLoading: false });
+  sla.useSlaHours.mockReturnValue({ data: { chat: null, ticket: null }, isLoading: false });
 });
 
 describe('AgentPerformancePage', () => {
@@ -123,6 +131,25 @@ describe('AgentPerformancePage', () => {
     // 20m and 1m over the two ANSWERED chats. The unanswered one folded in as a
     // 0 would report 7m and flatter the day.
     expect(tile('First response')).toBe('10m 30s');
+  });
+
+  it('counts only WORKING time when the chat policy has business hours', () => {
+    // The shift opens at 10:15 UTC: the 10:01 reply waited 0 working minutes,
+    // the 10:20 one 5 — the same reading the SLA engine gives them.
+    const open = [['10:15', '24:00']];
+    sla.useSlaHours.mockReturnValue({
+      data: {
+        chat: {
+          timezone: 'UTC',
+          days: Object.fromEntries(['0', '1', '2', '3', '4', '5', '6'].map((d) => [d, open])),
+        },
+        ticket: null,
+      },
+      isLoading: false,
+    } as never);
+    renderPage();
+    expect(tile('First response')).toBe('2m 30s');
+    expect(tile('Answered in time')).toBe('67%');
   });
 
   it('counts a chat nobody answered against the target instead of excusing it', () => {

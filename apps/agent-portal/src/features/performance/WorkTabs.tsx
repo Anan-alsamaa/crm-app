@@ -12,12 +12,14 @@ import {
 } from '@yiji/ui';
 import { formatDuration } from '@yiji/reports';
 import {
+  businessMsBetween,
   couponOrderId,
   displayContactName,
   normaliseTicketStatus,
   normalizePhone,
 } from '@yiji/shared-types';
 import { isForbidden } from '../../lib/directus.js';
+import { useSlaHours } from '../../lib/sla-hours.js';
 import {
   useCouponPerformance,
   useTicketPerformance,
@@ -199,6 +201,9 @@ export function TicketsTab({
   const navigate = useNavigate();
   const stageLabel = useStageLabel();
   const query = useTicketPerformance(filters);
+  /* Time to solve counts the TICKET policy's working hours only, as the SLA
+     engine does (owner, 2026-10-08). None configured = the wall clock. */
+  const ticketHours = useSlaHours().data?.ticket ?? null;
   const oneAgent = !!filters.agentId;
 
   const rows = useMemo(
@@ -209,7 +214,7 @@ export function TicketsTab({
         const end = tk.resolvedAt ? Date.parse(tk.resolvedAt) : NaN;
         const solveSec =
           status === 'solved' && Number.isFinite(start) && Number.isFinite(end)
-            ? Math.max(0, Math.round((end - start) / 1000))
+            ? Math.round(businessMsBetween(new Date(start), new Date(end), ticketHours) / 1000)
             : null;
         return {
           ...tk,
@@ -219,7 +224,7 @@ export function TicketsTab({
           customer: displayContactName(tk.contactName, tk.contactPhone ?? tk.customerPhone) || null,
         };
       }),
-    [query.data],
+    [query.data, ticketHours],
   );
 
   const summary = useMemo(() => {

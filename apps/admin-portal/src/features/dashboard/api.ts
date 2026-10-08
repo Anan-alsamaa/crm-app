@@ -2,11 +2,14 @@ import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
 import {
   buildStoreIndex,
+  businessMsBetween,
   matchStore,
   resolveStoreAttribution,
+  type SlaBusinessHours,
   type StoreSnapshot,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { loadSlaHours } from '../../lib/sla-hours.js';
 
 /**
  * Live operational metrics for the admin overview (scope §16). Computed
@@ -36,8 +39,12 @@ export interface DashboardMetrics {
   ticketsWithOrder: number;
 }
 
-const minutesBetween = (a: string, b: string) =>
-  (new Date(b).getTime() - new Date(a).getTime()) / 60_000;
+/**
+ * Minutes from `a` to `b` — WORKING minutes when the ticket SLA policy carries
+ * business hours, as the SLA engine counts them (owner, 2026-10-08).
+ */
+const minutesBetween = (a: string, b: string, hours: SlaBusinessHours | null) =>
+  businessMsBetween(new Date(a), new Date(b), hours) / 60_000;
 
 export function useDashboardMetrics(days: number) {
   return useQuery({
@@ -48,106 +55,115 @@ export function useDashboardMetrics(days: number) {
       const since = new Date(Date.now() - days * 86_400_000).toISOString();
       const dateFilter = { date_created: { _gte: since } };
 
-      const [conversations, tickets, csat, users, vendors, storeRows] = await Promise.all([
-        directus.request(
-          readItems('conversations', {
-            filter: dateFilter,
-            fields: ['id', 'status', 'date_created', 'vendor'],
-            limit: -1,
-          }),
-        ) as Promise<
-          Array<{ id: string; status: string; date_created: string | null; vendor: string | null }>
-        >,
-        directus.request(
-          readItems('tickets', {
-            filter: dateFilter,
-            fields: [
-              'id',
-              'status',
-              'date_created',
-              'first_responded_at',
-              'first_response_due_at',
-              'assigned_agent',
-              // The snapshot taken when the ticket was raised. Using it rather
-              // than re-querying the order API keeps the dashboard to one round
-              // trip, works when the commerce proxy is down, and reflects the
-              // order that was actually linked to the ticket.
-              'order_snapshot',
-              'store_snapshot',
-            ],
-            limit: -1,
-          }),
-        ) as Promise<
-          Array<{
-            id: string;
-            status: string;
-            date_created: string | null;
-            first_responded_at: string | null;
-            first_response_due_at: string | null;
-            assigned_agent: string | null;
-            store_snapshot: StoreSnapshot | null;
-            order_snapshot: {
-              brandName?: string | null;
-              restaurantName?: string | null;
-              restaurantId?: string | null;
-            } | null;
-          }>
-        >,
-        directus.request(
-          readItems('csat_responses', {
-            filter: { submitted_at: { _gte: since } },
-            fields: ['id', 'score'],
-            limit: -1,
-          }),
-        ) as Promise<Array<{ id: string; score: number | null }>>,
-        directus.request(
-          readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 }),
-        ) as Promise<
-          Array<{
-            id: string;
-            first_name: string | null;
-            last_name: string | null;
-            email: string | null;
-          }>
-        >,
-        directus.request(readItems('vendors', { fields: ['id', 'name'], limit: -1 })) as Promise<
-          Array<{ id: string; name: string }>
-        >,
-        directus.request(
-          readItems('stores', {
-            fields: [
-              'id',
-              'code',
-              'name',
-              'city',
-              'area_manager',
-              'chain_manager',
-              'yiji_restaurant_id',
-              'brand.id',
-              'brand.code',
-              'brand.name',
-              'brand.yiji_brand_name',
-            ],
-            limit: -1,
-          }),
-        ) as Promise<
-          Array<{
-            id: string;
-            code: string | null;
-            name: string;
-            city: string | null;
-            area_manager: string | null;
-            chain_manager: string | null;
-            yiji_restaurant_id: string | null;
-            brand: {
+      const [conversations, tickets, csat, users, vendors, storeRows, slaHours] = await Promise.all(
+        [
+          directus.request(
+            readItems('conversations', {
+              filter: dateFilter,
+              fields: ['id', 'status', 'date_created', 'vendor'],
+              limit: -1,
+            }),
+          ) as Promise<
+            Array<{
               id: string;
-              code: string;
+              status: string;
+              date_created: string | null;
+              vendor: string | null;
+            }>
+          >,
+          directus.request(
+            readItems('tickets', {
+              filter: dateFilter,
+              fields: [
+                'id',
+                'status',
+                'date_created',
+                'first_responded_at',
+                'first_response_due_at',
+                'assigned_agent',
+                // The snapshot taken when the ticket was raised. Using it rather
+                // than re-querying the order API keeps the dashboard to one round
+                // trip, works when the commerce proxy is down, and reflects the
+                // order that was actually linked to the ticket.
+                'order_snapshot',
+                'store_snapshot',
+              ],
+              limit: -1,
+            }),
+          ) as Promise<
+            Array<{
+              id: string;
+              status: string;
+              date_created: string | null;
+              first_responded_at: string | null;
+              first_response_due_at: string | null;
+              assigned_agent: string | null;
+              store_snapshot: StoreSnapshot | null;
+              order_snapshot: {
+                brandName?: string | null;
+                restaurantName?: string | null;
+                restaurantId?: string | null;
+              } | null;
+            }>
+          >,
+          directus.request(
+            readItems('csat_responses', {
+              filter: { submitted_at: { _gte: since } },
+              fields: ['id', 'score'],
+              limit: -1,
+            }),
+          ) as Promise<Array<{ id: string; score: number | null }>>,
+          directus.request(
+            readUsers({ fields: ['id', 'first_name', 'last_name', 'email'], limit: -1 }),
+          ) as Promise<
+            Array<{
+              id: string;
+              first_name: string | null;
+              last_name: string | null;
+              email: string | null;
+            }>
+          >,
+          directus.request(readItems('vendors', { fields: ['id', 'name'], limit: -1 })) as Promise<
+            Array<{ id: string; name: string }>
+          >,
+          directus.request(
+            readItems('stores', {
+              fields: [
+                'id',
+                'code',
+                'name',
+                'city',
+                'area_manager',
+                'chain_manager',
+                'yiji_restaurant_id',
+                'brand.id',
+                'brand.code',
+                'brand.name',
+                'brand.yiji_brand_name',
+              ],
+              limit: -1,
+            }),
+          ) as Promise<
+            Array<{
+              id: string;
+              code: string | null;
               name: string;
-              yiji_brand_name?: string | null;
-            } | null;
-          }>
-        >,
-      ]);
+              city: string | null;
+              area_manager: string | null;
+              chain_manager: string | null;
+              yiji_restaurant_id: string | null;
+              brand: {
+                id: string;
+                code: string;
+                name: string;
+                yiji_brand_name?: string | null;
+              } | null;
+            }>
+          >,
+          // Never throws: null hours = the wall clock.
+          loadSlaHours(),
+        ],
+      );
 
       const userName = new Map(
         users.map((u) => [
@@ -184,7 +200,7 @@ export function useDashboardMetrics(days: number) {
       const byAgent = new Map<string, number>();
       for (const tk of tickets) {
         if (tk.date_created && tk.first_responded_at) {
-          respSum += minutesBetween(tk.date_created, tk.first_responded_at);
+          respSum += minutesBetween(tk.date_created, tk.first_responded_at, slaHours.ticket);
           respCount += 1;
         }
         if (tk.first_response_due_at) {

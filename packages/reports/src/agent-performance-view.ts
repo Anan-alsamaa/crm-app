@@ -4,8 +4,10 @@ import {
   firstResponseSec,
   metFirstResponse,
   timeToSolveSec,
+  withBusinessHours,
   type ChatTiming,
 } from './agent-performance.js';
+import type { SlaBusinessHours } from '@yiji/shared-types';
 
 /**
  * The shapes the agent-performance PAGE draws, computed once.
@@ -57,11 +59,19 @@ const median = (xs: number[]): number | null => {
   return s.length % 2 ? s[mid]! : Math.round((s[mid - 1]! + s[mid]!) / 2);
 };
 
-/** The headline numbers, over whatever population is passed in. */
+/**
+ * The headline numbers, over whatever population is passed in.
+ *
+ * `hours` (optional): the chat SLA policy's working hours — every duration and
+ * the met-rate then count working time only, as the SLA engine does. Omitted =
+ * each chat's own `businessHours` (none = wall clock).
+ */
 export function performanceSummary(
-  chats: readonly ChatTiming[],
+  population: readonly ChatTiming[],
   targetSec: number,
+  hours?: SlaBusinessHours | null,
 ): PerformanceSummary {
+  const chats = withBusinessHours(population, hours);
   const firsts: number[] = [];
   const solves: number[] = [];
   let unanswered = 0;
@@ -139,8 +149,9 @@ export interface ComparisonRow {
 export function comparisonRows(
   chats: readonly ChatTiming[],
   noteFor: (n: number) => string,
+  hours?: SlaBusinessHours | null,
 ): ComparisonRow[] {
-  return agentPerformance(chats).map((r) => ({
+  return agentPerformance(chats, hours).map((r) => ({
     label: r.agentName,
     agentId: r.agentId,
     note: noteFor(r.chats),
@@ -178,8 +189,10 @@ function dayKey(iso: string | null | undefined): string | null {
  * complaint into Thursday's column and make a bad Monday invisible.
  */
 export function dailyTrend(
-  chats: ReadonlyArray<ChatTiming & { startedAt?: string | null }>,
+  population: ReadonlyArray<ChatTiming & { startedAt?: string | null }>,
+  hours?: SlaBusinessHours | null,
 ): DailyPoint[] {
+  const chats = withBusinessHours(population, hours);
   const byDay = new Map<string, { chats: number; first: number[]; solve: number[] }>();
   for (const c of chats) {
     const key = dayKey(c.firstCustomerAt ?? c.startedAt ?? null);

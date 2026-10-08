@@ -53,6 +53,10 @@ const perf = vi.hoisted(() => ({
   useCouponPerformance: vi.fn(),
 }));
 vi.mock('../src/features/performance/api.js', () => perf);
+// No working hours configured: the wall clock (owner, 2026-10-08).
+vi.mock('../src/lib/sla-hours.js', () => ({
+  useSlaHours: () => ({ data: { chat: null, ticket: null }, isLoading: false }),
+}));
 
 import { AgentPerformancePage } from '../src/features/performance/AgentPerformancePage.js';
 

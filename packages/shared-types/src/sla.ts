@@ -269,3 +269,222 @@ export function businessHoursSummary(hours: SlaBusinessHours | null | undefined)
         : openIdx.map(short).join(', ');
   return uniform ? `${days} ${window}` : days;
 }
+
+/* ── Working-hours arithmetic for the REPORTS ─────────────────────────────── */
+
+/** Minutes since midnight for an 'HH:MM' string ('17:00' -> 1020, '24:00' -> 1440). */
+function parseHHMM(hhmm: string): number {
+  const [h, m] = String(hhmm)
+    .split(':')
+    .map((v) => Number(v));
+  return (h ?? 0) * 60 + (m ?? 0);
+}
+
+/** One formatter per zone: building an Intl.DateTimeFormat is the expensive part. */
+const ZONE_FORMATTERS = new Map<string, Intl.DateTimeFormat>();
+function zoneFormatter(tz: string): Intl.DateTimeFormat {
+  let f = ZONE_FORMATTERS.get(tz);
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      hourCycle: 'h23',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    ZONE_FORMATTERS.set(tz, f);
+  }
+  return f;
+}
+
+/** Local wall-clock fields of `instant` (epoch ms) in `tz`. */
+function zoneFields(instant: number, tz: string) {
+  const parts = zoneFormatter(tz).formatToParts(new Date(instant));
+  const get = (t: string) => Number(parts.find((p) => p.type === t)!.value);
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+    second: get('second'),
+  };
+}
+
+/** Offset (local - UTC) in minutes for `instant` in `tz`, DST-aware. */
+function zoneOffsetMinutes(instant: number, tz: string): number {
+  const p = zoneFields(instant, tz);
+  const asIfUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+  return Math.round((asIfUtc - instant) / 60_000);
+}
+
+/**
+ * Epoch ms for `minutesIntoDay` after local midnight of (year, month, day) in
+ * `tz`. The same two-pass conversion as the SLA engine's `zonedToUtc`
+ * (services/workers/src/lib/sla-clock.ts), so a window edge lands on the same
+ * instant in a report as it does in a deadline.
+ */
+function zonedMs(
+  year: number,
+  month: number,
+  day: number,
+  minutesIntoDay: number,
+  tz: string,
+): number {
+  const h = Math.floor(minutesIntoDay / 60);
+  const m = Math.floor(minutesIntoDay % 60);
+  const s = Math.round((minutesIntoDay - h * 60 - m) * 60);
+  const guess = Date.UTC(year, month - 1, day, h, m, s);
+  let utc = guess - zoneOffsetMinutes(guess, tz) * 60_000;
+  utc = guess - zoneOffsetMinutes(utc, tz) * 60_000;
+  return utc;
+}
+
+/** True when the hours name at least one open window somewhere in the week. */
+function hasAnyWindow(hours: SlaBusinessHours): boolean {
+  return Object.values(hours.days ?? {}).some((w) => Array.isArray(w) && w.length > 0);
+}
+
+/**
+ * HOW MUCH OF AN INTERVAL FELL INSIDE WORKING HOURS, in milliseconds.
+ *
+ * The reports' half of the SLA clock (owner, 2026-10-08). The SLA engine
+ * (`computeDueAt` in services/workers/src/lib/sla-clock.ts) already counts a
+ * deadline in working minutes only; the reports measured the same chats on the
+ * wall clock, so a customer who wrote at 05:35 and got a reply at 08:52 — before
+ * the 09:00 shift — read as a 3h17m first response against a promise that had
+ * not even started running. This is the inverse of `computeDueAt`:
+ *
+ *     businessMsBetween(start, computeDueAt(start, N, hours), hours) === N * 60_000
+ *
+ * Same reading of the hours as the engine: windows and weekdays are LOCAL to
+ * `hours.timezone` (DST-aware via Intl), '24:00' closes at the next midnight,
+ * a missing or empty weekday is closed.
+ *
+ * - `hours` null/undefined ⇒ round the clock: plain `end - start`.
+ * - `end <= start` ⇒ 0, never negative.
+ * - Hours that name NO window at all ⇒ wall clock as well. The engine refuses
+ *   such a policy (it would never reach a deadline); a report answering 0 for
+ *   every chat would be the silent-zero failure, so it falls back instead.
+ */
+export function businessMsBetween(
+  start: Date,
+  end: Date,
+  hours: SlaBusinessHours | null | undefined,
+): number {
+  const a = start.getTime();
+  const b = end.getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b) || b <= a) return 0;
+  if (!hours || !hours.days || !hasAnyWindow(hours)) return b - a;
+
+  const tz = hours.timezone || 'UTC';
+  const first = zoneFields(a, tz);
+  let total = 0;
+  // One pass per LOCAL calendar day, from the start's day until a day begins
+  // at or after the end. Date.UTC normalises day overflow, so `first.day + i`
+  // walks month and year boundaries correctly.
+  for (let i = 0; ; i++) {
+    const cal = new Date(Date.UTC(first.year, first.month - 1, first.day + i));
+    const y = cal.getUTCFullYear();
+    const mo = cal.getUTCMonth() + 1;
+    const d = cal.getUTCDate();
+    if (i > 0 && zonedMs(y, mo, d, 0, tz) >= b) break;
+    const windows = hours.days[String(cal.getUTCDay())] ?? [];
+    if (!Array.isArray(windows)) continue;
+    for (const w of windows) {
+      if (!Array.isArray(w) || w.length < 2) continue;
+      const open = zonedMs(y, mo, d, parseHHMM(w[0]), tz);
+      const close = zonedMs(y, mo, d, parseHHMM(w[1]), tz);
+      const overlap = Math.min(b, close) - Math.max(a, open);
+      if (overlap > 0) total += overlap;
+    }
+  }
+  return total;
+}
+
+/**
+ * `businessMsBetween` for two ISO strings, in SECONDS. Null when either is
+ * missing or unparsable, or when the clock ran backwards (`to` before `from`) —
+ * a negative interval is no measurement, and reporting it as 0 would be a lie
+ * in the flattering direction.
+ */
+export function businessSecondsBetween(
+  from: string | null | undefined,
+  to: string | null | undefined,
+  hours: SlaBusinessHours | null | undefined,
+): number | null {
+  if (!from || !to) return null;
+  const a = new Date(from);
+  const b = new Date(to);
+  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return null;
+  if (b.getTime() < a.getTime()) return null;
+  return businessMsBetween(a, b, hours) / 1000;
+}
+
+/**
+ * Read a `business_hours` column value into the shape, or null.
+ *
+ * Directus returns a json column parsed, but a hand-edited row can carry a
+ * string, and a malformed value must read as "round the clock" (the old
+ * behaviour) rather than throw inside a report.
+ */
+export function parseBusinessHours(raw: unknown): SlaBusinessHours | null {
+  let v = raw;
+  if (typeof v === 'string') {
+    try {
+      v = JSON.parse(v);
+    } catch {
+      return null;
+    }
+  }
+  if (!v || typeof v !== 'object') return null;
+  const o = v as { timezone?: unknown; days?: unknown };
+  if (!o.days || typeof o.days !== 'object' || Array.isArray(o.days)) return null;
+  return {
+    timezone: typeof o.timezone === 'string' && o.timezone ? o.timezone : 'UTC',
+    days: o.days as SlaBusinessHours['days'],
+  };
+}
+
+/** The working hours each clock runs on, as the reports need them. */
+export interface SlaHoursByObject {
+  chat: SlaBusinessHours | null;
+  ticket: SlaBusinessHours | null;
+}
+
+/**
+ * Which working hours the reports use for chats and for tickets, from the
+ * `sla_policies` rows.
+ *
+ * Only ACTIVE policies count, split by `governs`. Of those, the first (by name,
+ * then id — the same stable order the engine breaks ties with) that carries
+ * usable hours wins. None carrying hours ⇒ null ⇒ wall clock, which is what
+ * every report did before.
+ */
+export function slaHoursByGoverns(
+  policies: ReadonlyArray<{
+    id?: string | null;
+    name?: string | null;
+    governs?: string | null;
+    active?: boolean | null;
+    business_hours?: unknown;
+  }>,
+): SlaHoursByObject {
+  const pick = (governs: SlaGoverns): SlaBusinessHours | null => {
+    const rows = policies
+      .filter((p) => !!p && p.active !== false && policyGoverns(p) === governs)
+      .sort(
+        (a, b) =>
+          (a.name ?? '').localeCompare(b.name ?? '') || (a.id ?? '').localeCompare(b.id ?? ''),
+      );
+    for (const p of rows) {
+      const h = parseBusinessHours(p.business_hours);
+      if (h && hasAnyWindow(h)) return h;
+    }
+    return null;
+  };
+  return { chat: pick('chat'), ticket: pick('ticket') };
+}

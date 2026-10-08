@@ -3,7 +3,13 @@ import { aggregate, readItems, readRevisions, readUsers } from '@directus/sdk';
 import { formatDateTime } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
-import { displayContactName, type StoreSnapshot } from '@yiji/shared-types';
+import {
+  businessSecondsBetween,
+  displayContactName,
+  type SlaBusinessHours,
+  type StoreSnapshot,
+} from '@yiji/shared-types';
+import { loadSlaHours } from '../../lib/sla-hours.js';
 // The complaints row shape is shared with the agent portal — see @yiji/reports.
 // The chat arithmetic (timestamps, handoffs, per-agent rollup) is the SAME
 // shared code the two Agent-performance pages use, so this report can never
@@ -332,13 +338,19 @@ export interface AgentReportData {
 
 const DAY_MS = 86_400_000;
 
-function minutesBetween(a: string | null, b: string | null): number | null {
-  if (!a || !b) return null;
-  const start = new Date(a).getTime();
-  const end = new Date(b).getTime();
-  if (Number.isNaN(start) || Number.isNaN(end)) return null;
-  const diff = (end - start) / 60_000;
-  return diff >= 0 ? diff : null;
+/**
+ * Minutes from `a` to `b`, null when either is missing or the clock ran
+ * backwards. With `hours` (the SLA policy's working hours) only working minutes
+ * count, as the SLA engine counts them (owner, 2026-10-08); without, the wall
+ * clock.
+ */
+function minutesBetween(
+  a: string | null,
+  b: string | null,
+  hours: SlaBusinessHours | null = null,
+): number | null {
+  const sec = businessSecondsBetween(a, b, hours);
+  return sec == null ? null : sec / 60;
 }
 
 /** met / breached / pending / na from a due + done pair. */
@@ -560,6 +572,10 @@ async function loadAgentReport(
         [field]: until ? { _gte: since, _lte: until } : { _gte: since },
       });
       const now = Date.now();
+      /* The SLA policies' working hours, read alongside everything else: ticket
+         durations count the ticket policy's hours, chat timings the chat
+         policy's (owner, 2026-10-08). Never throws — null = wall clock. */
+      const slaHoursRead = loadSlaHours();
 
       /*
        * WHAT THIS REPORT ACTUALLY SHOWS, so only that is fetched (2026-10-05).
@@ -944,6 +960,7 @@ async function loadAgentReport(
         ),
       ]);
       for (const c of extraConvs) convAgent.set(c.id, c.assigned_agent);
+      const slaHours = await slaHoursRead;
 
       /* Report 1: tickets + SLA timings (order enrichment added later). */
       // Not for the breakdown: it never shows these, and its leaner field list
@@ -967,9 +984,9 @@ async function loadAgentReport(
         contactPhone: t.contact?.phone ?? '',
         agentName: agentOf(t.assigned_agent),
         createdAt: t.date_created,
-        firstResponseMinutes: minutesBetween(t.date_created, t.first_responded_at),
+        firstResponseMinutes: minutesBetween(t.date_created, t.first_responded_at, slaHours.ticket),
         firstResponseState: slaOutcome(t.first_response_due_at, t.first_responded_at, now),
-        resolutionMinutes: minutesBetween(t.date_created, t.resolved_at),
+        resolutionMinutes: minutesBetween(t.date_created, t.resolved_at, slaHours.ticket),
         resolutionState: slaOutcome(t.resolution_due_at, t.resolved_at, now),
         storeSnapshot: t.store_snapshot ?? null,
       }));
@@ -1197,6 +1214,8 @@ async function loadAgentReport(
           // never answered is not "not replied" (owner, 2026-10-07).
           initiatedBy: c.initiated_by === 'agent' ? ('agent' as const) : ('customer' as const),
           firstOutreachAt: chatTimes.get(c.id)?.firstAgentAnyAt ?? null,
+          // Every chat duration below counts the chat policy's working hours.
+          businessHours: slaHours.chat,
         };
       });
       const perfRows = new Map(agentPerformance(timings).map((r) => [r.agentId ?? '', r]));

@@ -76,8 +76,8 @@ describe('sla-reports api', () => {
       resPct: null,
       breaches: 0,
     });
-    // tickets + conversations + users.
-    expect(request).toHaveBeenCalledTimes(3);
+    // tickets + conversations + users + sla_policies (the working hours).
+    expect(request).toHaveBeenCalledTimes(4);
   });
 
   it('classifies met / breached-late / breached-overdue / pending / na across all branches', async () => {

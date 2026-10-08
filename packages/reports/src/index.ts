@@ -64,6 +64,7 @@ export {
   formatDuration,
   awaitingCustomer,
   agentInitiatedSummary,
+  withBusinessHours,
   type ChatTiming,
   type AgentPerformanceRow,
   type AgentInitiatedSummary,
