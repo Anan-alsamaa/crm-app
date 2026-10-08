@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CachedVendorDirectory,
+  vendorsFromRows,
   ConnectorRegistry,
   EnvVendorSettingsSource,
   StaticVendorDirectory,
@@ -101,6 +103,140 @@ describe('ConnectorRegistry', () => {
     });
     await expect(r.connectorFor('1')).rejects.toThrow('settings store down');
     await expect(r.connectorFor('1')).resolves.toBeInstanceOf(YijiConnector);
+  });
+});
+
+describe('vendors table directory (ai-gateway: portals send UUID AND yiji_vendor_id)', () => {
+  const UUID = '0b6f9a52-7c1e-4a8e-9f3e-2f6d1c0a9e11';
+  const rows = [
+    { id: UUID, yiji_vendor_id: '1', status: 'active', name: 'Yiji' },
+    { id: 'demo-uuid', yiji_vendor_id: 'demo-okashi', status: 'active', name: 'Okashi' },
+    { id: 'old-uuid', yiji_vendor_id: 'old', status: 'archived' },
+    { id: 'no-platform-id', yiji_vendor_id: null, status: 'active' },
+  ];
+
+  function dbRegistry(load: () => Promise<ConnectorVendor[]>, onDirectoryFallback?: () => void) {
+    return createEnvConnectorRegistry({
+      yiji: { client: {} },
+      loadVendors: load,
+      ...(onDirectoryFallback ? { onDirectoryFallback } : {}),
+    });
+  }
+
+  it('resolves the CRM UUID and "1" to the SAME connector', async () => {
+    const r = dbRegistry(async () => vendorsFromRows(rows));
+    const byUuid = await r.connectorFor(UUID);
+    expect(byUuid).toBe(await r.connectorFor('1'));
+    expect(byUuid).toBeInstanceOf(YijiConnector);
+  });
+
+  it('still refuses a vendor the table does not hold, and an inactive one', async () => {
+    const r = dbRegistry(async () => vendorsFromRows(rows));
+    await expect(r.connectorFor('nope')).rejects.toMatchObject({ reason: 'unknown' });
+    await expect(r.connectorFor('old-uuid')).rejects.toMatchObject({ reason: 'inactive' });
+    await expect(r.connectorFor('no-platform-id')).rejects.toMatchObject({ reason: 'unknown' });
+  });
+
+  it('pins legacy records to the env vendor even with several active vendors', async () => {
+    const r = dbRegistry(async () => vendorsFromRows(rows));
+    expect(await r.defaultVendorForLegacyRecords()).toBe('1');
+  });
+
+  it('a failed read falls back to the env vendor and SAYS so', async () => {
+    const warned: unknown[] = [];
+    const r = dbRegistry(
+      async () => {
+        throw new Error('403 FORBIDDEN');
+      },
+      () => warned.push('fallback'),
+    );
+    // '1' keeps working: a Directus hiccup is not a commerce outage.
+    await expect(r.connectorFor('1')).resolves.toBeInstanceOf(YijiConnector);
+    expect(await r.defaultVendorForLegacyRecords()).toBe('1');
+    // A UUID cannot be resolved from env alone - an honest 404, not a guess.
+    await expect(r.connectorFor(UUID)).rejects.toMatchObject({ reason: 'unknown' });
+    expect(warned.length).toBeGreaterThan(0);
+  });
+
+  it('an EMPTY read is a failure, not "no vendors"', async () => {
+    let fellBack = false;
+    const r = dbRegistry(
+      async () => [],
+      () => {
+        fellBack = true;
+      },
+    );
+    await expect(r.connectorFor('1')).resolves.toBeInstanceOf(YijiConnector);
+    expect(fellBack).toBe(true);
+  });
+});
+
+describe('CachedVendorDirectory', () => {
+  const env = new StaticVendorDirectory([{ ...yijiVendor, crmId: undefined }]);
+  const db: ConnectorVendor[] = [yijiVendor];
+
+  it('caches a good read for the TTL and re-reads after it', async () => {
+    let t = 0;
+    let reads = 0;
+    const dir = new CachedVendorDirectory({
+      load: async () => {
+        reads += 1;
+        return db;
+      },
+      fallback: env,
+      ttlMs: 1000,
+      now: () => t,
+    });
+    await dir.list();
+    await dir.list();
+    expect(reads).toBe(1);
+    t = 1500;
+    await dir.list();
+    expect(reads).toBe(2);
+  });
+
+  it('serves the LAST GOOD list when a refresh fails, and backs off before retrying', async () => {
+    let t = 0;
+    let fail = false;
+    let reads = 0;
+    const errors: unknown[] = [];
+    const dir = new CachedVendorDirectory({
+      load: async () => {
+        reads += 1;
+        if (fail) throw new Error('directus down');
+        return db;
+      },
+      fallback: env,
+      ttlMs: 1000,
+      retryMs: 500,
+      onFallback: (e) => errors.push(e),
+      now: () => t,
+    });
+    expect(await dir.list()).toEqual(db);
+    fail = true;
+    t = 2000;
+    expect(await dir.list()).toEqual(db); // last good, UUID still resolvable
+    expect(errors).toHaveLength(1);
+    t = 2200; // inside the back-off: no new read
+    await dir.list();
+    expect(reads).toBe(2);
+    fail = false;
+    t = 2600;
+    await dir.list();
+    expect(reads).toBe(3);
+  });
+
+  it('coalesces concurrent reads into one', async () => {
+    let reads = 0;
+    const dir = new CachedVendorDirectory({
+      load: async () => {
+        reads += 1;
+        return db;
+      },
+      fallback: env,
+    });
+    await Promise.all([dir.list(), dir.list(), dir.list()]);
+    expect(reads).toBe(1);
   });
 });
 

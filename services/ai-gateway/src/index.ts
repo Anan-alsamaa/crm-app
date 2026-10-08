@@ -19,7 +19,7 @@ import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
 import { CommerceCache } from './commerce/cache.js';
 import { Registry } from './metrics.js';
-import { createEnvConnectorRegistry } from '@yiji/shared-types';
+import { createEnvConnectorRegistry, vendorsFromRows } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
@@ -148,10 +148,22 @@ async function main(): Promise<void> {
 
   // Commerce connectors (MV-2): each request's vendor resolves to its
   // platform's connector — server-side so the platform API key never reaches
-  // the browser. Today ONE Yiji vendor (`yiji_vendor_id` '1'), built from the
-  // same env as before; empty YIJI_API_URL => mock client. Any other vendor id
-  // is a 404 `unknown_vendor`, never Yiji's data.
+  // the browser. Settings from the same env as before; empty YIJI_API_URL =>
+  // mock client.
+  //
+  // The portals name a vendor by its CRM UUID (late orders, new ticket) AND by
+  // `yiji_vendor_id` (inbox, contact, tickets), and old bundles stay live
+  // behind "Update now" — so the `vendors` table is read (cached 5 min) and
+  // both forms resolve. A failed read falls back to the last good list, else
+  // to the env vendor ('1'), with a warning: a Directus hiccup must not become
+  // a commerce outage. A vendor that is in neither is a 404 `unknown_vendor`.
   const connectors = createEnvConnectorRegistry({
+    loadVendors: async () => vendorsFromRows(await directus.listVendors()),
+    onDirectoryFallback: (err) =>
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'vendors read failed - commerce is resolving vendors from the last good list / env',
+      ),
     yiji: {
       client: {
         apiUrl: config.YIJI_API_URL,

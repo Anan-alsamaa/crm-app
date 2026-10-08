@@ -5,6 +5,7 @@ import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   LATE_DELIVERY_MINUTES_KEY,
   lateDeliveryMinutes,
+  type VendorRow,
 } from '@yiji/shared-types';
 
 /**
@@ -227,6 +228,24 @@ export class GatewayDirectus {
    *      support session is a burst of messages; hours of silence in between is
    *      the customer going away and coming back with a NEW case.
    */
+  /**
+   * Every vendor, for the commerce connector registry (MV-2): the portals name
+   * a vendor by its CRM UUID in some places and by `yiji_vendor_id` in others,
+   * and both must resolve. Needs `read` on `vendors` for svc-ai-gateway.
+   *
+   * THROWS on failure — the registry's cached directory decides what to fall
+   * back to and logs it; swallowing here would make a 403 look like "no
+   * vendors".
+   */
+  async listVendors(): Promise<VendorRow[]> {
+    return (await this.client.request(
+      readItems(
+        'vendors' as never,
+        { fields: ['id', 'yiji_vendor_id', 'status', 'name'], limit: -1 } as never,
+      ),
+    )) as unknown as VendorRow[];
+  }
+
   /** One row per AI call (owner, 2026-10-07). Never throws. */
   async logAiCall(row: AiCallRow): Promise<void> {
     try {

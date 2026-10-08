@@ -2,7 +2,8 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { registerCommerceRoutes } from '../src/commerce/index.js';
 import type { CallerVerifierDeps } from '../src/auth/index.js';
-import { connectorsFor } from './connectors-fixture.js';
+import { createEnvConnectorRegistry, YijiConnector } from '@yiji/shared-types';
+import { connectorsFor, dbConnectorsFor } from './connectors-fixture.js';
 
 const AGENT_TOKEN = 'agent-session-token';
 
@@ -129,6 +130,71 @@ describe('commerce proxy', () => {
       expect(res.statusCode, url).toBe(404);
       expect(res.json(), url).toEqual({ error: 'unknown_vendor' });
     }
+  });
+
+  /*
+   * The portals send BOTH forms: the late-orders page and the new-ticket page
+   * pass the vendor's CRM UUID (`vendors.data[0].id`), the inbox and tickets
+   * pass `yiji_vendor_id`. Old bundles stay live behind "Update now", so the
+   * server must answer both.
+   */
+  describe('with the vendors table (production shape)', () => {
+    const UUID = '0b6f9a52-7c1e-4a8e-9f3e-2f6d1c0a9e11';
+    const rows = [{ id: UUID, yiji_vendor_id: '1', status: 'active', name: 'Yiji' }];
+
+    async function dbApp(onFallback?: (err: unknown) => void) {
+      const a = Fastify();
+      await registerCommerceRoutes(a, {
+        directus,
+        connectors: dbConnectorsFor(yiji, rows, onFallback),
+      });
+      return a;
+    }
+
+    it('answers the CRM UUID and the yiji_vendor_id alike (not 404)', async () => {
+      const a = await dbApp();
+      for (const v of [UUID, '1']) {
+        const order = await a.inject({
+          method: 'GET',
+          url: `/commerce/order?vendorId=${v}&orderId=O-1`,
+          headers: auth,
+        });
+        expect(order.statusCode, v).toBe(200);
+        expect(order.json().data.orderId, v).toBe('O-1');
+        const orders = await a.inject({
+          method: 'GET',
+          url: `/commerce/orders?vendorId=${v}&customerId=c1&limit=2`,
+          headers: auth,
+        });
+        expect(orders.statusCode, v).toBe(200);
+        expect(orders.json().data, v).toHaveLength(2);
+      }
+    });
+
+    it('a failing vendors read still serves "1" (env fallback) and logs it', async () => {
+      const a = Fastify();
+      const errors: unknown[] = [];
+      await registerCommerceRoutes(a, {
+        directus,
+        connectors: createEnvConnectorRegistry({
+          yiji: { client: {} },
+          loadVendors: async () => {
+            throw new Error('403 FORBIDDEN on vendors');
+          },
+          onDirectoryFallback: (e) => errors.push(e),
+          factories: {
+            yiji: (v, s) => new YijiConnector(v, s, { client: yiji }),
+          },
+        }),
+      });
+      const res = await a.inject({
+        method: 'GET',
+        url: '/commerce/order?vendorId=1&orderId=O-1',
+        headers: auth,
+      });
+      expect(res.statusCode).toBe(200);
+      expect(errors.length).toBeGreaterThan(0);
+    });
   });
 
   it('customer-exists reports configured:false when the vendor has no phone lookup', async () => {

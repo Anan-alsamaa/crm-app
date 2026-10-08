@@ -351,6 +351,106 @@ export class StaticVendorDirectory implements VendorDirectory {
   }
 }
 
+/** A `vendors` row as the directory reads it. */
+export interface VendorRow {
+  id: string;
+  yiji_vendor_id: string | null;
+  status: string | null;
+  name?: string | null;
+}
+
+/**
+ * `vendors` rows as connector vendors.
+ *
+ * Every vendor is on the Yiji platform today — the table has no platform
+ * column yet (MV-1 adds one), and before MV-2 every vendor's commerce request
+ * was answered by Yiji. A row without a platform id is skipped: there is no id
+ * to call the platform with.
+ */
+export function vendorsFromRows(rows: readonly VendorRow[]): ConnectorVendor[] {
+  const out: ConnectorVendor[] = [];
+  for (const r of rows) {
+    const platformVendorId = r.yiji_vendor_id?.trim();
+    if (!r.id || !platformVendorId) continue;
+    out.push({
+      crmId: r.id,
+      platformVendorId,
+      platform: 'yiji',
+      status: r.status ?? '',
+      ...(r.name ? { name: r.name } : {}),
+    });
+  }
+  return out;
+}
+
+export interface CachedVendorDirectoryOptions {
+  /** Reads the vendors (e.g. the `vendors` collection). */
+  load: () => Promise<ConnectorVendor[]>;
+  /** Answers when `load` fails and nothing was ever loaded — today's env vendor. */
+  fallback: VendorDirectory;
+  /** How long a successful read is trusted. Default 5 minutes. */
+  ttlMs?: number;
+  /** How long to wait before asking again after a failure. Default 30 s. */
+  retryMs?: number;
+  /** Told about every failed read, so a fallback is never silent. */
+  onFallback?: (err: unknown) => void;
+  /** Injectable clock, for tests. */
+  now?: () => number;
+}
+
+/**
+ * The vendors table, cached — with the env vendor behind it.
+ *
+ * A Directus hiccup must never become a commerce outage, so a failed read
+ * answers with the LAST GOOD list when there is one, else the fallback (the
+ * env vendor, which still resolves `yiji_vendor_id` '1'), and reports it
+ * through `onFallback`. An EMPTY answer counts as a failure: a vendors read
+ * that returns nothing is a permission or filter problem, not a CRM with no
+ * vendors, and treating it as truth would 404 every commerce request.
+ */
+export class CachedVendorDirectory implements VendorDirectory {
+  private good: { vendors: ConnectorVendor[]; at: number } | null = null;
+  private retryAt = 0;
+  private inflight: Promise<ConnectorVendor[]> | null = null;
+  private readonly ttlMs: number;
+  private readonly retryMs: number;
+  private readonly now: () => number;
+
+  constructor(private readonly opts: CachedVendorDirectoryOptions) {
+    this.ttlMs = opts.ttlMs ?? 5 * 60_000;
+    this.retryMs = opts.retryMs ?? 30_000;
+    this.now = opts.now ?? Date.now;
+  }
+
+  async list(): Promise<ConnectorVendor[]> {
+    const t = this.now();
+    if (this.good && t - this.good.at < this.ttlMs) return [...this.good.vendors];
+    if (t < this.retryAt) return this.degraded();
+    this.inflight ??= this.refresh().finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  private async refresh(): Promise<ConnectorVendor[]> {
+    try {
+      const vendors = await this.opts.load();
+      if (vendors.length === 0) throw new Error('vendors read returned no rows');
+      this.good = { vendors, at: this.now() };
+      this.retryAt = 0;
+      return [...vendors];
+    } catch (err) {
+      this.retryAt = this.now() + this.retryMs;
+      this.opts.onFallback?.(err);
+      return this.degraded();
+    }
+  }
+
+  private async degraded(): Promise<ConnectorVendor[]> {
+    return this.good ? [...this.good.vendors] : this.opts.fallback.list();
+  }
+}
+
 /**
  * Every Yiji vendor gets the SAME settings — today's single env config.
  *
@@ -375,6 +475,11 @@ export interface ConnectorRegistryOptions {
   settings: VendorSettingsSource;
   /** Per-platform builders. Defaults to the built-in Yiji connector. */
   factories?: Partial<Record<CommercePlatform, ConnectorFactory>>;
+  /**
+   * The vendor that owns records written before vendors were distinguished —
+   * see `defaultVendorForLegacyRecords`. Unset = the single active Yiji vendor.
+   */
+  legacyVendorKey?: string;
 }
 
 const DEFAULT_FACTORIES: Record<CommercePlatform, ConnectorFactory> = {
@@ -436,12 +541,27 @@ export class ConnectorRegistry {
    * and every caller of this helper must pass the record's vendor instead —
    * then this method is deleted.
    *
-   * Answers the platform id of the SINGLE active Yiji vendor, and REFUSES
-   * (typed error) the moment there are two: from then on a vendor-less record
-   * cannot be attributed, and guessing would hand one vendor's coupons to
-   * another vendor's platform.
+   * With `legacyVendorKey` (the services pass today's env vendor, '1'): that
+   * vendor, which must exist and be active — it is the vendor every
+   * vendor-less record was in fact written for, the same rule the coupon
+   * push's `couponEndpointFor` fallback already applies. It is pinned rather
+   * than inferred because a vendors table read whole can hold more than one
+   * active row (e.g. showcase vendors on staging), and that must not take the
+   * late-orders queue down.
+   *
+   * Without it: the platform id of the SINGLE active Yiji vendor, and a typed
+   * REFUSAL the moment there are two — guessing would hand one vendor's
+   * coupons to another vendor's platform.
    */
   async defaultVendorForLegacyRecords(): Promise<string> {
+    if (this.opts.legacyVendorKey) {
+      const legacy = await this.resolveVendor(this.opts.legacyVendorKey).catch((err: unknown) => {
+        if (isUnknownVendor(err)) throw new UnknownVendorError('', 'no_legacy_default');
+        throw err;
+      });
+      if (legacy.platform !== 'yiji') throw new UnknownVendorError('', 'no_legacy_default');
+      return legacy.platformVendorId;
+    }
     const yiji = (await this.opts.directory.list()).filter(
       (v) => v.platform === 'yiji' && v.status === 'active',
     );
@@ -463,17 +583,26 @@ export function asYijiConnector(connector: VendorConnector): YijiConnector {
 export const LEGACY_YIJI_VENDOR_ID = '1';
 
 /**
- * Today's setup, as a registry: ONE active Yiji vendor, settings from env.
+ * Today's setup, as a registry: Yiji vendors, settings from env.
  *
- * `vendorId` is the platform id of that vendor (`yiji_vendor_id`) — the value
- * each service already uses (`DEFAULT_VENDOR_ID`, `YIJI_VENDOR_ID`, or `'1'`).
- * Any other vendor key resolves to `UnknownVendorError`.
+ * `vendorId` is the platform id of the env vendor (`yiji_vendor_id`) — the
+ * value each service already uses (`DEFAULT_VENDOR_ID`, `YIJI_VENDOR_ID`, or
+ * `'1'`). It owns the legacy (vendor-less) records.
+ *
+ * Without `loadVendors` that is the ONLY vendor: any other key resolves to
+ * `UnknownVendorError`. With it (a service that can read the `vendors`
+ * table), every vendor there resolves by its CRM UUID or its
+ * `yiji_vendor_id`, cached for `vendorsTtlMs`; the env vendor answers only
+ * while that read is failing, reported through `onDirectoryFallback`.
  */
 export function createEnvConnectorRegistry(opts: {
   vendorId?: string;
   crmVendorId?: string;
   yiji: Omit<YijiPlatformSettings, 'platform'>;
   factories?: ConnectorRegistryOptions['factories'];
+  loadVendors?: () => Promise<ConnectorVendor[]>;
+  onDirectoryFallback?: (err: unknown) => void;
+  vendorsTtlMs?: number;
 }): ConnectorRegistry {
   const vendor: ConnectorVendor = {
     platformVendorId: opts.vendorId?.trim() || LEGACY_YIJI_VENDOR_ID,
@@ -482,9 +611,18 @@ export function createEnvConnectorRegistry(opts: {
     status: 'active',
     name: 'Yiji',
   };
+  const envDirectory = new StaticVendorDirectory([vendor]);
   return new ConnectorRegistry({
-    directory: new StaticVendorDirectory([vendor]),
+    directory: opts.loadVendors
+      ? new CachedVendorDirectory({
+          load: opts.loadVendors,
+          fallback: envDirectory,
+          ...(opts.vendorsTtlMs != null ? { ttlMs: opts.vendorsTtlMs } : {}),
+          ...(opts.onDirectoryFallback ? { onFallback: opts.onDirectoryFallback } : {}),
+        })
+      : envDirectory,
     settings: new EnvVendorSettingsSource({ platform: 'yiji', ...opts.yiji }),
+    legacyVendorKey: vendor.platformVendorId,
     ...(opts.factories ? { factories: opts.factories } : {}),
   });
 }
