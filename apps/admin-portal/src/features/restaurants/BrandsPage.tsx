@@ -34,6 +34,7 @@ import {
   useStores,
   type Brand,
 } from './api.js';
+import { useRecordVendorNames } from '../vendors/api.js';
 
 const schema = z.object({
   code: z.string().min(1),
@@ -63,6 +64,8 @@ export function BrandsPage() {
   const { t } = useTranslation();
   const brands = useBrands();
   const stores = useStores();
+  /* MV-1: read-only Vendor column, from its own query (see the hook). */
+  const vendorNames = useRecordVendorNames('brands');
   const createBrand = useCreateBrand();
   const updateBrand = useUpdateBrand();
   const deleteBrand = useDeleteBrand();
@@ -228,6 +231,7 @@ export function BrandsPage() {
                     <Th className="text-end">
                       {t('brands.storesUnit', { defaultValue: 'stores' })}
                     </Th>
+                    <Th>{t('brands.colVendor', { defaultValue: 'Vendor' })}</Th>
                     <Th>{t('brands.colStatus', { defaultValue: 'Status' })}</Th>
                     <Th className="text-end">
                       <span className="sr-only">
@@ -269,6 +273,9 @@ export function BrandsPage() {
                         <span className="font-semibold tabular-nums text-foreground">
                           {storeCountFor(b.id)}
                         </span>
+                      </Td>
+                      <Td className="text-muted-foreground">
+                        {vendorNames.data?.get(b.id) ?? '—'}
                       </Td>
                       <Td>
                         {b.status === 'inactive' ? (

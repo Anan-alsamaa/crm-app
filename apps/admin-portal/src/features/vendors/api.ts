@@ -16,7 +16,33 @@ export interface VendorBrandingColors {
   // Future: accent, surface, etc.
 }
 
-export interface VendorRow {
+/**
+ * Non-secret customer-push settings (MV-1). Same names as the connector's
+ * `YijiPlatformSettings.push`; the API key is a SECRET and is never here.
+ */
+export interface VendorNotifySettings {
+  notifyUrl?: string;
+  notifyTopic?: string;
+  notifyTitle?: string;
+  openChatAction?: string;
+}
+
+/**
+ * The vendor's NON-SECRET integration settings (MV-1, EMA-70). Credentials
+ * stay in service configuration until MV-3 decides how secrets are stored.
+ * All optional: a vendor row from before MV-1 has none of them.
+ */
+export interface VendorIntegration {
+  platform?: 'yiji' | null;
+  api_base_url?: string | null;
+  admin_api_url?: string | null;
+  tenant_id?: string | null;
+  brand_id?: string | null;
+  notify_settings?: VendorNotifySettings | null;
+  webhook_path_key?: string | null;
+}
+
+export interface VendorRow extends VendorIntegration {
   id: string;
   name: string;
   yiji_vendor_id: string;
@@ -26,9 +52,21 @@ export interface VendorRow {
   status: 'active' | 'inactive';
 }
 
-export type VendorInput = Pick<VendorRow, 'name' | 'yiji_vendor_id' | 'colors' | 'status'> & {
-  logo?: string | null;
-};
+export type VendorInput = Pick<VendorRow, 'name' | 'yiji_vendor_id' | 'colors' | 'status'> &
+  VendorIntegration & {
+    logo?: string | null;
+  };
+
+/** Every integration field, for the read and the form. */
+export const VENDOR_INTEGRATION_FIELDS = [
+  'platform',
+  'api_base_url',
+  'admin_api_url',
+  'tenant_id',
+  'brand_id',
+  'notify_settings',
+  'webhook_path_key',
+] as const;
 
 export function useVendors() {
   return useQuery({
@@ -36,7 +74,16 @@ export function useVendors() {
     queryFn: () =>
       directus.request(
         readItems('vendors', {
-          fields: ['id', 'name', 'yiji_vendor_id', 'logo', 'colors', 'support_settings', 'status'],
+          fields: [
+            'id',
+            'name',
+            'yiji_vendor_id',
+            'logo',
+            'colors',
+            'support_settings',
+            'status',
+            ...VENDOR_INTEGRATION_FIELDS,
+          ],
           sort: ['name'],
           limit: -1,
         }),
@@ -66,5 +113,29 @@ export function useDeleteVendor() {
   return useMutation({
     mutationFn: (id: string) => directus.request(deleteItem('vendors', id)),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['vendors'] }),
+  });
+}
+
+/**
+ * WHICH VENDOR EACH BRAND / STORE BELONGS TO (MV-1), for the read-only Vendor
+ * column on those pages.
+ *
+ * Its OWN query on purpose, not a field added to `useStores`: that query also
+ * feeds the store index every report and the coupon queue attribute orders
+ * with, and Directus 403s a WHOLE query that names a missing field. Kept
+ * apart, a vendor column that cannot load shows a dash and nothing else
+ * notices. NULL (pre-MV-1, not yet backfilled) also shows a dash.
+ */
+export function useRecordVendorNames(collection: 'brands' | 'stores') {
+  return useQuery({
+    queryKey: ['record-vendor-names', collection],
+    retry: false,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const rows = (await directus.request(
+        readItems(collection, { limit: -1, fields: ['id', 'vendor.name'] as never }),
+      )) as Array<{ id: string; vendor?: { name?: string | null } | null }>;
+      return new Map(rows.map((r) => [r.id, r.vendor?.name ?? null]));
+    },
   });
 }

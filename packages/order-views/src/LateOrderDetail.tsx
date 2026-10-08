@@ -24,12 +24,12 @@ import { OrderDetails, OrderHeader } from './OrderViews.js';
  */
 
 /** `1x Chicken Pasta` with the choices under it. */
-function CartLines({ orderId }: { orderId: string }) {
+function CartLines({ orderId, vendorId }: { orderId: string; vendorId: string | null }) {
   const { t } = useTranslation();
   const commerce = useOrderCommerce();
   const q = useQuery({
-    queryKey: ['order-cart', orderId],
-    queryFn: () => commerce.getOrderCart(orderId),
+    queryKey: ['order-cart', orderId, vendorId],
+    queryFn: () => commerce.getOrderCart(orderId, vendorId),
     staleTime: 5 * 60_000,
     retry: false,
   });
@@ -247,8 +247,8 @@ export function LateOrderDetail({
    * one request rather than two.
    */
   const cart = useQuery({
-    queryKey: ['order-cart', orderId],
-    queryFn: () => commerce.getOrderCart(orderId),
+    queryKey: ['order-cart', orderId, vendorId],
+    queryFn: () => commerce.getOrderCart(orderId, vendorId),
     staleTime: 5 * 60_000,
     retry: false,
   });
@@ -295,7 +295,7 @@ export function LateOrderDetail({
         <h4 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
           {t('lateOrders.cartHeading', { defaultValue: 'Cart' })}
         </h4>
-        <CartLines orderId={orderId} />
+        <CartLines orderId={orderId} vendorId={vendorId} />
       </section>
       <section className="min-w-0">
         <h4 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">

@@ -526,9 +526,9 @@ export function LateOrdersPage() {
    * a row whose cart has already been looked at costs nothing at all.
    */
   const couponCart = useQuery({
-    queryKey: ['order-cart', coupon?.row.orderId],
+    queryKey: ['order-cart', coupon?.row.orderId, soleVendorId],
     enabled: !!coupon?.row.orderId,
-    queryFn: () => commerce.getOrderCart(coupon!.row.orderId),
+    queryFn: () => commerce.getOrderCart(coupon!.row.orderId, soleVendorId),
     staleTime: 5 * 60_000,
     retry: false,
   });

@@ -27,10 +27,11 @@ export interface OrderCommerceClient {
   getOrder(vendorId: string, orderId: string): Promise<YijiOrder | null>;
   /**
    * The order's cart: every line, the choices behind it, and the courier's
-   * tracking URL. Keyed by ORDER ID alone — no vendor — which is what lets it
-   * answer even when the order lookup cannot.
+   * tracking URL. Keyed by ORDER ID — no order lookup needed — which is what
+   * lets it answer even when the order lookup cannot. `vendorId` (MV-1) picks
+   * WHOSE platform; omitted, the gateway answers for the legacy vendor.
    */
-  getOrderCart(orderId: string): Promise<YijiOrderCart | null>;
+  getOrderCart(orderId: string, vendorId?: string | null): Promise<YijiOrderCart | null>;
   /** The order's status timeline. `derived: true` means it was inferred. */
   getOrderTimeline(vendorId: string, orderId: string): Promise<YijiOrderTimeline | null>;
 }

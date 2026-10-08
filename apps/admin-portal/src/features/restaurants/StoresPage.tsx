@@ -35,6 +35,7 @@ import {
   useBulkCreateBrands,
   type Store,
 } from './api.js';
+import { useRecordVendorNames } from '../vendors/api.js';
 import { downloadCsv, parseStoresCsv, toCsv } from './csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { exportFileName } from '@yiji/shared-config';
@@ -111,6 +112,8 @@ export function StoresPage() {
   const canExport = can('export_data');
   const stores = useStores();
   const brands = useBrands();
+  /* MV-1: read-only Vendor column, from its own query (see the hook). */
+  const vendorNames = useRecordVendorNames('stores');
   const createStore = useCreateStore();
   const updateStore = useUpdateStore();
   const deleteStore = useDeleteStore();
@@ -620,6 +623,9 @@ export function StoresPage() {
                     {t('stores.colChain', { defaultValue: 'Chain manager' })}
                   </th>
                   <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                    {t('stores.colVendor', { defaultValue: 'Vendor' })}
+                  </th>
+                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
                     {t('stores.colStatus', { defaultValue: 'Status' })}
                   </th>
                   <th className="h-11 px-4 text-end align-middle font-semibold" />
@@ -672,6 +678,9 @@ export function StoresPage() {
                     <td className="px-4 py-3 text-muted-foreground">{s.city ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{s.area_manager ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground">{s.chain_manager ?? '—'}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {vendorNames.data?.get(s.id) ?? '—'}
+                    </td>
                     <td className="px-4 py-3">
                       {s.status === 'inactive' ? (
                         <Pill tone="muted" size="sm">

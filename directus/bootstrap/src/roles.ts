@@ -801,6 +801,15 @@ export const roles: RoleSpec[] = [
        */
       { collection: 'coupon_approvals', action: 'read' },
       { collection: 'coupon_approvals', action: 'update' },
+      /*
+       * VENDORS (MV-1). A coupon row now names its vendor by CRM UUID, and the
+       * worker's connector registry resolves that UUID from this table. Without
+       * the grant the read 403s, the registry falls back to the env vendor
+       * ('1') with a logged warning, the UUID is unknown, and the coupon stays
+       * `approved` (never sent to a guessed platform) until the grant exists.
+       * Read-only: vendors are the Administrator's to manage.
+       */
+      ...readOnly('vendors'),
     ],
   },
   {

@@ -252,17 +252,22 @@ async function applyCollections(client: AnyClient, only?: Set<string>): Promise<
   }
 }
 
-async function applyRelations(client: AnyClient): Promise<void> {
+async function applyRelations(client: AnyClient, only?: Set<string>): Promise<void> {
   console.log('Relations:');
   for (const rel of relations) {
+    if (only && !only.has(rel.collection)) continue;
     // Ensure the FK field exists (uuid) on the owning collection.
     await idempotent(`field ${rel.collection}.${rel.field}`, () =>
       client.request(
         createField(rel.collection, {
           field: rel.field,
           type: 'uuid',
-          meta: { interface: 'select-dropdown-m2o', special: ['m2o'] },
-          schema: { is_nullable: true },
+          meta: {
+            interface: 'select-dropdown-m2o',
+            special: ['m2o'],
+            ...(rel.note ? { note: rel.note } : {}),
+          },
+          schema: { is_nullable: true, ...(rel.index ? { is_indexed: true } : {}) },
         } as never),
       ),
     );
@@ -913,8 +918,9 @@ async function main(): Promise<void> {
    * `--only=messages,ai_calls` (with --fields-only): just those collections.
    * A full fields-only pass is one round trip per field across ~70
    * collections — over an hour against staging — for a release that adds
-   * four fields. Relations and junctions are skipped in this mode, so name
-   * only collections whose change is fields.
+   * four fields. The M2O relations OWNED by the named collections are applied
+   * too (MV-1 adds a `vendor` M2O to eight tables; each existing relation is
+   * an idempotent no-op). Junctions are skipped in this mode.
    */
   const onlyArg = process.argv.find((a) => a.startsWith('--only='));
   const only = onlyArg
@@ -941,6 +947,7 @@ async function main(): Promise<void> {
     const unknown = [...only].filter((c) => !known.has(c));
     if (unknown.length) throw new Error(`Unknown collection(s): ${unknown.join(', ')}`);
     await applyCollections(client, only);
+    await applyRelations(client, only);
     console.log('Done. Only the named collections were touched.');
     return;
   }

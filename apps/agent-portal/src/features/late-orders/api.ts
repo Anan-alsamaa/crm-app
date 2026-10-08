@@ -19,6 +19,7 @@ import {
 } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { directus } from '../../lib/directus.js';
+import { vendorField } from '../../lib/record-vendor.js';
 
 /**
  * Late Delivery Handling — the agent's queue and the two decisions.
@@ -444,6 +445,12 @@ export interface RecordLateDecisionInput {
   /** The ticket raised alongside, when one was. */
   ticketId?: string | null;
   /**
+   * The vendor whose order this is (MV-1). The queue carries none yet, so it
+   * is usually the page's single vendor; omitted = resolved from the ticket,
+   * else the single active vendor.
+   */
+  vendorId?: string | null;
+  /**
    * The ORDER as it stood when this was decided — items, totals, payment and
    * delivery (owner, 2026-09-29).
    *
@@ -469,11 +476,16 @@ export interface RecordLateDecisionInput {
 export function useRecordLateDecision() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: RecordLateDecisionInput) =>
-      directus.request(
+    mutationFn: async (input: RecordLateDecisionInput) => {
+      const vendor = await vendorField({
+        explicit: input.vendorId,
+        ticket: input.ticketId ?? null,
+      });
+      return directus.request(
         createItem(
           'late_order_decisions' as never,
           {
+            ...vendor,
             order_id: input.row.orderId,
             kind: input.kind,
             action: input.action,
@@ -487,7 +499,8 @@ export function useRecordLateDecision() {
             restaurant_name: input.row.restaurantName ?? null,
           } as never,
         ),
-      ),
+      );
+    },
     onSuccess: () => {
       /*
        * ONE INVALIDATION, AND IT COVERS EVERYTHING.

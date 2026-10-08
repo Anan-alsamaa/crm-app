@@ -87,6 +87,11 @@ export interface CouponApprovalRow {
    * queue). `couponOrderId` prefers the ticket's when both exist.
    */
   order_id: string | null;
+  /**
+   * The vendor this coupon is for (MV-1) — whose platform delivers it. NULL on
+   * rows written before MV-1 (the Yiji vendor until backfilled).
+   */
+  vendor?: string | null;
   ticket: {
     id: string;
     subject: string | null;
@@ -157,6 +162,7 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
               'awaiting_signup_at',
               'signup_checked_at',
               'order_id',
+              'vendor',
               {
                 ticket: [
                   'id',
@@ -427,13 +433,15 @@ export function useRetryCouponDelivery() {
  * while a supervisor reads one card — and never retried, because a failure here
  * must not turn into a warning about the customer.
  */
-export function useCustomerReachable(phone: string) {
+export function useCustomerReachable(phone: string, vendorId?: string | null) {
   const trimmed = (phone ?? '').trim();
   return useQuery({
-    queryKey: ['yiji-customer-exists', trimmed],
+    /* The vendor is in the key: the same number can be a customer of one
+       vendor's platform and not another's (MV-1). */
+    queryKey: ['yiji-customer-exists', trimmed, vendorId ?? null],
     enabled: trimmed.length > 0,
     retry: false,
     staleTime: 10 * 60_000,
-    queryFn: () => commerce.customerExists(trimmed),
+    queryFn: () => commerce.customerExists(trimmed, vendorId),
   });
 }

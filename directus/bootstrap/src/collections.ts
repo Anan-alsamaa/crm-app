@@ -53,6 +53,10 @@ export interface RelationSpec {
   related: string;
   /** on-delete behavior */
   onDelete?: 'SET NULL' | 'CASCADE' | 'NO ACTION';
+  /** Index the FK column (only applied when the field is first created). */
+  index?: boolean;
+  /** Field note shown in Directus (only applied when the field is first created). */
+  note?: string;
 }
 
 /** Many-to-many via a junction collection. */
@@ -76,7 +80,7 @@ const PRIORITY = ['low', 'medium', 'high', 'urgent'];
 export const collections: CollectionSpec[] = [
   {
     collection: 'vendors',
-    note: 'Yiji ecosystem vendors (data entities, not users)',
+    note: 'Vendors the CRM supports (data entities, not users). Each runs on a commerce PLATFORM reached through that platform’s connector. Only NON-SECRET integration settings live here: API credentials (admin email/password, API keys) stay in service configuration until MV-3 decides how secrets are encrypted at rest. Managed by the Administrator only.',
     fields: [
       { field: 'name', type: 'string', required: true },
       { field: 'logo', type: 'uuid', note: 'directus_files' },
@@ -84,6 +88,48 @@ export const collections: CollectionSpec[] = [
       { field: 'support_settings', type: 'json' },
       { field: 'yiji_vendor_id', type: 'string', required: true, unique: true },
       { field: 'status', type: 'string', choices: ['active', 'inactive'], defaultValue: 'active' },
+      /*
+       * INTEGRATION SETTINGS (MV-1, EMA-70). All nullable: the deployed code
+       * reads none of them yet, so the schema can land before any release.
+       */
+      {
+        field: 'platform',
+        type: 'string',
+        choices: ['yiji'],
+        defaultValue: 'yiji',
+        note: 'The commerce platform this vendor runs on — picks the connector. NULL reads as yiji (every vendor before MV-1).',
+      },
+      {
+        field: 'api_base_url',
+        type: 'string',
+        note: 'The platform’s order API base URL (Yiji: https://order.yiji-app.com). Not a secret.',
+      },
+      {
+        field: 'admin_api_url',
+        type: 'string',
+        note: 'The platform’s admin API base URL (Yiji: https://admin.yiji-app.com). Not a secret.',
+      },
+      {
+        field: 'tenant_id',
+        type: 'string',
+        note: 'The platform tenant (Yiji `tenantid` header). Empty = the service configuration value.',
+      },
+      {
+        field: 'brand_id',
+        type: 'string',
+        note: 'Fallback brand for customer push when the customer has no order. Empty = the service configuration value.',
+      },
+      {
+        field: 'notify_settings',
+        type: 'json',
+        note: 'Non-secret customer-push settings (notify URL, topic, title, open-chat action). The API key is a secret and is NOT stored here (MV-3).',
+      },
+      {
+        field: 'webhook_path_key',
+        type: 'string',
+        unique: true,
+        note: 'The <vendor> segment of this vendor’s future /webhooks/<vendor> URL. Unique; lowercase letters, digits and dashes.',
+      },
     ],
   },
   {
@@ -1232,6 +1278,57 @@ export const collections: CollectionSpec[] = [
   },
 ];
 
+/*
+ * THE VENDOR EVERY RECORD BELONGS TO (MV-1, EMA-70).
+ *
+ * A nullable `vendor` M2O (SET NULL, indexed) on each table below. The
+ * deployed code neither writes nor filters on it, so the schema can land first
+ * and nothing changes. Deleting a vendor must never take its coupons,
+ * decisions or master data with it.
+ *
+ * Two meanings of NULL, and they are different:
+ *  - RECORD and master-data tables: NULL = written before MV-1, i.e. the Yiji
+ *    vendor, until `scripts/backfill-vendor.mjs` fills it in.
+ *  - SHARED CONFIG: NULL = applies to EVERY vendor. The same agents serve all
+ *    vendors, and most wording and SLA promises are not vendor-specific.
+ *    Never backfilled.
+ */
+
+/** Tables whose NULL vendor means "legacy = Yiji" — the backfill targets. */
+export const VENDOR_RECORD_COLLECTIONS = [
+  'brands',
+  'stores',
+  'coupon_approvals',
+  'late_order_decisions',
+  'store_notify_rules',
+  'store_notifications',
+] as const;
+
+/** Tables whose NULL vendor means "every vendor". Never backfilled. */
+export const VENDOR_SHARED_CONFIG_COLLECTIONS = ['quick_replies', 'sla_policies'] as const;
+
+function vendorScopedRelations(): RelationSpec[] {
+  const rel = (collection: string, note: string): RelationSpec => ({
+    collection,
+    field: 'vendor',
+    related: 'vendors',
+    onDelete: 'SET NULL',
+    index: true,
+    note,
+  });
+  return [
+    ...VENDOR_RECORD_COLLECTIONS.map((c) =>
+      rel(
+        c,
+        'The vendor this belongs to. NULL = written before MV-1 (the Yiji vendor) until backfilled.',
+      ),
+    ),
+    ...VENDOR_SHARED_CONFIG_COLLECTIONS.map((c) =>
+      rel(c, 'The vendor this applies to. NULL = applies to EVERY vendor (shared config).'),
+    ),
+  ];
+}
+
 /** Many-to-one relations (foreign keys). */
 export const relations: RelationSpec[] = [
   { collection: 'contacts', field: 'vendor', related: 'vendors', onDelete: 'CASCADE' },
@@ -1369,6 +1466,7 @@ export const relations: RelationSpec[] = [
   },
   { collection: 'csat_responses', field: 'contact', related: 'contacts', onDelete: 'CASCADE' },
   { collection: 'directus_users', field: 'team', related: 'teams', onDelete: 'SET NULL' },
+  ...vendorScopedRelations(),
 ];
 
 /** Many-to-many relations via junction collections. */

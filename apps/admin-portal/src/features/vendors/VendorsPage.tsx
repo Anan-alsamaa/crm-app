@@ -24,7 +24,14 @@ import {
   ZapIcon,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
-import { useVendors, useCreateVendor, useUpdateVendor, type VendorRow } from './api.js';
+import {
+  useVendors,
+  useCreateVendor,
+  useUpdateVendor,
+  type VendorIntegration,
+  type VendorNotifySettings,
+  type VendorRow,
+} from './api.js';
 import { resolveUrl } from '@yiji/shared-config';
 
 const DIRECTUS_URL = resolveUrl(
@@ -43,14 +50,76 @@ const DIRECTUS_URL = resolveUrl(
  */
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
+/** Optional text: blank is allowed and saved as NULL. */
+const optionalText = z.string().trim().optional().or(z.literal(''));
+const optionalUrl = z
+  .string()
+  .trim()
+  .regex(/^https?:\/\/\S+$/, 'Use a full http(s):// URL')
+  .optional()
+  .or(z.literal(''));
 const schema = z.object({
   name: z.string().min(1),
   yiji_vendor_id: z.string().min(1),
   primary: z.string().regex(HEX, 'Use #RRGGBB').optional().or(z.literal('')),
   secondary: z.string().regex(HEX, 'Use #RRGGBB').optional().or(z.literal('')),
   status: z.enum(['active', 'inactive']),
+  /* INTEGRATION (MV-1, EMA-70) — non-secret settings only. */
+  platform: z.enum(['yiji']),
+  api_base_url: optionalUrl,
+  admin_api_url: optionalUrl,
+  tenant_id: optionalText,
+  brand_id: optionalText,
+  webhook_path_key: z
+    .string()
+    .trim()
+    .regex(/^[a-z0-9-]+$/, 'Lowercase letters, digits and dashes only')
+    .optional()
+    .or(z.literal('')),
+  notify_url: optionalUrl,
+  notify_topic: optionalText,
+  notify_title: optionalText,
+  open_chat_action: optionalText,
 });
 type FormValues = z.infer<typeof schema>;
+
+/** Blank -> null, so clearing a field clears the column. */
+const orNull = (v: string | undefined): string | null => (v?.trim() ? v.trim() : null);
+
+/** The form's integration inputs as the row stores them. */
+function integrationPatch(values: FormValues): VendorIntegration {
+  const notify: VendorNotifySettings = {};
+  if (values.notify_url?.trim()) notify.notifyUrl = values.notify_url.trim();
+  if (values.notify_topic?.trim()) notify.notifyTopic = values.notify_topic.trim();
+  if (values.notify_title?.trim()) notify.notifyTitle = values.notify_title.trim();
+  if (values.open_chat_action?.trim()) notify.openChatAction = values.open_chat_action.trim();
+  return {
+    platform: values.platform,
+    api_base_url: orNull(values.api_base_url),
+    admin_api_url: orNull(values.admin_api_url),
+    tenant_id: orNull(values.tenant_id),
+    brand_id: orNull(values.brand_id),
+    webhook_path_key: orNull(values.webhook_path_key),
+    notify_settings: Object.keys(notify).length ? notify : null,
+  };
+}
+
+/** A row's integration settings as form values (blank where unset). */
+function integrationValues(v: VendorRow | null) {
+  const n = v?.notify_settings ?? {};
+  return {
+    platform: 'yiji' as const,
+    api_base_url: v?.api_base_url ?? '',
+    admin_api_url: v?.admin_api_url ?? '',
+    tenant_id: v?.tenant_id ?? '',
+    brand_id: v?.brand_id ?? '',
+    webhook_path_key: v?.webhook_path_key ?? '',
+    notify_url: n.notifyUrl ?? '',
+    notify_topic: n.notifyTopic ?? '',
+    notify_title: n.notifyTitle ?? '',
+    open_chat_action: n.openChatAction ?? '',
+  };
+}
 
 function PlusIcon() {
   return (
@@ -81,7 +150,7 @@ export function VendorsPage() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { status: 'active' },
+    defaultValues: { status: 'active', platform: 'yiji' },
   });
 
   useEffect(() => {
@@ -93,6 +162,7 @@ export function VendorsPage() {
         primary: editing.colors?.primary ?? '',
         secondary: editing.colors?.secondary ?? '',
         status: editing.status,
+        ...integrationValues(editing),
       });
     } else if (drawerOpen && !editing) {
       setLogoId(null);
@@ -102,6 +172,7 @@ export function VendorsPage() {
         primary: '#0F8D8F',
         secondary: '#EC4899',
         status: 'active',
+        ...integrationValues(null),
       });
     }
   }, [drawerOpen, editing, form]);
@@ -136,6 +207,7 @@ export function VendorsPage() {
             colors,
             logo: logoId,
             status: values.status,
+            ...integrationPatch(values),
           },
         });
         toast.success(t('vendors.updated', { defaultValue: 'Vendor updated.' }));
@@ -146,6 +218,7 @@ export function VendorsPage() {
           colors,
           logo: logoId,
           status: values.status,
+          ...integrationPatch(values),
         });
         toast.success(t('vendors.created', { defaultValue: 'Vendor created.' }));
       }
@@ -361,6 +434,8 @@ export function VendorsPage() {
             </FormField>
           </DrawerSection>
 
+          <IntegrationSection form={form} />
+
           <DrawerSection
             title={t('vendors.sectionBranding', { defaultValue: 'Branding' })}
             description={t('vendors.sectionBrandingHint', {
@@ -463,6 +538,93 @@ export function VendorsPage() {
         </form>
       </Drawer>
     </div>
+  );
+}
+
+/**
+ * INTEGRATION (MV-1, EMA-70): how the CRM reaches this vendor's platform.
+ *
+ * Owner-only like the rest of the page (the route is `ownerOnly`). NON-SECRET
+ * settings only — the admin password and API keys stay in the services'
+ * configuration until secret storage is decided (MV-3), and the section says
+ * so rather than offering a field that would store a credential in plain
+ * text. Nothing reads these in production yet; they are recorded so a second
+ * vendor is configured here rather than in a deploy.
+ */
+function IntegrationSection({ form }: { form: ReturnType<typeof useForm<FormValues>> }) {
+  const { t } = useTranslation();
+  const err = form.formState.errors;
+  const text = (
+    name: Exclude<keyof FormValues, 'platform' | 'status'>,
+    label: string,
+    hint?: string,
+    placeholder?: string,
+  ) => (
+    <FormField label={label} hint={hint} error={err[name]?.message}>
+      <Input invalid={!!err[name]} placeholder={placeholder} {...form.register(name)} />
+    </FormField>
+  );
+  return (
+    <DrawerSection
+      title={t('vendors.sectionIntegration', { defaultValue: 'Integration' })}
+      description={t('vendors.sectionIntegrationHint', {
+        defaultValue:
+          'How the CRM reaches this vendor’s commerce platform. Non-secret settings only: passwords and API keys stay in the service configuration.',
+      })}
+    >
+      <FormField label={t('vendors.platform', { defaultValue: 'Platform' })}>
+        <select
+          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+          aria-label={t('vendors.platform', { defaultValue: 'Platform' })}
+          {...form.register('platform')}
+        >
+          <option value="yiji">Yiji</option>
+        </select>
+      </FormField>
+      {text(
+        'api_base_url',
+        t('vendors.apiBaseUrl', { defaultValue: 'Order API URL' }),
+        undefined,
+        'https://order.yiji-app.com',
+      )}
+      {text(
+        'admin_api_url',
+        t('vendors.adminApiUrl', { defaultValue: 'Admin API URL' }),
+        undefined,
+        'https://admin.yiji-app.com',
+      )}
+      {text('tenant_id', t('vendors.tenantId', { defaultValue: 'Tenant ID' }))}
+      {text(
+        'brand_id',
+        t('vendors.brandId', { defaultValue: 'Fallback brand ID' }),
+        t('vendors.brandIdHint', {
+          defaultValue: 'Used for a customer push when the customer has no order yet.',
+        }),
+      )}
+      {text(
+        'webhook_path_key',
+        t('vendors.webhookKey', { defaultValue: 'Webhook path key' }),
+        t('vendors.webhookKeyHint', {
+          defaultValue: 'The <vendor> part of this vendor’s /webhooks/<vendor> address.',
+        }),
+        'yiji',
+      )}
+      {text('notify_url', t('vendors.notifyUrl', { defaultValue: 'Push notification URL' }))}
+      {text('notify_topic', t('vendors.notifyTopic', { defaultValue: 'Push topic' }))}
+      {text('notify_title', t('vendors.notifyTitle', { defaultValue: 'Push title' }))}
+      {text(
+        'open_chat_action',
+        t('vendors.openChatAction', { defaultValue: 'Open-chat action' }),
+        undefined,
+        'crm.openchat',
+      )}
+      <p className="text-2xs leading-relaxed text-muted-foreground">
+        {t('vendors.secretsNote', {
+          defaultValue:
+            'Credentials (admin email and password, API keys) are not stored here. They stay in the service configuration until secret storage is decided.',
+        })}
+      </p>
+    </DrawerSection>
   );
 }
 

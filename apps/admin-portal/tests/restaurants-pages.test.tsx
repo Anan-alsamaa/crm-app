@@ -32,6 +32,10 @@ const api = vi.hoisted(() => ({
   toStoreRecord: vi.fn(),
 }));
 vi.mock('../src/features/restaurants/api.js', () => api);
+// MV-1: the read-only Vendor column has its own query; answer it with nothing.
+vi.mock('../src/features/vendors/api.js', () => ({
+  useRecordVendorNames: () => ({ data: new Map([['s1', 'Yiji']]) }),
+}));
 
 /**
  * Who is signed in. The Yiji restaurant id is gated on `edit_yiji_branch_id`,
