@@ -265,6 +265,43 @@ describe("LatestOrder - the customer's choices under each line (EMA-58)", () => 
   });
 });
 
+/* EMA-58, the words of the report: "modifiers are not appearing in the CART".
+   The Cart view showed three totals and no items at all. */
+describe('LatestOrder - the Cart view lists the items with their add-ons (EMA-58)', () => {
+  it('shows every item and each add-on on its own line when Cart is opened', async () => {
+    client.getOrders.mockResolvedValue([summary('1334028', '2026-10-07T13:15:00')]);
+    client.getOrder.mockResolvedValue(
+      full('1334028', {
+        items: [
+          {
+            sku: '45068',
+            name: 'Buffalo Pasta Combo',
+            qty: 1,
+            price: 35,
+            modifiers: ['Pepsi', '2x Cheese +5'],
+          },
+          {
+            sku: '44873',
+            name: 'Makrona Hamra',
+            qty: 1,
+            price: 18,
+            modifiers: ['Regular Size with Chicken'],
+          },
+        ],
+      }),
+    );
+    renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
+    await waitFor(() => expect(screen.getAllByText(/Buffalo Pasta Combo/).length).toBe(1));
+    fireEvent.click(screen.getByRole('button', { name: /Cart/ }));
+    // The item now appears in the Cart view as well as on the card...
+    expect(screen.getAllByText(/Buffalo Pasta Combo/).length).toBe(2);
+    // ...with each choice on its own line.
+    expect(screen.getByText('+ Pepsi')).toBeInTheDocument();
+    expect(screen.getByText('+ 2x Cheese +5')).toBeInTheDocument();
+    expect(screen.getByText('+ Regular Size with Chicken')).toBeInTheDocument();
+  });
+});
+
 describe('CustomerOrders (contact panel)', () => {
   it('lists collapsed rows and fetches details only on expand', async () => {
     client.getOrders.mockResolvedValue([summary('C-1', '2026-06-25T12:00:00')]);

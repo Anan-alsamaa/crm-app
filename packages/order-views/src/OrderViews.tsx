@@ -205,7 +205,13 @@ function BagIcon() {
  * The Cart view: the order's money composition — points, coupon and discount —
  * straight off the single-order payload (no extra API call).
  */
-function CartPanel({ order }: { order: YijiOrder }) {
+function CartPanel({
+  order,
+  modifiersByItem,
+}: {
+  order: YijiOrder;
+  modifiersByItem?: Map<string, string[]>;
+}) {
   const { t } = useTranslation();
   const rows: Array<[string, number | undefined]> = [
     [t('commerce.totalPoints', { defaultValue: 'Total point amount' }), order.totalPointAmount],
@@ -214,6 +220,41 @@ function CartPanel({ order }: { order: YijiOrder }) {
   ];
   return (
     <div className="space-y-1 rounded-xl bg-secondary/50 p-2.5">
+      {/*
+        WHAT WAS IN THE CART, add-ons included (EMA-58, Mohammed Aljouf):
+        "modifiers are not appearing in the cart". This view showed only the
+        three totals below, so an agent who opened Cart to check "did they
+        order it without onions?" found no items at all. Each choice gets its
+        own line under the item it belongs to.
+      */}
+      {order.items.length > 0 && (
+        <ul className="mb-1.5 space-y-1.5 border-b border-foreground/[0.06] pb-2 text-xs">
+          {order.items.map((it, i) => {
+            const mods = it.modifiers?.length
+              ? it.modifiers
+              : (modifiersByItem?.get(it.name) ?? []);
+            return (
+              <li key={it.sku || i}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 text-foreground">
+                    <span className="tabular-nums text-foreground/80">{it.qty}×</span> {it.name}
+                  </span>
+                  <span className="shrink-0 tabular-nums text-foreground">
+                    {money(it.price * it.qty, order.currency)}
+                  </span>
+                </div>
+                {mods.length > 0 && (
+                  <ul className="mt-0.5 space-y-0.5 ps-5 text-2xs text-muted-foreground">
+                    {mods.map((m, j) => (
+                      <li key={j}>+ {m}</li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {rows.map(([label, v]) => (
         <TotalsRow
           key={label}
@@ -606,7 +647,7 @@ export function OrderDetails({
           ))}
         </div>
       </div>
-      {view === 'cart' && <CartPanel order={order} />}
+      {view === 'cart' && <CartPanel order={order} modifiersByItem={modifiersByItem} />}
       {view === 'tracking' && <TrackingPanel vendorId={vendorId} orderId={order.orderId} />}
     </div>
   );
