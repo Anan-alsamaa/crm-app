@@ -106,6 +106,54 @@ describe('HttpYijiClient', () => {
     expect(o?.customerPhone).toBe('0545808075');
   });
 
+  /* EMA-58: the add-ons ARE on the single order - read from live #1334028. */
+  it("carries each line's chosen add-ons from extraModifiers", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          id: 1334028,
+          orderItems: [
+            {
+              id: 2201449,
+              idChooseableItem: 45068,
+              itemName: 'Buffalo Pasta Combo',
+              itemCategory: 'Combos',
+              quantity: 1,
+              itemPrice: 35,
+              elements: [],
+              modifierElements: [],
+              extraModifiers: [
+                {
+                  extraModifierName: 'Soft Drink',
+                  elements: [{ elementName: 'Pepsi', quantity: 1, elementPrice: 0 }],
+                },
+                {
+                  extraModifierName: 'Extras',
+                  elements: [{ elementName: 'Cheese', quantity: 2, elementPrice: 5 }],
+                },
+                { extraModifierName: 'Cutlery', elements: [] },
+              ],
+            },
+            {
+              id: 2,
+              idChooseableItem: 9,
+              itemName: 'Water',
+              quantity: 1,
+              itemPrice: 2,
+              extraModifiers: [],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    const client = new HttpYijiClient({ baseUrl: 'https://api.example.com' });
+    const o = await client.getOrder('v1', '1334028');
+    expect(o?.items[0]?.modifiers).toEqual(['Pepsi', '2x Cheese +5', 'Cutlery']);
+    expect(o?.items[0]?.category).toBe('Combos');
+    expect(o?.items[1]).not.toHaveProperty('modifiers');
+  });
+
   it('leaves an already-canonical order phone alone', async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ id: 8, customerPhoneNumber: '0545808075', orderDetails: [] }), {

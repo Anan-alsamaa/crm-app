@@ -20,6 +20,13 @@ export interface YijiOrderItem {
   price: number;
   // Optional; the live single-order endpoint returns `itemCategory` per item.
   category?: string;
+  /**
+   * The customer's choices on this line - "Pepsi", "Regular Size with Chicken"
+   * (EMA-58, 2026-10-08). They ARE on the single-order payload, under
+   * `extraModifiers[].elements[]`; the card used to show the category in their
+   * place.
+   */
+  modifiers?: string[];
 }
 
 export interface YijiOrder {

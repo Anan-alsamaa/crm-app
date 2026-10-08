@@ -227,6 +227,44 @@ describe('LatestOrder (inbox)', () => {
   });
 });
 
+/* EMA-58 (Mohammed Aljouf, 2026-10-07): the add-ons were not on the card -
+   the line showed a cut-off category ("· Com...") where they belong. */
+describe("LatestOrder - the customer's choices under each line (EMA-58)", () => {
+  it("shows each line's modifiers in place of the category", async () => {
+    client.getOrders.mockResolvedValue([summary('1334028', '2026-10-07T13:15:00')]);
+    client.getOrder.mockResolvedValue(
+      full('1334028', {
+        items: [
+          {
+            sku: '45068',
+            name: 'Buffalo Pasta Combo',
+            qty: 1,
+            price: 35,
+            category: 'Combos',
+            modifiers: ['Pepsi'],
+          },
+          {
+            sku: '44873',
+            name: 'Makrona Hamra',
+            qty: 1,
+            price: 18,
+            category: 'Original Pasta',
+            modifiers: ['Regular Size with Chicken'],
+          },
+          { sku: '1', name: 'Water', qty: 1, price: 2, category: 'Drinks' },
+        ],
+      }),
+    );
+    renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
+    await waitFor(() => expect(screen.getByText('Pepsi')).toBeInTheDocument());
+    expect(screen.getByText('Regular Size with Chicken')).toBeInTheDocument();
+    // The category gives way to the choices...
+    expect(screen.queryByText(/Combos/)).toBeNull();
+    // ...and still shows on a line that has none.
+    expect(screen.getByText(/Drinks/)).toBeInTheDocument();
+  });
+});
+
 describe('CustomerOrders (contact panel)', () => {
   it('lists collapsed rows and fetches details only on expand', async () => {
     client.getOrders.mockResolvedValue([summary('C-1', '2026-06-25T12:00:00')]);

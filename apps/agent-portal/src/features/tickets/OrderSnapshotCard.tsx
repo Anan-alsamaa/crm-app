@@ -33,6 +33,8 @@ export interface TicketOrderSnapshotItem {
   qty: number;
   price: number;
   category?: string;
+  /** The customer's choices on this line, e.g. "Pepsi" (EMA-58). */
+  modifiers?: string[];
 }
 
 export interface TicketOrderSnapshot {
@@ -89,6 +91,8 @@ export function orderToSnapshot(order: YijiOrder): TicketOrderSnapshot {
       qty: it.qty,
       price: it.price,
       ...(it.category ? { category: it.category } : {}),
+      // The customer's choices travel with the ticket's copy too (EMA-58).
+      ...(it.modifiers?.length ? { modifiers: it.modifiers } : {}),
     })),
     ...(order.brandName ? { brandName: order.brandName } : {}),
     ...(order.restaurantName ? { restaurantName: order.restaurantName } : {}),
@@ -393,8 +397,14 @@ function HeaderlessBody({
                   {it.qty}×
                 </span>
                 <span className="text-foreground">{it.name}</span>
-                {it.category && (
+                {it.category && !it.modifiers?.length && (
                   <span className="ms-1.5 text-2xs text-muted-foreground">· {it.category}</span>
+                )}
+                {/* The choices under the line (EMA-58). */}
+                {!!it.modifiers?.length && (
+                  <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
+                    {it.modifiers.join(' · ')}
+                  </span>
                 )}
               </span>
               <span className="shrink-0 text-xs tabular-nums text-foreground">

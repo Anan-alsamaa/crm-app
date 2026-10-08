@@ -419,7 +419,44 @@ interface RawYijiOrder {
     quantity?: number;
     itemPrice?: number;
     itemCategory?: string | null;
+    extraModifiers?: RawYijiCartItem['extraModifiers'];
   }> | null;
+}
+
+/**
+ * The choices on one order line, as an agent reads them (EMA-58).
+ *
+ * Measured on 40 live orders (2026-10-08): 48 of 67 lines carried choices, ALL
+ * under `extraModifiers[].elements[]` - the other modifier arrays Yiji's schema
+ * declares were always empty. The chosen ELEMENT ("Pepsi") is what answers a
+ * complaint; the GROUP ("Soft Drink") is used only when it has no elements.
+ * A quantity above one and a price are kept, because "2x Extra Cheese +5" is a
+ * different order from "Extra Cheese".
+ */
+export function lineModifiers(item: {
+  extraModifiers?: Array<{
+    extraModifierName?: string | null;
+    elements?: Array<{
+      elementName?: string | null;
+      quantity?: number | null;
+      elementPrice?: number | null;
+    }> | null;
+  }> | null;
+}): string[] {
+  const out: string[] = [];
+  for (const mod of item.extraModifiers ?? []) {
+    const chosen = (mod.elements ?? [])
+      .filter((e) => !!e.elementName?.trim())
+      .map((e) => {
+        const qty = typeof e.quantity === 'number' && e.quantity > 1 ? `${e.quantity}x ` : '';
+        const price =
+          typeof e.elementPrice === 'number' && e.elementPrice > 0 ? ` +${e.elementPrice}` : '';
+        return `${qty}${e.elementName!.trim()}${price}`;
+      });
+    if (chosen.length) out.push(...chosen);
+    else if (mod.extraModifierName?.trim()) out.push(mod.extraModifierName.trim());
+  }
+  return out;
 }
 
 /**
@@ -450,7 +487,11 @@ interface RawYijiCartItem {
      ("Add-ons") holding the elements they picked ("Without Broccoli"). */
   extraModifiers?: Array<{
     extraModifierName?: string | null;
-    elements?: Array<{ elementName?: string | null }> | null;
+    elements?: Array<{
+      elementName?: string | null;
+      quantity?: number | null;
+      elementPrice?: number | null;
+    }> | null;
   }> | null;
 }
 
@@ -490,6 +531,10 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
       qty: it.quantity ?? 1,
       price: it.itemPrice ?? 0,
       category: it.itemCategory ?? undefined,
+      ...(() => {
+        const m = lineModifiers(it);
+        return m.length ? { modifiers: m } : {};
+      })(),
     })),
     restaurantId: raw.restaurantId != null ? String(raw.restaurantId) : undefined,
     restaurantName: raw.restaurantName ?? undefined,
@@ -1329,14 +1374,7 @@ export class HttpYijiClient implements YijiClient {
     const order = raw?.order;
     if (!order) return null;
     const lines: YijiCartLine[] = (order.orderItems ?? []).map((it) => {
-      const modifiers: string[] = [];
-      for (const mod of it.extraModifiers ?? []) {
-        const chosen = (mod.elements ?? [])
-          .map((e) => e.elementName?.trim())
-          .filter((n): n is string => !!n);
-        if (chosen.length) modifiers.push(...chosen);
-        else if (mod.extraModifierName?.trim()) modifiers.push(mod.extraModifierName.trim());
-      }
+      const modifiers = lineModifiers(it);
       return {
         name: it.itemName?.trim() || 'item',
         qty: it.quantity ?? 1,

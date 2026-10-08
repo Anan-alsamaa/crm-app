@@ -337,11 +337,10 @@ export function OrderDetails({
   /**
    * The add-ons chosen per line, keyed by item name (owner, 2026-09-29).
    *
-   * OPTIONAL, because they are not on the order payload at all: `YijiOrderItem`
-   * carries sku, name, qty, price and category, and the modifiers live only on
-   * `GetOrderCart`. A caller that has already fetched the cart — the late-order
-   * panel does, for the tracking link — passes them; the inbox does not and
-   * renders exactly as before.
+   * A FALLBACK since EMA-58 (2026-10-08): the order payload DOES carry the
+   * choices (`YijiOrderItem.modifiers`, read from `extraModifiers`), and those
+   * win. This is used only for an order shaped without them - e.g. one cached
+   * from before the change - when the caller has the cart to hand.
    *
    * Keyed by NAME rather than sku: the cart's lines carry no item id at all, so
    * the name is the only thing the two payloads share.
@@ -386,38 +385,45 @@ export function OrderDetails({
 
       {order.items.length > 0 ? (
         <ul className="space-y-1 text-xs">
-          {order.items.map((it, i) => (
-            <li key={it.sku || i} className="flex items-baseline justify-between gap-2">
-              {/* `truncate` only while there is nothing beneath: a modifier line
+          {order.items.map((it, i) => {
+            /* The order's own choices first (EMA-58); the cart's, matched by
+               name, only for an order shaped before the order carried them. */
+            const mods = it.modifiers?.length
+              ? it.modifiers
+              : (modifiersByItem?.get(it.name) ?? []);
+            return (
+              <li key={it.sku || i} className="flex items-baseline justify-between gap-2">
+                {/* `truncate` only while there is nothing beneath: a modifier line
                   renders as a block inside this span, and a truncated parent
                   would clip it to one line and hide the rest. */}
-              <span
-                className={modifiersByItem?.get(it.name)?.length ? 'min-w-0' : 'min-w-0 truncate'}
-              >
-                <span className="text-foreground/80 tabular-nums">{it.qty}×</span> {it.name}
-                {it.qty > 1 && (
-                  <span className="ms-1 text-2xs text-muted-foreground tabular-nums">
-                    ({money(it.price, order.currency)}{' '}
-                    {t('commerce.each', { defaultValue: 'each' })})
-                  </span>
-                )}
-                {it.category && (
-                  <span className="ms-1 text-2xs text-muted-foreground">· {it.category}</span>
-                )}
-                {/* THE CHOICES, under the line they belong to. "Without
+                <span className={mods.length ? 'min-w-0' : 'min-w-0 truncate'}>
+                  <span className="text-foreground/80 tabular-nums">{it.qty}×</span> {it.name}
+                  {it.qty > 1 && (
+                    <span className="ms-1 text-2xs text-muted-foreground tabular-nums">
+                      ({money(it.price, order.currency)}{' '}
+                      {t('commerce.each', { defaultValue: 'each' })})
+                    </span>
+                  )}
+                  {/* The category only when there are no choices to show: it was
+                    the cut-off "· Com..." that sat where the add-ons belong. */}
+                  {it.category && !mods.length && (
+                    <span className="ms-1 text-2xs text-muted-foreground">· {it.category}</span>
+                  )}
+                  {/* THE CHOICES, under the line they belong to. "Without
                     Broccoli" is what answers an accuracy complaint, and the
                     money view alone never showed it. */}
-                {(modifiersByItem?.get(it.name)?.length ?? 0) > 0 && (
-                  <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
-                    {modifiersByItem!.get(it.name)!.join(' · ')}
-                  </span>
-                )}
-              </span>
-              <span className="shrink-0 tabular-nums text-foreground">
-                {money(it.price * it.qty, order.currency)}
-              </span>
-            </li>
-          ))}
+                  {mods.length > 0 && (
+                    <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
+                      {mods.join(' · ')}
+                    </span>
+                  )}
+                </span>
+                <span className="shrink-0 tabular-nums text-foreground">
+                  {money(it.price * it.qty, order.currency)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       ) : (
         <p className="text-2xs text-muted-foreground">
