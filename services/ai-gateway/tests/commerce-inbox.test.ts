@@ -4,6 +4,7 @@ import { registerCommerceRoutes } from '../src/commerce/index.js';
 import { CommerceCache } from '../src/commerce/cache.js';
 import { YijiUnavailableError } from '@yiji/shared-types';
 import type { CallerVerifierDeps } from '../src/auth/index.js';
+import { connectorsFor } from './connectors-fixture.js';
 
 const AGENT_TOKEN = 'agent-session-token';
 const auth = { authorization: `Bearer ${AGENT_TOKEN}` };
@@ -65,8 +66,7 @@ async function build(yijiClient: unknown, redis?: ReturnType<typeof fakeRedis>) 
   const app = Fastify();
   await registerCommerceRoutes(app, {
     directus,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    yiji: yijiClient as any,
+    connectors: connectorsFor(yijiClient),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ...(redis ? { cache: new CommerceCache(redis as any) } : {}),
   });

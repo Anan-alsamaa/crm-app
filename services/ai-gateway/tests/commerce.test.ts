@@ -2,6 +2,7 @@ import { describe, expect, it, beforeEach } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { registerCommerceRoutes } from '../src/commerce/index.js';
 import type { CallerVerifierDeps } from '../src/auth/index.js';
+import { connectorsFor } from './connectors-fixture.js';
 
 const AGENT_TOKEN = 'agent-session-token';
 
@@ -36,7 +37,7 @@ const yiji: any = {
 
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify();
-  await registerCommerceRoutes(app, { directus, yiji });
+  await registerCommerceRoutes(app, { directus, connectors: connectorsFor(yiji) });
   return app;
 }
 
@@ -107,5 +108,36 @@ describe('commerce proxy', () => {
       headers: auth,
     });
     expect(missing.statusCode).toBe(400);
+  });
+
+  /*
+   * MV-2: a vendor the registry does not know is a 404, never another
+   * vendor's orders. Before the connector layer every vendorId was silently
+   * answered from Yiji.
+   */
+  it('answers an unknown vendor with 404 unknown_vendor on every vendor route', async () => {
+    for (const url of [
+      '/commerce/orders?vendorId=v2&customerId=c1',
+      '/commerce/activity?vendorId=v2&customerId=c1',
+      '/commerce/order?vendorId=v2&orderId=O-1',
+      '/commerce/inbox?vendorId=v2&customerId=c1',
+      '/commerce/tracking?vendorId=v2&orderId=O-1',
+      '/commerce/payment?vendorId=v2&orderId=O-1',
+      '/commerce/shipment?vendorId=v2&orderId=O-1',
+    ]) {
+      const res = await app.inject({ method: 'GET', url, headers: auth });
+      expect(res.statusCode, url).toBe(404);
+      expect(res.json(), url).toEqual({ error: 'unknown_vendor' });
+    }
+  });
+
+  it('customer-exists reports configured:false when the vendor has no phone lookup', async () => {
+    const res = await app.inject({
+      method: 'GET',
+      url: '/commerce/customer-exists?phone=0540041059',
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data).toEqual({ configured: false, exists: false, customerId: null });
   });
 });

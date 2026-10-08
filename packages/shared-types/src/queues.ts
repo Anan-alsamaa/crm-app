@@ -360,5 +360,12 @@ export const CustomerPushJob = z.object({
   preview: z.string(),
   /** When the reply was sent, so a delayed push can say so. */
   sentAt: z.string(),
+  /**
+   * The conversation's vendor, as its platform id (`yiji_vendor_id`) — which
+   * connector delivers the push (MV-2). Optional: jobs queued before it
+   * existed, or a conversation with no vendor, fall back to the single legacy
+   * vendor in the worker.
+   */
+  vendorId: z.string().min(1).optional(),
 });
 export type CustomerPushJob = z.infer<typeof CustomerPushJob>;

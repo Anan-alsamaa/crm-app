@@ -36,8 +36,7 @@ import {
   AgentInitiateRequest,
   isDialablePhone,
   WalkInSessionRequest,
-  createYijiUserReader,
-  createYijiLatestOrderReader,
+  createEnvConnectorRegistry,
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
@@ -369,12 +368,26 @@ async function main(): Promise<void> {
    * token issued by the Yiji app resolves to a real customer instead of being
    * refused.
    */
-  const yijiUsers = createYijiUserReader({
-    apiUrl: config.YIJI_API_URL,
-    adminApiUrl: config.YIJI_ADMIN_API_URL,
-    adminEmail: config.YIJI_ADMIN_EMAIL,
-    adminPassword: config.YIJI_ADMIN_PASSWORD,
+  /*
+   * Commerce connectors (MV-2). Today ONE Yiji vendor — `DEFAULT_VENDOR_ID`,
+   * the vendor every session is resolved against — built from the same env as
+   * before (no order-API token, exactly as the readers were built). Any other
+   * vendor id resolves to `UnknownVendorError`, never to Yiji.
+   */
+  const connectors = createEnvConnectorRegistry({
+    vendorId: DEFAULT_VENDOR_ID,
+    yiji: {
+      client: {
+        apiUrl: config.YIJI_API_URL,
+        adminApiUrl: config.YIJI_ADMIN_API_URL,
+        adminEmail: config.YIJI_ADMIN_EMAIL,
+        adminPassword: config.YIJI_ADMIN_PASSWORD,
+      },
+    },
   });
+  /* An app-issued session token is the Yiji app's own, so the vendor it
+     belongs to is the one its claims are stamped with: DEFAULT_VENDOR_ID. */
+  const yijiUsers = (await connectors.connectorFor(DEFAULT_VENDOR_ID)).getCustomerProfile;
 
   /*
    * ONE POLICY OBJECT, shared by both upload paths.
@@ -405,14 +418,12 @@ async function main(): Promise<void> {
     yijiUsers,
     /* The customer's most recent order id, prefilled into the WhatsApp
        fallback so an offline handover starts with the order already named.
-       Null without YIJI_API_URL, in which case the link simply carries no
-       order line. */
-    yijiLatestOrder: createYijiLatestOrderReader({
-      apiUrl: config.YIJI_API_URL,
-      adminApiUrl: config.YIJI_ADMIN_API_URL,
-      adminEmail: config.YIJI_ADMIN_EMAIL,
-      adminPassword: config.YIJI_ADMIN_PASSWORD,
-    }),
+       Asked of the SESSION's vendor's connector; null without YIJI_API_URL,
+       in which case the link simply carries no order line. */
+    latestOrderLookup: async (vendorKey, externalCustomerId) => {
+      const latest = (await connectors.connectorFor(vendorKey)).latestOrderId;
+      return latest ? latest(externalCustomerId) : null;
+    },
     rateLimit: {
       capacity: config.MSG_RATE_CAPACITY,
       refillPerSec: config.MSG_RATE_REFILL_PER_SEC,

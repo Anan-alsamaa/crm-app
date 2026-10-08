@@ -19,7 +19,7 @@ import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
 import { CommerceCache } from './commerce/cache.js';
 import { Registry } from './metrics.js';
-import { createYijiClient, createYijiCustomerFinder } from '@yiji/shared-types';
+import { createEnvConnectorRegistry } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
@@ -146,15 +146,21 @@ async function main(): Promise<void> {
     return metrics.render();
   });
 
-  // Commerce client (Yiji order/payment/shipment lookups) — server-side so the
-  // Yiji API key never reaches the browser. Empty YIJI_API_URL => mock client.
-  // Powers the commerce proxy the agent portal reads order data from.
-  const yiji = createYijiClient({
-    apiUrl: config.YIJI_API_URL,
-    token: config.YIJI_API_KEY,
-    adminApiUrl: config.YIJI_ADMIN_API_URL,
-    adminEmail: config.YIJI_ADMIN_EMAIL,
-    adminPassword: config.YIJI_ADMIN_PASSWORD,
+  // Commerce connectors (MV-2): each request's vendor resolves to its
+  // platform's connector — server-side so the platform API key never reaches
+  // the browser. Today ONE Yiji vendor (`yiji_vendor_id` '1'), built from the
+  // same env as before; empty YIJI_API_URL => mock client. Any other vendor id
+  // is a 404 `unknown_vendor`, never Yiji's data.
+  const connectors = createEnvConnectorRegistry({
+    yiji: {
+      client: {
+        apiUrl: config.YIJI_API_URL,
+        token: config.YIJI_API_KEY,
+        adminApiUrl: config.YIJI_ADMIN_API_URL,
+        adminEmail: config.YIJI_ADMIN_EMAIL,
+        adminPassword: config.YIJI_ADMIN_PASSWORD,
+      },
+    },
   });
 
   await registerAiRoutes(app, {
@@ -174,19 +180,13 @@ async function main(): Promise<void> {
   // Read-through cache in front of Yiji. The inbox opens the same customer's
   // orders repeatedly and several agents open the same chat; without this every
   // one of those is a fresh external round trip.
-  /* Null without the admin credential, in which case `/commerce/customer-exists`
-     reports `configured: false` and the coupon card shows no verdict either way. */
-  const findCustomer = createYijiCustomerFinder({
-    apiUrl: process.env.YIJI_API_URL ?? '',
-    adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
-    adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
-    adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
-  });
+  /* `/commerce/customer-exists` uses the connector's phone lookup: null without
+     the admin credential, in which case the route reports `configured: false`
+     and the coupon card shows no verdict either way. */
   await registerCommerceRoutes(app, {
     directus,
-    yiji,
+    connectors,
     cache: new CommerceCache(redis),
-    ...(findCustomer ? { findCustomer } : {}),
   });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { isYijiUnavailable } from '@yiji/shared-types';
-import type { createYijiClient } from '@yiji/shared-types';
+import { isUnknownVendor, isYijiUnavailable } from '@yiji/shared-types';
+import type { ConnectorRegistry, VendorConnector } from '@yiji/shared-types';
 import { verifyCaller, AuthError, type CallerVerifierDeps } from '../auth/index.js';
 import { COMMERCE_TTL, type CommerceCache } from './cache.js';
 
@@ -15,7 +15,15 @@ import { COMMERCE_TTL, type CommerceCache } from './cache.js';
  * (including `null`).
  */
 
-type Yiji = ReturnType<typeof createYijiClient>;
+/**
+ * What the routes need from the connector registry (MV-2): the connector of a
+ * request's vendor, and - for the routes whose records carry no vendor yet -
+ * the one legacy vendor.
+ */
+export type CommerceConnectors = Pick<
+  ConnectorRegistry,
+  'connectorFor' | 'defaultVendorForLegacyRecords'
+>;
 
 export interface CommerceDeps {
   /**
@@ -26,17 +34,18 @@ export interface CommerceDeps {
    * Directus client they could write through.
    */
   directus: CallerVerifierDeps & { lateDeliveryThreshold(): Promise<number> };
-  yiji: Yiji;
+  /**
+   * Resolves the `vendorId` each request names (the vendor's `yiji_vendor_id`,
+   * or its CRM UUID) to that vendor's commerce connector. An unknown vendor is
+   * a 404 `unknown_vendor`, never another vendor's data.
+   *
+   * `/commerce/customer-exists` reads the connector's `findCustomerIdByPhone`:
+   * null without the admin credential, and the route then reports
+   * `configured: false` rather than claiming the customer does not exist.
+   */
+  connectors: CommerceConnectors;
   /** Read-through cache. Optional so existing tests construct deps unchanged. */
   cache?: CommerceCache;
-  /**
-   * Resolves a phone to a Yiji customer id, for `/commerce/customer-exists`.
-   *
-   * Optional: without the admin credential the route reports
-   * `configured: false` rather than claiming the customer does not exist, and
-   * the caller shows no warning off an unanswered question.
-   */
-  findCustomer?: (phone: string) => Promise<string | null>;
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -69,7 +78,18 @@ export async function registerCommerceRoutes(
   app: FastifyInstance,
   deps: CommerceDeps,
 ): Promise<void> {
-  const findCustomer = deps.findCustomer;
+  /** The connector for the vendor a request names. */
+  const connectorFor = (vendorKey: string): Promise<VendorConnector> =>
+    deps.connectors.connectorFor(vendorKey);
+
+  /*
+   * TODO(MV-1): the late-orders queue, the cart, the service-time batch and
+   * the customer-exists check carry no vendor today, so they are answered by
+   * the single legacy Yiji vendor. MV-1 gives them one and this goes.
+   */
+  const legacyConnector = async (): Promise<VendorConnector> =>
+    deps.connectors.connectorFor(await deps.connectors.defaultVendorForLegacyRecords());
+
   /** Require a verified Directus agent session; replies + returns false on fail. */
   async function requireAgent(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
     try {
@@ -99,6 +119,10 @@ export async function registerCommerceRoutes(
     try {
       return reply.send({ data: await fn() });
     } catch (err) {
+      if (isUnknownVendor(err)) {
+        app.log.warn({ ...what, reason: err.reason }, 'commerce request for an unknown vendor');
+        return reply.code(404).send({ error: 'unknown_vendor' });
+      }
       if (!isYijiUnavailable(err)) throw err;
       app.log.warn({ ...what, err }, 'commerce upstream unavailable');
       return reply.code(504).send({ error: 'commerce_unavailable' });
@@ -109,15 +133,20 @@ export async function registerCommerceRoutes(
   const cached = <T>(parts: readonly string[], ttl: number, fn: () => Promise<T>): Promise<T> =>
     deps.cache ? deps.cache.wrap(parts, ttl, fn) : fn();
 
-  const listOrders = (vendorId: string, customerId: string, limit: number) =>
+  /* Cache keys are unchanged (the vendor id as the request named it), so a
+     deploy of this layer does not cold-start the cache. */
+  const listOrders = (
+    connector: VendorConnector,
+    vendorId: string,
+    customerId: string,
+    limit: number,
+  ) =>
     cached(['orders', vendorId, customerId, String(limit)], COMMERCE_TTL.orders, () =>
-      deps.yiji.getOrders(vendorId, customerId, { limit }),
+      connector.getOrders(customerId, { limit }),
     );
 
-  const orderDetail = (vendorId: string, orderId: string) =>
-    cached(['order', vendorId, orderId], COMMERCE_TTL.order, () =>
-      deps.yiji.getOrder(vendorId, orderId),
-    );
+  const orderDetail = (connector: VendorConnector, vendorId: string, orderId: string) =>
+    cached(['order', vendorId, orderId], COMMERCE_TTL.order, () => connector.getOrder(orderId));
 
   app.get('/commerce/activity', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
@@ -125,11 +154,12 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const customerId = str(q.customerId);
     if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'activity', vendorId, customerId }, () =>
-      cached(['activity', vendorId, customerId], COMMERCE_TTL.activity, () =>
-        deps.yiji.getPurchaseActivity(vendorId, customerId),
-      ),
-    );
+    return answering(reply, { route: 'activity', vendorId, customerId }, async () => {
+      const connector = await connectorFor(vendorId);
+      return cached(['activity', vendorId, customerId], COMMERCE_TTL.activity, () =>
+        connector.getPurchaseActivity(customerId),
+      );
+    });
   });
 
   app.get('/commerce/orders', async (req, reply) => {
@@ -140,8 +170,8 @@ export async function registerCommerceRoutes(
     if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
     const parsed = Number.parseInt(str(q.limit) || '6', 10);
     const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 6, 1), 50);
-    return answering(reply, { route: 'orders', vendorId, customerId }, () =>
-      listOrders(vendorId, customerId, limit),
+    return answering(reply, { route: 'orders', vendorId, customerId }, async () =>
+      listOrders(await connectorFor(vendorId), vendorId, customerId, limit),
     );
   });
 
@@ -168,6 +198,7 @@ export async function registerCommerceRoutes(
     const phone = str(q.phone);
     if (!phone) return reply.code(400).send({ error: 'missing_params' });
     return answering(reply, { route: 'customer-exists', phone }, async () => {
+      const findCustomer = (await legacyConnector()).findCustomerIdByPhone;
       const id = findCustomer ? await findCustomer(phone) : null;
       /* `configured: false` is NOT "they do not exist" — without the credential
          nothing was asked, and the caller must not render a warning off it. */
@@ -181,8 +212,8 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'order', vendorId, orderId }, () =>
-      orderDetail(vendorId, orderId),
+    return answering(reply, { route: 'order', vendorId, orderId }, async () =>
+      orderDetail(await connectorFor(vendorId), vendorId, orderId),
     );
   });
 
@@ -210,11 +241,20 @@ export async function registerCommerceRoutes(
     const parsed = Number.parseInt(str(q.limit) || '2', 10);
     const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : 2, 1), 10);
 
+    let connector: VendorConnector;
+    try {
+      connector = await connectorFor(vendorId);
+    } catch (err) {
+      if (!isUnknownVendor(err)) throw err;
+      app.log.warn({ vendorId, reason: err.reason }, 'commerce inbox for an unknown vendor');
+      return reply.code(404).send({ error: 'unknown_vendor' });
+    }
+
     const TIMED_OUT = Symbol('timed-out');
     let orders: Awaited<ReturnType<typeof listOrders>> | typeof TIMED_OUT;
     try {
       orders = await Promise.race([
-        listOrders(vendorId, customerId, limit),
+        listOrders(connector, vendorId, customerId, limit),
         new Promise<typeof TIMED_OUT>((r) => setTimeout(() => r(TIMED_OUT), INBOX_BUDGET_MS)),
       ]);
     } catch (err) {
@@ -255,7 +295,7 @@ export async function registerCommerceRoutes(
      */
     const detail = newest
       ? await Promise.race([
-          orderDetail(vendorId, newest.orderId),
+          orderDetail(connector, vendorId, newest.orderId),
           new Promise<null>((resolve) => setTimeout(() => resolve(null), DETAIL_BUDGET_MS)),
         ]).catch(() => null)
       : null;
@@ -274,11 +314,12 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'tracking', vendorId, orderId }, () =>
-      cached(['tracking', vendorId, orderId], COMMERCE_TTL.order, () =>
-        deps.yiji.getOrderTimeline(vendorId, orderId),
-      ),
-    );
+    return answering(reply, { route: 'tracking', vendorId, orderId }, async () => {
+      const connector = await connectorFor(vendorId);
+      return cached(['tracking', vendorId, orderId], COMMERCE_TTL.order, () =>
+        connector.getOrderTimeline(orderId),
+      );
+    });
   });
 
   /**
@@ -350,6 +391,8 @@ export async function registerCommerceRoutes(
     const live = str(q.live) === '1';
     const ttl = history && !live ? COMMERCE_TTL.order : COMMERCE_TTL.lateOrders;
     return answering(reply, { route: 'late-orders', thresholdMinutes, from, to }, async () => {
+      // TODO(MV-1): the queue is not per-vendor yet - see `legacyConnector`.
+      const connector = await legacyConnector();
       const rows = await cached(
         /* `live` is part of the KEY: the same dates asked for both ways are two
            different cache entries, so a long-lived historical answer can never
@@ -362,7 +405,7 @@ export async function registerCommerceRoutes(
           live ? 'live' : 'hist',
         ],
         ttl,
-        () => deps.yiji.getLateDeliveryOrders(thresholdMinutes, opts),
+        () => connector.getLateDeliveryOrders(thresholdMinutes, opts),
       );
       return { rows, thresholdMinutes, builtAt: new Date().toISOString() };
     });
@@ -380,9 +423,11 @@ export async function registerCommerceRoutes(
     const q = req.query as Record<string, string | undefined>;
     const orderId = str(q.orderId);
     if (!orderId) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'cart', orderId }, () =>
-      cached(['cart', orderId], COMMERCE_TTL.order, () => deps.yiji.getOrderCart(orderId)),
-    );
+    return answering(reply, { route: 'cart', orderId }, async () => {
+      // TODO(MV-1): the portal names no vendor for a cart - see `legacyConnector`.
+      const connector = await legacyConnector();
+      return cached(['cart', orderId], COMMERCE_TTL.order, () => connector.getOrderCart(orderId));
+    });
   });
 
   /**
@@ -413,11 +458,13 @@ export async function registerCommerceRoutes(
       .slice(0, 50);
     if (ids.length === 0) return reply.code(400).send({ error: 'missing_params' });
     return answering(reply, { route: 'service-times', count: ids.length }, async () => {
+      // TODO(MV-1): the batch names no vendor - see `legacyConnector`.
+      const connector = await legacyConnector();
       const entries = await Promise.all(
         ids.map(async (orderId) => {
           try {
             const timeline = await cached(['timeline', orderId], COMMERCE_TTL.order, () =>
-              deps.yiji.getOrderTimeline('', orderId),
+              connector.getOrderTimeline(orderId),
             );
             /*
              * THE WHOLE HISTORY, flattened to `status -> first timestamp`.
@@ -457,8 +504,8 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'payment', vendorId, orderId }, () =>
-      deps.yiji.getPaymentStatus(vendorId, orderId),
+    return answering(reply, { route: 'payment', vendorId, orderId }, async () =>
+      (await connectorFor(vendorId)).getPaymentStatus(orderId),
     );
   });
 
@@ -468,8 +515,8 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'shipment', vendorId, orderId }, () =>
-      deps.yiji.getShipmentTracking(vendorId, orderId),
+    return answering(reply, { route: 'shipment', vendorId, orderId }, async () =>
+      (await connectorFor(vendorId)).getShipmentTracking(orderId),
     );
   });
 }

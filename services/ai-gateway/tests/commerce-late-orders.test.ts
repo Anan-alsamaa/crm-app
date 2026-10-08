@@ -3,10 +3,12 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { registerCommerceRoutes } from '../src/commerce/index.js';
 import type { CommerceDeps } from '../src/commerce/index.js';
 import { YijiUnavailableError } from '@yiji/shared-types';
+import { connectorsFor } from './connectors-fixture.js';
 
 const AGENT_TOKEN = 'agent-session-token';
 
-function deps(over: Partial<CommerceDeps> = {}, threshold = 60): CommerceDeps {
+/** `yiji` is the fake client the single test vendor's connector delegates to. */
+function deps(over: { yiji?: unknown } = {}, threshold = 60): CommerceDeps {
   return {
     directus: {
       async whoAmI(token: string) {
@@ -19,9 +21,7 @@ function deps(over: Partial<CommerceDeps> = {}, threshold = 60): CommerceDeps {
         return threshold;
       },
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    yiji: { getLateDeliveryOrders: async () => [] } as any,
-    ...over,
+    connectors: connectorsFor(over.yiji ?? { getLateDeliveryOrders: async () => [] }),
   };
 }
 
