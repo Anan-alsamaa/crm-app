@@ -445,6 +445,7 @@ code → commit (pre-commit lint) → push main → CI + Deploy to ECS (staging)
 
 ### 17.2 GitHub Actions
 
+- Runners are pinned to `ubuntu-24.04` and every action is on its Node 24 major, so GitHub platform changes cannot fail jobs unannounced.
 - **CI** (`ci.yml`): lint, format, typecheck, security guard, unit tests with coverage; Playwright E2E against a real Directus; AI/commerce auth-contract test.
 - **Deploy to ECS** (`deploy-ecs.yml`, AWS access via GitHub OIDC, no keys stored):
   1. **gate** — `pnpm verify`.
