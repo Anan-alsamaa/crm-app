@@ -118,7 +118,11 @@ async function main() {
   const unknown = await status(`/commerce/activity?vendorId=no-such-vendor&customerId=c1`, {
     headers: bearer(agentToken),
   });
-  check('commerce proxy unknown vendor → 404 (never another vendor)', unknown === 404, `status=${unknown}`);
+  check(
+    'commerce proxy unknown vendor → 404 (never another vendor)',
+    unknown === 404,
+    `status=${unknown}`,
+  );
   check(
     'commerce proxy no token → 401',
     (await status('/commerce/activity?vendorId=1&customerId=c1')) === 401,

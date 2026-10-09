@@ -1484,6 +1484,22 @@ export class GatewayDirectus {
     )[0]!;
   }
 
+  /** ACTIVE users among `ids`, with a display name. Used to vet note mentions. */
+  async activeStaffUsers(ids: string[]): Promise<Array<{ id: string; name: string | null }>> {
+    if (ids.length === 0) return [];
+    const rows = (await this.client.request(
+      readUsers({
+        filter: { id: { _in: ids }, status: { _eq: 'active' } },
+        fields: ['id', 'first_name', 'last_name'],
+        limit: ids.length,
+      }) as never,
+    )) as Array<{ id: string; first_name: string | null; last_name: string | null }>;
+    return rows.map((u) => ({
+      id: u.id,
+      name: [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || null,
+    }));
+  }
+
   async getAssignmentTarget(
     entityType: AssignmentEntityType,
     entityId: string,

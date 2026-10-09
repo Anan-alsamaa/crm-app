@@ -39,6 +39,7 @@ import {
   type AttachmentPolicy,
 } from './attachments.js';
 import { createTokenBucket } from './rate-limit.js';
+import { notifyNoteMentions } from './mention-notify.js';
 
 /**
  * Whether this agent may be handed a customer chat — and therefore is worth
@@ -1672,7 +1673,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
     if (!parsed.success) {
       return socket.emit(SOCKET_EVENTS.error, { code: 'bad_payload', message: 'invalid note' });
     }
-    const { conversationId, content, clientMsgId } = parsed.data;
+    const { conversationId, content, clientMsgId, mentions } = parsed.data;
     try {
       const saved = await directus.persistMessage({
         conversationId,
@@ -1690,6 +1691,18 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         clientMsgId,
         isInternalNote: true,
       });
+      // Tell whoever the note @mentions. After the echo, never awaited: the
+      // note is saved, and a slow queue must not hold up the author's screen.
+      if (data.agentId && mentions?.length) {
+        void notifyNoteMentions(
+          {
+            activeUsers: (ids) => directus.activeStaffUsers(ids),
+            enqueueNotification: (job, jobId) => producer.enqueueNotification(job, jobId),
+            logger,
+          },
+          { noteId: saved.id, conversationId, authorId: data.agentId, content, mentions },
+        );
+      }
     } catch (err) {
       logger.error({ err }, 'note:add failed');
       socket.emit(SOCKET_EVENTS.error, {
