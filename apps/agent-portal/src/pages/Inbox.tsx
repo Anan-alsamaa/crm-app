@@ -297,6 +297,8 @@ export function Inbox() {
     assignment: filters.assignment,
     currentUserId: user?.id,
     currentTeamId: user?.team ?? null,
+    // The tiles count what the vendor filter shows (MV-7); undefined with one vendor.
+    vendor: vendorFilter,
   });
   const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
   // WhatsApp-style second line: the last real message, not a repeat of the

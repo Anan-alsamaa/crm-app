@@ -116,3 +116,26 @@ describe('GatewayDirectus.getConversation', () => {
     expect(request).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('GatewayDirectus.listVendorIntegration (MV-7)', () => {
+  it('reads only the non-secret connector settings, and throws on failure', async () => {
+    const { roles } = await import('../../../directus/bootstrap/src/roles.js');
+    const granted = roles
+      .find((r) => r.name === 'svc-ai-gateway')!
+      .permissions!.find((p) => p.collection === 'vendors')!.fields!;
+    request.mockImplementationOnce(async (cmd: () => unknown) => cmd());
+    const g = new GatewayDirectus('http://localhost:8055', 'svc-token');
+    const sent = (await g.listVendorIntegration()) as unknown as {
+      path: string;
+      params: { fields?: string | string[] };
+    };
+    expect(sent.path).toContain('vendors');
+    const raw = sent.params.fields;
+    const fields = Array.isArray(raw) ? raw : String(raw).split(',');
+    expect(fields).toContain('api_base_url');
+    for (const f of fields ?? []) expect(granted, f).toContain(f);
+    expect(fields).not.toContain('support_settings');
+    request.mockRejectedValueOnce(new Error('403'));
+    await expect(g.listVendorIntegration()).rejects.toThrow('403');
+  });
+});

@@ -5,6 +5,8 @@ import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   LATE_DELIVERY_MINUTES_KEY,
   lateDeliveryMinutes,
+  VENDOR_INTEGRATION_READ_FIELDS,
+  type VendorIntegrationRow,
   type VendorRow,
 } from '@yiji/shared-types';
 
@@ -246,6 +248,23 @@ export class GatewayDirectus {
         { fields: ['id', 'yiji_vendor_id', 'status', 'name', 'platform'], limit: -1 } as never,
       ),
     )) as unknown as VendorRow[];
+  }
+
+  /**
+   * Each vendor's NON-SECRET integration settings (MV-7): order/admin API
+   * URLs, tenant, brand, notify settings, and the key that names its env
+   * credentials. Needs those fields in svc-ai-gateway's `vendors` read
+   * (roles.ts). Read SEPARATELY from `listVendors` so a missing grant degrades
+   * only the settings (env answers, logged) and never vendor resolution.
+   * THROWS on failure, for the same reason as `listVendors`.
+   */
+  async listVendorIntegration(): Promise<VendorIntegrationRow[]> {
+    return (await this.client.request(
+      readItems(
+        'vendors' as never,
+        { fields: [...VENDOR_INTEGRATION_READ_FIELDS], limit: -1 } as never,
+      ),
+    )) as unknown as VendorIntegrationRow[];
   }
 
   /** One row per AI call (owner, 2026-10-07). Never throws. */

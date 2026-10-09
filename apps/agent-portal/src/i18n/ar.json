@@ -1013,7 +1013,9 @@
       "rejected": "مرفوضة",
       "waitingApproval": "بانتظار الموافقة",
       "waitingSignup": "بانتظار انضمام العميل إلى ييجي"
-    }
+    },
+    "vendor": "البائع",
+    "allVendors": "كل البائعين"
   },
   "coupons": {
     "title": "قسائمي",
@@ -1201,7 +1203,9 @@
       "allStates": "الكل",
       "orderStatus": "حالة الطلب",
       "allStatuses": "كل الحالات",
-      "reset": "إعادة تعيين"
+      "reset": "إعادة تعيين",
+      "vendor": "البائع",
+      "allVendors": "كل البائعين"
     },
     "showDetail": "السلة والتتبّع",
     "hideDetail": "إخفاء التفاصيل",

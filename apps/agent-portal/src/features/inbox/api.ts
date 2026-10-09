@@ -416,21 +416,30 @@ function buildSort(f: InboxFilters): string[] {
  * counter that reacts to its own filter can never be clicked back.
  */
 export function useInboxCounts(
-  scope: Pick<InboxFilters, 'assignment' | 'currentUserId' | 'currentTeamId'> = {},
+  scope: Pick<InboxFilters, 'assignment' | 'currentUserId' | 'currentTeamId' | 'vendor'> = {},
 ) {
   // Only the scope matters — a status/priority/search change must not refetch
-  // these, or the numbers would flicker as the agent filters.
+  // these, or the numbers would flicker as the agent filters. The vendor IS
+  // scope (MV-7): with a vendor chosen the tiles count that vendor's chats, not
+  // every vendor's. Unset (always, with one vendor) it adds no clause at all.
   const base = buildFilter({
     assignment: scope.assignment,
     currentUserId: scope.currentUserId,
     currentTeamId: scope.currentTeamId,
+    vendor: scope.vendor || undefined,
   });
   const withBase = (extra: Record<string, unknown>) => ({
     _and: [...(base ? [base] : []), extra],
   });
 
   return useQuery({
-    queryKey: ['inbox-counts', scope.assignment ?? 'all', scope.currentUserId, scope.currentTeamId],
+    queryKey: [
+      'inbox-counts',
+      scope.assignment ?? 'all',
+      scope.currentUserId,
+      scope.currentTeamId,
+      ...(scope.vendor ? [scope.vendor] : []),
+    ],
     staleTime: 15_000,
     queryFn: async () => {
       // Three aggregates rather than one fetch of every row: the count must

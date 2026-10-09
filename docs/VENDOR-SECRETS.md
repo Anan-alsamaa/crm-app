@@ -21,6 +21,24 @@ rejected, walk-in session 503). It is never given Yiji's secret.
 
 Code: `packages/shared-types/src/vendor-secrets.ts`, `services/socket-gateway/src/vendor-auth.ts`.
 
+### Platform API credentials (MV-7)
+
+On the services that call the platform (**ai-gateway** and **workers**), same `KEY`, same
+no-fallback rule:
+
+| Vendor            | Order-API key / push key | Admin API login            | Admin API password            |
+| ----------------- | ------------------------ | -------------------------- | ----------------------------- |
+| Yiji (key `yiji`) | `YIJI_API_KEY`           | `YIJI_ADMIN_EMAIL`         | `YIJI_ADMIN_PASSWORD`         |
+| any other `<key>` | `VENDOR_<KEY>_API_KEY`   | `VENDOR_<KEY>_ADMIN_EMAIL` | `VENDOR_<KEY>_ADMIN_PASSWORD` |
+
+The env vendor (`yiji_vendor_id` = the service's vendor, `1`) always keeps the `YIJI_*` values
+the service already has, whatever its `webhook_path_key`. A vendor without its variables has no
+credential: its admin-API capabilities (coupon delivery, push, phone lookup, status history) are
+`null`, never Yiji's. The NON-SECRET settings (order/admin API URLs, tenant, brand, notify URL /
+topic / title / open-chat action) come from the vendor's record, each falling back to the
+service's `YIJI_*` env value when blank (`RecordVendorSettingsSource` in
+`packages/shared-types/src/connector.ts`).
+
 ## Webhooks
 
 - `POST /webhooks/yiji` — unchanged (Yiji's route, `YIJI_WEBHOOK_SECRET`).

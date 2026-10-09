@@ -47,6 +47,13 @@ export interface PerformanceFilters {
   to?: string;
   /** Directus user id, or '' for everyone. */
   agentId?: string;
+  /**
+   * The CRM vendor id (`vendors.id`) to narrow to (MV-7). Set only while 2+
+   * vendors are active and one is chosen; absent, no clause is added and every
+   * read is exactly what it was. Chats, tickets and coupons each carry their
+   * own `vendor` column.
+   */
+  vendor?: string;
 }
 
 interface ConversationRow {
@@ -94,6 +101,7 @@ export function useChatTimings(filters: PerformanceFilters) {
       if (filters.from) and.push({ date_created: { _gte: filters.from } });
       if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
       if (filters.agentId) and.push({ assigned_agent: { _eq: filters.agentId } });
+      if (filters.vendor) and.push({ vendor: { _eq: filters.vendor } });
 
       const conversations = (await directus.request(
         readItems('conversations', {
@@ -358,6 +366,7 @@ export function useTicketPerformance(filters: PerformanceFilters, enabled = true
             { user_created: { _eq: filters.agentId } },
           ],
         });
+      if (filters.vendor) and.push({ vendor: { _eq: filters.vendor } });
       const tickets = (await directus.request(
         readItems('tickets', {
           limit: -1,
@@ -486,6 +495,8 @@ export function useCouponPerformance(filters: PerformanceFilters, enabled = true
       if (filters.from) and.push({ date_created: { _gte: filters.from } });
       if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
       if (filters.agentId) and.push({ requested_by: { _eq: filters.agentId } });
+      /* Also scopes the best-effort extra reads below, which share `filter`. */
+      if (filters.vendor) and.push({ vendor: { _eq: filters.vendor } });
       const filter = and.length ? { filter: { _and: and } } : {};
 
       const rows = (await directus.request(

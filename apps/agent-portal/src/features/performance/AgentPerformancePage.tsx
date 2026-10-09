@@ -35,6 +35,7 @@ import {
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useSlaHours } from '../../lib/sla-hours.js';
 import { useAgents } from '../inbox/api.js';
+import { useVendorDirectory } from '../../lib/vendors.js';
 import {
   useChatTimings,
   useCsatByConversation,
@@ -183,7 +184,28 @@ export function AgentPerformancePage() {
     }
   }, [filtersKey, filters, targetMin, tab, search]);
 
-  const timings = useChatTimings(filters);
+  /*
+   * THE VENDOR FILTER (MV-7): offered, and applied, only with 2+ active
+   * vendors. `scoped` is what every read on the page (chats, tickets, coupons,
+   * KPIs) is asked with: with one vendor it carries no `vendor` key at all, so
+   * each query is exactly what it was. A remembered choice whose vendor is gone
+   * (or that is the last one left) stops applying instead of emptying the page.
+   */
+  const vendorDir = useVendorDirectory();
+  const vendorFilter =
+    vendorDir.show && filters.vendor && vendorDir.options.some((v) => v.id === filters.vendor)
+      ? filters.vendor
+      : undefined;
+  const scoped = useMemo<PerformanceFilters>(() => {
+    const out: PerformanceFilters = {};
+    if (filters.from !== undefined) out.from = filters.from;
+    if (filters.to !== undefined) out.to = filters.to;
+    if (filters.agentId !== undefined) out.agentId = filters.agentId;
+    if (vendorFilter) out.vendor = vendorFilter;
+    return out;
+  }, [filters.from, filters.to, filters.agentId, vendorFilter]);
+
+  const timings = useChatTimings(scoped);
   /* WORKING HOURS (owner, 2026-10-08): every duration on this page counts only
      the chat SLA policy's working hours, as the SLA engine does. Stamped on each
      chat so every shared function below reads the same clock. */
@@ -292,7 +314,7 @@ export function AgentPerformancePage() {
   );
 
   /** Per-agent totals — the same shared rollup the admin console reports. */
-  const csat = useCsatByConversation(filters);
+  const csat = useCsatByConversation(scoped);
   const totals = useMemo(() => agentPerformance(chats), [chats]);
   /* CSAT joined onto the same chats the rest of the page measures, so the
      rating column can never describe a different population than the timings
@@ -376,6 +398,20 @@ export function AgentPerformancePage() {
             })),
           ]}
         />
+        {/* Whose work (MV-7) — only with 2+ active vendors. */}
+        {vendorDir.show && (
+          <SelectMenu
+            size="sm"
+            className="w-[10rem] shrink-0"
+            value={vendorFilter ?? ''}
+            onChange={(v) => setFilters((f) => ({ ...f, vendor: v || undefined }))}
+            aria-label={t('performance.vendor', { defaultValue: 'Vendor' })}
+            options={[
+              { value: '', label: t('performance.allVendors', { defaultValue: 'All vendors' }) },
+              ...vendorDir.options.map((v) => ({ value: v.id, label: v.name })),
+            ]}
+          />
+        )}
         {/* Widths go on the WRAPPER, not the input: Input carries `w-full` in
             its base classes and `cn` is a plain joiner, not tailwind-merge, so
             a `w-…` passed through className is a coin toss against it. Sizing
@@ -443,9 +479,9 @@ export function AgentPerformancePage() {
             ]}
           />
           {tab === 'tickets' ? (
-            <TicketsTab filters={filters} search={search} agentNames={agentNames} />
+            <TicketsTab filters={scoped} search={search} agentNames={agentNames} />
           ) : tab === 'coupons' ? (
-            <CouponsTab filters={filters} search={search} />
+            <CouponsTab filters={scoped} search={search} />
           ) : (
             <>
               {timings.isLoading || agents.isLoading || slaHours.isLoading ? (

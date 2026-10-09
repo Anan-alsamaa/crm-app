@@ -1050,6 +1050,52 @@ await check('MV-6', 'svc-ai-gateway and svc-workers may read vendors.platform', 
   return { ok: missing.length === 0, detail: missing.length ? `missing on: ${missing.join(', ')}` : 'both granted' };
 });
 
+/* MV-7: the connectors read each vendor's NON-SECRET settings from its record
+   in a separate query; without these fields that read 403s and both services
+   quietly run on the env settings (logged warning). */
+const MV7_FIELDS = ['webhook_path_key', 'api_base_url', 'admin_api_url', 'tenant_id', 'brand_id', 'notify_settings'];
+await check('MV-7', 'svc-ai-gateway and svc-workers may read the vendor connector settings', async () => {
+  const res = await fetch(
+    `${API}/permissions?${new URLSearchParams({
+      fields: 'fields,policy.name',
+      filter: JSON.stringify({ collection: { _eq: 'vendors' }, action: { _eq: 'read' } }),
+      limit: '-1',
+    })}`,
+    { headers: H },
+  );
+  if (res.status === 403) return { status: 'SKIP', detail: 'permissions unreadable here' };
+  const rows = (await res.json())?.data ?? [];
+  const missing = [];
+  for (const svc of ['svc-ai-gateway', 'svc-workers']) {
+    const f = rows.find((p) => String(p.policy?.name ?? '').includes(svc))?.fields ?? [];
+    if (f.includes('*')) continue;
+    const gap = MV7_FIELDS.filter((x) => !f.includes(x));
+    if (gap.length) missing.push(`${svc}: ${gap.join(',')}`);
+  }
+  return { ok: missing.length === 0, detail: missing.length ? `missing ${missing.join('; ')}` : 'both granted' };
+});
+
+/* MV-7: the Yiji vendor's record now feeds its connector - its URLs/tenant must
+   be the values the env always had, or every Yiji request moves host. */
+await check('MV-7', 'Yiji vendor record holds the production Yiji URLs and tenant', async () => {
+  const res = await fetch(
+    `${API}/items/vendors?${new URLSearchParams({
+      fields: 'yiji_vendor_id,api_base_url,admin_api_url,tenant_id',
+      filter: JSON.stringify({ yiji_vendor_id: { _eq: '1' } }),
+    })}`,
+    { headers: H },
+  );
+  if (res.status === 403) return { status: 'SKIP', detail: 'vendors integration fields unreadable here' };
+  const v = (await res.json())?.data?.[0];
+  if (!v) return { ok: false, detail: 'no vendor with yiji_vendor_id 1' };
+  const bad = [];
+  const blankOr = (val, want) => val == null || String(val).trim() === '' || String(val).replace(/\/+$/, '') === want;
+  if (!blankOr(v.api_base_url, 'https://order.yiji-app.com')) bad.push(`api_base_url=${v.api_base_url}`);
+  if (!blankOr(v.admin_api_url, 'https://admin.yiji-app.com')) bad.push(`admin_api_url=${v.admin_api_url}`);
+  if (!blankOr(v.tenant_id, '1')) bad.push(`tenant_id=${v.tenant_id}`);
+  return { ok: bad.length === 0, detail: bad.length ? bad.join(', ') : 'record matches (or blank = env)' };
+});
+
 const failed = results.filter((r) => r.status === 'FAIL').length;
 const skipped = results.filter((r) => r.status === 'SKIP').length;
 console.log(`\n${results.length - failed - skipped} passed, ${failed} failed, ${skipped} skipped`);

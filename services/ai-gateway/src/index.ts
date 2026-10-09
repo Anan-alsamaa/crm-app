@@ -171,6 +171,16 @@ async function main(): Promise<void> {
         { err: err instanceof Error ? err.message : String(err) },
         'vendors read failed - commerce is resolving vendors from the last good list / env',
       ),
+    /* MV-7: each vendor's NON-SECRET settings (URLs, tenant, brand) from its
+       record, env per field behind it; credentials stay env (YIJI_* for Yiji,
+       VENDOR_<KEY>_* for others). A failed read = env settings, logged. */
+    loadIntegration: () => directus.listVendorIntegration(),
+    credentialEnv: process.env,
+    onSettingsFallback: (err) =>
+      logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'vendor integration settings read failed - commerce is using the env settings',
+      ),
     yiji: {
       client: {
         apiUrl: config.YIJI_API_URL,

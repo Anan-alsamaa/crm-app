@@ -24,6 +24,7 @@ export {
 };
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
+import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 
 /**
  * The late-order register: every decision an agent recorded from the queue.
@@ -67,15 +68,22 @@ import { commerce } from '../../lib/commerce-client.js';
  * spinner where an answer should be.
  */
 export function useLateOrderQueue(fromIso: string, toIso: string) {
+  /*
+   * The shared report vendor filter (MV-7): the chosen vendor's CRM id, which
+   * the gateway resolves to that vendor's connector. '' = every vendor, always
+   * so with one — then the request carries no `vendorId` and the key is
+   * unchanged, exactly as before.
+   */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['late-order-queue', fromIso, toIso],
+    queryKey: ['late-order-queue', fromIso, toIso, ...(vendor ? [vendor] : [])],
     staleTime: 60_000,
     retry: false,
     queryFn: async (): Promise<LateOrderRow[]> => {
-      const q = await commerce.getLateOrders({
-        from: fromIso.slice(0, 10),
-        to: toIso.slice(0, 10),
-      });
+      const range = { from: fromIso.slice(0, 10), to: toIso.slice(0, 10) };
+      const q = vendor
+        ? await commerce.getLateOrders(range, vendor)
+        : await commerce.getLateOrders(range);
       return q?.rows ?? [];
     },
   });
@@ -99,12 +107,17 @@ export function useLateOrderEventTimes(orderIds: string[]) {
   // Sorted + joined so the key is stable: the same ids in a different order
   // must not look like a different query and refetch.
   const key = [...orderIds].sort().join(',');
+  /* The chosen vendor's orders live on its own platform (MV-7); '' = unchanged. */
+  const vendor = useReportVendorFilter();
   return useQuery<Record<string, Record<string, string | null>>>({
-    queryKey: ['late-order-event-times', key],
+    queryKey: ['late-order-event-times', key, ...(vendor ? [vendor] : [])],
     enabled: orderIds.length > 0,
     staleTime: 60_000,
     retry: false,
-    queryFn: () => commerce.getOrderEventTimes(orderIds),
+    queryFn: () =>
+      vendor
+        ? commerce.getOrderEventTimes(orderIds, vendor)
+        : commerce.getOrderEventTimes(orderIds),
   });
 }
 
@@ -182,14 +195,16 @@ export function latestPerOrder(rows: LateOrderDecisionRow[]): LateOrderDecisionR
 }
 
 export function useLateOrderDecisions(fromIso: string, toIso: string) {
+  /* `late_order_decisions.vendor` is the CRM vendor id (MV-7); '' = unchanged. */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['late-order-decisions', fromIso, toIso],
+    queryKey: ['late-order-decisions', fromIso, toIso, ...(vendor ? [vendor] : [])],
     queryFn: async (): Promise<LateOrderDecisionRow[]> =>
       (await directus.request(
         readItems(
           'late_order_decisions' as never,
           {
-            filter: { date_created: { _between: [fromIso, toIso] } },
+            filter: withVendor({ date_created: { _between: [fromIso, toIso] } }, vendor),
             fields: [
               'id',
               'order_id',
