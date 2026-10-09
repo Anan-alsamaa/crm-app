@@ -1,6 +1,6 @@
 # Sara CRM — End-to-End System Guide
 
-_For: the product manager / owner. Every statement is taken from the code as of v1.46.0 (2026-10-09). Paths are relative to the repo root._
+_For: the product manager / owner. Every statement is taken from the code as of v1.47.0 (2026-10-09). Paths are relative to the repo root._
 
 **How to read:** §1–4 explain the system and its vocabulary. §5–13 trace each business flow step by step, with the endpoint, body and response at each step. §14–18 cover multi-vendor, configuration, the Yiji API reference, deployment and the tools we use. §19 lists the known issues found while writing this.
 
