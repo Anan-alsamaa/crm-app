@@ -66,6 +66,7 @@ const stamp = `release-check ${new Date().toISOString()}`;
 let customer;
 let agent;
 let conversationId = null;
+let mentionUserId = null;
 
 try {
   // ── auth ────────────────────────────────────────────────────────────────
@@ -342,6 +343,64 @@ try {
     step('agent can open the photo', file.ok, `HTTP ${file.status}`);
   }
 
+  // ── @mention in an internal note reaches the colleague (owner 2026-10-09) ──
+  /* The gateway used to drop note mentions. A throwaway colleague (example.com,
+     never a real inbox) is mentioned and must get an in-app `mention` row.
+     STAGING ONLY: it creates and deletes a user. */
+  if (/staging|localhost/.test(API)) {
+    const h = { authorization: `Bearer ${adminToken}`, 'content-type': 'application/json' };
+    const roleId = (
+      await (
+        await fetch(`${API}/roles?filter[name][_eq]=WeCare%20Agent&fields=id`, { headers: h })
+      ).json()
+    )?.data?.[0]?.id;
+    const made = await (
+      await fetch(`${API}/users`, {
+        method: 'POST',
+        headers: h,
+        body: JSON.stringify({
+          email: `mention-check-${Date.now()}@staff.example.com`,
+          password: `${Math.random().toString(36).slice(2)}Aa1!x9`,
+          role: roleId,
+          first_name: 'Mention',
+          last_name: 'Check',
+          status: 'active',
+        }),
+      })
+    ).json();
+    mentionUserId = made?.data?.id ?? null;
+    if (mentionUserId) {
+      agent.emit('note:add', {
+        conversationId,
+        content: `${stamp} — note for @mention-check`,
+        mentions: [mentionUserId],
+        clientMsgId: `n1-${Date.now()}`,
+      });
+      let row = null;
+      for (let i = 0; i < 20 && !row; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        row = (
+          await (
+            await fetch(
+              `${API}/items/notifications?filter[recipient][_eq]=${mentionUserId}&filter[type][_eq]=mention&fields=id,link&limit=1`,
+              { headers: h },
+            )
+          ).json()
+        )?.data?.[0];
+      }
+      step(
+        'a colleague @mentioned in a chat note is notified',
+        !!row && String(row.link).includes(conversationId),
+        row ? '' : 'no mention notification within 30s',
+      );
+    } else
+      step(
+        'a colleague @mentioned in a chat note is notified',
+        false,
+        'could not create test colleague',
+      );
+  }
+
   // ── history after reconnect (the edit/delete markers must survive) ──────
   const histP = waitFor(customer, 'messages:history', () => true, 20_000).catch(() => null);
   customer.disconnect();
@@ -402,6 +461,40 @@ try {
         headers: { authorization: `Bearer ${t}`, 'content-type': 'application/json' },
         body: JSON.stringify({ status: 'closed' }),
       });
+    } catch {
+      /* best effort */
+    }
+  }
+  if (mentionUserId) {
+    try {
+      const t = (
+        await (
+          await fetch(`${API}/auth/login`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              email: process.env.ADMIN_EMAIL,
+              password: process.env.ADMIN_PASSWORD,
+            }),
+          })
+        ).json()
+      ).data.access_token;
+      const h = { authorization: `Bearer ${t}` };
+      const ids = (
+        await (
+          await fetch(
+            `${API}/items/notifications?filter[recipient][_eq]=${mentionUserId}&fields=id&limit=-1`,
+            { headers: h },
+          )
+        ).json()
+      )?.data?.map((n) => n.id);
+      if (ids?.length)
+        await fetch(`${API}/items/notifications`, {
+          method: 'DELETE',
+          headers: { ...h, 'content-type': 'application/json' },
+          body: JSON.stringify(ids),
+        });
+      await fetch(`${API}/users/${mentionUserId}`, { method: 'DELETE', headers: h });
     } catch {
       /* best effort */
     }
