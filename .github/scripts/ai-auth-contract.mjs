@@ -106,14 +106,22 @@ async function main() {
   check('agent session accepted (not 401)', s !== 401, `status=${s}`);
   check('agent session → 404 conversation_not_found', s === 404, `status=${s}`);
 
-  // 3. Commerce proxy with agent session → 200 (mock client; no token in browser)
-  const c = await status(`/commerce/activity?vendorId=v1&customerId=c1`, {
+  // 3. Commerce proxy with agent session → 200 (mock client; no token in browser).
+  //    Vendor "1" = the configured default vendor, known even with an empty
+  //    vendors table. Since MV-2 (2026-10-08) an UNKNOWN vendor is refused
+  //    rather than silently served as Yiji - this used a made-up "v1" and has
+  //    failed on every CI run since.
+  const c = await status(`/commerce/activity?vendorId=1&customerId=c1`, {
     headers: bearer(agentToken),
   });
   check('commerce proxy agent session → 200', c === 200, `status=${c}`);
+  const unknown = await status(`/commerce/activity?vendorId=no-such-vendor&customerId=c1`, {
+    headers: bearer(agentToken),
+  });
+  check('commerce proxy unknown vendor → 404 (never another vendor)', unknown === 404, `status=${unknown}`);
   check(
     'commerce proxy no token → 401',
-    (await status('/commerce/activity?vendorId=v1&customerId=c1')) === 401,
+    (await status('/commerce/activity?vendorId=1&customerId=c1')) === 401,
   );
 
   // 4. Agent (non-admin) → /admin/config → 403 (spoofing a header can't help)
