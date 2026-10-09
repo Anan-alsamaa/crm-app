@@ -19,7 +19,11 @@ import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
 import { CommerceCache } from './commerce/cache.js';
 import { Registry } from './metrics.js';
-import { createEnvConnectorRegistry, vendorsFromRows } from '@yiji/shared-types';
+import {
+  createEnvConnectorRegistry,
+  mockVendorsAllowed,
+  vendorsFromRows,
+} from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
 /** Reachability ping to Directus /server/health with a hard timeout. */
@@ -159,6 +163,9 @@ async function main(): Promise<void> {
   // a commerce outage. A vendor that is in neither is a 404 `unknown_vendor`.
   const connectors = createEnvConnectorRegistry({
     loadVendors: async () => vendorsFromRows(await directus.listVendors()),
+    /* MV-6: the test vendor's `mock` platform, only with ALLOW_MOCK_VENDORS=true
+       (throws at startup if that flag meets production Directus). */
+    allowMockVendors: mockVendorsAllowed(process.env),
     onDirectoryFallback: (err) =>
       logger.warn(
         { err: err instanceof Error ? err.message : String(err) },

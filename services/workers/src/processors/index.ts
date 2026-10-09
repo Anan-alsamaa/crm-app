@@ -3,8 +3,9 @@ import type { Logger } from 'pino';
 import { readItems } from '@directus/sdk';
 import {
   QUEUES,
-  asYijiConnector,
+  asCouponPushConnector,
   createEnvConnectorRegistry,
+  mockVendorsAllowed,
   isUnknownVendor,
   vendorsFromRows,
   type ConnectorRegistry,
@@ -139,6 +140,13 @@ const redirectCouponsTo = stagingOnlyPhone('COUPON_REDIRECT_PHONE');
 const redirectPushTo = stagingOnlyPhone('PUSH_REDIRECT_PHONE');
 
 /**
+ * MV-6: serve `mock` (test) vendors. Read at module load, like the redirects,
+ * so ALLOW_MOCK_VENDORS against production Directus stops the worker at
+ * startup instead of at its first coupon.
+ */
+const allowMockVendors = mockVendorsAllowed(process.env);
+
+/**
  * THE COMMERCE CONNECTORS (MV-2), built ONCE for the process.
  *
  * Once, because the connector's admin poster CACHES ITS TOKEN: rebuilt per job
@@ -172,13 +180,18 @@ function connectorsFor(deps: Pick<ProcessorDeps, 'directus' | 'logger'>): Connec
 const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
   createEnvConnectorRegistry({
     vendorId: process.env.YIJI_VENDOR_ID,
+    /* MV-6: the test vendor's `mock` platform, only with ALLOW_MOCK_VENDORS=true
+       (throws if that flag meets production Directus). */
+    allowMockVendors,
     loadVendors: async () =>
       vendorsFromRows(
         (await deps.directus.request(
           readItems(
             'vendors' as never,
             {
-              fields: ['id', 'yiji_vendor_id', 'status', 'name'],
+              /* `platform` picks the connector (MV-6): without it a mock
+                 vendor would read as Yiji. Granted in roles.ts. */
+              fields: ['id', 'yiji_vendor_id', 'status', 'name', 'platform'],
               limit: -1,
             } as never,
           ),
@@ -366,7 +379,8 @@ export const processors: Record<QueueName, Processor> = {
       logger: deps.logger,
     });
     if (!connector) return;
-    const yiji = asYijiConnector(connector);
+    /* Yiji, or the mock (answers Yiji's shapes in memory, MV-6). */
+    const yiji = asCouponPushConnector(connector);
     await processCouponPushJob(job as Job<CouponPushJob>, {
       directus: deps.directus,
       logger: deps.logger,
@@ -411,9 +425,9 @@ export const processors: Record<QueueName, Processor> = {
      */
     const pushJob = job as Job<CustomerPushJob>;
     const connectors = connectorsFor(deps);
-    let yiji: ReturnType<typeof asYijiConnector>;
+    let yiji: ReturnType<typeof asCouponPushConnector>;
     try {
-      yiji = asYijiConnector(
+      yiji = asCouponPushConnector(
         await connectors.connectorFor(
           pushJob.data.vendorId ?? (await connectors.defaultVendorForLegacyRecords()),
         ),

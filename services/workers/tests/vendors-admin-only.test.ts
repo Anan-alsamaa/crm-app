@@ -60,8 +60,12 @@ describe('vendors permissions in roles.ts', () => {
       roles.find((r) => r.name === name)!.permissions!.find((p) => p.collection === 'vendors')!
         .fields!;
     expect(fieldsOf('svc-socket-gateway')).toContain('webhook_path_key');
+    /* MV-6: the connector registries in these two read `platform` — it picks
+       the connector — and nothing else from the integration settings. */
     for (const svc of ['svc-workers', 'svc-ai-gateway']) {
-      for (const f of INTEGRATION_FIELDS) expect(fieldsOf(svc)).not.toContain(f);
+      expect(fieldsOf(svc)).toContain('platform');
+      for (const f of INTEGRATION_FIELDS.filter((x) => x !== 'platform'))
+        expect(fieldsOf(svc)).not.toContain(f);
     }
   });
 });

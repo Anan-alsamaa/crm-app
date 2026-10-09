@@ -49,6 +49,7 @@ import {
   type YijiClientEnv,
   type YijiUserProfile,
 } from './yiji-impl.js';
+import { MockConnector } from './mock-connector.js';
 
 /* ── The CRM's standard commerce shapes ──────────────────────────── */
 
@@ -82,8 +83,17 @@ export type PlatformAdminPoster = YijiAdminPoster;
 
 /* ── Vendors ─────────────────────────────────────────────────────── */
 
-/** Every commerce platform the CRM has a connector for. */
-export type CommercePlatform = 'yiji';
+/**
+ * Every commerce platform the CRM has a connector for.
+ *
+ * `mock` (MV-6) is the TEST platform: simulated data, zero network calls,
+ * usable only where `ALLOW_MOCK_VENDORS=true` (never production) - see
+ * `mockVendorsAllowed` and `MockConnector`.
+ */
+export type CommercePlatform = 'yiji' | 'mock';
+
+/** The platforms a `vendors.platform` value may name (the schema's choices). */
+export const COMMERCE_PLATFORMS: readonly CommercePlatform[] = ['yiji', 'mock'];
 
 /**
  * A vendor as the registry knows it.
@@ -131,8 +141,21 @@ export interface YijiPlatformSettings {
   };
 }
 
-/** One entry per platform; a union as soon as a second platform exists. */
-export type VendorPlatformSettings = YijiPlatformSettings;
+/**
+ * The mock platform's settings (MV-6). Nothing to configure: no URL, no
+ * credential. The optional fields mirror Yiji's so the workers' coupon/push
+ * processors (which read `tenantId`, `brandId`, `push`) run unchanged; blank
+ * push settings mean "log, do not send".
+ */
+export interface MockPlatformSettings {
+  platform: 'mock';
+  tenantId?: string;
+  brandId?: string;
+  push?: YijiPlatformSettings['push'];
+}
+
+/** One entry per platform. */
+export type VendorPlatformSettings = YijiPlatformSettings | MockPlatformSettings;
 
 /* ── The connector contract ──────────────────────────────────────── */
 
@@ -293,7 +316,9 @@ export type UnknownVendorReason =
   | 'inactive'
   | 'unsupported_platform'
   | 'no_legacy_default'
-  | 'ambiguous_legacy_default';
+  | 'ambiguous_legacy_default'
+  /** A `mock` vendor on a service without `ALLOW_MOCK_VENDORS=true` (MV-6). */
+  | 'mock_not_allowed';
 
 /**
  * The registry cannot serve this vendor.
@@ -317,7 +342,9 @@ export class UnknownVendorError extends Error {
             ? `vendor "${vendorKey}" is on a platform with no connector`
             : reason === 'no_legacy_default'
               ? 'no active Yiji vendor to own legacy (vendor-less) records'
-              : 'more than one active Yiji vendor: legacy (vendor-less) records cannot be attributed',
+              : reason === 'mock_not_allowed'
+                ? `vendor "${vendorKey}" is a mock (test) vendor and ALLOW_MOCK_VENDORS is not set`
+                : 'more than one active Yiji vendor: legacy (vendor-less) records cannot be attributed',
     );
     this.name = 'UnknownVendorError';
   }
@@ -462,9 +489,17 @@ export class CachedVendorDirectory implements VendorDirectory {
  * vendor's own URLs/credentials; no call site changes.
  */
 export class EnvVendorSettingsSource implements VendorSettingsSource {
-  constructor(private readonly yiji: YijiPlatformSettings) {}
+  constructor(
+    private readonly yiji: YijiPlatformSettings,
+    /** MV-6: answer `mock` vendors (no settings needed). Off = refused. */
+    private readonly opts: { allowMock?: boolean } = {},
+  ) {}
   async settingsFor(vendor: ConnectorVendor): Promise<VendorPlatformSettings> {
     if (vendor.platform === 'yiji') return this.yiji;
+    if (vendor.platform === 'mock') {
+      if (this.opts.allowMock) return { platform: 'mock' };
+      throw new UnknownVendorError(vendor.platformVendorId, 'mock_not_allowed');
+    }
     throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
   }
 }
@@ -480,14 +515,32 @@ export interface ConnectorRegistryOptions {
   /** Per-platform builders. Defaults to the built-in Yiji connector. */
   factories?: Partial<Record<CommercePlatform, ConnectorFactory>>;
   /**
+   * MV-6: serve vendors on the `mock` platform. Off by default, and a service
+   * sets it only from `mockVendorsAllowed(env)`. Off, a mock vendor is refused
+   * (`mock_not_allowed`) - never answered by another platform's connector.
+   */
+  allowMockVendors?: boolean;
+  /**
    * The vendor that owns records written before vendors were distinguished —
    * see `defaultVendorForLegacyRecords`. Unset = the single active Yiji vendor.
    */
   legacyVendorKey?: string;
 }
 
-const DEFAULT_FACTORIES: Record<CommercePlatform, ConnectorFactory> = {
-  yiji: (vendor, settings) => new YijiConnector(vendor, settings),
+const DEFAULT_FACTORIES: Partial<Record<CommercePlatform, ConnectorFactory>> = {
+  yiji: (vendor, settings) => {
+    if (settings.platform !== 'yiji') {
+      throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
+    }
+    return new YijiConnector(vendor, settings);
+  },
+};
+
+const MOCK_FACTORY: ConnectorFactory = (vendor, settings) => {
+  if (settings.platform !== 'mock') {
+    throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
+  }
+  return new MockConnector(vendor, settings);
 };
 
 /**
@@ -499,11 +552,27 @@ const DEFAULT_FACTORIES: Record<CommercePlatform, ConnectorFactory> = {
  * process-wide singletons' did.
  */
 export class ConnectorRegistry {
-  private readonly factories: Record<CommercePlatform, ConnectorFactory>;
+  private readonly factories: Partial<Record<CommercePlatform, ConnectorFactory>>;
   private readonly connectors = new Map<string, Promise<VendorConnector>>();
 
+  /**
+   * THE PLATFORM PICKS THE CONNECTOR: `vendor.platform` (from
+   * `vendors.platform`) indexes the factories. `mock` is in the table only
+   * with `allowMockVendors`; it is removed even from caller-supplied factories
+   * otherwise, so no wiring mistake can serve a test vendor in production.
+   */
   constructor(private readonly opts: ConnectorRegistryOptions) {
-    this.factories = { ...DEFAULT_FACTORIES, ...(opts.factories ?? {}) };
+    this.factories = {
+      ...DEFAULT_FACTORIES,
+      ...(opts.allowMockVendors ? { mock: MOCK_FACTORY } : {}),
+      ...(opts.factories ?? {}),
+    };
+    if (!opts.allowMockVendors) delete this.factories.mock;
+  }
+
+  /** Whether this registry serves `mock` vendors (MV-6). */
+  get mockVendorsAllowed(): boolean {
+    return Boolean(this.opts.allowMockVendors);
   }
 
   /** The vendor behind a key, or a typed error. Never a guess. */
@@ -516,7 +585,10 @@ export class ConnectorRegistry {
       vendors.find((v) => v.platformVendorId === key);
     if (!vendor) throw new UnknownVendorError(key, 'unknown');
     if (vendor.status !== 'active') throw new UnknownVendorError(key, 'inactive');
-    if (!(vendor.platform in this.factories)) {
+    if (vendor.platform === 'mock' && !this.opts.allowMockVendors) {
+      throw new UnknownVendorError(key, 'mock_not_allowed');
+    }
+    if (!Object.prototype.hasOwnProperty.call(this.factories, vendor.platform)) {
       throw new UnknownVendorError(key, 'unsupported_platform');
     }
     return vendor;
@@ -527,9 +599,10 @@ export class ConnectorRegistry {
     const cacheKey = `${vendor.platform}:${vendor.platformVendorId}`;
     let pending = this.connectors.get(cacheKey);
     if (!pending) {
+      const factory = this.factories[vendor.platform]!;
       pending = this.opts.settings
         .settingsFor(vendor)
-        .then((settings) => this.factories[vendor.platform](vendor, settings));
+        .then((settings) => factory(vendor, settings));
       // A failed build is not cached: the next call tries again.
       pending.catch(() => this.connectors.delete(cacheKey));
       this.connectors.set(cacheKey, pending);
@@ -586,6 +659,43 @@ export function asYijiConnector(connector: VendorConnector): YijiConnector {
   throw new UnknownVendorError(connector.vendor.platformVendorId, 'unsupported_platform');
 }
 
+/**
+ * A connector whose admin transport speaks the Yiji coupon/push protocol: Yiji
+ * itself, or the mock (which answers in Yiji's shapes, in memory). The workers'
+ * coupon and push processors build Yiji payloads, so they take only these. A
+ * real second platform is refused here until it has its own coupon/push code.
+ */
+export type CouponPushConnector = YijiConnector | MockConnector;
+
+export function asCouponPushConnector(connector: VendorConnector): CouponPushConnector {
+  if (connector.platform === 'yiji') return asYijiConnector(connector);
+  if (connector instanceof MockConnector || connector.platform === 'mock') {
+    return connector as MockConnector;
+  }
+  throw new UnknownVendorError(connector.vendor.platformVendorId, 'unsupported_platform');
+}
+
+/**
+ * MV-6: may this service serve `mock` (test) vendors?
+ *
+ * Only with `ALLOW_MOCK_VENDORS=true` - and NEVER against production Directus:
+ * the flag there throws, loudly, at startup (a service that cannot start is a
+ * visible failure; a production CRM quietly answering a vendor with fake data
+ * is not). Not keyed on NODE_ENV: both environments run `production`.
+ */
+export function mockVendorsAllowed(env: Readonly<Record<string, string | undefined>>): boolean {
+  const on = (env.ALLOW_MOCK_VENDORS ?? '').trim().toLowerCase() === 'true';
+  if (!on) return false;
+  const directus = (env.DIRECTUS_INTERNAL_URL ?? env.DIRECTUS_URL ?? '').toLowerCase();
+  if (directus.includes('prod-directus') || directus.includes('crm-api.anan.sa')) {
+    throw new Error(
+      'ALLOW_MOCK_VENDORS=true on a service pointed at PRODUCTION Directus ' +
+        `(${directus}). Mock vendors are a staging test tool. Unset it.`,
+    );
+  }
+  return true;
+}
+
 /** The vendor id the Yiji app sends and the seeded vendor carries. */
 export const LEGACY_YIJI_VENDOR_ID = '1';
 
@@ -610,6 +720,8 @@ export function createEnvConnectorRegistry(opts: {
   loadVendors?: () => Promise<ConnectorVendor[]>;
   onDirectoryFallback?: (err: unknown) => void;
   vendorsTtlMs?: number;
+  /** MV-6: pass `mockVendorsAllowed(process.env)`. Default off. */
+  allowMockVendors?: boolean;
 }): ConnectorRegistry {
   const vendor: ConnectorVendor = {
     platformVendorId: opts.vendorId?.trim() || LEGACY_YIJI_VENDOR_ID,
@@ -628,8 +740,12 @@ export function createEnvConnectorRegistry(opts: {
           ...(opts.onDirectoryFallback ? { onFallback: opts.onDirectoryFallback } : {}),
         })
       : envDirectory,
-    settings: new EnvVendorSettingsSource({ platform: 'yiji', ...opts.yiji }),
+    settings: new EnvVendorSettingsSource(
+      { platform: 'yiji', ...opts.yiji },
+      { allowMock: Boolean(opts.allowMockVendors) },
+    ),
     legacyVendorKey: vendor.platformVendorId,
+    allowMockVendors: Boolean(opts.allowMockVendors),
     ...(opts.factories ? { factories: opts.factories } : {}),
   });
 }

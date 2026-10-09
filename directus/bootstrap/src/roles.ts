@@ -834,11 +834,12 @@ export const roles: RoleSpec[] = [
        * ('1') with a logged warning, the UUID is unknown, and the coupon stays
        * `approved` (never sent to a guessed platform) until the grant exists.
        * Read-only: vendors are the Administrator's to manage. Display fields
-       * only — the registry reads id, yiji_vendor_id, status, name. (MV-4: add
-       * `platform` and the integration fields here when the connector reads
-       * them, or that read 403s.)
+       * plus `platform` (MV-6): the registry reads id, yiji_vendor_id, status,
+       * name, platform — the platform PICKS the connector, and without it a
+       * `mock` test vendor would read as Yiji. A field named in the query but
+       * missing here 403s the whole read (registry falls back to env vendor).
        */
-      ...vendorsRead(),
+      ...vendorsRead(['platform']),
     ],
   },
   {
@@ -874,10 +875,11 @@ export const roles: RoleSpec[] = [
        * portal request names — by CRM UUID or by `yiji_vendor_id`, since the
        * portals send both — from this table. Without it the read 403s and the
        * gateway falls back to the env vendor ('1') with a warning, so a UUID
-       * request answers 404 `unknown_vendor`. Display fields only — it reads
-       * id, yiji_vendor_id, status, name (MV-4: widen with the connector).
+       * request answers 404 `unknown_vendor`. Display fields plus `platform`
+       * (MV-6): it reads id, yiji_vendor_id, status, name, platform — the
+       * platform picks the connector, so a `mock` vendor never reads as Yiji.
        */
-      ...vendorsRead(),
+      ...vendorsRead(['platform']),
     ],
   },
 ];

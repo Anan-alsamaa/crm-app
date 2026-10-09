@@ -65,7 +65,9 @@ const schema = z.object({
   secondary: z.string().regex(HEX, 'Use #RRGGBB').optional().or(z.literal('')),
   status: z.enum(['active', 'inactive']),
   /* INTEGRATION (MV-1, EMA-70) — non-secret settings only. */
-  platform: z.enum(['yiji']),
+  /* `mock` (MV-6): the staging test vendor. Kept selectable so editing that
+     vendor here can never silently flip it to Yiji. */
+  platform: z.enum(['yiji', 'mock']),
   api_base_url: optionalUrl,
   admin_api_url: optionalUrl,
   tenant_id: optionalText,
@@ -108,7 +110,7 @@ function integrationPatch(values: FormValues): VendorIntegration {
 function integrationValues(v: VendorRow | null) {
   const n = v?.notify_settings ?? {};
   return {
-    platform: 'yiji' as const,
+    platform: v?.platform === 'mock' ? ('mock' as const) : ('yiji' as const),
     api_base_url: v?.api_base_url ?? '',
     admin_api_url: v?.admin_api_url ?? '',
     tenant_id: v?.tenant_id ?? '',
@@ -579,6 +581,7 @@ function IntegrationSection({ form }: { form: ReturnType<typeof useForm<FormValu
           {...form.register('platform')}
         >
           <option value="yiji">Yiji</option>
+          <option value="mock">Mock (test only - never calls any platform)</option>
         </select>
       </FormField>
       {text(

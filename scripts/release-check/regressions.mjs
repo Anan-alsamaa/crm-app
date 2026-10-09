@@ -18,7 +18,31 @@
  *
  * Yiji checks are skipped (reported as SKIP, not PASS) when its credentials
  * are not provided.
+ *
+ * PER-VENDOR (MV-6): for EVERY active vendor — its connector resolves, its
+ * records never come back under another vendor's filter, and (staging) the
+ * mock test vendor answers from the mock, never Yiji. The test vendor's chat
+ * login / webhook / mock commerce are SKIPPED, naming the missing variable,
+ * until the owner approves those env vars on the staging task definitions.
+ * Optional: VENDOR_<KEY>_WEBHOOK_SECRET in this script's env adds a signed
+ * webhook ping for that vendor.
  */
+import {
+  ISOLATION_COLLECTIONS,
+  ISOLATION_SAMPLE,
+  MOCK_PROBE_ORDER_ID,
+  MOCK_PROBE_PHONE,
+  classifyChatLoginProbe,
+  classifyMockOrderProbe,
+  classifyResolveProbe,
+  classifyWebhookProbe,
+  connectorVerdict,
+  isolationPairs,
+  isolationVerdict,
+  platformOf,
+  signWebhook,
+  vendorSecretEnvNames,
+} from './lib/vendor-checks.mjs';
 const API = (process.env.API ?? '').replace(/\/$/, '');
 const ENV = process.env.ENV ?? 'staging';
 if (!API || !process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
@@ -60,6 +84,8 @@ async function check(id, name, fn) {
   try {
     const r = await fn();
     if (r === 'skip') report('SKIP', id, name, 'credentials not provided');
+    else if (r?.status === 'PASS' || r?.status === 'FAIL' || r?.status === 'SKIP')
+      report(r.status, id, name, r.detail ?? '');
     else if (r === true || r?.ok) report('PASS', id, name, r?.detail ?? '');
     else report('FAIL', id, name, r?.detail ?? '');
   } catch (err) {
@@ -848,6 +874,180 @@ await check('COUPON-CAP', 'no waiting Amount coupon has a cap below its value', 
       ? bad.map((c) => `${c.coupon_code} value ${c.coupon_value} cap ${Number(c.max_discount)}`).join('; ')
       : `${(r.data ?? []).length} waiting coupons, all consistent`,
   };
+});
+
+// ── every vendor: connector, isolation, test vendor (MV-6, EMA-75) ───────────
+/* The release-check account may not hold admin_access, and MV-5 limits
+   everyone else to the display fields - so `platform` / `webhook_path_key`
+   are asked for first and dropped on a 403 (the live probes still prove the
+   connector resolves). */
+let vendorRows = await items('vendors', {
+  fields: 'id,name,status,yiji_vendor_id,platform,webhook_path_key',
+  filter: JSON.stringify({ status: { _eq: 'active' } }),
+  limit: '-1',
+});
+const platformReadable = vendorRows.status === 200;
+if (!platformReadable) {
+  vendorRows = await items('vendors', {
+    fields: 'id,name,status,yiji_vendor_id',
+    filter: JSON.stringify({ status: { _eq: 'active' } }),
+    limit: '-1',
+  });
+}
+const activeVendors = vendorRows.data ?? [];
+await check('MV-6', 'active vendors are readable', async () => ({
+  ok: vendorRows.status === 200 && activeVendors.length > 0,
+  detail: `HTTP ${vendorRows.status}: ${activeVendors.map((v) => `${v.name} (${v.yiji_vendor_id}, ${platformReadable ? platformOf(v) : 'platform unreadable'})`).join(', ') || 'none'}`,
+}));
+
+async function gatewayGet(path) {
+  const res = await fetch(`${API}${path}`, { headers: H });
+  return { status: res.status, body: await res.json().catch(() => null) };
+}
+
+for (const v of activeVendors) {
+  const label = `${v.name} (${v.yiji_vendor_id})`;
+  if (platformReadable) {
+    await check('MV-6', `${label}: a connector exists for its platform`, async () =>
+      connectorVerdict(v, { env: ENV }),
+    );
+  }
+  await check('MV-6', `${label}: the AI gateway resolves its connector`, async () => {
+    /* A nonsense order id: for Yiji one read-only GET that finds nothing. */
+    const probe = platformOf(v) === 'mock' ? MOCK_PROBE_ORDER_ID : '0';
+    const { status, body } = await gatewayGet(
+      `/commerce/order?${new URLSearchParams({ vendorId: v.id, orderId: probe })}`,
+    );
+    return classifyResolveProbe(platformReadable ? v : { ...v, platform: 'yiji' }, status, body);
+  });
+}
+
+/* (b) Isolation: vendor A's rows, queried under vendor B's filter, must come
+   back empty; and every row B's filter returns must be B's. Read-only. */
+const pairs = isolationPairs(activeVendors);
+if (pairs.length === 0) {
+  report('SKIP', 'MV-6', 'cross-vendor isolation probes', 'only one active vendor');
+}
+for (const col of ISOLATION_COLLECTIONS) {
+  for (const [a, b] of pairs) {
+    await check('MV-6', `isolation ${col}: ${a.name} never under ${b.name}`, async () => {
+      const ofA = await items(col, {
+        fields: 'id',
+        filter: JSON.stringify({ vendor: { _eq: a.id } }),
+        sort: '-id',
+        limit: String(ISOLATION_SAMPLE),
+      });
+      if (ofA.status === 403) return { status: 'SKIP', detail: `${col} not readable here` };
+      if (ofA.status !== 200) return { ok: false, detail: `HTTP ${ofA.status} ${ofA.error ?? ''}` };
+      const ids = (ofA.data ?? []).map((x) => x.id);
+      const cross = ids.length
+        ? await items(col, {
+            fields: 'id,vendor',
+            filter: JSON.stringify({ _and: [{ id: { _in: ids } }, { vendor: { _eq: b.id } }] }),
+            limit: '-1',
+          })
+        : { status: 200, data: [] };
+      const ofB = await items(col, {
+        fields: 'id,vendor',
+        filter: JSON.stringify({ vendor: { _eq: b.id } }),
+        limit: String(ISOLATION_SAMPLE),
+      });
+      if (cross.status !== 200 || ofB.status !== 200) {
+        return { ok: false, detail: `HTTP ${cross.status}/${ofB.status}` };
+      }
+      return isolationVerdict({
+        collection: col,
+        a,
+        b,
+        sampled: ids.length,
+        crossRows: cross.data,
+        bRows: ofB.data,
+      });
+    });
+  }
+}
+
+/* (c) The MOCK test vendor: staging only, never production. */
+const mockVendors = platformReadable ? activeVendors.filter((v) => platformOf(v) === 'mock') : [];
+if (ENV === 'prod') {
+  await check('MV-6', 'no mock (test) vendor is active on production', async () => ({
+    ok: mockVendors.length === 0,
+    detail: platformReadable
+      ? mockVendors.map((v) => v.name).join(', ') || 'none'
+      : 'platform unreadable here; the resolve probes above fail a mock vendor on prod',
+  }));
+} else if (mockVendors.length === 0) {
+  report('SKIP', 'MV-6', 'mock test vendor checks', 'no active mock vendor (scripts/seed-test-vendor.mjs)');
+}
+for (const v of ENV === 'prod' ? [] : mockVendors) {
+  const label = `${v.name} (mock)`;
+  await check('MV-6', `${label}: order lookup answers from the mock, never Yiji`, async () => {
+    const { status, body } = await gatewayGet(
+      `/commerce/order?${new URLSearchParams({ vendorId: v.id, orderId: MOCK_PROBE_ORDER_ID })}`,
+    );
+    return classifyMockOrderProbe(status, body);
+  });
+  const key = v.webhook_path_key?.trim();
+  if (!key) {
+    report('FAIL', 'MV-6', `${label}: webhook_path_key`, 'not set - chat login and webhook cannot work');
+    continue;
+  }
+  await check('MV-6', `${label}: customer chat login`, async () => {
+    const res = await fetch(`${API}/chat/session`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', origin: ORIGINS.widget },
+      body: JSON.stringify({ phone: MOCK_PROBE_PHONE, vendorId: v.yiji_vendor_id }),
+    });
+    return classifyChatLoginProbe(key, res.status, await res.json().catch(() => null));
+  });
+  await check('MV-6', `${label}: webhook refuses an unsigned call`, async () => {
+    const res = await fetch(`${API}/webhooks/${encodeURIComponent(key)}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ type: 'release-check.ping' }),
+    });
+    return classifyWebhookProbe(key, res.status, { signed: false });
+  });
+  const secret = process.env[vendorSecretEnvNames(key).webhook];
+  if (!secret) {
+    report('SKIP', 'MV-6', `${label}: signed webhook ping`, `${vendorSecretEnvNames(key).webhook} not in this check's env`);
+  } else {
+    await check('MV-6', `${label}: signed webhook ping is accepted`, async () => {
+      const raw = JSON.stringify({ type: 'release-check.ping' });
+      const ts = String(Math.floor(Date.now() / 1000));
+      const res = await fetch(`${API}/webhooks/${encodeURIComponent(key)}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-yiji-timestamp': ts,
+          'x-yiji-signature': `sha256=${signWebhook(secret, ts, raw)}`,
+        },
+        body: raw,
+      });
+      return classifyWebhookProbe(key, res.status, { signed: true });
+    });
+  }
+}
+
+/* The two connector registries read `vendors.platform`; without the grant
+   their whole vendors read 403s and they fall back to the env vendor. */
+await check('MV-6', 'svc-ai-gateway and svc-workers may read vendors.platform', async () => {
+  const res = await fetch(
+    `${API}/permissions?${new URLSearchParams({
+      fields: 'fields,policy.name',
+      filter: JSON.stringify({ collection: { _eq: 'vendors' }, action: { _eq: 'read' } }),
+      limit: '-1',
+    })}`,
+    { headers: H },
+  );
+  if (res.status === 403) return { status: 'SKIP', detail: 'permissions unreadable here' };
+  const rows = (await res.json())?.data ?? [];
+  const missing = ['svc-ai-gateway', 'svc-workers'].filter((svc) => {
+    const row = rows.find((p) => String(p.policy?.name ?? '').includes(svc));
+    const f = row?.fields ?? [];
+    return !(f.includes('*') || f.includes('platform'));
+  });
+  return { ok: missing.length === 0, detail: missing.length ? `missing on: ${missing.join(', ')}` : 'both granted' };
 });
 
 const failed = results.filter((r) => r.status === 'FAIL').length;

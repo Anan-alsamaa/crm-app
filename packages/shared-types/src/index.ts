@@ -11,6 +11,7 @@ export * from './entities/index.js';
 export * from './yiji.js';
 export * from './yiji-impl.js';
 export * from './connector.js';
+export * from './mock-connector.js';
 export * from './vendor-records.js';
 export * from './vendor-secrets.js';
 export * from './restaurants.js';

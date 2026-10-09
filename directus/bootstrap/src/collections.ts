@@ -95,9 +95,11 @@ export const collections: CollectionSpec[] = [
       {
         field: 'platform',
         type: 'string',
-        choices: ['yiji'],
+        /* `mock` (MV-6): the staging TEST platform — simulated data, zero
+           network calls, served only where ALLOW_MOCK_VENDORS=true. */
+        choices: ['yiji', 'mock'],
         defaultValue: 'yiji',
-        note: 'The commerce platform this vendor runs on — picks the connector. NULL reads as yiji (every vendor before MV-1).',
+        note: 'The commerce platform this vendor runs on — picks the connector. NULL reads as yiji (every vendor before MV-1). `mock` = staging test vendor (simulated data, never calls any platform; refused unless the service sets ALLOW_MOCK_VENDORS=true).',
       },
       {
         field: 'api_base_url',
