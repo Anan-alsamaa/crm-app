@@ -67,6 +67,7 @@ let customer;
 let agent;
 let conversationId = null;
 let mentionUserId = null;
+let mentionEventId = null;
 
 try {
   // ── auth ────────────────────────────────────────────────────────────────
@@ -393,6 +394,43 @@ try {
         !!row && String(row.link).includes(conversationId),
         row ? '' : 'no mention notification within 30s',
       );
+      // Same colleague, named in a TICKET comment (notify-on-change hook).
+      const ticketId = (
+        await (
+          await fetch(`${API}/items/tickets?fields=id&limit=1&sort=-date_created`, { headers: h })
+        ).json()
+      )?.data?.[0]?.id;
+      if (ticketId) {
+        const ev = await (
+          await fetch(`${API}/items/ticket_events`, {
+            method: 'POST',
+            headers: h,
+            body: JSON.stringify({
+              ticket: ticketId,
+              event_type: 'commented',
+              payload: { text: `${stamp} — @mention-check`, mentions: [mentionUserId] },
+            }),
+          })
+        ).json();
+        mentionEventId = ev?.data?.id ?? null;
+        let trow = null;
+        for (let i = 0; i < 10 && !trow; i++) {
+          await new Promise((r) => setTimeout(r, 1000));
+          trow = (
+            await (
+              await fetch(
+                `${API}/items/notifications?filter[recipient][_eq]=${mentionUserId}&filter[type][_eq]=mention&filter[link][_eq]=/tickets/${ticketId}&fields=id&limit=1`,
+                { headers: h },
+              )
+            ).json()
+          )?.data?.[0];
+        }
+        step(
+          'a colleague @mentioned in a ticket comment is notified',
+          !!trow,
+          trow ? '' : 'no mention notification within 10s',
+        );
+      }
     } else
       step(
         'a colleague @mentioned in a chat note is notified',
@@ -493,6 +531,11 @@ try {
           method: 'DELETE',
           headers: { ...h, 'content-type': 'application/json' },
           body: JSON.stringify(ids),
+        });
+      if (mentionEventId)
+        await fetch(`${API}/items/ticket_events/${mentionEventId}`, {
+          method: 'DELETE',
+          headers: h,
         });
       await fetch(`${API}/users/${mentionUserId}`, { method: 'DELETE', headers: h });
     } catch {

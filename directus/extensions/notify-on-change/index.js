@@ -14,7 +14,8 @@
  * NOTE: this covers the in-app channel. Email + realtime socket push for these
  * events would route through the BullMQ `notifications` queue (workers
  * processor) — a follow-up if those channels are needed for assignment/updates.
- * Mentions are produced by the gateway (note:add), not here.
+ * Chat-note mentions are produced by the gateway (note:add); ticket-comment
+ * mentions are produced here (ticket_events create).
  */
 export default ({ action }, { services, database, getSchema, logger }) => {
   const { ItemsService } = services;
@@ -94,6 +95,53 @@ export default ({ action }, { services, database, getSchema, logger }) => {
           payload: { ticketId: id, status: payload.status },
         });
       }
+    }
+  });
+
+  /*
+   * @MENTIONS IN A TICKET COMMENT (owner 2026-10-09).
+   *
+   * The portal saves `payload.mentions` (user ids) on the `commented` event and
+   * nothing ever read them, so a colleague named in a comment was never told.
+   * The ids come from the browser, so each must be an ACTIVE user; the author
+   * is skipped by `notify`; capped like the chat-note path in the gateway.
+   */
+  const MAX_MENTIONS = 20;
+  action('ticket_events.items.create', async (meta, context) => {
+    const row = meta?.payload ?? {};
+    if (row.event_type !== 'commented') return;
+    const raw = Array.isArray(row.payload?.mentions) ? row.payload.mentions : [];
+    const ids = [...new Set(raw.filter((x) => typeof x === 'string' && x))].slice(0, MAX_MENTIONS);
+    if (ids.length === 0 || !row.ticket) return;
+    try {
+      const actor = context?.accountability?.user ?? row.actor ?? null;
+      const users = await database('directus_users')
+        .whereIn('id', [...ids, ...(actor ? [actor] : [])])
+        .andWhere({ status: 'active' })
+        .select('id', 'first_name', 'last_name');
+      const author = users.find((u) => u.id === actor);
+      const authorName =
+        [author?.first_name, author?.last_name].filter(Boolean).join(' ').trim() || 'A colleague';
+      const ticket = await database('tickets').where({ id: row.ticket }).first('subject');
+      const text = String(row.payload?.text ?? '')
+        .trim()
+        .replace(/\s+/g, ' ');
+      const preview = text.length > 140 ? `${text.slice(0, 139)}…` : text;
+      const schema = await getSchema();
+      for (const u of users) {
+        if (!ids.includes(u.id)) continue;
+        await notify(schema, {
+          recipient: u.id,
+          actor,
+          type: 'mention',
+          title: `${authorName} mentioned you on a ticket`,
+          body: ticket?.subject ? `${ticket.subject}: ${preview}` : preview,
+          link: `/tickets/${row.ticket}`,
+          payload: { entityType: 'ticket', ticketId: row.ticket, eventId: meta?.key ?? null },
+        });
+      }
+    } catch (err) {
+      logger?.warn?.(`notify-on-change: ticket mention failed: ${err?.message ?? err}`);
     }
   });
 

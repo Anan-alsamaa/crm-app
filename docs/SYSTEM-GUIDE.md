@@ -256,7 +256,7 @@ Add-ons come from Yiji's `orderItems[].extraModifiers[].elements[]`. Unknown ven
 
 - `ticket_events` history: created, status_changed, assigned, commented (with @mentions), contacted (WhatsApp), sla_warning / sla_breached / sla_escalated, resolved.
 - **Branch notification**: if the complaint type has an enabled rule (`store_notify_rules`), a `store_notifications` row is queued for the branch _(delivery waits on a POS integration — see §19)_.
-- **Agent notifications** (`notify-on-change` extension): assignment, status change, high-value coupon request. `POST /jobs/notify-assignment` lets staff notify a colleague. Each user chooses in-app / email / both / none per type.
+- **Agent notifications** (`notify-on-change` extension): assignment, status change, high-value coupon request, and **@mentions in a comment** ("<name> mentioned you on a ticket", links to the ticket). `POST /jobs/notify-assignment` lets staff notify a colleague. Each user chooses in-app / email / both / none per type.
   Statuses: **Pending** and **Solved** only.
 
 ---
@@ -489,17 +489,16 @@ ECS Fargate (`crm-staging`, `crm-prod`) · ECR · RDS Postgres (shared) · Elast
 
 ## 19. Known issues (found while writing this guide)
 
-| #   | Issue                                                                                                          | Effect                                                           |
-| --- | -------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| 1   | **@mentions in ticket comments** are saved but nobody is notified (chat-note mentions notify since 2026-10-09) | Mentioned colleague on a ticket is not told                      |
-| 2   | `customer:presence` is never emitted by the server                                                             | The "customer online" indicator in the agent portal never lights |
-| 3   | **Branch notifications are queued but never sent** (no POS integration yet)                                    | `store_notifications` stay `queued`                              |
-| 4   | **Ticket import doesn't require a branch** (form does)                                                         | Imported tickets may have no branch                              |
-| 5   | Late-order coupons put the brand **name** into `brand_id`                                                      | Harmless today (push uses the order's numeric brand)             |
-| 6   | `/walk-in/link` saves `created_by: null`                                                                       | No record of who minted a personal link                          |
-| 7   | Late-orders query uses `DeliveryTypeIds=1` for delivery while the order map says 0 = delivery                  | Worth confirming with Yiji's data                                |
-| 8   | Stale code comments (`AddCompensationCoupon`, `orderMaximum 100000`, `entry_point` default)                    | Documentation only                                               |
-| 9   | `docs/RELEASE.md` describes the old deploy flow                                                                | Use this guide / `deploy-ecs.yml`                                |
+| #   | Issue                                                                                         | Effect                                                           |
+| --- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| 1   | `customer:presence` is never emitted by the server                                            | The "customer online" indicator in the agent portal never lights |
+| 2   | **Branch notifications are queued but never sent** (no POS integration yet)                   | `store_notifications` stay `queued`                              |
+| 3   | **Ticket import doesn't require a branch** (form does)                                        | Imported tickets may have no branch                              |
+| 4   | Late-order coupons put the brand **name** into `brand_id`                                     | Harmless today (push uses the order's numeric brand)             |
+| 5   | `/walk-in/link` saves `created_by: null`                                                      | No record of who minted a personal link                          |
+| 6   | Late-orders query uses `DeliveryTypeIds=1` for delivery while the order map says 0 = delivery | Worth confirming with Yiji's data                                |
+| 7   | Stale code comments (`AddCompensationCoupon`, `orderMaximum 100000`, `entry_point` default)   | Documentation only                                               |
+| 8   | `docs/RELEASE.md` describes the old deploy flow                                               | Use this guide / `deploy-ecs.yml`                                |
 
 ---
 
