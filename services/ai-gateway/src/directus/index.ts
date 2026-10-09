@@ -241,7 +241,9 @@ export class GatewayDirectus {
     return (await this.client.request(
       readItems(
         'vendors' as never,
-        { fields: ['id', 'yiji_vendor_id', 'status', 'name'], limit: -1 } as never,
+        /* `platform` picks the connector (MV-6): without it a mock vendor would
+           read as Yiji. Granted to svc-ai-gateway in roles.ts. */
+        { fields: ['id', 'yiji_vendor_id', 'status', 'name', 'platform'], limit: -1 } as never,
       ),
     )) as unknown as VendorRow[];
   }

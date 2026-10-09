@@ -33,7 +33,7 @@ export interface VendorNotifySettings {
  * All optional: a vendor row from before MV-1 has none of them.
  */
 export interface VendorIntegration {
-  platform?: 'yiji' | null;
+  platform?: 'yiji' | 'mock' | null;
   api_base_url?: string | null;
   admin_api_url?: string | null;
   tenant_id?: string | null;
