@@ -25,6 +25,7 @@ import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { ReportVendorFilter, useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 
 /**
  * What happens to the coupons agents ask for.
@@ -35,15 +36,19 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
  * throughout: both went through, but only one went through as asked, and the
  * difference is the whole reason this page exists.
  */
-function useCouponFacts() {
+export function useCouponFacts() {
+  /* The shared report vendor filter (MV-7); '' = every vendor, always so with
+     one — then neither the key nor the request changes at all. */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['coupon-approval-facts'],
+    queryKey: ['coupon-approval-facts', ...(vendor ? [vendor] : [])],
     staleTime: 60_000,
     queryFn: async (): Promise<CouponApprovalFact[]> => {
       const rows = (await directus.request(
         readItems(
           'coupon_approvals' as never,
           {
+            ...(vendor ? { filter: withVendor({}, vendor) } : {}),
             limit: -1,
             fields: ['status', 'edited_by_admin', { requested_by: ['id', 'first_name', 'email'] }],
           } as never,
@@ -165,6 +170,8 @@ export function CouponReportPage() {
           {t('couponReport.title', { defaultValue: 'Coupon approvals' })}
         </h1>
         <ToolbarSpacer />
+        {/* Renders nothing unless 2+ vendors are active. */}
+        <ReportVendorFilter className="flex items-center gap-2" />
         {canExport && (
           <Button
             type="button"

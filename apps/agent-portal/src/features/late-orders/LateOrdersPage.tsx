@@ -51,6 +51,7 @@ import { useStoreIndex } from '../tickets/useStoreMatch.js';
 /* The ticket path's own shaper — one idea of what an order snapshot is. */
 import { orderToSnapshot } from '../tickets/OrderSnapshotCard.js';
 import { useVendors } from '../tickets/api.js';
+import { useVendorDirectory } from '../../lib/vendors.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
 import { QuickReplies } from '../conversation/QuickReplies.js';
@@ -393,12 +394,22 @@ export function LateOrdersPage() {
   const showingToday = !range;
 
   const vendors = useVendors();
+  /*
+   * THE VENDOR FILTER (MV-7): offered, and applied, only with 2+ active
+   * vendors. With one vendor it never renders, `vendorFilter` is '' and every
+   * request below is exactly what it was. A choice left over from when a
+   * second vendor was live stops applying the moment it is gone.
+   */
+  const vendorDir = useVendorDirectory();
+  const [vendorChoice, setVendorChoice] = useState('');
+  const vendorFilter =
+    vendorDir.show && vendorDir.options.some((v) => v.id === vendorChoice) ? vendorChoice : '';
 
   /* The queue follows the range. Today is a range too — so finished orders
      stay on the list — but it is still live, so it keeps polling. */
   /* Today keeps polling — orders cross the threshold while an agent watches.
      A searched range is a fixed answer and does not. */
-  const queue = useLateOrders(activeRange, true, showingToday);
+  const queue = useLateOrders(activeRange, true, showingToday, vendorFilter || undefined);
   /* `useHandledLateOrders` is deliberately NOT used here any more (ops,
      2026-10-03). It asked only for the last 24 hours, so an order compensated
      the day before looked unhandled and the row offered a second coupon.
@@ -510,7 +521,9 @@ export function LateOrdersPage() {
      and the window actually requested can never disagree — reading `builtAt`
      here once meant the filter could name a different day than the query. */
   const currentBusinessDay = dayTick;
-  const soleVendorId = vendors.data?.length === 1 ? vendors.data[0]!.id : null;
+  /* The vendor these orders belong to: the CHOSEN one when the queue is
+     narrowed to a vendor (MV-7), else the deployment's single vendor. */
+  const soleVendorId = vendorFilter || (vendors.data?.length === 1 ? vendors.data[0]!.id : null);
   /* The store master, for attributing a raised ticket to its branch. Shares
      the tickets page's query key, so it is one cached copy. */
   const { index: storeIndex } = useStoreIndex();
@@ -589,7 +602,7 @@ export function LateOrdersPage() {
   /* The SAME window the queue is showing, so the decisions behind these orders
      are the ones actually fetched — a fixed 30 days left an older search with
      five empty columns and no aged-out rows at all. */
-  const decisions = useLateOrderDecisions(activeRange ?? undefined);
+  const decisions = useLateOrderDecisions(activeRange ?? undefined, vendorFilter || undefined);
   /*
    * THE HANDLING STATE of one order: pending, commented or handled.
    *
@@ -722,7 +735,10 @@ export function LateOrdersPage() {
     () => rows.slice((current - 1) * pageSize, current * pageSize),
     [rows, current, pageSize],
   );
-  const eventTimes = useOrderEventTimes(paged.map((r) => r.orderId));
+  const eventTimes = useOrderEventTimes(
+    paged.map((r) => r.orderId),
+    vendorFilter || undefined,
+  );
   /*
    * THE CAUSES, from the editable list (owner, 2026-09-29).
    *
@@ -1178,6 +1194,28 @@ export function LateOrdersPage() {
                 className="w-52"
               />
             </label>
+            {/* Whose orders (MV-7) — only with 2+ active vendors. Applies at
+            once: it picks a different queue, not a wider date walk. */}
+            {vendorDir.show && (
+              <label className="flex flex-col gap-1">
+                <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                  {t('lateOrders.filter.vendor', { defaultValue: 'Vendor' })}
+                </span>
+                <SelectMenu
+                  value={vendorFilter}
+                  size="sm"
+                  onChange={(v) => setVendorChoice(v)}
+                  aria-label={t('lateOrders.filter.vendor', { defaultValue: 'Vendor' })}
+                  options={[
+                    {
+                      value: '',
+                      label: t('lateOrders.filter.allVendors', { defaultValue: 'All vendors' }),
+                    },
+                    ...vendorDir.options.map((v) => ({ value: v.id, label: v.name })),
+                  ]}
+                />
+              </label>
+            )}
             {/* Applied on click, not per keystroke: a range walks upstream pages,
             so typing a date would fire a query per character. */}
             {/*
@@ -1262,6 +1300,7 @@ export function LateOrdersPage() {
                 setBrandQuery('');
                 setHandlingFilter('pending');
                 setStatusFilter(new Set());
+                setVendorChoice('');
               }}
             >
               {t('lateOrders.filter.reset', { defaultValue: 'Reset' })}

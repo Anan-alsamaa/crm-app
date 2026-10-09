@@ -39,6 +39,7 @@ import {
   toCsv,
 } from '@yiji/reports';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 import { TicketHistoryDrawer } from '../report-exports/TicketHistoryDrawer.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 
@@ -115,14 +116,19 @@ interface Row {
 /** `||` not `??`: Directus stores an unset name as an empty string. */
 const who = (u: Row['requested_by']) => u?.first_name?.trim() || u?.email || '';
 
-function useAllCoupons() {
+export function useAllCoupons() {
+  /* The shared report vendor filter (MV-7); '' = every vendor, always so with
+     one — then neither the key nor the request changes at all. */
+  const vendor = useReportVendorFilter();
   return useQuery({
-    queryKey: ['all-compensation'],
+    queryKey: ['all-compensation', ...(vendor ? [vendor] : [])],
     queryFn: async () =>
       (await directus.request(
         readItems(
           'coupon_approvals' as never,
           {
+            /* `coupon_approvals.vendor` is the CRM vendor id. */
+            ...(vendor ? { filter: withVendor({}, vendor) } : {}),
             limit: -1,
             sort: ['-date_created'],
             fields: [
@@ -783,6 +789,7 @@ export function AllCompensationPage() {
             ]}
             filtering={filtering}
             onClear={reset}
+            vendorFilter
             actions={
               <div className="flex flex-wrap items-center gap-2">
                 {/* Arrange only — no checkboxes. Every column stays on screen

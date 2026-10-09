@@ -50,6 +50,7 @@ import {
   type YijiUserProfile,
 } from './yiji-impl.js';
 import { MockConnector } from './mock-connector.js';
+import { YIJI_VENDOR_KEY, vendorCredentialsFromEnv, type SecretEnv } from './vendor-secrets.js';
 
 /* ── The CRM's standard commerce shapes ──────────────────────────── */
 
@@ -485,8 +486,8 @@ export class CachedVendorDirectory implements VendorDirectory {
 /**
  * Every Yiji vendor gets the SAME settings — today's single env config.
  *
- * The first `VendorSettingsSource`. MV-1 replaces it with one that reads each
- * vendor's own URLs/credentials; no call site changes.
+ * The first `VendorSettingsSource`; services that read the vendor record use
+ * `RecordVendorSettingsSource` (MV-7) instead.
  */
 export class EnvVendorSettingsSource implements VendorSettingsSource {
   constructor(
@@ -501,6 +502,196 @@ export class EnvVendorSettingsSource implements VendorSettingsSource {
       throw new UnknownVendorError(vendor.platformVendorId, 'mock_not_allowed');
     }
     throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
+  }
+}
+
+/* ── Settings from the vendor record (MV-7) ──────────────────────── */
+
+/**
+ * A vendor's NON-SECRET integration settings as the `vendors` row holds them
+ * (MV-1). Read by svc-ai-gateway and svc-workers only (roles.ts); never a
+ * credential — those stay in service env (docs/VENDOR-SECRETS.md).
+ */
+export interface VendorIntegrationRow {
+  id: string;
+  yiji_vendor_id?: string | null;
+  /** Names the vendor's env credentials (`VENDOR_<KEY>_*`). */
+  webhook_path_key?: string | null;
+  api_base_url?: string | null;
+  admin_api_url?: string | null;
+  tenant_id?: string | null;
+  brand_id?: string | null;
+  notify_settings?: {
+    notifyUrl?: unknown;
+    notifyTopic?: unknown;
+    notifyTitle?: unknown;
+    openChatAction?: unknown;
+  } | null;
+}
+
+/**
+ * The fields a service reads for `VendorIntegrationRow`. Every one must be in
+ * that service's `vendors` read grant (roles.ts), or Directus refuses the read
+ * whole — which this source survives by falling back to env.
+ */
+export const VENDOR_INTEGRATION_READ_FIELDS = [
+  'id',
+  'yiji_vendor_id',
+  'webhook_path_key',
+  'api_base_url',
+  'admin_api_url',
+  'tenant_id',
+  'brand_id',
+  'notify_settings',
+] as const;
+
+export interface RecordVendorSettingsSourceOptions {
+  /**
+   * Today's env settings for Yiji. Every NON-SECRET field the record leaves
+   * blank falls back to it, field by field; the env (legacy) vendor also takes
+   * its CREDENTIALS from it, exactly as before.
+   */
+  env: YijiPlatformSettings;
+  /** The env vendor's platform id (`yiji_vendor_id`, '1'): the one that keeps `YIJI_*` credentials. */
+  legacyVendorKey: string;
+  /** Reads the integration rows (`VENDOR_INTEGRATION_READ_FIELDS`). */
+  load: () => Promise<VendorIntegrationRow[]>;
+  /** Where another vendor's `VENDOR_<KEY>_*` credentials are read (the service's process.env). */
+  credentialEnv?: SecretEnv;
+  /** MV-6: answer `mock` vendors. */
+  allowMock?: boolean;
+  /** How long a successful read is trusted. Default 5 minutes. */
+  ttlMs?: number;
+  /** How long to wait before reading again after a failure. Default 30 s. */
+  retryMs?: number;
+  /** Told about every failed read (the env answers meanwhile), so a fallback is never silent. */
+  onFallback?: (err: unknown) => void;
+  now?: () => number;
+}
+
+const str = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() ? v.trim() : undefined;
+
+/**
+ * Each vendor's settings from ITS OWN `vendors` record (MV-7), env behind it.
+ *
+ * NON-SECRET fields (order/admin API URLs, tenant, brand, notify settings)
+ * come from the record when set, else from today's env, per field. SECRETS
+ * never come from the record: the env vendor (`legacyVendorKey`, or a vendor
+ * whose `webhook_path_key` is `yiji`) keeps today's `YIJI_*` credentials as the
+ * service already passes them; any other vendor gets only its own
+ * `VENDOR_<KEY>_API_KEY` / `_ADMIN_EMAIL` / `_ADMIN_PASSWORD` (KEY from its
+ * `webhook_path_key`) - never Yiji's.
+ *
+ * A failed read never breaks commerce: the last good rows answer, else env
+ * only, reported through `onFallback`.
+ */
+export class RecordVendorSettingsSource implements VendorSettingsSource {
+  private good: { rows: VendorIntegrationRow[]; at: number } | null = null;
+  private retryAt = 0;
+  private inflight: Promise<VendorIntegrationRow[] | null> | null = null;
+  private readonly ttlMs: number;
+  private readonly retryMs: number;
+  private readonly now: () => number;
+
+  constructor(private readonly opts: RecordVendorSettingsSourceOptions) {
+    this.ttlMs = opts.ttlMs ?? 5 * 60_000;
+    this.retryMs = opts.retryMs ?? 30_000;
+    this.now = opts.now ?? Date.now;
+  }
+
+  private async rows(): Promise<VendorIntegrationRow[] | null> {
+    const t = this.now();
+    if (this.good && t - this.good.at < this.ttlMs) return this.good.rows;
+    if (t < this.retryAt) return this.good?.rows ?? null;
+    this.inflight ??= (async () => {
+      try {
+        const rows = await this.opts.load();
+        this.good = { rows, at: this.now() };
+        this.retryAt = 0;
+        return rows;
+      } catch (err) {
+        this.retryAt = this.now() + this.retryMs;
+        this.opts.onFallback?.(err);
+        return this.good?.rows ?? null;
+      }
+    })().finally(() => {
+      this.inflight = null;
+    });
+    return this.inflight;
+  }
+
+  async settingsFor(vendor: ConnectorVendor): Promise<VendorPlatformSettings> {
+    if (vendor.platform === 'mock') {
+      if (this.opts.allowMock) return { platform: 'mock' };
+      throw new UnknownVendorError(vendor.platformVendorId, 'mock_not_allowed');
+    }
+    if (vendor.platform !== 'yiji') {
+      throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
+    }
+    const rows = await this.rows();
+    const rec =
+      rows?.find((r) => vendor.crmId && r.id === vendor.crmId) ??
+      rows?.find((r) => str(r.yiji_vendor_id) === vendor.platformVendorId) ??
+      null;
+    return this.merge(vendor, rec);
+  }
+
+  private merge(vendor: ConnectorVendor, rec: VendorIntegrationRow | null): YijiPlatformSettings {
+    const env = this.opts.env;
+    const key = str(rec?.webhook_path_key)?.toLowerCase();
+    const isEnvVendor =
+      vendor.platformVendorId === this.opts.legacyVendorKey || key === YIJI_VENDOR_KEY;
+
+    /* Credentials: env only. The env vendor keeps exactly what the service
+       passed (incl. whether it passed an order-API token at all). */
+    let client: YijiClientEnv;
+    let apiKey: string | undefined;
+    if (isEnvVendor) {
+      client = { ...env.client };
+      apiKey = env.push?.apiKey;
+    } else {
+      const creds = key ? vendorCredentialsFromEnv(this.opts.credentialEnv ?? {}, key) : {};
+      client = {
+        ...(env.client.apiUrl !== undefined ? { apiUrl: env.client.apiUrl } : {}),
+        ...(env.client.adminApiUrl !== undefined ? { adminApiUrl: env.client.adminApiUrl } : {}),
+        ...(env.client.mockFixtures ? { mockFixtures: env.client.mockFixtures } : {}),
+        ...('token' in env.client && creds.apiKey ? { token: creds.apiKey } : {}),
+        ...(creds.adminEmail ? { adminEmail: creds.adminEmail } : {}),
+        ...(creds.adminPassword ? { adminPassword: creds.adminPassword } : {}),
+      };
+      apiKey = creds.apiKey;
+    }
+
+    /* Non-secret: the record when set, else env - per field. */
+    const apiUrl = str(rec?.api_base_url);
+    const adminApiUrl = str(rec?.admin_api_url);
+    if (apiUrl) client.apiUrl = apiUrl;
+    if (adminApiUrl) client.adminApiUrl = adminApiUrl;
+    const tenantId = str(rec?.tenant_id) ?? env.tenantId;
+    const brandId = str(rec?.brand_id) ?? env.brandId;
+
+    const n =
+      rec?.notify_settings && typeof rec.notify_settings === 'object' ? rec.notify_settings : {};
+    let push: YijiPlatformSettings['push'];
+    if (env.push || Object.keys(n).length > 0) {
+      const p = env.push ?? {};
+      push = {
+        notifyUrl: str(n.notifyUrl) ?? p.notifyUrl,
+        notifyTopic: str(n.notifyTopic) ?? p.notifyTopic,
+        notifyTitle: str(n.notifyTitle) ?? p.notifyTitle,
+        openChatAction: str(n.openChatAction) ?? p.openChatAction,
+        apiKey,
+      };
+    }
+
+    return {
+      platform: 'yiji',
+      client,
+      ...(tenantId !== undefined ? { tenantId } : {}),
+      ...(brandId !== undefined ? { brandId } : {}),
+      ...(push ? { push } : {}),
+    };
   }
 }
 
@@ -553,7 +744,8 @@ const MOCK_FACTORY: ConnectorFactory = (vendor, settings) => {
  */
 export class ConnectorRegistry {
   private readonly factories: Partial<Record<CommercePlatform, ConnectorFactory>>;
-  private readonly connectors = new Map<string, Promise<VendorConnector>>();
+  /** One connector per vendor, with the settings it was built from (fingerprint). */
+  private readonly connectors = new Map<string, { fp: string; connector: VendorConnector }>();
 
   /**
    * THE PLATFORM PICKS THE CONNECTOR: `vendor.platform` (from
@@ -594,20 +786,23 @@ export class ConnectorRegistry {
     return vendor;
   }
 
+  /**
+   * The vendor's connector. Reused while its settings are unchanged (so its
+   * cached admin token survives); rebuilt when they change — MV-7 reads them
+   * from the vendor record (cached), so an edit on the Vendors page, or the
+   * record read recovering after an env fallback, takes effect without a
+   * restart. A failed build is not cached: the next call tries again.
+   */
   async connectorFor(vendorKey: string): Promise<VendorConnector> {
     const vendor = await this.resolveVendor(vendorKey);
     const cacheKey = `${vendor.platform}:${vendor.platformVendorId}`;
-    let pending = this.connectors.get(cacheKey);
-    if (!pending) {
-      const factory = this.factories[vendor.platform]!;
-      pending = this.opts.settings
-        .settingsFor(vendor)
-        .then((settings) => factory(vendor, settings));
-      // A failed build is not cached: the next call tries again.
-      pending.catch(() => this.connectors.delete(cacheKey));
-      this.connectors.set(cacheKey, pending);
-    }
-    return pending;
+    const settings = await this.opts.settings.settingsFor(vendor);
+    const fp = JSON.stringify(settings);
+    const hit = this.connectors.get(cacheKey);
+    if (hit && hit.fp === fp) return hit.connector;
+    const connector = this.factories[vendor.platform]!(vendor, settings);
+    this.connectors.set(cacheKey, { fp, connector });
+    return connector;
   }
 
   /**
@@ -722,6 +917,16 @@ export function createEnvConnectorRegistry(opts: {
   vendorsTtlMs?: number;
   /** MV-6: pass `mockVendorsAllowed(process.env)`. Default off. */
   allowMockVendors?: boolean;
+  /**
+   * MV-7: read each vendor's NON-SECRET integration settings from its record
+   * (`VENDOR_INTEGRATION_READ_FIELDS`), env behind it per field. Without it
+   * every Yiji vendor gets today's env settings.
+   */
+  loadIntegration?: () => Promise<VendorIntegrationRow[]>;
+  /** MV-7: where another vendor's `VENDOR_<KEY>_*` credentials are read (process.env). */
+  credentialEnv?: SecretEnv;
+  /** MV-7: told when the integration read fails (env settings answer meanwhile). */
+  onSettingsFallback?: (err: unknown) => void;
 }): ConnectorRegistry {
   const vendor: ConnectorVendor = {
     platformVendorId: opts.vendorId?.trim() || LEGACY_YIJI_VENDOR_ID,
@@ -740,10 +945,20 @@ export function createEnvConnectorRegistry(opts: {
           ...(opts.onDirectoryFallback ? { onFallback: opts.onDirectoryFallback } : {}),
         })
       : envDirectory,
-    settings: new EnvVendorSettingsSource(
-      { platform: 'yiji', ...opts.yiji },
-      { allowMock: Boolean(opts.allowMockVendors) },
-    ),
+    settings: opts.loadIntegration
+      ? new RecordVendorSettingsSource({
+          env: { platform: 'yiji', ...opts.yiji },
+          legacyVendorKey: vendor.platformVendorId,
+          load: opts.loadIntegration,
+          allowMock: Boolean(opts.allowMockVendors),
+          ...(opts.credentialEnv ? { credentialEnv: opts.credentialEnv } : {}),
+          ...(opts.vendorsTtlMs != null ? { ttlMs: opts.vendorsTtlMs } : {}),
+          ...(opts.onSettingsFallback ? { onFallback: opts.onSettingsFallback } : {}),
+        })
+      : new EnvVendorSettingsSource(
+          { platform: 'yiji', ...opts.yiji },
+          { allowMock: Boolean(opts.allowMockVendors) },
+        ),
     legacyVendorKey: vendor.platformVendorId,
     allowMockVendors: Boolean(opts.allowMockVendors),
     ...(opts.factories ? { factories: opts.factories } : {}),

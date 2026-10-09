@@ -75,6 +75,22 @@ export const VENDOR_PUBLIC_FIELDS = ['id', 'name', 'logo', 'colors', 'status', '
 const vendorsRead = (extra: string[] = []): PermissionSpec[] => [
   { collection: 'vendors', action: 'read', fields: [...VENDOR_PUBLIC_FIELDS, ...extra] },
 ];
+/**
+ * MV-7: the NON-SECRET integration settings the commerce connectors read from
+ * each vendor's record (`VENDOR_INTEGRATION_READ_FIELDS` in shared-types),
+ * beyond the display fields. `webhook_path_key` names the vendor's env
+ * credentials (`VENDOR_<KEY>_*`). Granted ONLY to svc-ai-gateway and
+ * svc-workers, the two services that call the platform.
+ */
+export const VENDOR_CONNECTOR_SETTINGS_FIELDS = [
+  'platform',
+  'webhook_path_key',
+  'api_base_url',
+  'admin_api_url',
+  'tenant_id',
+  'brand_id',
+  'notify_settings',
+];
 
 const ALL_BUSINESS = [
   'teams',
@@ -838,8 +854,11 @@ export const roles: RoleSpec[] = [
        * name, platform — the platform PICKS the connector, and without it a
        * `mock` test vendor would read as Yiji. A field named in the query but
        * missing here 403s the whole read (registry falls back to env vendor).
+       * MV-7: plus the NON-SECRET connector settings (URLs, tenant, brand,
+       * notify settings, webhook_path_key), read in a SEPARATE query, so a
+       * missing grant only degrades the settings to env (logged).
        */
-      ...vendorsRead(['platform']),
+      ...vendorsRead(VENDOR_CONNECTOR_SETTINGS_FIELDS),
     ],
   },
   {
@@ -878,8 +897,10 @@ export const roles: RoleSpec[] = [
        * request answers 404 `unknown_vendor`. Display fields plus `platform`
        * (MV-6): it reads id, yiji_vendor_id, status, name, platform — the
        * platform picks the connector, so a `mock` vendor never reads as Yiji.
+       * MV-7: plus the NON-SECRET connector settings, read in a separate
+       * query (a missing grant degrades only the settings to env, logged).
        */
-      ...vendorsRead(['platform']),
+      ...vendorsRead(VENDOR_CONNECTOR_SETTINGS_FIELDS),
     ],
   },
 ];

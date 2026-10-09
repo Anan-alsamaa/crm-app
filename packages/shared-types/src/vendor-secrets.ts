@@ -50,6 +50,56 @@ export function vendorSecretEnvNames(vendorKey: string): { jwt: string; webhook:
   return { jwt: `VENDOR_${seg}_JWT_SECRET`, webhook: `VENDOR_${seg}_WEBHOOK_SECRET` };
 }
 
+/**
+ * The env var names holding a vendor's PLATFORM API credentials (MV-7) — read
+ * by the services that call the platform (ai-gateway, workers), never by the
+ * browser and never from the `vendors` table.
+ *
+ *   - Yiji (key `yiji`): YIJI_API_KEY, YIJI_ADMIN_EMAIL, YIJI_ADMIN_PASSWORD
+ *   - any other key:     VENDOR_<KEY>_API_KEY, VENDOR_<KEY>_ADMIN_EMAIL,
+ *                        VENDOR_<KEY>_ADMIN_PASSWORD
+ *
+ * Same no-fallback rule as the secrets above: a vendor without its variables
+ * has no credential; it never borrows Yiji's.
+ */
+export function vendorCredentialEnvNames(vendorKey: string): {
+  apiKey: string;
+  adminEmail: string;
+  adminPassword: string;
+} {
+  const key = vendorKey.trim().toLowerCase();
+  if (key === YIJI_VENDOR_KEY) {
+    return {
+      apiKey: 'YIJI_API_KEY',
+      adminEmail: 'YIJI_ADMIN_EMAIL',
+      adminPassword: 'YIJI_ADMIN_PASSWORD',
+    };
+  }
+  const seg = vendorEnvSegment(key);
+  return {
+    apiKey: `VENDOR_${seg}_API_KEY`,
+    adminEmail: `VENDOR_${seg}_ADMIN_EMAIL`,
+    adminPassword: `VENDOR_${seg}_ADMIN_PASSWORD`,
+  };
+}
+
+/** A vendor's platform credentials from env by the convention above; blanks are absent. */
+export function vendorCredentialsFromEnv(
+  env: SecretEnv,
+  vendorKey: string,
+): { apiKey?: string; adminEmail?: string; adminPassword?: string } {
+  if (typeof vendorKey !== 'string' || !VENDOR_KEY_PATTERN.test(vendorKey.trim().toLowerCase())) {
+    return {};
+  }
+  const names = vendorCredentialEnvNames(vendorKey);
+  const out: { apiKey?: string; adminEmail?: string; adminPassword?: string } = {};
+  for (const k of ['apiKey', 'adminEmail', 'adminPassword'] as const) {
+    const v = env[names[k]]?.trim();
+    if (v) out[k] = v;
+  }
+  return out;
+}
+
 export interface VendorSecrets {
   /** The customer-JWT secret for this vendor key, or null (= refuse). */
   jwtSecret(vendorKey: string): string | null;

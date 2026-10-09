@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { VENDOR_INTEGRATION_READ_FIELDS } from '@yiji/shared-types';
 import { roles, VENDOR_PUBLIC_FIELDS } from '../../../directus/bootstrap/src/roles.js';
 
 /**
@@ -60,13 +61,21 @@ describe('vendors permissions in roles.ts', () => {
       roles.find((r) => r.name === name)!.permissions!.find((p) => p.collection === 'vendors')!
         .fields!;
     expect(fieldsOf('svc-socket-gateway')).toContain('webhook_path_key');
-    /* MV-6: the connector registries in these two read `platform` — it picks
-       the connector — and nothing else from the integration settings. */
+    /* MV-6/MV-7: the connector registries in these two read `platform` (it
+       picks the connector) and each vendor's NON-SECRET connector settings —
+       every field the code reads, so the read is never refused whole — and
+       nothing else (never support_settings). */
+    const read = new Set<string>(['platform', ...VENDOR_INTEGRATION_READ_FIELDS]);
     for (const svc of ['svc-workers', 'svc-ai-gateway']) {
-      expect(fieldsOf(svc)).toContain('platform');
-      for (const f of INTEGRATION_FIELDS.filter((x) => x !== 'platform'))
-        expect(fieldsOf(svc)).not.toContain(f);
+      for (const f of read) expect(fieldsOf(svc), `${svc}:${f}`).toContain(f);
+      expect(fieldsOf(svc)).not.toContain('support_settings');
+      expect([...fieldsOf(svc)].sort()).toEqual(
+        [...new Set([...VENDOR_PUBLIC_FIELDS, ...read])].sort(),
+      );
     }
+    /* The socket gateway reads none of the connector settings. */
+    for (const f of INTEGRATION_FIELDS.filter((x) => x !== 'webhook_path_key'))
+      expect(fieldsOf('svc-socket-gateway')).not.toContain(f);
   });
 });
 

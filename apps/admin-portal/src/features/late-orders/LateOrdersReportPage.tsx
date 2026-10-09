@@ -35,6 +35,7 @@ import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { exportFileName } from '@yiji/shared-config';
 import { businessDayWindow, useRememberedRange } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { useReportVendorFilter } from '../../lib/report-vendor.js';
 /*
  * THE SAME CART AND TRACKING THE AGENT PORTAL SHOWS (ops, 2026-10-04).
  *
@@ -532,7 +533,10 @@ export function LateOrdersReportPage() {
    *     order id alone and needs no vendor.
    */
   const vendors = useVendorDirectory();
-  const yijiVendorId = vendors.data?.[0]?.yiji_vendor_id;
+  /* With the register narrowed to a vendor (MV-7) its orders are that
+     vendor's: the order panel asks its platform (the gateway takes the CRM id). */
+  const reportVendor = useReportVendorFilter();
+  const yijiVendorId = reportVendor || vendors.data?.[0]?.yiji_vendor_id;
 
   const exportByAgent = () => {
     const header = [
@@ -1087,6 +1091,7 @@ export function LateOrdersReportPage() {
              default month, so Clear means what it says. */
               reset();
             }}
+            vendorFilter
           />
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

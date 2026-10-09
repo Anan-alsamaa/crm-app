@@ -51,6 +51,13 @@ export function useLateOrders(
    * presence of dates.
    */
   live = false,
+  /**
+   * The vendor chosen in the page's vendor filter (MV-7): its CRM id
+   * (`vendors.id`), which the gateway resolves to that vendor's connector.
+   * Only ever set with 2+ active vendors; unset, the request and the cache key
+   * are exactly what they were before (no `vendorId` = the legacy vendor).
+   */
+  vendorId?: string,
 ) {
   /*
    * A PAST RANGE stops the polling.
@@ -70,8 +77,12 @@ export function useLateOrders(
          are different questions with different freshness, and a React Query key
          must contain everything its data resolved against. */
       live ? 'live' : 'hist',
+      ...(vendorId ? [vendorId] : []),
     ],
-    queryFn: () => commerce.getLateOrders(range, live),
+    queryFn: () =>
+      vendorId
+        ? commerce.getLateOrders(range, live, vendorId)
+        : commerce.getLateOrders(range, live),
     enabled,
     refetchInterval: history ? false : 30_000,
     staleTime: history ? 5 * 60_000 : 15_000,
@@ -133,48 +144,61 @@ function dayAfter(day: string): string {
   return new Date(at + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
-export function useLateOrderDecisions(range?: { from: string; to: string }) {
+export function useLateOrderDecisions(
+  range?: { from: string; to: string },
+  /** The chosen vendor's CRM id (MV-7); unset = every vendor, the filter unchanged. */
+  vendorId?: string,
+) {
   return useQuery({
     /* The range is IN THE KEY. Without it a search for last week would be
        served the cached answer for today and quietly show the wrong rows. */
-    queryKey: ['late-orders', 'decisions', range?.from ?? null, range?.to ?? null],
+    queryKey: [
+      'late-orders',
+      'decisions',
+      range?.from ?? null,
+      range?.to ?? null,
+      ...(vendorId ? [vendorId] : []),
+    ],
     staleTime: 15_000,
     queryFn: async (): Promise<Map<string, LateOrderDecisionRow>> => {
+      const dateFilter = range
+        ? {
+            date_created: {
+              /*
+               * THE END IS EXCLUSIVE, so it must be the day AFTER the one
+               * the agent typed.
+               *
+               * Reported 2026-10-05: searching a single day showed `-` in
+               * Creation time, Business day, Agent, Reason and Action
+               * taken, and the Comment box opened blank — on an order the
+               * ADMIN register showed fully decided, by name.
+               *
+               * Searching From 04/10 To 04/10 sent
+               * `_between [04/10T00:00, 04/10T00:00]` — a ZERO-WIDTH
+               * window that matches nothing. Measured on production: 0
+               * rows for that filter, 8 once the end moved to 05/10. Every
+               * one of those columns reads from this query, so one empty
+               * answer blanked them all and looked like five separate
+               * faults.
+               *
+               * It hid behind the default view: `businessDayRange` already
+               * returns an exclusive `to` (the next day), so today's queue
+               * was always right and only a TYPED range was broken.
+               */
+              _between: [`${range.from}T00:00:00`, `${dayAfter(range.to)}T00:00:00`],
+            },
+          }
+        : /* No range means "today", which the caller resolves; a bare 30
+                   days is kept only as the floor for that case so the first
+                   paint is not unbounded. */
+          { date_created: { _gte: new Date(Date.now() - 30 * 86_400_000).toISOString() } };
       const rows = (await directus.request(
         readItems(
           'late_order_decisions' as never,
           {
-            filter: range
-              ? {
-                  date_created: {
-                    /*
-                     * THE END IS EXCLUSIVE, so it must be the day AFTER the one
-                     * the agent typed.
-                     *
-                     * Reported 2026-10-05: searching a single day showed `-` in
-                     * Creation time, Business day, Agent, Reason and Action
-                     * taken, and the Comment box opened blank — on an order the
-                     * ADMIN register showed fully decided, by name.
-                     *
-                     * Searching From 04/10 To 04/10 sent
-                     * `_between [04/10T00:00, 04/10T00:00]` — a ZERO-WIDTH
-                     * window that matches nothing. Measured on production: 0
-                     * rows for that filter, 8 once the end moved to 05/10. Every
-                     * one of those columns reads from this query, so one empty
-                     * answer blanked them all and looked like five separate
-                     * faults.
-                     *
-                     * It hid behind the default view: `businessDayRange` already
-                     * returns an exclusive `to` (the next day), so today's queue
-                     * was always right and only a TYPED range was broken.
-                     */
-                    _between: [`${range.from}T00:00:00`, `${dayAfter(range.to)}T00:00:00`],
-                  },
-                }
-              : /* No range means "today", which the caller resolves; a bare 30
-                   days is kept only as the floor for that case so the first
-                   paint is not unbounded. */
-                { date_created: { _gte: new Date(Date.now() - 30 * 86_400_000).toISOString() } },
+            /* A chosen vendor narrows the decisions to its own orders (MV-7):
+               `late_order_decisions.vendor` is the CRM vendor id. */
+            filter: vendorId ? { _and: [dateFilter, { vendor: { _eq: vendorId } }] } : dateFilter,
             /* `date_created` and `decided_by` so the queue can show WHEN a
                decision was taken and by WHOM — the register in the admin
                portal reports both, and the two screens must agree. */
@@ -290,16 +314,23 @@ export function useUpdateLateDecision() {
  * flattened. The DURATIONS are computed at render by `orderEventTimes`, against
  * the same clock the rest of the row uses, so a live order's service time ticks.
  */
-export function useOrderEventTimes(orderIds: string[]) {
+export function useOrderEventTimes(
+  orderIds: string[],
+  /** The chosen vendor (MV-7): its orders live on its own platform. Unset = unchanged. */
+  vendorId?: string,
+) {
   // Sorted + joined so the key is stable: the same ids in a different order
   // must not look like a different query and refetch.
   const key = [...orderIds].sort().join(',');
   return useQuery<Record<string, Record<string, string | null>>>({
-    queryKey: ['late-orders', 'event-times', key],
+    queryKey: ['late-orders', 'event-times', key, ...(vendorId ? [vendorId] : [])],
     enabled: orderIds.length > 0,
     staleTime: 60_000,
     retry: false,
-    queryFn: () => commerce.getOrderEventTimes(orderIds),
+    queryFn: () =>
+      vendorId
+        ? commerce.getOrderEventTimes(orderIds, vendorId)
+        : commerce.getOrderEventTimes(orderIds),
   });
 }
 

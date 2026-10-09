@@ -10,6 +10,8 @@ import {
   vendorsFromRows,
   type ConnectorRegistry,
   type VendorRow,
+  type VendorIntegrationRow,
+  VENDOR_INTEGRATION_READ_FIELDS,
   type QueueName,
   type NotificationJob,
   type SlaJob,
@@ -201,6 +203,23 @@ const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
       deps.logger.warn(
         { err: err instanceof Error ? err.message : String(err) },
         'vendors read failed - commerce connectors fall back to the env vendor',
+      ),
+    /* MV-7: each vendor's NON-SECRET settings (URLs, tenant, brand, notify
+       settings) from its record, env per field behind it; credentials stay env
+       (YIJI_* for Yiji, VENDOR_<KEY>_* for others). Read separately from the
+       vendors list, so a missing grant only degrades settings to env (logged). */
+    loadIntegration: async () =>
+      (await deps.directus.request(
+        readItems(
+          'vendors' as never,
+          { fields: [...VENDOR_INTEGRATION_READ_FIELDS], limit: -1 } as never,
+        ),
+      )) as unknown as VendorIntegrationRow[],
+    credentialEnv: process.env,
+    onSettingsFallback: (err) =>
+      deps.logger.warn(
+        { err: err instanceof Error ? err.message : String(err) },
+        'vendor integration settings read failed - commerce connectors use the env settings',
       ),
     yiji: {
       client: {

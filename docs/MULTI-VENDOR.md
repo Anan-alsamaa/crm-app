@@ -24,10 +24,18 @@ another platform's connector. A NULL platform reads as `yiji` (every vendor befo
 3. **Secrets** (owner approval: AWS task-definition change). On **svc socket-gateway**:
    `VENDOR_<KEY>_JWT_SECRET` (>= 32 chars) and `VENDOR_<KEY>_WEBHOOK_SECRET`, `KEY` = the
    webhook key upper-cased, non-alphanumerics -> `_` (docs/VENDOR-SECRETS.md). Platform API
-   credentials go on the services that call the platform (ai-gateway, workers).
-4. **Release checks.** `scripts/release-check/regressions.mjs` runs per vendor automatically:
-   connector resolves, cross-vendor isolation (contacts, conversations, tickets, coupons), and for
-   a mock vendor the mock commerce / chat login / webhook. All read-only on production.
+   credentials go on the services that call the platform (ai-gateway, workers):
+   `VENDOR_<KEY>_API_KEY`, `VENDOR_<KEY>_ADMIN_EMAIL`, `VENDOR_<KEY>_ADMIN_PASSWORD`.
+
+**Where a connector's settings come from (MV-7).** ai-gateway and workers read each vendor's
+non-secret settings (`api_base_url`, `admin_api_url`, `tenant_id`, `brand_id`,
+`notify_settings`, `webhook_path_key`) from its record, cached 5 minutes, each blank field
+falling back to the service's `YIJI_*` env value. A failed read (e.g. the grant below missing)
+answers with the env settings and logs `vendor integration settings read failed`; vendor
+resolution is a separate read and is unaffected. A changed record rebuilds that vendor's
+connector on the next request after the cache expires (no restart). 4. **Release checks.** `scripts/release-check/regressions.mjs` runs per vendor automatically:
+connector resolves, cross-vendor isolation (contacts, conversations, tickets, coupons), and for
+a mock vendor the mock commerce / chat login / webhook. All read-only on production.
 
 ## The staging test vendor
 
@@ -50,7 +58,18 @@ Yiji's shapes, so the real coupon processor runs end to end. Nothing it holds su
    rows' vendor to NULL, which means "legacy Yiji" (an approved test coupon would be pushed to
    real Yiji) or "every vendor" (quick replies, SLA policies).
 
-### Live edits this change needs (per environment, owner approval)
+### Live edits MV-7 needs (per environment, owner approval, BEFORE the deploy)
+
+| Where                                                        | Edit                                                                                                       |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Directus permission, policy `svc-ai-gateway`, `vendors` read | add fields `webhook_path_key`, `api_base_url`, `admin_api_url`, `tenant_id`, `brand_id`, `notify_settings` |
+| Directus permission, policy `svc-workers`, `vendors` read    | same six fields                                                                                            |
+
+Before going live, check the Yiji vendor row: its URLs must be exactly the env values
+(`https://order.yiji-app.com`, `https://admin.yiji-app.com`, tenant `1`); any `brand_id` /
+`notify_settings` set on it now take precedence over `YIJI_BRAND_ID` / `YIJI_NOTIFY_*`.
+
+### Live edits MV-6 needed (per environment, owner approval)
 
 | Where                                                        | Edit                                                    | Staging             | Prod      |
 | ------------------------------------------------------------ | ------------------------------------------------------- | ------------------- | --------- |

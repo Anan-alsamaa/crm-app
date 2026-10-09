@@ -860,7 +860,9 @@
       "rejected": "Rejected",
       "waitingApproval": "Waiting for approval",
       "waitingSignup": "Waiting for the customer to join Yiji"
-    }
+    },
+    "vendor": "Vendor",
+    "allVendors": "All vendors"
   },
   "coupons": {
     "title": "My coupons",
