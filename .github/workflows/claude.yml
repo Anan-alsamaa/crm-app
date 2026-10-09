@@ -39,7 +39,7 @@ on:
 jobs:
   claude:
     if: contains(github.event.comment.body || github.event.issue.body, '@claude')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Least privilege: enough to read the repo and open a PR, and nothing that
     # could alter settings, secrets, or protected branches.
     permissions:
