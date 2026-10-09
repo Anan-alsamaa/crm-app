@@ -57,6 +57,22 @@ function thread(ctx: ConversationContext): string {
  * than passing the raw code ("ar") is deliberate: the code is an identifier,
  * the name is an instruction, and models follow instructions more reliably.
  */
+/**
+ * THE DRAFT'S LANGUAGE WINS (owner, 2026-10-10).
+ *
+ * Enhance sends the portal's display language, and most agents run the portal
+ * in English — so an Arabic draft came back in English. When the agent has
+ * written something, the reply is in the language they wrote it in; only an
+ * empty or script-less draft falls back to the portal language.
+ */
+export function draftLanguage(draft: string | undefined): 'ar' | 'en' | undefined {
+  if (!draft) return undefined;
+  const arabic = (draft.match(/\p{Script=Arabic}/gu) ?? []).length;
+  const latin = (draft.match(/[A-Za-z]/g) ?? []).length;
+  if (arabic === 0 && latin === 0) return undefined;
+  return arabic >= latin ? 'ar' : 'en';
+}
+
 function writeIn(locale: string | undefined): string {
   if (!locale) return '';
   const ar = locale.toLowerCase().startsWith('ar');
@@ -84,8 +100,9 @@ export const prompts = {
   suggestReply(
     ctx: ConversationContext,
     draft: string | undefined,
-    locale: string | undefined,
+    uiLocale: string | undefined,
   ): { system: string; user: string } {
+    const locale = draftLanguage(draft) ?? uiLocale;
     return {
       system:
         'You draft helpful, concise customer-support replies on behalf of an agent. ' +
@@ -102,8 +119,8 @@ export const prompts = {
         'the support issue. ' +
         `${
           locale
-            ? `WRITE THE REPLY IN THIS LANGUAGE: ${locale}. The agent selected it, so it ` +
-              'overrides everything else — including the language of the thread. ' +
+            ? `WRITE THE REPLY IN THIS LANGUAGE: ${locale}. It overrides everything ` +
+              'else — including the language of the thread. ' +
               (locale.toLowerCase().startsWith('ar')
                 ? 'Write natural Modern Standard Arabic, not transliteration. '
                 : '')
