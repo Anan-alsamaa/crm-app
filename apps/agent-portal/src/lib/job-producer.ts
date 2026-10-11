@@ -114,3 +114,33 @@ export function notifyAssignmentBestEffort(
 ): void {
   void jobProducer.notifyAssignment(entityType, entityId).catch(() => undefined);
 }
+
+/**
+ * Agent-performance data, read by the gateway with its service token (owner,
+ * 2026-10-11): every agent's figures are visible on that page while the inbox
+ * keeps its own rules. Only named datasets exist - the server picks the fields.
+ */
+export type PerformanceDataset =
+  | 'conversations'
+  | 'linkedTickets'
+  | 'messages'
+  | 'routingEvents'
+  | 'csat'
+  | 'tickets'
+  | 'ticketCoupons'
+  | 'coupons'
+  | 'couponExtra';
+
+export async function performanceRead<T>(
+  dataset: PerformanceDataset,
+  filters: { from?: string; to?: string; agentId?: string; vendor?: string } = {},
+  opts: { ids?: string[]; field?: string } = {},
+): Promise<T[]> {
+  const res = await post<EnqueueResult & { data?: T[] }>('/jobs/performance', {
+    dataset,
+    filters,
+    ...(opts.ids ? { ids: opts.ids } : {}),
+    ...(opts.field ? { field: opts.field } : {}),
+  });
+  return res.data ?? [];
+}

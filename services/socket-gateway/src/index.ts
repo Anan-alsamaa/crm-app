@@ -65,6 +65,7 @@ import {
 import { Registry } from './metrics.js';
 import { parseAttachmentPolicy, sanitizeFilename } from './attachments.js';
 import { notifyAssignment } from './assignment-notify.js';
+import { PerformanceQuery, readPerformanceDataset } from './performance-report.js';
 
 /**
  * A link code: ten characters of Crockford base32, from a CSPRNG.
@@ -717,6 +718,26 @@ async function main(): Promise<void> {
     }
     return identity;
   };
+  /*
+   * Agent performance, read with the SERVICE token (owner, 2026-10-11): anyone
+   * who may open the page sees every agent's figures there, while the inbox
+   * keeps its own rules. Only fixed, named datasets - see performance-report.ts.
+   */
+  app.post('/jobs/performance', async (req, reply) => {
+    if (!(await requirePrivilege(req, reply, 'use_chat'))) return reply;
+    const parsed = PerformanceQuery.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ ok: false, error: 'invalid query' });
+    try {
+      const data = await readPerformanceDataset(
+        (collection, query) => directus.readForReport(collection, query),
+        parsed.data,
+      );
+      return reply.send({ ok: true, data });
+    } catch (err) {
+      logger.warn({ err, dataset: parsed.data.dataset }, 'performance report read failed');
+      return reply.code(502).send({ ok: false, error: 'read failed' });
+    }
+  });
   app.post('/jobs/import', async (req, reply) => {
     if (!(await requirePrivilege(req, reply, 'import_data'))) return reply;
     const parsed = ImportJob.safeParse(req.body);

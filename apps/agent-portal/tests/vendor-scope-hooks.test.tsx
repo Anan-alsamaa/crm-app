@@ -36,6 +36,22 @@ const commerce = vi.hoisted(() => ({
   getOrderEventTimes: vi.fn(async () => ({})),
 }));
 vi.mock('../src/lib/commerce-client.js', () => ({ commerce }));
+/* Agent performance is read through the gateway since 2026-10-11; the vendor
+   clause itself is built there (services/socket-gateway/tests/performance-report.test.ts). */
+const perf = vi.hoisted(() => ({
+  calls: [] as Array<{ dataset: string; filters: Record<string, unknown>; opts?: unknown }>,
+}));
+vi.mock('../src/lib/job-producer.js', () => ({
+  performanceRead: vi.fn(
+    async (dataset: string, filters: Record<string, unknown> = {}, opts?: unknown) => {
+      perf.calls.push({ dataset, filters, opts });
+      if (dataset === 'conversations') return [{ id: 'c1', status: 'open' }];
+      if (dataset === 'tickets') return [{ id: 't1' }];
+      if (dataset === 'coupons') return [{ id: 'cp1' }];
+      return [];
+    },
+  ),
+}));
 
 import { useInboxCounts } from '../src/features/inbox/api.js';
 import {
@@ -91,51 +107,29 @@ describe('inbox count tiles', () => {
 
 describe('Agent performance reads', () => {
   const run = async (vendor?: string) => {
+    perf.calls.length = 0;
     const filters = { from: '2026-10-01', agentId: 'faisal', ...(vendor ? { vendor } : {}) };
     const w = wrapper();
     renderHook(() => useChatTimings(filters), { wrapper: w });
     renderHook(() => useTicketPerformance(filters), { wrapper: w });
     renderHook(() => useCouponPerformance(filters), { wrapper: w });
     await waitFor(() => {
-      expect(callsTo('conversations').length).toBeGreaterThan(0);
-      expect(callsTo('tickets').length).toBeGreaterThan(0);
+      expect(perf.calls.some((c) => c.dataset === 'conversations')).toBe(true);
+      expect(perf.calls.some((c) => c.dataset === 'tickets')).toBe(true);
       // The main coupon read plus its four best-effort field reads.
-      expect(callsTo('coupon_approvals').length).toBeGreaterThanOrEqual(5);
+      expect(perf.calls.filter((c) => c.dataset.startsWith('coupon')).length).toBe(5);
     });
+    return perf.calls.filter((c) =>
+      ['conversations', 'tickets', 'coupons', 'couponExtra'].includes(c.dataset),
+    );
   };
 
-  it('add no vendor clause when none is chosen', async () => {
-    await run();
-    const conv = callsTo('conversations')[0]!;
-    expect(conv.query.filter).toEqual({
-      _and: [{ date_created: { _gte: '2026-10-01' } }, { assigned_agent: { _eq: 'faisal' } }],
-    });
-    const tickets = callsTo('tickets').filter((c) => json(c.query.filter).includes('date_created'));
-    for (const c of tickets) expect(json(c.query.filter)).not.toContain('vendor');
-    const coupons = callsTo('coupon_approvals').filter((c) =>
-      json(c.query.filter).includes('date_created'),
-    );
-    expect(coupons.length).toBeGreaterThanOrEqual(5);
-    for (const c of coupons) expect(json(c.query.filter)).not.toContain('vendor');
+  it('add no vendor when none is chosen', async () => {
+    for (const c of await run()) expect(c.filters).not.toHaveProperty('vendor');
   });
 
-  it('scope chats, tickets and coupons (and their KPIs) to the chosen vendor', async () => {
-    await run('v-two');
-    expect(callsTo('conversations')[0]!.query.filter).toEqual({
-      _and: [
-        { date_created: { _gte: '2026-10-01' } },
-        { assigned_agent: { _eq: 'faisal' } },
-        { vendor: { _eq: 'v-two' } },
-      ],
-    });
-    const tickets = callsTo('tickets').filter((c) => json(c.query.filter).includes('date_created'));
-    expect(tickets).toHaveLength(1);
-    expect(json(tickets[0]!.query.filter)).toContain('{"vendor":{"_eq":"v-two"}}');
-    const coupons = callsTo('coupon_approvals').filter((c) =>
-      json(c.query.filter).includes('date_created'),
-    );
-    expect(coupons.length).toBeGreaterThanOrEqual(5);
-    for (const c of coupons) expect(json(c.query.filter)).toContain('{"vendor":{"_eq":"v-two"}}');
+  it('pass the chosen vendor to every filtered read (chats, tickets, coupons)', async () => {
+    for (const c of await run('v-two')) expect(c.filters.vendor).toBe('v-two');
   });
 });
 

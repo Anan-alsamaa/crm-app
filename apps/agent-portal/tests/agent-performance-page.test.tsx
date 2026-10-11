@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -52,6 +52,10 @@ const sla = vi.hoisted(() => ({
   useSlaHours: vi.fn(() => ({ data: { chat: null, ticket: null }, isLoading: false })),
 }));
 vi.mock('../src/lib/sla-hours.js', () => sla);
+const access = vi.hoisted(() => ({ canRead: vi.fn(async (_id: string) => true) }));
+vi.mock('../src/features/tickets/api.js', () => ({
+  canReadConversation: (id: string) => access.canRead(id),
+}));
 
 import { MemoryRouter } from 'react-router-dom';
 import { AgentPerformancePage } from '../src/features/performance/AgentPerformancePage.js';
@@ -215,7 +219,35 @@ describe('AgentPerformancePage', () => {
     renderPage();
     const breakdown = screen.getByRole('table', { name: 'Chat by chat' });
     await user.click(within(breakdown).getByText('20m 0s'));
-    expect(navigate).toHaveBeenCalledWith('/?conv=slow');
+    await waitFor(() => expect(navigate).toHaveBeenCalledWith('/?conv=slow'));
+  });
+
+  /* Owner, 2026-10-11: every agent sees every agent's rows, but a live chat
+     held by someone else is not theirs to open - say so, never a blank inbox. */
+  /* Owner, 2026-10-11: a rating column, empty when the customer did not rate. */
+  it('shows each chat’s own customer rating, and nothing when unrated', () => {
+    vi.mocked(perf.useCsatByConversation).mockReturnValue({
+      data: new Map([['slow', 4]]),
+    } as never);
+    renderPage();
+    const breakdown = screen.getByRole('table', { name: 'Chat by chat' });
+    expect(within(breakdown).getByRole('columnheader', { name: 'Customer rating' })).toBeTruthy();
+    const slowRow = within(breakdown).getByText('20m 0s').closest('tr')!;
+    expect(within(slowRow).getByText('4/5')).toBeTruthy();
+    const rated = within(breakdown).queryAllByText(/\/5$/);
+    expect(rated).toHaveLength(1);
+    vi.mocked(perf.useCsatByConversation).mockReturnValue({ data: new Map() } as never);
+  });
+
+  it('does not open a chat the agent may not read, and says why', async () => {
+    access.canRead.mockResolvedValueOnce(false);
+    navigate.mockClear();
+    const user = userEvent.setup();
+    renderPage();
+    const breakdown = screen.getByRole('table', { name: 'Chat by chat' });
+    await user.click(within(breakdown).getByText('20m 0s'));
+    await waitFor(() => expect(access.canRead).toHaveBeenCalledWith('slow'));
+    expect(navigate).not.toHaveBeenCalledWith('/?conv=slow');
   });
 
   it('opens on the signed-in agent, and widens to the team on request', async () => {

@@ -750,6 +750,11 @@ export const roles: RoleSpec[] = [
       // token can't — an agent loses ticket read access the moment they hand it
       // to a colleague). The gateway never writes tickets.
       { collection: 'tickets', action: 'read' },
+      /* The agent-performance report (POST /jobs/performance, owner
+         2026-10-11) reads the routing ladder's outcomes and coupon requests
+         for every agent; the page's own token cannot. Read-only. */
+      { collection: 'routing_events', action: 'read' },
+      { collection: 'coupon_approvals', action: 'read' },
       ...readOnly('directus_users'),
       /* Display fields (resolveVendor: id, name, colors) + `webhook_path_key`:
          MV-3 picks a vendor's webhook / chat-login secret by that key

@@ -1,8 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
-import { readItems } from '@directus/sdk';
 import { normaliseConversationStatus } from '@yiji/shared-types';
-import { chatHandoffs, conversationTimestamps, readChunked, type ChatTiming } from '@yiji/reports';
-import { directus } from '../../lib/directus.js';
+import { chatHandoffs, conversationTimestamps, type ChatTiming } from '@yiji/reports';
+import { performanceRead } from '../../lib/job-producer.js';
 
 /**
  * Chat timings for the agent-performance report.
@@ -77,9 +76,6 @@ interface MessageRow {
   sender_user: string | null;
 }
 
-/** End of the chosen day, so a `to` of today includes everything today. */
-const endOfDay = (isoDate: string) => `${isoDate}T23:59:59.999Z`;
-
 /**
  * NOTE: this deliberately does NOT resolve agent names.
  *
@@ -97,30 +93,7 @@ export function useChatTimings(filters: PerformanceFilters) {
   return useQuery({
     queryKey: ['chat-timings', filters],
     queryFn: async (): Promise<ChatTimingRow[]> => {
-      const and: Array<Record<string, unknown>> = [];
-      if (filters.from) and.push({ date_created: { _gte: filters.from } });
-      if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
-      if (filters.agentId) and.push({ assigned_agent: { _eq: filters.agentId } });
-      if (filters.vendor) and.push({ vendor: { _eq: filters.vendor } });
-
-      const conversations = (await directus.request(
-        readItems('conversations', {
-          limit: -1,
-          fields: [
-            'id',
-            'status',
-            'assigned_agent',
-            'solved_at',
-            'date_created',
-            // The per-chat breakdown names the customer and the order. A row of
-            // timings against a uuid is a number nobody can act on.
-            'last_order_id',
-            'initiated_by',
-            { contact: ['id', 'name', 'phone'] },
-          ],
-          ...(and.length ? { filter: { _and: and } } : {}),
-        }),
-      )) as unknown as ConversationRow[];
+      const conversations = await performanceRead<ConversationRow>('conversations', filters);
 
       if (conversations.length === 0) return [];
 
@@ -130,32 +103,12 @@ export function useChatTimings(filters: PerformanceFilters) {
       const subjectOf = new Map<string, string>();
       const ticketOf = new Map<string, string>();
       try {
-        // Chunked: every conversation id in one query string is an HTTP 414
-        // from CloudFront once the count grows. See readChunked.
-        const linked = await readChunked<{
+        const linked = await performanceRead<{
           id: string | number;
           conversation: string | null;
           subject: string | null;
           complaint_type: string | null;
-        }>(
-          conversations.map((c) => c.id),
-          (ids) =>
-            directus.request(
-              readItems('tickets', {
-                limit: -1,
-                filter: { conversation: { _in: ids } },
-                fields: ['id', 'conversation', 'subject', 'complaint_type'],
-                sort: ['-date_created'],
-              }),
-            ) as unknown as Promise<
-              Array<{
-                id: string | number;
-                conversation: string | null;
-                subject: string | null;
-                complaint_type: string | null;
-              }>
-            >,
-        );
+        }>('linkedTickets', {}, { ids: conversations.map((c) => c.id) });
         for (const tk of linked) {
           if (!tk.conversation) continue;
           // Newest ticket wins; the sort above puts it first.
@@ -167,20 +120,12 @@ export function useChatTimings(filters: PerformanceFilters) {
         /* no ticket read access — rows fall back to the customer alone */
       }
 
-      const messages = await readChunked<MessageRow>(
-        conversations.map((c) => c.id),
-        (ids) =>
-          directus.request(
-            readItems('messages', {
-              limit: -1,
-              filter: {
-                conversation: { _in: ids },
-                is_internal_note: { _eq: false },
-              },
-              fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
-              sort: ['date_created'],
-            }),
-          ) as unknown as Promise<MessageRow[]>,
+      const messages = await performanceRead<MessageRow>(
+        'messages',
+        {},
+        {
+          ids: conversations.map((c) => c.id),
+        },
       );
 
       /**
@@ -205,29 +150,12 @@ export function useChatTimings(filters: PerformanceFilters) {
        */
       let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
       try {
-        const events = await readChunked<{
+        const events = await performanceRead<{
           conversation: string;
           agent: string | null;
           outcome: string;
           stage: string;
-        }>(
-          conversations.map((c) => c.id),
-          (ids) =>
-            directus.request(
-              readItems('routing_events', {
-                limit: -1,
-                filter: { conversation: { _in: ids } },
-                fields: ['conversation', 'agent', 'outcome', 'stage'],
-              }),
-            ) as unknown as Promise<
-              Array<{
-                conversation: string;
-                agent: string | null;
-                outcome: string;
-                stage: string;
-              }>
-            >,
-        );
+        }>('routingEvents', {}, { ids: conversations.map((c) => c.id) });
         handoffs = chatHandoffs(events);
       } catch {
         /* no routing history readable — every chat counts as cleanly assigned */
@@ -275,23 +203,15 @@ export interface CsatRow {
  * folding them into the chat read would make every timing refetch wait on
  * them. The page joins the two by conversation id.
  */
-export function useCsatByConversation(filters: PerformanceFilters) {
+export function useCsatByConversation(filters: PerformanceFilters, conversationIds: string[]) {
   return useQuery({
-    queryKey: ['csat-by-conversation', filters],
+    /* BY CHAT, not by submission date (owner, 2026-10-11: a rating column per
+       chat). A customer rates after the chat ends, so a window on the rating's
+       own timestamp dropped late ratings of chats that ARE in range. */
+    queryKey: ['csat-by-conversation', filters, conversationIds],
+    enabled: conversationIds.length > 0,
     queryFn: async (): Promise<Map<string, number>> => {
-      const and: Array<Record<string, unknown>> = [];
-      if (filters.from) and.push({ submitted_at: { _gte: filters.from } });
-      if (filters.to) and.push({ submitted_at: { _lte: `${filters.to}T23:59:59.999Z` } });
-      const rows = (await directus.request(
-        readItems(
-          'csat_responses' as never,
-          {
-            limit: -1,
-            fields: ['conversation', 'score'],
-            ...(and.length ? { filter: { _and: and } } : {}),
-          } as never,
-        ),
-      )) as unknown as CsatRow[];
+      const rows = await performanceRead<CsatRow>('csat', {}, { ids: conversationIds });
       const out = new Map<string, number>();
       for (const r of rows) {
         if (!r.conversation || typeof r.score !== 'number') continue;
@@ -356,38 +276,7 @@ export function useTicketPerformance(filters: PerformanceFilters, enabled = true
     // A refusal is an answer, not a blip — the tab renders it calmly.
     retry: false,
     queryFn: async (): Promise<PerformanceTicketRow[]> => {
-      const and: Array<Record<string, unknown>> = [];
-      if (filters.from) and.push({ date_created: { _gte: filters.from } });
-      if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
-      if (filters.agentId)
-        and.push({
-          _or: [
-            { assigned_agent: { _eq: filters.agentId } },
-            { user_created: { _eq: filters.agentId } },
-          ],
-        });
-      if (filters.vendor) and.push({ vendor: { _eq: filters.vendor } });
-      const tickets = (await directus.request(
-        readItems('tickets', {
-          limit: -1,
-          fields: [
-            'id',
-            'subject',
-            'complaint_type',
-            'order_id',
-            'status',
-            'assigned_agent',
-            'user_created',
-            'date_created',
-            'resolved_at',
-            'closed_at',
-            'customer_phone',
-            { contact: ['id', 'name', 'phone'] },
-          ],
-          sort: ['-date_created'],
-          ...(and.length ? { filter: { _and: and } } : {}),
-        } as never),
-      )) as unknown as TicketReadRow[];
+      const tickets = await performanceRead<TicketReadRow>('tickets', filters);
       if (tickets.length === 0) return [];
 
       /* The coupon on each ticket. Best-effort: a role that cannot read the
@@ -399,20 +288,12 @@ export function useTicketPerformance(filters: PerformanceFilters, enabled = true
           coupon_code: string | null;
           status: string;
         };
-        const coupons = await readChunked<LinkedCoupon>(
-          tickets.map((tk) => String(tk.id)),
-          (ids) =>
-            directus.request(
-              readItems(
-                'coupon_approvals' as never,
-                {
-                  limit: -1,
-                  filter: { ticket: { _in: ids } },
-                  fields: ['ticket', 'coupon_code', 'status'],
-                  sort: ['-date_created'],
-                } as never,
-              ),
-            ) as unknown as Promise<LinkedCoupon[]>,
+        const coupons = await performanceRead<LinkedCoupon>(
+          'ticketCoupons',
+          {},
+          {
+            ids: tickets.map((tk) => String(tk.id)),
+          },
         );
         for (const c of coupons) {
           if (c.ticket == null) continue;
@@ -491,48 +372,16 @@ export function useCouponPerformance(filters: PerformanceFilters, enabled = true
     enabled,
     retry: false,
     queryFn: async (): Promise<PerformanceCouponRow[]> => {
-      const and: Array<Record<string, unknown>> = [];
-      if (filters.from) and.push({ date_created: { _gte: filters.from } });
-      if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
-      if (filters.agentId) and.push({ requested_by: { _eq: filters.agentId } });
-      /* Also scopes the best-effort extra reads below, which share `filter`. */
-      if (filters.vendor) and.push({ vendor: { _eq: filters.vendor } });
-      const filter = and.length ? { filter: { _and: and } } : {};
-
-      const rows = (await directus.request(
-        readItems(
-          'coupon_approvals' as never,
-          {
-            limit: -1,
-            sort: ['-date_created'],
-            fields: [
-              'id',
-              'coupon_code',
-              'coupon_value',
-              'coupon_percent',
-              'discount_category',
-              'status',
-              'date_created',
-              'order_id',
-              'customer_phone',
-              { ticket: ['id', 'subject', 'order_id', 'complaint_type'] },
-              { contact: ['id', 'name', 'phone'] },
-              { requested_by: ['id', 'first_name', 'email'] },
-            ],
-            ...filter,
-          } as never,
-        ),
-      )) as unknown as PerformanceCouponRow[];
+      const rows = await performanceRead<PerformanceCouponRow>('coupons', filters);
       if (rows.length === 0) return [];
 
       const extra = async (field: CouponExtraField) => {
         try {
-          const got = (await directus.request(
-            readItems(
-              'coupon_approvals' as never,
-              { limit: -1, fields: ['id', field], ...filter } as never,
-            ),
-          )) as unknown as Array<Record<string, unknown> & { id: string }>;
+          const got = await performanceRead<Record<string, unknown> & { id: string }>(
+            'couponExtra',
+            filters,
+            { field },
+          );
           return new Map(got.map((g) => [String(g.id), g[field]]));
         } catch {
           return null;

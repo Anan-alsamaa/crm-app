@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { canReadConversation } from '../tickets/api.js';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -16,6 +18,7 @@ import {
   SectionCard,
   SelectMenu,
   Skeleton,
+  toast,
   Toolbar,
   ToolbarSpacer,
   TrendChart,
@@ -99,6 +102,26 @@ interface SavedView {
 export function AgentPerformancePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  /*
+   * A row opens its chat (owner, 2026-10-11). Every agent now sees every
+   * agent's rows here, but the inbox keeps its rules: a live chat held by
+   * someone else would open blank, so it says why instead.
+   */
+  const openChat = async (conversationId: string) => {
+    const ok = await queryClient
+      .fetchQuery({
+        queryKey: ['can-read-conversation', conversationId],
+        staleTime: 60_000,
+        queryFn: () => canReadConversation(conversationId),
+      })
+      .catch(() => true);
+    if (ok) navigate(`/?conv=${encodeURIComponent(conversationId)}`);
+    else
+      toast(
+        t('tickets.conversationNotVisible', { defaultValue: 'chat assigned to another agent' }),
+      );
+  };
   const { user } = useAuth();
   const agents = useAgents();
 
@@ -314,7 +337,8 @@ export function AgentPerformancePage() {
   );
 
   /** Per-agent totals — the same shared rollup the admin console reports. */
-  const csat = useCsatByConversation(scoped);
+  const chatIds = useMemo(() => chats.map((c) => c.conversationId), [chats]);
+  const csat = useCsatByConversation(scoped, chatIds);
   const totals = useMemo(() => agentPerformance(chats), [chats]);
   /* CSAT joined onto the same chats the rest of the page measures, so the
      rating column can never describe a different population than the timings
@@ -900,13 +924,16 @@ export function AgentPerformancePage() {
                             <th className="px-4 py-2.5 text-end font-semibold">
                               {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
                             </th>
+                            <th className="px-4 py-2.5 text-end font-semibold">
+                              {t('performance.csat', { defaultValue: 'Customer rating' })}
+                            </th>
                           </tr>
                         </thead>
                         <tbody>
                           {breakdown.length === 0 && (
                             <tr>
                               <td
-                                colSpan={oneAgent ? 6 : 7}
+                                colSpan={oneAgent ? 7 : 8}
                                 className="px-4 py-8 text-center text-sm text-muted-foreground"
                               >
                                 {t('performance.searchNoMatch', {
@@ -919,9 +946,7 @@ export function AgentPerformancePage() {
                           {breakdown.map(({ chat, first, solve }) => (
                             <tr
                               key={chat.conversationId}
-                              onClick={() =>
-                                navigate(`/?conv=${encodeURIComponent(chat.conversationId)}`)
-                              }
+                              onClick={() => void openChat(chat.conversationId)}
                               className="cursor-pointer border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]"
                             >
                               <td className="max-w-[18rem] px-4 py-2.5 text-foreground">
@@ -1012,6 +1037,14 @@ export function AgentPerformancePage() {
                                 ) : (
                                   formatDuration(solve)
                                 )}
+                              </td>
+                              {/* This chat's own rating; empty when the customer
+                                  did not rate (owner, 2026-10-11). */}
+                              <td className="px-4 py-2.5 text-end tabular-nums text-foreground">
+                                {(() => {
+                                  const score = csat.data?.get(chat.conversationId);
+                                  return typeof score === 'number' ? `${score}/5` : '';
+                                })()}
                               </td>
                             </tr>
                           ))}

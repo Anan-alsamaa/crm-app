@@ -1484,6 +1484,11 @@ export class GatewayDirectus {
     )[0]!;
   }
 
+  /** One service-token read for the agent-performance report (fixed queries only). */
+  async readForReport(collection: string, query: Record<string, unknown>): Promise<unknown[]> {
+    return (await this.client.request(readItems(collection as never, query as never))) as unknown[];
+  }
+
   /** ACTIVE users among `ids`, with a display name. Used to vet note mentions. */
   async activeStaffUsers(ids: string[]): Promise<Array<{ id: string; name: string | null }>> {
     if (ids.length === 0) return [];
