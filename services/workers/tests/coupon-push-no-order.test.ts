@@ -255,15 +255,29 @@ describe('a coupon with no order', () => {
     expect(patches).toHaveLength(0);
   });
 
-  /* NOT SETTLED either: a supervisor may yet add the number. */
-  it('records NOTHING when the row has no phone to look up', async () => {
-    const { deps: d, patches } = deps({}, {
+  /* No phone anywhere (row, contact, title) is REFUSED with the reason on the
+     request, so the approver sees what to add - never guessed from an order
+     (owner, 2026-10-11). */
+  it('refuses a coupon with no phone anywhere, and posts nothing', async () => {
+    const {
+      deps: d,
+      patches,
+      postCoupon,
+      findCustomer,
+    } = deps({}, {
       ...NO_ORDER_ROW,
+      title: 'Sorry about your order',
       contact: null,
       customer_phone: null,
+      ticket: { order_id: '1187929' },
     } as unknown as CouponApprovalRow);
-    await expect(processCouponPushJob(job(), d)).resolves.toBe('no-order');
-    expect(patches).toHaveLength(0);
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(postCoupon).not.toHaveBeenCalled();
+    expect(findCustomer).not.toHaveBeenCalled();
+    expect(patches[0]).toMatchObject({
+      yiji_push_error: expect.stringMatching(/No customer phone/),
+    });
+    expect(patches[0]).not.toHaveProperty('status');
   });
 
   it('stays approved when no lookup is configured at all', async () => {
@@ -357,29 +371,55 @@ describe('the order-less grant uses the permitted endpoint', () => {
   });
 });
 
-describe('a coupon WITH an order is unchanged', () => {
+/*
+ * A COUPON WITH AN ORDER NUMBER IS STILL DELIVERED BY PHONE (owner, 2026-10-11).
+ *
+ * Yiji gives an order-attached coupon to whoever OWNS that order, and the
+ * number is typed by hand - OPS-NDYVFZZK and OPS-JR6VFXB9 went to strangers.
+ * The order number is reference only now: never read, never posted to.
+ */
+describe('a coupon WITH an order number is delivered by phone', () => {
   const WITH_ORDER = {
     ...NO_ORDER_ROW,
     id: 'ca-1',
     ticket: { order_id: '1187929' },
-    contact: { id: 'k1', name: 'Saad', phone: '+966500000000', external_customer_id: 'yiji-77' },
+    contact: { id: 'k1', name: 'Saad', phone: '0500000000', external_customer_id: 'yiji-77' },
   } as unknown as CouponApprovalRow;
 
-  /* The order endpoint resolves the customer itself, so no lookup may happen —
-     an extra admin call on the money path is cost and risk for nothing. */
-  it('uses the order endpoint and never looks the customer up', async () => {
-    const { deps: d, postCoupon, findCustomer } = deps({}, WITH_ORDER);
+  it('never calls the order endpoint or reads the order; the phone finds the customer', async () => {
+    const readOrder = vi.fn(async () => ({ userId: 'yiji-77', customerPhone: '+966500000000' }));
+    const { deps: d, postCoupon, lookedUp } = deps({ readOrder: readOrder as never }, WITH_ORDER);
     await expect(processCouponPushJob(job('ca-1'), d)).resolves.toBe('delivered');
-    expect(findCustomer).not.toHaveBeenCalled();
-    expect(postCoupon.mock.calls[0]![0]).toBe(YIJI_COUPON_PATH);
+    expect(readOrder).not.toHaveBeenCalled();
+    expect(lookedUp).toEqual(['0500000000']);
+    const paths = postCoupon.mock.calls.map((c) => c[0]);
+    expect(paths).toEqual([YIJI_UNASSIGNED_COUPON_PATH, YIJI_COMPENSATION_COUPON_PATH]);
+    expect(paths).not.toContain(YIJI_COUPON_PATH);
+    expect(postCoupon.mock.calls[1]![1]).toMatchObject({ userId: 'yiji-user-abc' });
   });
 
-  it('still wraps the body in the order envelope', async () => {
-    const { deps: d, postCoupon } = deps({}, WITH_ORDER);
-    await processCouponPushJob(job('ca-1'), d);
-    const body = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
-    expect(body).toHaveProperty('couponUser');
-    expect(body.orderId).toBe(1187929);
+  /* Dine-in/Takeout numbers are the RESTAURANT's, so on Yiji they can belong
+     to anyone. The coupon follows the phone, not that order's owner. */
+  it('a Dine-in order number owned by someone else on Yiji still goes to the phone', async () => {
+    const readOrder = vi.fn(async () => ({
+      userId: 'stranger-guid',
+      customerPhone: '+966563940549',
+    }));
+    const {
+      deps: d,
+      postCoupon,
+      lookedUp,
+    } = deps({ readOrder: readOrder as never }, {
+      ...WITH_ORDER,
+      delivery_type: 'Dine-in',
+    } as unknown as CouponApprovalRow);
+    await expect(processCouponPushJob(job('ca-1'), d)).resolves.toBe('delivered');
+    expect(readOrder).not.toHaveBeenCalled();
+    expect(lookedUp).toEqual(['0500000000']);
+    const attach = postCoupon.mock.calls[1]![1] as Record<string, unknown>;
+    expect(attach.userId).toBe('yiji-user-abc');
+    expect(JSON.stringify(postCoupon.mock.calls)).not.toContain('stranger-guid');
+    expect(JSON.stringify(postCoupon.mock.calls)).not.toContain('563940549');
   });
 });
 

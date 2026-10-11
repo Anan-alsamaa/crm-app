@@ -17,8 +17,8 @@ import {
   Toolbar,
 } from '@yiji/ui';
 import {
+  isRestaurantOrderNumber,
   COUPON_APPROVAL_STATUSES,
-  couponOrderId,
   couponTermsProblems,
   isPercentageCategory,
   type CouponApprovalStatus,
@@ -376,13 +376,17 @@ function Row({
    * there is neither an order nor a number — the one case where nothing can
    * possibly reach them — and the softer notice covers "we will try".
    */
-  // The ORDER decides, from wherever it lives — a coupon given from the
-  // late-orders queue carries its own and has no ticket at all.
-  const hasOrder = Boolean(couponOrderId(row));
-  /* Either phone the row can carry: a late-order or WhatsApp compensation has
-     no contact row, so its number lives on the request itself. */
-  const deliveryPhone = (row.customer_phone ?? row.contact?.phone ?? '').trim();
-  const canBeDelivered = hasOrder || Boolean(deliveryPhone);
+  /*
+   * THE PHONE DECIDES (owner, 2026-10-11): every coupon goes to the customer's
+   * phone number, never to an order - so a coupon with no phone cannot be
+   * delivered, whatever order number it carries. Same order of preference as
+   * the worker: the request's number, the contact's, a phone-shaped title.
+   */
+  const deliveryPhone =
+    [row.customer_phone, row.contact?.phone, row.title]
+      .map((v) => (v ?? '').trim())
+      .find((v) => v.replace(/\D/g, '').length >= 9) ?? '';
+  const canBeDelivered = Boolean(deliveryPhone);
   /*
    * Can this number actually be reached on Yiji?
    *
@@ -391,10 +395,7 @@ function Row({
    * such row, cached for the session, so opening the queue does not become a
    * burst of lookups.
    */
-  const reach = useCustomerReachable(
-    !hasOrder && !row.delivery_excluded ? deliveryPhone : '',
-    row.vendor,
-  );
+  const reach = useCustomerReachable(!row.delivery_excluded ? deliveryPhone : '', row.vendor);
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
@@ -498,9 +499,9 @@ function Row({
           <Pill tone={TONE[row.status] ?? 'success'} size="sm">
             {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
           </Pill>
-          {row.ticket?.order_id && (
+          {(row.ticket?.order_id || row.order_id) && (
             <span className="shrink-0 font-mono text-2xs text-muted-foreground">
-              #{row.ticket.order_id}
+              #{row.ticket?.order_id || row.order_id}
             </span>
           )}
           {/* WHETHER IT GOES TO THE YIJI APP, on every row (owner, 2026-10-05).
@@ -706,6 +707,18 @@ function Row({
               label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
               value={row.title}
             />
+            {/* THE ORDER, on every card (owner, 2026-10-11). Reference only: the
+                coupon goes to the customer's PHONE, never to this number. For
+                Dine-in / Takeout it is the restaurant's own order number. */}
+            <Term
+              label={
+                isRestaurantOrderNumber(row.delivery_type)
+                  ? t('couponApprovals.restaurantOrder', { defaultValue: 'Restaurant order no.' })
+                  : t('couponApprovals.yijiOrder', { defaultValue: 'Yiji order' })
+              }
+              value={row.order_id ?? row.ticket?.order_id ?? null}
+              mono
+            />
             <Term
               label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
               value={row.issuing_side}
@@ -906,7 +919,7 @@ function Row({
             <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
               {t('couponApprovals.noOrderNoPhone', {
                 defaultValue:
-                  'No order number and no phone on this request, so there is no way to reach the customer on Yiji. Approving still records the compensation, but nothing will arrive in the app — add the order number or the customer’s number first.',
+                  'No customer phone on this request, so it cannot reach the customer on Yiji (coupons go to the phone number, never to an order). Approving still records the compensation, but nothing will arrive in the app — add the customer’s number first.',
               })}
             </p>
           )}
@@ -934,15 +947,14 @@ function Row({
             when the lookup is not configured: an unanswered question is not
             evidence of absence.
           */}
-          {!hasOrder &&
-            Boolean(deliveryPhone) &&
+          {Boolean(deliveryPhone) &&
             !row.delivery_excluded &&
             reach.data?.configured === true &&
             reach.data.exists === false && (
               <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
                 {t('couponApprovals.noYijiAccount', {
                   defaultValue:
-                    'No order number, and {{phone}} has no Yiji account — so this coupon cannot reach the app. Approving still records the compensation; honour it in the branch.',
+                    '{{phone}} has no Yiji account yet — the coupon is held and sent automatically if they sign up. Until then honour it in the branch.',
                   phone: normalizePhone(deliveryPhone) || deliveryPhone,
                 })}
               </p>
@@ -1414,14 +1426,13 @@ function Row({
                               defaultValue: 'Approving puts the coupon on the ticket.',
                             })
                           : canBeDelivered
-                            ? t('couponApprovals.approveOrderHint', {
-                                order: couponOrderId(row),
-                                defaultValue:
-                                  'No ticket — the coupon goes to order {{order}} directly.',
+                            ? t('couponApprovals.approvePhoneHint', {
+                                phone: normalizePhone(deliveryPhone) || deliveryPhone,
+                                defaultValue: 'No ticket — the coupon goes to {{phone}} directly.',
                               })
                             : t('couponApprovals.noTicketHint', {
                                 defaultValue:
-                                  'No ticket and no order on this request — there is nowhere to put the coupon.',
+                                  'No ticket and no customer phone on this request — there is nobody to send the coupon to.',
                               })}
                       </span>
                     </>

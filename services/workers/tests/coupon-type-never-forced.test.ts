@@ -18,8 +18,9 @@ import {
  * 0 = General, 1 = Private; `category`: 1 = Amount, 0 = Percentage (the owner's
  * own console payloads, 2026-10-07).
  *
- * This walks EVERY route the CRM uses to put a coupon on Yiji — by order, by
- * user (create then attach), withheld (created, nobody assigned) — for BOTH
+ * This walks EVERY route the CRM uses to put a coupon on Yiji — by user
+ * (create then attach, with or without an order number; the order route is
+ * gone since 2026-10-11), withheld (created, nobody assigned) — for BOTH
  * types and BOTH categories, and fails if any body that defines a coupon says
  * anything but what the agent chose. A new path, or a "helpful" override in an
  * old one, cannot pass this without being added here and answering to it.
@@ -114,8 +115,10 @@ async function bodiesFor(row: CouponApprovalRow) {
   return bodies;
 }
 
+/* An order number no longer picks a route: it is delivered by phone like any
+   other (owner, 2026-10-11), so the coupon is defined on AddCoupon. */
 const PATHS: Array<[string, Partial<CouponApprovalRow>, string]> = [
-  ['by order', { order_id: '1330455' }, YIJI_COUPON_PATH],
+  ['with an order number, by phone', { order_id: '1330455' }, YIJI_UNASSIGNED_COUPON_PATH],
   ['by user, no order (create then attach)', {}, YIJI_UNASSIGNED_COUPON_PATH],
   [
     'withheld (created, assigned to nobody)',
@@ -147,6 +150,8 @@ describe('the coupon type and category reach Yiji exactly as the agent chose the
           const bodies = await bodiesFor(row);
           // The path really ran, and really defined a coupon.
           expect(bodies.map((b) => b.path)).toContain(endpoint);
+          // And never by order: that route gave coupons to strangers.
+          expect(bodies.map((b) => b.path)).not.toContain(YIJI_COUPON_PATH);
           const coupons = bodies.flatMap((b) => couponsIn(b.body));
           expect(coupons.length).toBeGreaterThan(0);
           for (const c of coupons) {

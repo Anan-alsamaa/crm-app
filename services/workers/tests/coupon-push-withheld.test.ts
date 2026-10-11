@@ -350,8 +350,17 @@ describe('processCouponPushJob — a withheld coupon', () => {
   });
 
   it('does not let that unreadable column stop an ASSIGNED coupon', async () => {
-    const h = harness({ ...ROW, delivery_excluded: false }, {}, { failCouponIdRead: true });
-    h.postCoupon.mockResolvedValue({ result: 1, extendedProperties: { CouponUserId: 21117 } });
+    /* Assigned coupons go by phone (2026-10-11): create, then attach. */
+    const h = harness(
+      { ...ROW, delivery_excluded: false },
+      { findCustomer: (async () => 'yiji-77') as never },
+      { failCouponIdRead: true },
+    );
+    h.postCoupon.mockImplementation(async (path: string) =>
+      path === YIJI_UNASSIGNED_COUPON_PATH
+        ? CREATED
+        : { result: 1, extendedProperties: { CouponUserId: 21117 } },
+    );
     await expect(processCouponPushJob(job(), h.deps)).resolves.toBe('delivered');
   });
 
@@ -367,13 +376,14 @@ describe('processCouponPushJob — a withheld coupon', () => {
     expect(h.patches).toHaveLength(0);
   });
 
-  it('still creates it when the order cannot be read', async () => {
-    const h = harness(ROW, {
-      readOrder: vi.fn(async () => {
-        throw new Error('order api down');
-      }) as never,
+  /* Phone only (owner, 2026-10-11): the order number is never read, even here. */
+  it('creates it without ever reading the order', async () => {
+    const readOrder = vi.fn(async () => {
+      throw new Error('must not be called');
     });
+    const h = harness(ROW, { readOrder: readOrder as never });
     await expect(processCouponPushJob(job(), h.deps)).resolves.toBe('withheld');
+    expect(readOrder).not.toHaveBeenCalled();
     const body = h.postCoupon.mock.calls[0]![1] as Record<string, unknown>;
     expect(body).not.toHaveProperty('restaurantId');
     expect(body.name).toBe('+966508315325');

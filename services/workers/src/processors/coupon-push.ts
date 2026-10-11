@@ -920,23 +920,6 @@ export function couponCustomerPhone(row: {
 }
 
 /**
- * Why an order cannot carry this customer's coupon, or null when it can.
- * Compared on the last 9 digits, so 05X, +9665X and 9665X agree.
- */
-export function orderOwnerMismatch(
-  order: { customerPhone?: string | null } | null,
-  expectedPhone: string,
-): string | null {
-  if (!order) return 'was not found on Yiji';
-  const last9 = (v: string) => v.replace(/\D/g, '').slice(-9);
-  const owner = order.customerPhone?.trim();
-  if (!owner) return null; // nothing to compare: leave it to the order id, as before
-  return last9(owner) === last9(expectedPhone)
-    ? null
-    : `belongs to a different customer (${owner}), not ${expectedPhone}`;
-}
-
-/**
  * Write down why the coupon did not go.
  *
  * Best-effort: if recording the failure ALSO fails there is nothing useful left
@@ -1403,8 +1386,7 @@ export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
 ): Promise<PushOutcome> {
-  const { directus, logger, postCoupon, readOrder, findCustomer, yijiTenantId, redirectCouponsTo } =
-    deps;
+  const { directus, logger, postCoupon, findCustomer, yijiTenantId, redirectCouponsTo } = deps;
   const id = job.data.couponApprovalId;
 
   const row = (await directus.request(
@@ -1505,30 +1487,26 @@ export async function processCouponPushJob(
       directus,
       logger,
       postCoupon,
-      readOrder,
+      // Phone only (owner, 2026-10-11): the order number is never looked up.
+      readOrder: undefined,
       yijiTenantId,
       redirectCouponsTo,
     });
   }
 
   /*
-   * THE ONE THING THIS CALL CANNOT BE MADE WITHOUT.
+   * EVERY COUPON IS GIVEN BY THE CUSTOMER'S PHONE NUMBER (owner, 2026-10-11).
    *
-   * `CreateCouponUserFromOrder` attaches a coupon to an order. Without one
-   * there is nothing to attach it to: Yiji would answer 200 with a refusal,
-   * and the retry would repeat it until the job gave up — a queue full of
-   * failures whose real cause is a blank field on our side.
-   *
-   * The customer's Yiji id is NOT required alongside it. The order already
-   * identifies the customer on Yiji's side, which is what the endpoint's name
-   * says and what their captured request confirms by sending no `userId` at
-   * all. Requiring one would have blocked 18 of the 19 approvals in this
-   * database — the guard would have looked correct and caused an outage.
-   *
-   * Reported as its own outcome and left `approved`, so the coupon is still
-   * visibly owed to the customer and a supervisor can see why it has not gone.
+   * Coupons used to be attached to the ticket's ORDER, and Yiji gives such a
+   * coupon to whoever owns that order. The order number is typed by hand -
+   * and for Dine-in and Takeout it is the RESTAURANT's own order number, not
+   * Yiji's - so OPS-NDYVFZZK (30 SAR) and OPS-JR6VFXB9 (86 SAR) went to
+   * strangers who owned an unrelated old order with that number. The order
+   * number is now a reference only: stored and shown, never used to decide
+   * who receives a coupon. The customer is found by phone - exactly one Yiji
+   * account - or the coupon is held/refused with the reason on the request.
    */
-  const orderId = couponOrderId(row);
+  const orderId = couponOrderId(row); // reference only - see above
   /*
    * NO ORDER IS NO LONGER THE END OF THE ROAD.
    *
@@ -1544,7 +1522,7 @@ export async function processCouponPushJob(
    * `approved` so it is visibly owed and can be honoured in the branch.
    */
   let compensationUserId: string | null = null;
-  if (!orderId) {
+  {
     /*
      * THE REDIRECTED NUMBER ON STAGING, THE REAL ONE IN PRODUCTION.
      *
@@ -1555,8 +1533,14 @@ export async function processCouponPushJob(
      * revoked from our side. The lookup itself is therefore redirected, not just
      * the phone in the payload. `redirectCouponsTo` is empty in production.
      */
-    const phone =
-      redirectCouponsTo?.trim() || row.customer_phone?.trim() || row.contact?.phone?.trim() || '';
+    const phone = redirectCouponsTo?.trim() || couponCustomerPhone(row) || '';
+    if (!phone) {
+      /* No phone, no coupon: never guessed from an order (owner, 2026-10-11). */
+      const detail = 'No customer phone on this request - add the phone number and approve again.';
+      await recordFailure(directus, id, detail);
+      logger.warn({ id, code: row.coupon_code }, 'coupon refused: no customer phone');
+      return 'refused';
+    }
     if (findCustomer && phone) {
       try {
         compensationUserId = await findCustomer(phone);
@@ -1613,53 +1597,9 @@ export async function processCouponPushJob(
    */
   /* Only when there IS an order. The order-less path has nothing to enrich from
      and must not call an order reader with a blank id. */
-  let order: CouponOrderContext | null = null;
-  if (readOrder && orderId) {
-    try {
-      order = await readOrder(orderId);
-      if (!order) {
-        logger.warn(
-          { id, orderId },
-          'yiji does not know this order — pushing on the order id alone',
-        );
-      }
-    } catch (err) {
-      /* The order's OWNER is now checked before attaching (see below), so an
-         unreadable order cannot be pushed blind: throw, and BullMQ retries. */
-      if (couponCustomerPhone(row) && !redirectCouponsTo?.trim()) {
-        throw new Error(
-          `could not read order ${orderId} to check its owner: ${describeError(err)}`,
-        );
-      }
-      logger.warn(
-        { id, orderId, err: describeError(err) },
-        'could not read the order for coupon enrichment — pushing without it',
-      );
-    }
-  }
-
-  /*
-   * THE ORDER MUST BE THIS CUSTOMER'S (owner, 2026-10-11 - OPS-NDYVFZZK).
-   *
-   * Yiji gives a coupon attached to an order to whoever OWNS that order. A
-   * ticket for 0500006272 carried order 193721 - mistyped, a July-2025 order
-   * of a different customer - and the 30 SAR coupon went to that stranger,
-   * irreversibly from our side. So before attaching, the order's owner must be
-   * the coupon's customer. A mismatch is REFUSED and written on the request,
-   * so the approver sees "wrong order" instead of a coupon gone to the wrong
-   * person. Skipped on staging (the redirect sends to a test handset) and when
-   * the request carries no phone at all (nothing to compare).
-   */
-  const expectedPhone = couponCustomerPhone(row);
-  if (readOrder && orderId && !redirectCouponsTo?.trim() && expectedPhone) {
-    const mismatch = orderOwnerMismatch(order, expectedPhone);
-    if (mismatch) {
-      const detail = `Order ${orderId} ${mismatch}. Not sent: correct the order number (or remove it to send by phone) and approve again.`;
-      logger.warn({ id, code: row.coupon_code, orderId }, `coupon refused: ${detail}`);
-      await recordFailure(directus, id, detail);
-      return 'refused';
-    }
-  }
+  /* The order is never read for a coupon any more (phone only, 2026-10-11),
+     so nothing below is taken from an order. */
+  const order = null as CouponOrderContext | null;
 
   /*
    * THE ORDER KNOWS WHO THEY ARE — so learn it.

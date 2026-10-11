@@ -1089,7 +1089,13 @@
     "sendOnAppYes": "Send on app: Yes",
     "sendOnAppNo": "Send on app: No",
     "awaitingSignup": "Waiting for the customer to join Yiji",
-    "awaitingSignupHint": "It is sent to their account automatically when they sign up with this number. Last checked {{when}}."
+    "awaitingSignupHint": "It is sent to their account automatically when they sign up with this number. Last checked {{when}}.",
+    "restaurantOrder": "Restaurant order no.",
+    "yijiOrder": "Yiji order",
+    "noOrderNoPhone": "No customer phone on this request, so it cannot reach the customer on Yiji (coupons go to the phone number, never to an order). Approving still records the compensation, but nothing will arrive in the app — add the customer’s number first.",
+    "noYijiAccount": "{{phone}} has no Yiji account yet — the coupon is held and sent automatically if they sign up. Until then honour it in the branch.",
+    "approvePhoneHint": "No ticket — the coupon goes to {{phone}} directly.",
+    "noTicketHint": "No ticket and no customer phone on this request — there is nobody to send the coupon to."
   },
   "complaintReport": {
     "any": "Any",

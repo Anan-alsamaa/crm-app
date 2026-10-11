@@ -846,7 +846,13 @@ function CreateTicketForm({
                     Yiji attaches coupons TO AN ORDER. */}
                 {!latestOrder && (
                   <FormField
-                    label={t('complaint.orderId', { defaultValue: 'Order number (optional)' })}
+                    label={
+                      walkInService
+                        ? t('complaint.restaurantOrderId', {
+                            defaultValue: 'Restaurant order no. (optional)',
+                          })
+                        : t('complaint.orderId', { defaultValue: 'Order number (optional)' })
+                    }
                     hint={
                       walkInService
                         ? t('complaint.orderIdWalkInHint', {
@@ -857,7 +863,7 @@ function CreateTicketForm({
                           ? undefined
                           : t('complaint.orderIdHint', {
                               defaultValue:
-                                'If the customer has their order number, add it — a coupon can only be sent against an order.',
+                                'For reference only. A coupon is always sent to the customer’s phone number, never to an order.',
                             })
                     }
                     /* A walk-in receipt number is NOT a Yiji order id, so a

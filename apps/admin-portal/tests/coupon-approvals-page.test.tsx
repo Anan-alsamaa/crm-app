@@ -501,7 +501,7 @@ describe('CouponApprovalsPage — how an order-less coupon can still be delivere
     const user = userEvent.setup();
     renderPage();
     await expandFirst(user);
-    expect(screen.getByText(/no way to reach the customer/i)).toBeInTheDocument();
+    expect(screen.getByText(/no customer phone on this request/i)).toBeInTheDocument();
   });
 
   /*
@@ -516,7 +516,7 @@ describe('CouponApprovalsPage — how an order-less coupon can still be delivere
     renderPage();
     await expandFirst(user);
     expect(screen.queryByText(/has no Yiji account/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no customer phone on this request/i)).not.toBeInTheDocument();
   });
 
   /* ...and warns when it genuinely cannot be delivered. 0536418952 is a real
@@ -576,9 +576,10 @@ describe('CouponApprovalsPage — how an order-less coupon can still be delivere
     for (const b of screen.getAllByRole('button', { name: /^approve/i })) {
       expect(b).toBeEnabled();
     }
-    // And it says where the coupon is actually going, rather than claiming
-    // there is nowhere to put it.
-    expect(screen.getByText(/goes to order 1311494 directly/i)).toBeInTheDocument();
+    // It says where the coupon is actually going: the customer's PHONE, never
+    // the order (owner, 2026-10-11).
+    expect(screen.getByText(/the coupon goes to .+ directly/i)).toBeInTheDocument();
+    expect(screen.queryByText(/goes to order 1311494/i)).not.toBeInTheDocument();
   });
 
   it('does not promise delivery for one it cannot deliver', async () => {
@@ -602,6 +603,6 @@ describe('CouponApprovalsPage — how an order-less coupon can still be delivere
     const user = userEvent.setup();
     renderPage();
     await expandFirst(user);
-    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no customer phone on this request/i)).not.toBeInTheDocument();
   });
 });

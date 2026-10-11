@@ -672,58 +672,76 @@ await check(
   },
 );
 
-/* A COUPON ATTACHED TO AN ORDER GOES TO THAT ORDER'S OWNER (2026-10-11,
-   OPS-NDYVFZZK: a mistyped order number on a ticket sent 30 SAR to a stranger).
-   The worker now refuses an order whose owner is not the coupon's customer;
-   this proves no coupon pushed since the fix went to someone else. Older ones
-   are listed, never failed - they cannot be undone from our side. */
-const OWNER_GUARD_SINCE = process.env.OWNER_GUARD_SINCE ?? '2026-10-11T12:00:00Z';
-await check('COUPON-OWNER', "coupons attached to an order went to that order's owner", async () => {
-  if (!yijiToken) return 'skip';
-  if (ENV !== 'prod') return { ok: true, detail: 'production only' };
-  const r = await items('coupon_approvals', {
-    filter: JSON.stringify({
-      _and: [
-        { yiji_coupon_user_id: { _nnull: true } },
-        { _or: [{ order_id: { _nnull: true } }, { ticket: { order_id: { _nnull: true } } }] },
-        { yiji_pushed_at: { _gte: new Date(Date.now() - 7 * 864e5).toISOString() } },
-      ],
-    }),
-    fields: 'coupon_code,yiji_pushed_at,order_id,ticket.order_id,customer_phone,contact.phone,title',
-    sort: '-yiji_pushed_at',
-    limit: '15',
-  });
-  if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
-  const YH = { authorization: `Bearer ${yijiToken}` };
-  const last9 = (v) => String(v ?? '').replace(/\D/g, '').slice(-9);
-  const wrongNew = [];
-  const wrongOld = [];
-  let seen = 0;
-  for (const row of r.data ?? []) {
-    const want = [row.customer_phone, row.contact?.phone, row.title].find((p) => last9(p).length === 9);
-    const orderId = row.order_id ?? row.ticket?.order_id;
-    if (!want || !orderId) continue;
-    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, { headers: YH });
-    const order = o.ok ? await o.json().catch(() => null) : null;
-    const owner = order?.customerPhoneNumber ?? order?.customerPhone;
-    if (!owner) continue;
-    seen += 1;
-    if (last9(owner) !== last9(want)) {
-      const line = `${row.coupon_code} (order ${orderId} is ${owner}'s, coupon was for ${want})`;
-      (row.yiji_pushed_at >= OWNER_GUARD_SINCE ? wrongNew : wrongOld).push(line);
+/* EVERY COUPON GOES TO THE CUSTOMER'S PHONE (owner, 2026-10-11). A coupon
+   attached to a mistyped ORDER number went to whoever owned that order
+   (OPS-NDYVFZZK, OPS-JR6VFXB9 - since moved back by hand). Delivery is now by
+   phone only; this proves every coupon delivered since then sits in the Yiji
+   account of the request's phone, or was already spent there. */
+const PHONE_ONLY_SINCE = process.env.PHONE_ONLY_SINCE ?? '2026-10-11T14:00:00Z';
+await check(
+  'COUPON-PHONE',
+  "delivered coupons sit in the account of the request's phone",
+  async () => {
+    if (!yijiToken) return 'skip';
+    if (ENV !== 'prod') return { ok: true, detail: 'production only' };
+    const r = await items('coupon_approvals', {
+      filter: JSON.stringify({
+        _and: [
+          { yiji_coupon_user_id: { _nnull: true } },
+          { yiji_pushed_at: { _gte: PHONE_ONLY_SINCE } },
+          { delivery_excluded: { _neq: true } },
+        ],
+      }),
+      fields: PIPE_FIELDS + ',title',
+      sort: '-yiji_pushed_at',
+      limit: '10',
+    });
+    if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
+    if (!r.data?.length)
+      return { ok: true, detail: 'no coupon delivered since the phone-only change yet' };
+    const YH = { authorization: `Bearer ${yijiToken}` };
+    const last9 = (v) =>
+      String(v ?? '')
+        .replace(/\D/g, '')
+        .slice(-9);
+    const wrong = [];
+    const notes = [];
+    for (const row of r.data) {
+      const want = [row.customer_phone, row.contact?.phone, row.title].find(
+        (p) => last9(p).length === 9,
+      );
+      if (!want) {
+        wrong.push(`${row.coupon_code}: delivered with no phone on the request`);
+        continue;
+      }
+      const u = await fetch(
+        `${Y}/api/User/GetfilteredCustomers?PhoneNumber=${last9(want)}&PageSize=5`,
+        { headers: YH },
+      );
+      const list = u.ok ? await u.json() : [];
+      const acct = (list ?? []).find((x) => last9(x.phoneNumber) === last9(want));
+      if (!acct) {
+        wrong.push(`${row.coupon_code}: ${want} has no Yiji account`);
+        continue;
+      }
+      const h = await fetch(
+        `${Y}/api/CouponUser/GetCouponByUser/${acct.id}?PageNumber=1&PageSize=500`,
+        { headers: YH },
+      );
+      const held = (h.ok ? await h.json() : []).find((x) => x.couponCode === row.coupon_code);
+      if (held) continue;
+      const spent = await spentOrExpired(row, acct.id, YH);
+      if (spent?.spent) notes.push(`${row.coupon_code} ${spent.spent}`);
+      else wrong.push(`${row.coupon_code}: not in ${want}'s account`);
     }
-  }
-  return {
-    ok: wrongNew.length === 0,
-    detail:
-      [
-        wrongNew.length ? `WRONG CUSTOMER: ${wrongNew.join('; ')}` : '',
-        wrongOld.length ? `before the fix (listed only): ${wrongOld.join('; ')}` : '',
-      ]
-        .filter(Boolean)
-        .join(' | ') || `${seen} checked, all went to the right customer`,
-  };
-});
+    return {
+      ok: wrong.length === 0,
+      detail: wrong.length
+        ? wrong.join('; ')
+        : `${r.data.length} checked${notes.length ? ` (${notes.join('; ')})` : ''}`,
+    };
+  },
+);
 
 // ── what agents see is the build that shipped ────────────────────────────────
 await check(

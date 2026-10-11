@@ -150,6 +150,28 @@ export function couponOrderId(request: {
   return request.ticket?.order_id?.trim() || request.order_id?.trim() || null;
 }
 
+/**
+ * DINE-IN AND TAKEOUT NUMBERS ARE THE RESTAURANT'S (owner, 2026-10-11).
+ *
+ * For those two delivery types the "order number" an agent types is the
+ * branch's own POS number, not a Yiji order id, so it must never be looked up
+ * on Yiji. True when every listed type is Dine-in or Takeout.
+ */
+export function isRestaurantOrderNumber(deliveryType: string | null | undefined): boolean {
+  const types = String(deliveryType ?? '')
+    .split(',')
+    .map((x) =>
+      x
+        .trim()
+        .toLowerCase()
+        .replace(/[\s_-]+/g, ''),
+    )
+    .filter(Boolean);
+  return (
+    types.length > 0 && types.every((x) => x === 'dinein' || x === 'takeout' || x === 'takeaway')
+  );
+}
+
 /** The patch that puts an approved coupon onto its ticket. */
 export function approvedCouponPatch(request: CouponFields): CouponFields {
   return {

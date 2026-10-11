@@ -7,6 +7,8 @@ import {
   readCouponUserId,
   yijiCouponPayload,
   YIJI_COUPON_PATH,
+  YIJI_COMPENSATION_COUPON_PATH,
+  YIJI_UNASSIGNED_COUPON_PATH,
   type CouponApprovalRow,
 } from '../src/processors/coupon-push.js';
 
@@ -82,6 +84,9 @@ const OK_BODY = {
   transactionStatus: 0,
 };
 
+/** What `AddCoupon` sends back: the new coupon's id, inside `exceptionMessage`. */
+const CREATED_BODY = { result: 1, exceptionMessage: 'couponId 73900', extendedProperties: {} };
+
 function deps(
   overrides: Partial<Parameters<typeof processCouponPushJob>[1]> = {},
   row: CouponApprovalRow = ROW,
@@ -100,19 +105,34 @@ function deps(
   // Stands in for the service-account poster. Signing in is not this file's
   // concern — that lives in `createYijiAdminPoster`, next to the
   // status-history integration that shares the credential.
-  const postCoupon = vi.fn(async () => OK_BODY);
+  // Every coupon goes by phone (2026-10-11): AddCoupon answers the new coupon
+  // id, AddUserCoupon answers the grant receipt.
+  const postCoupon = vi.fn(async (path: string, _body?: unknown, _h?: unknown) =>
+    path === YIJI_UNASSIGNED_COUPON_PATH ? CREATED_BODY : OK_BODY,
+  );
+  // The phone resolves to exactly one Yiji account.
+  const findCustomer = vi.fn(async (_phone: string) => 'yiji-77');
   return {
     directus,
     patches,
     postCoupon,
+    findCustomer,
     deps: {
       directus: directus as never,
       logger,
       postCoupon: postCoupon as never,
+      findCustomer: findCustomer as never,
       yijiTenantId: '1',
       ...overrides,
     },
   };
+}
+
+/** AddCoupon succeeds; the ATTACH step (AddUserCoupon) answers with `attach`. */
+function attachAnswers(attach: () => Promise<unknown>) {
+  return vi.fn(async (path: string) =>
+    path === YIJI_UNASSIGNED_COUPON_PATH ? CREATED_BODY : attach(),
+  ) as never;
 }
 
 const job = (id = 'ca-1') =>
@@ -459,16 +479,26 @@ describe('readCouponUserId', () => {
 
 describe('processCouponPushJob', () => {
   it('posts the coupon, stores the receipt and marks it assigned', async () => {
-    const { deps: d, patches, postCoupon } = deps();
+    const { deps: d, patches, postCoupon, findCustomer } = deps();
     await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
 
-    const call = postCoupon.mock.calls[0]! as unknown as [string, unknown, Record<string, string>];
-    expect(call[0]).toBe(YIJI_COUPON_PATH);
-    // Their API is multi-tenant and routes on this.
-    expect(call[2].tenantid).toBe('1');
-    // Stable across retries of the same job, so a timeout that in fact
-    // succeeded cannot become a second coupon.
-    expect(call[2]['idempotency-key']).toBe('OPS-ABC23456');
+    // By phone (2026-10-11): create, then attach to the account the phone names.
+    expect(findCustomer).toHaveBeenCalledWith('+966500000000');
+    const calls = postCoupon.mock.calls as unknown as Array<
+      [string, Record<string, unknown>, Record<string, string>]
+    >;
+    expect(calls.map((c) => c[0])).toEqual([
+      YIJI_UNASSIGNED_COUPON_PATH,
+      YIJI_COMPENSATION_COUPON_PATH,
+    ]);
+    expect(calls[1]![1]).toMatchObject({ couponId: 73900, userId: 'yiji-77' });
+    for (const call of calls) {
+      // Their API is multi-tenant and routes on this.
+      expect(call[2].tenantid).toBe('1');
+      // Stable across retries of the same job, so a timeout that in fact
+      // succeeded cannot become a second coupon.
+      expect(call[2]['idempotency-key']).toBe('OPS-ABC23456');
+    }
 
     // The receipt is written in the SAME patch as the status — a crash between
     // two writes would leave "assigned" with nothing to prove it.
@@ -489,10 +519,10 @@ describe('processCouponPushJob', () => {
      * supervisor can see it.
      */
     const { deps: d, patches } = deps({
-      postCoupon: vi.fn(async () => ({
+      postCoupon: attachAnswers(async () => ({
         result: 0,
         exceptionMessage: 'coupon limit reached',
-      })) as never,
+      })),
     });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
     expect(patches[0]).toMatchObject({
@@ -501,23 +531,20 @@ describe('processCouponPushJob', () => {
     expect(patches[0]).not.toHaveProperty('status');
   });
 
-  it('will not push a coupon with no order to attach it to', async () => {
-    // The endpoint attaches a coupon to an order. Without one Yiji answers 200
-    // with a refusal, and the retry repeats it until the job gives up — a queue
-    // full of failures whose real cause is a blank field on our side.
-    const { deps: d, postCoupon } = deps({}, { ...ROW, ticket: { order_id: null } });
+  /* Not configured is not "no account": nothing was asked, so nothing is
+     posted and nothing is recorded. */
+  it('will not push when the customer cannot be looked up by phone', async () => {
+    const { deps: d, postCoupon, patches } = deps({ findCustomer: undefined });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('no-order');
     expect(postCoupon).not.toHaveBeenCalled();
+    expect(patches).toHaveLength(0);
   });
 
-  it('STILL pushes when the customer has no Yiji id — the order identifies them', async () => {
+  it('STILL delivers when the contact has no Yiji id — the phone finds them', async () => {
     /*
-     * This is the regression that matters most here. An earlier version of this
-     * processor refused to push without `external_customer_id`, which reads as
-     * careful and would have silently held back 18 of the 19 approvals in this
-     * database: every coupon for a complaint that arrived by phone or WhatsApp
-     * rather than through the app. The endpoint resolves the customer from the
-     * order, so the coupon goes.
+     * An earlier version refused to push without `external_customer_id`, which
+     * would have held back every coupon for a complaint that arrived by phone or
+     * WhatsApp. The phone resolves the account, so the coupon goes.
      */
     const {
       deps: d,
@@ -525,7 +552,7 @@ describe('processCouponPushJob', () => {
       postCoupon,
     } = deps({}, { ...ROW, contact: { ...ROW.contact!, external_customer_id: null } });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
-    expect(postCoupon).toHaveBeenCalled();
+    expect(postCoupon.mock.calls[1]![1]).toMatchObject({ userId: 'yiji-77' });
     expect(patches[0]).toMatchObject({ status: 'assigned', yiji_coupon_user_id: '21117' });
   });
 
@@ -560,9 +587,9 @@ describe('processCouponPushJob', () => {
 
   it('throws on a transport failure so the job retries, and writes nothing', async () => {
     const { deps: d, patches } = deps({
-      postCoupon: vi.fn(async () => {
-        throw new Error('admin upstream 502 for /api/CouponUserOrder/CreateCouponUserFromOrder');
-      }) as never,
+      postCoupon: attachAnswers(async () => {
+        throw new Error('admin upstream 502 for /api/CouponUser/AddUserCoupon');
+      }),
     });
     await expect(processCouponPushJob(job(), d)).rejects.toThrow(/502/);
     /*
@@ -595,12 +622,12 @@ describe('a refusal is an answer, not an outage', () => {
 
   it('records the reason and stops, rather than retrying a settled no', async () => {
     const { deps: d, patches } = deps({
-      postCoupon: vi.fn(async () => {
+      postCoupon: attachAnswers(async () => {
         throw new RefusedError(400, {
           result: 2,
           exceptionMessage: 'User already have this coupon',
         });
-      }) as never,
+      }),
     });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
     // The reason is on the row, where a supervisor can see it — not only in a
@@ -615,20 +642,20 @@ describe('a refusal is an answer, not an outage', () => {
     // Their API is not consistent about which it uses, so both roads lead to
     // the same place.
     const { deps: d, patches } = deps({
-      postCoupon: vi.fn(async () => ({ result: 0, exceptionMessage: 'order not found' })) as never,
+      postCoupon: attachAnswers(async () => ({ result: 0, exceptionMessage: 'user not found' })),
     });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
     expect(String((patches[0] as { yiji_push_error: string }).yiji_push_error)).toMatch(
-      /order not found/,
+      /user not found/,
     );
   });
 
   it('still RETRIES an upstream that is merely unwell', async () => {
     // A 502 or a timeout has decided nothing; trying again is exactly right.
     const { deps: d } = deps({
-      postCoupon: vi.fn(async () => {
-        throw new Error('admin upstream 502 for /api/CouponUserOrder/CreateCouponUserFromOrder');
-      }) as never,
+      postCoupon: attachAnswers(async () => {
+        throw new Error('admin upstream 502 for /api/CouponUser/AddUserCoupon');
+      }),
     });
     await expect(processCouponPushJob(job(), d)).rejects.toThrow(/502/);
   });
@@ -756,17 +783,17 @@ describe('an outage must not park a coupon', () => {
       }
     }
     const transient = deps({
-      postCoupon: vi.fn(async () => {
+      postCoupon: attachAnswers(async () => {
         throw new Error('network error: socket hang up');
-      }) as never,
+      }),
     });
     await expect(processCouponPushJob(job(), transient.deps)).rejects.toThrow(/socket hang up/);
     expect(transient.patches).toHaveLength(0);
 
     const refused = deps({
-      postCoupon: vi.fn(async () => {
+      postCoupon: attachAnswers(async () => {
         throw new RefusedError(400, { result: 2, exceptionMessage: 'no' });
-      }) as never,
+      }),
     });
     await expect(processCouponPushJob(job(), refused.deps)).resolves.toBe('refused');
     expect(refused.patches).toHaveLength(1);
@@ -908,44 +935,14 @@ describe("the payload carries YIJI's own values for the order", () => {
     expect(without.couponUser.coupon).not.toHaveProperty('brandId');
   });
 
-  /* Changed 2026-10-11 (OPS-NDYVFZZK): the order's OWNER is checked before a
-     coupon is attached, so an unreadable order is retried, never pushed blind. */
-  it('retries, rather than sends blind, when the order cannot be read', async () => {
-    const { deps: d, postCoupon } = deps({
-      readOrder: vi.fn(async () => {
-        throw new Error('order api unreachable');
-      }) as never,
-    });
-    await expect(processCouponPushJob(job(), d)).rejects.toThrow(/check its owner/);
-    expect(postCoupon).not.toHaveBeenCalled();
-  });
-
-  it('REFUSES an order that belongs to a different customer', async () => {
-    const {
-      deps: d,
-      patches,
-      postCoupon,
-    } = deps({
-      readOrder: vi.fn(async () => ({ ...ORDER, customerPhone: '+966563940549' })) as never,
-    });
-    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
-    expect(postCoupon).not.toHaveBeenCalled();
-    expect(JSON.stringify(patches)).toMatch(/belongs to a different customer/);
-  });
-
-  it('sends when the order is this customer’s, whatever the phone format', async () => {
-    const { deps: d, postCoupon } = deps({
-      readOrder: vi.fn(async () => ({ ...ORDER, customerPhone: '+966500000000' })) as never,
-    });
-    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
-    expect(postCoupon).toHaveBeenCalled();
-  });
-
-  it('asks about the order the ticket actually names', async () => {
+  /* Since 2026-10-11 the job never reads the order at all - the phone decides
+     who gets the coupon. Its tests: coupon-push-no-order.test.ts, "a coupon
+     WITH an order number is delivered by phone". */
+  it('never asks Yiji about the order the ticket names', async () => {
     const readOrder = vi.fn(async () => ORDER);
     const { deps: d } = deps({ readOrder: readOrder as never });
-    await processCouponPushJob(job(), d);
-    expect(readOrder).toHaveBeenCalledWith('1187929');
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
+    expect(readOrder).not.toHaveBeenCalled();
   });
 });
 

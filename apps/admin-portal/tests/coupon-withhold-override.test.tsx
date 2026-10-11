@@ -216,7 +216,7 @@ describe('supervisor override on Yiji delivery', () => {
     });
     renderPage();
     await expandFirst(user);
-    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no customer phone on this request/i)).not.toBeInTheDocument();
   });
 
   /* NEITHER an order NOR a phone: nothing can reach this customer, which is the
@@ -235,7 +235,7 @@ describe('supervisor override on Yiji delivery', () => {
     });
     renderPage();
     await expandFirst(user);
-    expect(screen.getByText(/no way to reach the customer/i)).toBeInTheDocument();
+    expect(screen.getByText(/no customer phone on this request/i)).toBeInTheDocument();
   });
 
   /*
@@ -261,7 +261,7 @@ describe('supervisor override on Yiji delivery', () => {
     /* Nothing is said when the customer exists — the card only speaks up when
        the coupon genuinely cannot reach them. */
     expect(screen.queryByText(/has no Yiji account/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/no way to reach the customer/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/no customer phone on this request/i)).not.toBeInTheDocument();
   });
 });
 

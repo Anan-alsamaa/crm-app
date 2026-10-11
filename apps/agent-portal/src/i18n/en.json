@@ -714,9 +714,10 @@
     "resolutionHint": "Optional — what you did about it",
     "orderId": "Order number (optional)",
     "orderIdPlaceholder": "e.g. 1234535",
-    "orderIdHint": "If the customer has their order number, add it — a coupon can only be sent against an order.",
+    "orderIdHint": "For reference only. A coupon is always sent to the customer's phone number, never to an order.",
     "orderNotFound": "No order with that number for this vendor.",
-    "orderIdWalkInHint": "Takeout and Dine-in: type the number on the restaurant receipt. It is recorded as given — there is nothing to look up."
+    "orderIdWalkInHint": "Takeout and Dine-in: type the number on the restaurant receipt. It is recorded as given — there is nothing to look up.",
+    "restaurantOrderId": "Restaurant order no. (optional)"
   },
   "complaints": {
     "title": "My tickets",

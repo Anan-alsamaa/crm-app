@@ -17,7 +17,9 @@ import {
  * route a coupon takes to Yiji, with the exact API calls in order and EVERY
  * value the owner has fixed or named:
  *
- *   1a  assign, with an order   CreateCouponUserFromOrder (one call)
+ *   1a  assign, with an order   same as 1b - the order number is reference
+ *                               only; CreateCouponUserFromOrder is never used
+ *                               (owner, 2026-10-11)
  *   1b  assign, no order        AddCoupon (create) -> AddUserCoupon (give it)
  *   2   create, don't assign    AddCoupon only, assignee [], never given
  *   3   customer not on Yiji    nothing created; held until they sign up
@@ -128,17 +130,22 @@ function expectOwnerValues(coupon: Record<string, unknown>) {
   expect(coupon.issuingSideId).toBe(6); // Operations
 }
 
-describe('1a — assign, with an order: CreateCouponUserFromOrder', () => {
-  it('makes exactly one call, carrying every owner value, and records the receipt', async () => {
+/* A mistyped order number gave coupons to strangers (OPS-NDYVFZZK), so an
+   order number no longer decides who gets the coupon - the phone does. */
+describe('1a — assign, with an order number: still by phone', () => {
+  it('goes through 1b exactly, never the order endpoint, and records the receipt', async () => {
     const { outcome, calls, patches } = await run({
       ...ROW,
       order_id: '1330455',
     } as CouponApprovalRow);
     expect(outcome).toBe('delivered');
-    expect(calls.map((c) => c.path)).toEqual([YIJI_COUPON_PATH]);
-    const cu = calls[0]!.body.couponUser as Record<string, unknown>;
-    expect(cu.couponCode).toBe('OPS-PIPE1234');
-    expectOwnerValues(cu.coupon as Record<string, unknown>);
+    expect(calls.map((c) => c.path)).toEqual([
+      YIJI_UNASSIGNED_COUPON_PATH,
+      YIJI_COMPENSATION_COUPON_PATH,
+    ]);
+    expect(calls.map((c) => c.path)).not.toContain(YIJI_COUPON_PATH);
+    expectOwnerValues(calls[0]!.body);
+    expect(calls[1]!.body).toMatchObject({ couponId: 73900, userId: 'yiji-user-1' });
     expect(patches.at(-1)).toMatchObject({ status: 'assigned', yiji_coupon_user_id: '21500' });
   });
 });
