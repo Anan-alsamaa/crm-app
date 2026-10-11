@@ -119,3 +119,41 @@ export const LATE_ORDER_COLUMN_LABELS: Record<LateOrderColumnKey, { key: string;
   actions: { key: 'lateOrders.col.actions', def: 'Decision' },
   comments: { key: 'lateOrders.col.comments', def: 'Comments' },
 };
+
+/* ── column widths (owner, 2026-10-11: "drag the column border") ─────────── */
+
+/** This browser's column widths in px; absent = the table's natural widths. */
+export const LATE_ORDER_COLUMN_WIDTHS_KEY = 'late-orders-columns-widths';
+export const MIN_COLUMN_WIDTH = 60;
+export const MAX_COLUMN_WIDTH = 800;
+
+export type LateOrderColumnWidths = Partial<Record<LateOrderColumnKey, number>>;
+
+export const clampColumnWidth = (w: number): number =>
+  Math.round(Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, w)));
+
+/** The saved widths, keeping only known columns and sane numbers. */
+export function loadLateOrderColumnWidths(): LateOrderColumnWidths | null {
+  try {
+    const raw = window.localStorage.getItem(LATE_ORDER_COLUMN_WIDTHS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const out: LateOrderColumnWidths = {};
+    for (const k of LATE_ORDER_COLUMN_KEYS) {
+      const v = parsed[k];
+      if (typeof v === 'number' && Number.isFinite(v)) out[k] = clampColumnWidth(v);
+    }
+    return Object.keys(out).length ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveLateOrderColumnWidths(widths: LateOrderColumnWidths | null): void {
+  try {
+    if (widths) window.localStorage.setItem(LATE_ORDER_COLUMN_WIDTHS_KEY, JSON.stringify(widths));
+    else window.localStorage.removeItem(LATE_ORDER_COLUMN_WIDTHS_KEY);
+  } catch {
+    /* storage unavailable: the widths last for this visit */
+  }
+}

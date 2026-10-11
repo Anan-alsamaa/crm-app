@@ -114,9 +114,8 @@ describe('the column list', () => {
 
   it('gives every key a header and a cell in the page', () => {
     for (const k of ALL) expect(PAGE).toMatch(new RegExp(`\\n    ${k}: \\{\\n      th:`));
-    expect(PAGE).toMatch(
-      /visibleColumns\.map\(\(k\) => \(\s*<Fragment key=\{k\}>\{columnDefs\[k\]\.th\}/,
-    );
+    // The header is the column's own <Th>, cloned to carry the resize handle.
+    expect(PAGE).toMatch(/const th = columnDefs\[k\]\.th as ReactElement/);
     expect(PAGE).toMatch(/<Fragment key=\{k\}>\{columnDefs\[k\]\.td\(row\)\}<\/Fragment>/);
   });
 

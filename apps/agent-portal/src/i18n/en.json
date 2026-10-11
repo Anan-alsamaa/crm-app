@@ -913,6 +913,7 @@
       "dragHint": "Drag to reorder",
       "moveUp": "Move {{col}} earlier",
       "moveDown": "Move {{col}} later"
-    }
+    },
+    "resizeColumn": "Drag to resize; double-click to reset"
   }
 }

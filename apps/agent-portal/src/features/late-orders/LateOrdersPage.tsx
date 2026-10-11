@@ -1,11 +1,23 @@
-import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Fragment,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  cloneElement,
+  type ReactElement,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { playMessageBeep } from '../../lib/sound.js';
 import { LiveToggle } from './LiveToggle.js';
+import { useColumnResize } from './useColumnResize.js';
 import { createItem } from '@directus/sdk';
 import {
   Button,
+  cn,
   ConfirmDialog,
   DateField,
   EmptyState,
@@ -789,6 +801,9 @@ export function LateOrdersPage() {
     () => visibleLateOrderColumns(columnOrder, hiddenColumns),
     [columnOrder, hiddenColumns],
   );
+  /* COLUMN WIDTHS: drag a header's edge (owner, 2026-10-11). */
+  const headerRowRef = useRef<HTMLTableSectionElement | null>(null);
+  const resize = useColumnResize(visibleColumns, headerRowRef);
   const [pageSize, setPageSize] = useState(25);
   const pageCount = pageCountOf(rows.length, pageSize);
   /* Clamped rather than stored: narrowing the filters while sitting on page 9
@@ -2018,12 +2033,66 @@ export function LateOrdersPage() {
                 flow
                 scrollLabel={t('lateOrders.title', { defaultValue: 'Late orders' })}
               >
-                <Table>
-                  <thead>
-                    <Tr>
+                <Table
+                  /* Fixed widths once a column has been dragged (see useColumnResize). */
+                  style={
+                    resize.widths
+                      ? {
+                          tableLayout: 'fixed',
+                          width: visibleColumns.reduce(
+                            (n, k) => n + (resize.widths?.[k] ?? 120),
+                            0,
+                          ),
+                        }
+                      : undefined
+                  }
+                  className={cn(resize.widths && '[&_td]:overflow-hidden [&_td]:text-ellipsis')}
+                >
+                  {resize.widths && (
+                    <colgroup>
                       {visibleColumns.map((k) => (
-                        <Fragment key={k}>{columnDefs[k].th}</Fragment>
+                        <col key={k} style={{ width: resize.widths?.[k] ?? 120 }} />
                       ))}
+                    </colgroup>
+                  )}
+                  <thead ref={headerRowRef}>
+                    <Tr>
+                      {visibleColumns.map((k) => {
+                        const th = columnDefs[k].th as ReactElement<{
+                          className?: string;
+                          children?: ReactNode;
+                        }>;
+                        /* The column's own header, plus a drag handle on its
+                           trailing edge (owner, 2026-10-11). */
+                        return (
+                          <Fragment key={k}>
+                            {cloneElement(
+                              th,
+                              { className: cn(th.props.className, 'relative') },
+                              th.props.children,
+                              <span
+                                role="separator"
+                                aria-orientation="vertical"
+                                aria-label={t('lateOrders.resizeColumn', {
+                                  defaultValue: 'Drag to resize; double-click to reset',
+                                })}
+                                title={t('lateOrders.resizeColumn', {
+                                  defaultValue: 'Drag to resize; double-click to reset',
+                                })}
+                                onPointerDown={(e) => resize.start(k, e)}
+                                onDoubleClick={resize.reset}
+                                className={cn(
+                                  'absolute inset-y-0 -end-1 z-10 w-2 cursor-col-resize touch-none',
+                                  'after:absolute after:inset-y-1.5 after:start-1/2 after:w-0.5 after:rounded-full after:transition-colors',
+                                  resize.dragging === k
+                                    ? 'after:bg-primary'
+                                    : 'after:bg-foreground/10 hover:after:bg-primary/60',
+                                )}
+                              />,
+                            )}
+                          </Fragment>
+                        );
+                      })}
                     </Tr>
                   </thead>
                   <tbody>
