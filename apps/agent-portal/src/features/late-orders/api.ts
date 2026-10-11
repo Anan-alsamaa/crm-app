@@ -88,7 +88,15 @@ export function useLateOrders(
     enabled,
     refetchInterval: history ? false : fast ? 10_000 : 30_000,
     staleTime: history ? 5 * 60_000 : fast ? 5_000 : 15_000,
-    retry: false,
+    /*
+     * RETRIED, and a wall screen keeps polling (owner, 2026-10-11: the TV
+     * showed "Could not load late orders"). One passing failure - a gateway
+     * restart, a slow session check - is retried quietly; the page keeps the
+     * last good table meanwhile (see LateOrdersPage).
+     */
+    retry: 3,
+    retryDelay: (n) => Math.min(1_000 * 2 ** n, 8_000),
+    refetchIntervalInBackground: fast,
   });
 }
 

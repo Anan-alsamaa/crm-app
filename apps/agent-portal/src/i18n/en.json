@@ -915,6 +915,7 @@
       "moveUp": "Move {{col}} earlier",
       "moveDown": "Move {{col}} later"
     },
-    "resizeColumn": "Drag to resize; double-click to reset"
+    "resizeColumn": "Drag to resize; double-click to reset",
+    "staleNotice": "Reconnecting… showing the list as of {{time}}."
   }
 }

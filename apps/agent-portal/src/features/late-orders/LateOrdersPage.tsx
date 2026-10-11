@@ -1984,7 +1984,24 @@ export function LateOrdersPage() {
             )}
           </div>
 
-          {queue.isError ? (
+          {/* A refresh failed but the last good table is still here: keep it
+              on screen and say so quietly (owner, 2026-10-11, the TV). */}
+          {queue.isError && queue.data && (
+            <div
+              role="status"
+              className="mb-2 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+            >
+              <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
+              {t('lateOrders.staleNotice', {
+                defaultValue: 'Reconnecting… showing the list as of {{time}}.',
+                time: new Date(queue.dataUpdatedAt).toLocaleTimeString([], {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                }),
+              })}
+            </div>
+          )}
+          {queue.isError && !queue.data ? (
             /*
              * A failed fetch must NOT look like an empty queue.
              *
