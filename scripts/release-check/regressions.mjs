@@ -329,6 +329,9 @@ await check('EMA-23', 'no approved coupon is stuck undelivered (older than 15 mi
         { yiji_coupon_user_id: { _null: true } },
         { yiji_push_error: { _null: true } },
         { delivery_excluded: { _neq: true } },
+        /* HELD for a customer with no Yiji account yet (EMA-49) is not stuck:
+           the sweep re-checks it until they sign up (OPS-P8K2FBMH, 2026-10-11). */
+        { awaiting_signup_at: { _null: true } },
       ],
     }),
     fields: 'id,coupon_code,decided_at',
@@ -437,7 +440,10 @@ function compareCoupon(row, c) {
 }
 async function yijiHeldBy(row) {
   const YH = { authorization: `Bearer ${yijiToken}` };
-  const orderId = row.order_id ?? row.ticket?.order_id;
+  /* PHONE FIRST (owner, 2026-10-11): coupons go to the customer's phone, and
+     two that went by a wrong order were moved to the phone's account by hand.
+     The order is only a fallback for a request that carries no phone. */
+  const orderId = plusPhone(row) ? null : (row.order_id ?? row.ticket?.order_id);
   let userId = null;
   if (orderId) {
     const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, {
@@ -935,8 +941,18 @@ await check(
     if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
     const gone = [];
     let spent = 0;
+    let unreadable = 0;
     for (const row of r.data ?? []) {
-      const got = await yijiHeldBy(row);
+      /* One customer's answer must not sink the whole check: a Yiji reply too
+         big to parse crashed it on 2026-10-11 ("Cannot create a string
+         longer than ..."). Counted as unreadable and reported. */
+      let got;
+      try {
+        got = await yijiHeldBy(row);
+      } catch {
+        unreadable += 1;
+        continue;
+      }
       if (got.error)
         gone.push(`${row.coupon_code} (grant ${row.yiji_coupon_user_id}): ${got.error}`);
       else if (got.spent) spent += 1;
@@ -947,6 +963,7 @@ await check(
       detail:
         `${n} delivered this week: ${n - spent - gone.length} held, ${spent} used or expired, ` +
         `${gone.length} no longer in the customer's wallet (Yiji side, left as is)` +
+        (unreadable ? `, ${unreadable} unreadable on Yiji` : '') +
         (gone.length ? ` - ${gone.map((g) => g.split(' ')[0]).join(', ')}` : ''),
     };
   },
