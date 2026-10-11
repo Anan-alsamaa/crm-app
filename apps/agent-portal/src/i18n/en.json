@@ -886,9 +886,10 @@
   "busy": {
     "on": "Busy",
     "off": "Busy",
-    "onHint": "Busy since {{since}}: you get no new chats. Click to take chats again.",
-    "offHint": "Mark yourself busy: you stay signed in but get no new chats.",
-    "failed": "Could not change your Busy status."
+    "onHint": "Busy since {{since}}: you get no new chats. Click when you are ready.",
+    "offHint": "Ready: new chats can come to you. Click to mark yourself busy.",
+    "failed": "Could not change your Busy status.",
+    "ready": "Ready"
   },
   "lateOrders": {
     "liveOn": "Live orders: ON",
