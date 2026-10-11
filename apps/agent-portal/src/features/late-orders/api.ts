@@ -58,6 +58,8 @@ export function useLateOrders(
    * are exactly what they were before (no `vendorId` = the legacy vendor).
    */
   vendorId?: string,
+  /** LIVE ORDERS mode (owner, 2026-10-11): a wall screen refreshes every 10 s. */
+  fast = false,
 ) {
   /*
    * A PAST RANGE stops the polling.
@@ -84,8 +86,8 @@ export function useLateOrders(
         ? commerce.getLateOrders(range, live, vendorId)
         : commerce.getLateOrders(range, live),
     enabled,
-    refetchInterval: history ? false : 30_000,
-    staleTime: history ? 5 * 60_000 : 15_000,
+    refetchInterval: history ? false : fast ? 10_000 : 30_000,
+    staleTime: history ? 5 * 60_000 : fast ? 5_000 : 15_000,
     retry: false,
   });
 }

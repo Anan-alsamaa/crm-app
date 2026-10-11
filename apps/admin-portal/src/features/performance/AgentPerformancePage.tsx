@@ -273,9 +273,10 @@ function useChatTimings(filters: Filters) {
 
       return conversations.map((c) => ({
         conversationId: c.id,
-        agentId: c.assigned_agent,
+        // No owner = the agent who answered; see the agent portal (2026-10-11).
+        agentId: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? null,
         // Placeholder; the page replaces it with the resolved name.
-        agentName: c.assigned_agent ?? 'Unassigned',
+        agentName: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? 'General',
         firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
         firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,
         firstAgentBy: times.get(c.id)?.firstAgentBy ?? null,
@@ -382,7 +383,7 @@ export function AgentPerformancePage() {
         agentName: c.agentId
           ? (agentNames.get(c.agentId) ??
             t('performance.unknownAgent', { defaultValue: 'Unknown agent' }))
-          : t('performance.unassigned', { defaultValue: 'Unassigned' }),
+          : t('performance.unassigned', { defaultValue: 'General' }),
       })),
     [timings.data, agentNames, t, chatHours],
   );

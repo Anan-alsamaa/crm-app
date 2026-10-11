@@ -144,3 +144,17 @@ export async function performanceRead<T>(
   });
   return res.data ?? [];
 }
+
+/** The caller's own Busy state (owner, 2026-10-11): no new chats while busy. */
+export interface BusyState {
+  busy: boolean;
+  since: string | null;
+}
+export async function getBusy(): Promise<BusyState> {
+  const res = await call<EnqueueResult & BusyState>('/jobs/busy');
+  return { busy: !!res.busy, since: res.since ?? null };
+}
+export async function setBusy(busy: boolean): Promise<BusyState> {
+  const res = await post<EnqueueResult & BusyState>('/jobs/busy', { busy });
+  return { busy: !!res.busy, since: res.since ?? null };
+}

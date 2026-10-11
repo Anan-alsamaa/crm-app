@@ -738,6 +738,48 @@ async function main(): Promise<void> {
       return reply.code(502).send({ ok: false, error: 'read failed' });
     }
   });
+  /*
+   * BUSY (owner, 2026-10-11). Signed in, but no new chats: the agent is on
+   * other work, or an admin opened the account to monitor. Only the CALLER's
+   * own state - the body carries no agent id, so nobody can mark a colleague.
+   * Open to whoever receives chats (WeCare Agent / Supervisor by default).
+   */
+  app.get('/jobs/busy', async (req, reply) => {
+    const me = await requirePrivilege(req, reply, 'receive_chats');
+    if (!me) return reply;
+    const open = await directus.openBusyPeriod(me.id);
+    return reply.send({ ok: true, busy: !!open, since: open?.started_at ?? null });
+  });
+  app.post('/jobs/busy', async (req, reply) => {
+    const me = await requirePrivilege(req, reply, 'receive_chats');
+    if (!me) return reply;
+    const busy = (req.body as { busy?: unknown } | null)?.busy;
+    if (typeof busy !== 'boolean')
+      return reply.code(400).send({ ok: false, error: 'busy must be true or false' });
+    if (busy) {
+      const p = await directus.startBusy(me.id, me.id);
+      logger.info({ agentId: me.id }, 'agent marked busy');
+      return reply.send({ ok: true, busy: true, since: p.started_at });
+    }
+    await directus.endBusy(me.id);
+    logger.info({ agentId: me.id }, 'agent no longer busy');
+    return reply.send({ ok: true, busy: false, since: null });
+  });
+  /* The Agent KPI "Busy time" report (admin portal). */
+  app.get('/jobs/busy/report', async (req, reply) => {
+    if (!(await requirePrivilege(req, reply, 'view_agent_reports'))) return reply;
+    const q = req.query as { from?: string; to?: string; agentId?: string };
+    const clean = (v?: string) =>
+      typeof v === 'string' && /^[\w:.-]{1,64}$/.test(v) ? v : undefined;
+    const filters: { from?: string; to?: string; agentId?: string } = {};
+    const from = clean(q.from);
+    const to = clean(q.to);
+    const agentId = clean(q.agentId);
+    if (from) filters.from = from;
+    if (to) filters.to = to;
+    if (agentId) filters.agentId = agentId;
+    return reply.send({ ok: true, data: await directus.busyPeriods(filters) });
+  });
   app.post('/jobs/import', async (req, reply) => {
     if (!(await requirePrivilege(req, reply, 'import_data'))) return reply;
     const parsed = ImportJob.safeParse(req.body);

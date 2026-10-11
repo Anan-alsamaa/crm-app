@@ -755,6 +755,11 @@ export const roles: RoleSpec[] = [
          for every agent; the page's own token cannot. Read-only. */
       { collection: 'routing_events', action: 'read' },
       { collection: 'coupon_approvals', action: 'read' },
+      /* Busy (owner, 2026-10-11): the gateway opens and closes an agent's own
+         busy periods and serves the Agent KPI report from them. */
+      { collection: 'agent_busy_periods', action: 'create' },
+      { collection: 'agent_busy_periods', action: 'read' },
+      { collection: 'agent_busy_periods', action: 'update' },
       ...readOnly('directus_users'),
       /* Display fields (resolveVendor: id, name, colors) + `webhook_path_key`:
          MV-3 picks a vendor's webhook / chat-login secret by that key
@@ -783,6 +788,8 @@ export const roles: RoleSpec[] = [
       // it worked.
       { collection: 'routing_events', action: 'create' },
       { collection: 'routing_events', action: 'read' },
+      // Routing gives a BUSY agent no new chats (owner, 2026-10-11).
+      { collection: 'agent_busy_periods', action: 'read' },
       /* The ladder decides whether to escalate by counting AGENT replies, so the
        * worker must be able to read messages. Without it the assign stage writes
        * the assignment and then throws on the very next call — the conversation

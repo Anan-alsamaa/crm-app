@@ -51,6 +51,11 @@ const LateOrdersReportPage = lazy(() =>
     default: m.LateOrdersReportPage,
   })),
 );
+const BusyReportPage = lazy(() =>
+  import('./features/busy-report/BusyReportPage.js').then((m) => ({
+    default: m.BusyReportPage,
+  })),
+);
 const SlaPoliciesPage = lazy(() =>
   import('./features/sla/SlaPoliciesPage.js').then((m) => ({ default: m.SlaPoliciesPage })),
 );
@@ -675,6 +680,12 @@ function reportTabs(t: TFunction) {
         requires: 'view_late_orders_report' as const,
       },
       {
+        /* How often agents used Busy and for how long (owner, 2026-10-11). */
+        to: 'busy',
+        label: t('nav.busyReport', { defaultValue: 'Busy time' }),
+        requires: 'view_agent_reports' as const,
+      },
+      {
         // Compensation is a money screen: its own report privilege (owner,
         // 2026-10-06), defaulting to whoever holds the coupon one.
         to: 'compensation',
@@ -836,6 +847,14 @@ export function App() {
               element={
                 <ProtectedRoute requires="view_late_orders_report">
                   <LateOrdersReportPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="busy"
+              element={
+                <ProtectedRoute requires="view_agent_reports">
+                  <BusyReportPage />
                 </ProtectedRoute>
               }
             />

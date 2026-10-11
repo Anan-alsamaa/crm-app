@@ -409,7 +409,28 @@ export function createRoutingRepo(client: YijiDirectusClient) {
       const users = (await client.request(
         readUsers({ filter, fields: ['id'], limit: -1 }) as never,
       )) as Array<{ id: string }>;
-      const ids = users.map((u) => u.id);
+      if (users.length === 0) return [];
+      /*
+       * BUSY AGENTS GET NO NEW CHATS (owner, 2026-10-11): signed in, but on
+       * other work - or an admin monitoring through the account. An open
+       * `agent_busy_periods` row is the switch. Fail-OPEN: if the read fails
+       * (an environment without the collection yet), nobody is treated as
+       * busy, because a routing outage is worse than one busy agent pinged.
+       */
+      let busy = new Set<string>();
+      try {
+        const rows = (await client.request(
+          readItems('agent_busy_periods' as never, {
+            filter: { ended_at: { _null: true } },
+            fields: ['agent'],
+            limit: -1,
+          }) as never,
+        )) as Array<{ agent: string | null }>;
+        busy = new Set(rows.map((r) => r.agent).filter((a): a is string => !!a));
+      } catch {
+        /* see above */
+      }
+      const ids = users.map((u) => u.id).filter((id) => !busy.has(id));
       if (ids.length === 0) return [];
 
       const open = (await client.request(

@@ -513,7 +513,15 @@ async function pipelineCheck(id, name, filter, fetchCoupon) {
       const got = await fetchCoupon(row);
       if (got.error) problems.push(`${row.coupon_code}: ${got.error}`);
       else if (got.spent) notes.push(`${row.coupon_code} ${got.spent}`);
-      else {
+      else if (!/^CRM - /.test(String(got.coupon?.compensationReason ?? ''))) {
+        /* NOT CREATED BY THE CRM (2026-10-11, OPS-5C43EFUR): every coupon our
+           worker creates is described "CRM - ...". One without it was made by
+           hand on Yiji with the CRM's code, and the worker only recorded that
+           the customer already held it. Its values are not ours to check, and
+           a release must not go red over data no code change can fix - so it
+           is LISTED for a human, never failed. */
+        notes.push(`${row.coupon_code} created by hand on Yiji, not by the CRM (not checked)`);
+      } else {
         const bad = compareCoupon(row, got.coupon);
         if (bad.length) problems.push(`${row.coupon_code}: ${bad.join(', ')}`);
       }
@@ -655,12 +663,67 @@ await check(
         .catch(() => null);
       const c = (list ?? []).find((x) => x.couponCode === row.coupon_code)?.coupon;
       if (!c) continue;
+      // Made by hand on Yiji, not by the CRM: not ours to check (see COUPON-1a).
+      if (!/^CRM - /.test(String(c.compensationReason ?? ''))) continue;
       seen += 1;
       if (!(c.reachLimit >= 1000)) low.push(`${row.coupon_code}=${c.reachLimit}`);
     }
     return { ok: low.length === 0, detail: low.length ? low.join(', ') : `${seen} checked` };
   },
 );
+
+/* A COUPON ATTACHED TO AN ORDER GOES TO THAT ORDER'S OWNER (2026-10-11,
+   OPS-NDYVFZZK: a mistyped order number on a ticket sent 30 SAR to a stranger).
+   The worker now refuses an order whose owner is not the coupon's customer;
+   this proves no coupon pushed since the fix went to someone else. Older ones
+   are listed, never failed - they cannot be undone from our side. */
+const OWNER_GUARD_SINCE = process.env.OWNER_GUARD_SINCE ?? '2026-10-11T12:00:00Z';
+await check('COUPON-OWNER', "coupons attached to an order went to that order's owner", async () => {
+  if (!yijiToken) return 'skip';
+  if (ENV !== 'prod') return { ok: true, detail: 'production only' };
+  const r = await items('coupon_approvals', {
+    filter: JSON.stringify({
+      _and: [
+        { yiji_coupon_user_id: { _nnull: true } },
+        { _or: [{ order_id: { _nnull: true } }, { ticket: { order_id: { _nnull: true } } }] },
+        { yiji_pushed_at: { _gte: new Date(Date.now() - 7 * 864e5).toISOString() } },
+      ],
+    }),
+    fields: 'coupon_code,yiji_pushed_at,order_id,ticket.order_id,customer_phone,contact.phone,title',
+    sort: '-yiji_pushed_at',
+    limit: '15',
+  });
+  if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
+  const YH = { authorization: `Bearer ${yijiToken}` };
+  const last9 = (v) => String(v ?? '').replace(/\D/g, '').slice(-9);
+  const wrongNew = [];
+  const wrongOld = [];
+  let seen = 0;
+  for (const row of r.data ?? []) {
+    const want = [row.customer_phone, row.contact?.phone, row.title].find((p) => last9(p).length === 9);
+    const orderId = row.order_id ?? row.ticket?.order_id;
+    if (!want || !orderId) continue;
+    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, { headers: YH });
+    const order = o.ok ? await o.json().catch(() => null) : null;
+    const owner = order?.customerPhoneNumber ?? order?.customerPhone;
+    if (!owner) continue;
+    seen += 1;
+    if (last9(owner) !== last9(want)) {
+      const line = `${row.coupon_code} (order ${orderId} is ${owner}'s, coupon was for ${want})`;
+      (row.yiji_pushed_at >= OWNER_GUARD_SINCE ? wrongNew : wrongOld).push(line);
+    }
+  }
+  return {
+    ok: wrongNew.length === 0,
+    detail:
+      [
+        wrongNew.length ? `WRONG CUSTOMER: ${wrongNew.join('; ')}` : '',
+        wrongOld.length ? `before the fix (listed only): ${wrongOld.join('; ')}` : '',
+      ]
+        .filter(Boolean)
+        .join(' | ') || `${seen} checked, all went to the right customer`,
+  };
+});
 
 // ── what agents see is the build that shipped ────────────────────────────────
 await check(

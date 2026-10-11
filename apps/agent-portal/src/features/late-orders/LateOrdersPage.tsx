@@ -1,9 +1,10 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem } from '@directus/sdk';
 import {
   Button,
+  cn,
   ConfirmDialog,
   DateField,
   EmptyState,
@@ -68,6 +69,10 @@ import {
   FALLBACK_THRESHOLD,
 } from './api.js';
 
+/** Remembers LIVE ORDERS mode in this browser (the TV screen keeps it). */
+const LIVE_MODE_KEY = 'late-orders-live-mode';
+/** How long an order that just arrived carries the NEW tag in live mode. */
+const NEW_FOR_MS = 2 * 60_000;
 /**
  * Rows per page. Starts at 25 — a queue is worked from the top, and a screenful
  * is what an agent reads; the larger sizes are for scanning a history range.
@@ -388,10 +393,31 @@ export function LateOrdersPage() {
    * Searching a range stores it here and stops the rolling.
    */
   const [range, setRange] = useState<{ from: string; to: string } | null>(null);
-  /** The window actually asked for: a searched range, else today. */
-  const activeRange = range ?? todayRange ?? undefined;
+  /*
+   * LIVE ORDERS (owner, 2026-10-11): a dashboard mode for a wall screen. On,
+   * the page shows today's orders still in progress only, refreshes every
+   * 10 s, and tags the ones that just arrived. Remembered in this browser, so
+   * the TV screen comes back live after a reload or a power cut.
+   */
+  const [liveMode, setLiveModeState] = useState<boolean>(() => {
+    try {
+      return window.localStorage.getItem(LIVE_MODE_KEY) === 'on';
+    } catch {
+      return false;
+    }
+  });
+  const setLiveMode = (on: boolean) => {
+    setLiveModeState(on);
+    try {
+      window.localStorage.setItem(LIVE_MODE_KEY, on ? 'on' : 'off');
+    } catch {
+      /* a browser refusing storage still gets the mode for this visit */
+    }
+  };
+  /** The window actually asked for: a searched range, else today (always today when live). */
+  const activeRange = (liveMode ? null : range) ?? todayRange ?? undefined;
   /** True while showing today — which is the only window that still moves. */
-  const showingToday = !range;
+  const showingToday = liveMode || !range;
 
   const vendors = useVendors();
   /*
@@ -409,7 +435,7 @@ export function LateOrdersPage() {
      stay on the list — but it is still live, so it keeps polling. */
   /* Today keeps polling — orders cross the threshold while an agent watches.
      A searched range is a fixed answer and does not. */
-  const queue = useLateOrders(activeRange, true, showingToday, vendorFilter || undefined);
+  const queue = useLateOrders(activeRange, true, showingToday, vendorFilter || undefined, liveMode);
   /* `useHandledLateOrders` is deliberately NOT used here any more (ops,
      2026-10-03). It asked only for the last 24 hours, so an order compensated
      the day before looked unhandled and the row offered a second coupon.
@@ -662,6 +688,8 @@ export function LateOrdersPage() {
     const order = orderQuery.trim();
     const brand = brandQuery.trim().toLowerCase();
     return allOrders.filter((r) => {
+      // Live mode: only orders still in progress, like an order dashboard.
+      if (liveMode && !r.live) return false;
       /*
        * TODAY MEANS TODAY'S BUSINESS DAY, not the calendar date.
        *
@@ -694,6 +722,7 @@ export function LateOrdersPage() {
     });
   }, [
     allOrders,
+    liveMode,
     orderQuery,
     brandQuery,
     showingToday,
@@ -767,6 +796,20 @@ export function LateOrdersPage() {
     }));
   }, [causes.data, t]);
   const updateDecision = useUpdateLateDecision();
+  /* When each order first appeared on this screen, for the NEW tag in live mode. */
+  const firstSeen = useRef(new Map<string, number>());
+  useEffect(() => {
+    const now = Date.now();
+    const initial = firstSeen.current.size === 0;
+    for (const r of queue.data?.rows ?? []) {
+      // The first load is the baseline: nothing on it is "new".
+      if (!firstSeen.current.has(r.orderId)) firstSeen.current.set(r.orderId, initial ? 0 : now);
+    }
+  }, [queue.data]);
+  const isNew = (orderId: string) => {
+    const at = firstSeen.current.get(orderId) ?? 0;
+    return liveMode && at > 0 && Date.now() - at < NEW_FOR_MS;
+  };
   const nowMs = queue.dataUpdatedAt || Date.now();
 
   /*
@@ -1133,6 +1176,39 @@ export function LateOrdersPage() {
               minutes: threshold,
               defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
             })}
+            actions={
+              <button
+                type="button"
+                onClick={() => setLiveMode(!liveMode)}
+                aria-pressed={liveMode}
+                title={
+                  liveMode
+                    ? t('lateOrders.liveOnHint', {
+                        defaultValue:
+                          "Showing today's orders still in progress, refreshed every 10 seconds. Click to turn off.",
+                      })
+                    : t('lateOrders.liveOffHint', {
+                        defaultValue: 'Turn on to show live late orders as they arrive.',
+                      })
+                }
+                className={cn(
+                  'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white shadow-sm',
+                  'transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+                  liveMode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700',
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn(
+                    'h-2 w-2 rounded-full bg-white',
+                    liveMode && 'motion-safe:animate-pulse',
+                  )}
+                />
+                {liveMode
+                  ? t('lateOrders.liveOn', { defaultValue: 'Live orders: ON' })
+                  : t('lateOrders.liveOff', { defaultValue: 'Live orders: OFF' })}
+              </button>
+            }
           />
 
           {/*
@@ -1491,6 +1567,11 @@ export function LateOrdersPage() {
                           </Td>
                           <Td className="whitespace-nowrap font-medium tabular-nums">
                             {row.orderId}
+                            {isNew(row.orderId) && (
+                              <span className="ms-2 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                                {t('lateOrders.new', { defaultValue: 'New' })}
+                              </span>
+                            )}
                           </Td>
                           {/*
                       A NUMBER, NOT A FILLED PILL (owner, 2026-09-28: "has some

@@ -331,6 +331,8 @@ export const AGENT_PORTAL_PRIVILEGES: readonly Privilege[] = [
   'use_chat',
   'view_tickets',
   'create_tickets',
+  // A display-only TV Screen role shows just Late orders (owner, 2026-10-11).
+  'work_late_orders',
 ];
 
 /**

@@ -265,7 +265,7 @@ export function TicketsTab({
   const nameOf = (id: string | null) =>
     id
       ? (agentNames.get(id) ?? t('performance.unknownAgent', { defaultValue: 'Unknown agent' }))
-      : t('performance.unassigned', { defaultValue: 'Unassigned' });
+      : t('performance.unassigned', { defaultValue: 'General' });
 
   return (
     <>

@@ -38,6 +38,66 @@ export default ({ action }, { services, database, getSchema, logger }) => {
     }
   }
 
+  /*
+   * A CHAT AN AGENT ANSWERED NEVER CLOSES WITHOUT AN OWNER (owner, 2026-10-11).
+   *
+   * Agent performance showed "Unassigned 21": 18 of those chats had been
+   * answered by a WeCare agent. Routing takes a chat back when its agent goes
+   * offline (reclaim), and one closed from the pool afterwards kept no owner,
+   * so the agent's work counted for nobody. On close, an ownerless chat goes
+   * to the first person who replied whose role receives chats (never a
+   * manager - 2026-09-14). Written with knex, not ItemsService, so it does not
+   * fire the "assigned to you" notification for a chat that is already closed.
+   */
+  const SOLVED = new Set(['solved', 'resolved', 'closed']);
+  async function receivesChats(userId) {
+    const u = await database('directus_users as u')
+      .leftJoin('directus_roles as r', 'r.id', 'u.role')
+      .where('u.id', userId)
+      .first('r.name as role');
+    const role = u?.role ?? null;
+    if (!role) return false;
+    const app = await database('app_roles').where({ name: role }).first('privileges');
+    let priv = app?.privileges ?? null;
+    if (typeof priv === 'string') {
+      try {
+        priv = JSON.parse(priv);
+      } catch {
+        priv = null;
+      }
+    }
+    if (priv && typeof priv.receive_chats === 'boolean') return priv.receive_chats;
+    return ['wecare agent', 'wecare supervisor'].includes(role.toLowerCase());
+  }
+  action('conversations.items.update', async (meta) => {
+    const status = meta?.payload?.status;
+    if (!status || !SOLVED.has(String(status))) return;
+    for (const id of meta?.keys ?? []) {
+      try {
+        const conv = await database('conversations').where({ id }).first('assigned_agent');
+        if (!conv || conv.assigned_agent) continue;
+        const repliers = await database('messages')
+          .where({ conversation: id, sender_type: 'agent' })
+          .whereNotNull('sender_user')
+          .andWhere((q) => q.where('is_internal_note', false).orWhereNull('is_internal_note'))
+          .orderBy('date_created', 'asc')
+          .distinct('sender_user', 'date_created')
+          .limit(20);
+        for (const r of repliers) {
+          if (await receivesChats(r.sender_user)) {
+            await database('conversations')
+              .where({ id })
+              .whereNull('assigned_agent')
+              .update({ assigned_agent: r.sender_user });
+            break;
+          }
+        }
+      } catch (err) {
+        logger?.warn?.(`notify-on-change: closing owner credit failed: ${err?.message ?? err}`);
+      }
+    }
+  });
+
   action('conversations.items.update', async (meta, context) => {
     const payload = meta?.payload ?? {};
     if (!payload.assigned_agent) return;

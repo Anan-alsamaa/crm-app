@@ -163,9 +163,13 @@ export function useChatTimings(filters: PerformanceFilters) {
 
       return conversations.map((c) => ({
         conversationId: c.id,
-        agentId: c.assigned_agent,
+        /* NO OWNER = THE AGENT WHO ANSWERED (owner, 2026-10-11). A chat taken
+           back by routing (its agent went offline) and closed from the pool
+           kept no owner, so the work showed as "Unassigned". Credit the first
+           person who replied; only a chat nobody has answered stays General. */
+        agentId: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? null,
         // Placeholder; the page replaces it with the resolved name. See above.
-        agentName: c.assigned_agent ?? 'Unassigned',
+        agentName: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? 'General',
         firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
         firstAgentBy: times.get(c.id)?.firstAgentBy ?? null,
         firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,

@@ -1036,7 +1036,8 @@
     "ticketsGroup": "التذاكر",
     "aiConfigGroup": "الذكاء",
     "aiConfigShort": "إعدادات الذكاء الاصطناعي",
-    "lateOrdersReport": "الطلبات المتأخرة"
+    "lateOrdersReport": "الطلبات المتأخرة",
+    "busyReport": "وقت الانشغال"
   },
   "pagination": {
     "prev": "السابق",
@@ -1050,7 +1051,7 @@
     "from": "من",
     "to": "إلى",
     "target": "الرد خلال (دقائق)",
-    "unassigned": "غير مُسند",
+    "unassigned": "عام",
     "chats": "المحادثات",
     "chatsCount": "{{n}} محادثة",
     "firstResponse": "أول رد",
@@ -1904,5 +1905,27 @@
     "cartHeading": "السلة",
     "trackingHeading": "التتبّع",
     "cartUnavailable": "تعذّر عرض السلة."
+  },
+  "busyReport": {
+    "unknown": "موظف غير معروف",
+    "search": "الموظف",
+    "searchPlaceholder": "اسم الموظف",
+    "agent": "الموظف",
+    "export": "تصدير CSV",
+    "kpiTimes": "مرات استخدام «مشغول»",
+    "kpiTotal": "إجمالي وقت الانشغال",
+    "kpiAgents": "الموظفون",
+    "error": "تعذّر تحميل وقت الانشغال.",
+    "empty": "لم يستخدم أحد «مشغول» في هذه الفترة.",
+    "byAgent": "وقت الانشغال لكل موظف",
+    "times": "المرات",
+    "total": "إجمالي الوقت",
+    "longest": "الأطول",
+    "last": "آخر استخدام",
+    "periods": "كل فترات الانشغال",
+    "started": "البداية",
+    "ended": "النهاية",
+    "duration": "المدة",
+    "ongoing": "ما زال مشغولًا"
   }
 }

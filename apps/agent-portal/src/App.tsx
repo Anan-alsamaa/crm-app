@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useState, type ReactNode } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { staffDisplayName } from '@yiji/shared-types';
 import { useTranslation } from 'react-i18next';
@@ -28,6 +28,7 @@ import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
+import { BusyToggle } from './components/BusyToggle.js';
 import { PageRefresh } from './components/PageRefresh.js';
 import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
@@ -399,6 +400,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             {/* In the masthead, so it is on every page without thirty copies
                 of it — thirty chances for one to be wired to the wrong
                 thing. */}
+            <BusyToggle />
             <PageRefresh />
             <NotificationBell />
             <HelpAssistant />
@@ -416,6 +418,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               {/* Desktop lives in `topBar`; `topBarActions` above is the MOBILE
                   header only, so a control placed there alone is invisible to
                   everyone on a laptop. */}
+              <BusyToggle />
               <PageRefresh />
               <NotificationBell />
               <HelpAssistant />
@@ -477,6 +480,27 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * HOME IS THE FIRST PAGE YOU CAN USE (owner, 2026-10-11).
+ *
+ * The inbox is home for everyone who chats. A display-only account - the TV
+ * Screen role, which only shows Late orders on a wall - used to land on "You
+ * do not have access to this page". Without chat access, go to the first page
+ * this person may open instead.
+ */
+const HOME_FALLBACKS: ReadonlyArray<{ to: string; requires: Privilege }> = [
+  { to: '/late-orders', requires: 'work_late_orders' },
+  { to: '/tickets', requires: 'view_tickets' },
+  { to: '/performance', requires: 'use_chat' },
+  { to: '/contacts', requires: 'view_contacts' },
+];
+function HomeRoute({ children }: { children: ReactNode }) {
+  const { user, can } = useAuth();
+  if (!user || can('use_chat')) return <>{children}</>;
+  const first = HOME_FALLBACKS.find((f) => can(f.requires));
+  return first ? <Navigate to={first.to} replace /> : <>{children}</>;
+}
+
 export function App() {
   return (
     <AuthProvider>
@@ -488,11 +512,13 @@ export function App() {
           <Route
             path="/"
             element={
-              <ProtectedRoute requires="use_chat">
-                <Shell>
-                  <Inbox />
-                </Shell>
-              </ProtectedRoute>
+              <HomeRoute>
+                <ProtectedRoute requires="use_chat">
+                  <Shell>
+                    <Inbox />
+                  </Shell>
+                </ProtectedRoute>
+              </HomeRoute>
             }
           />
           <Route

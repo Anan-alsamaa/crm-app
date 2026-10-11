@@ -905,6 +905,37 @@ export function describeRefusal(body: unknown): string {
   return JSON.stringify(body ?? 'no body').slice(0, 500);
 }
 
+/** The customer's phone on the request: the row, its contact, or a phone-shaped title. */
+export function couponCustomerPhone(row: {
+  customer_phone?: string | null;
+  contact?: { phone?: string | null } | null;
+  title?: string | null;
+}): string | null {
+  const candidates = [row.customer_phone, row.contact?.phone, row.title];
+  for (const c of candidates) {
+    const d = (c ?? '').replace(/\D/g, '');
+    if (d.length >= 9) return c!.trim();
+  }
+  return null;
+}
+
+/**
+ * Why an order cannot carry this customer's coupon, or null when it can.
+ * Compared on the last 9 digits, so 05X, +9665X and 9665X agree.
+ */
+export function orderOwnerMismatch(
+  order: { customerPhone?: string | null } | null,
+  expectedPhone: string,
+): string | null {
+  if (!order) return 'was not found on Yiji';
+  const last9 = (v: string) => v.replace(/\D/g, '').slice(-9);
+  const owner = order.customerPhone?.trim();
+  if (!owner) return null; // nothing to compare: leave it to the order id, as before
+  return last9(owner) === last9(expectedPhone)
+    ? null
+    : `belongs to a different customer (${owner}), not ${expectedPhone}`;
+}
+
 /**
  * Write down why the coupon did not go.
  *
@@ -1593,10 +1624,40 @@ export async function processCouponPushJob(
         );
       }
     } catch (err) {
+      /* The order's OWNER is now checked before attaching (see below), so an
+         unreadable order cannot be pushed blind: throw, and BullMQ retries. */
+      if (couponCustomerPhone(row) && !redirectCouponsTo?.trim()) {
+        throw new Error(
+          `could not read order ${orderId} to check its owner: ${describeError(err)}`,
+        );
+      }
       logger.warn(
         { id, orderId, err: describeError(err) },
         'could not read the order for coupon enrichment — pushing without it',
       );
+    }
+  }
+
+  /*
+   * THE ORDER MUST BE THIS CUSTOMER'S (owner, 2026-10-11 - OPS-NDYVFZZK).
+   *
+   * Yiji gives a coupon attached to an order to whoever OWNS that order. A
+   * ticket for 0500006272 carried order 193721 - mistyped, a July-2025 order
+   * of a different customer - and the 30 SAR coupon went to that stranger,
+   * irreversibly from our side. So before attaching, the order's owner must be
+   * the coupon's customer. A mismatch is REFUSED and written on the request,
+   * so the approver sees "wrong order" instead of a coupon gone to the wrong
+   * person. Skipped on staging (the redirect sends to a test handset) and when
+   * the request carries no phone at all (nothing to compare).
+   */
+  const expectedPhone = couponCustomerPhone(row);
+  if (readOrder && orderId && !redirectCouponsTo?.trim() && expectedPhone) {
+    const mismatch = orderOwnerMismatch(order, expectedPhone);
+    if (mismatch) {
+      const detail = `Order ${orderId} ${mismatch}. Not sent: correct the order number (or remove it to send by phone) and approve again.`;
+      logger.warn({ id, code: row.coupon_code, orderId }, `coupon refused: ${detail}`);
+      await recordFailure(directus, id, detail);
+      return 'refused';
     }
   }
 

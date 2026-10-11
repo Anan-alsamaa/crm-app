@@ -123,12 +123,13 @@ describe('admin AgentPerformancePage', () => {
     expect(screen.getByText('Response times per day')).toBeInTheDocument();
   });
 
+  /* "General" since 2026-10-11 (was "Unassigned"): work nobody has answered. */
   it('gives work nobody picked up its own row rather than dropping it', async () => {
     renderPage();
     await waitFor(() =>
       expect(screen.getByRole('table', { name: 'Totals per agent' })).toBeInTheDocument(),
     );
-    const unassigned = within(row('Unassigned')).getAllByRole('cell');
+    const unassigned = within(row('General')).getAllByRole('cell');
     expect(unassigned[1]).toHaveTextContent('1');
     expect(unassigned[2]).toHaveTextContent('1');
   });

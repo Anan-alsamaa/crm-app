@@ -212,6 +212,7 @@ describe('createRoutingRepo.agentsByLoad', () => {
   it('returns the least loaded first, ties broken stably', async () => {
     rolesRead();
     request.mockResolvedValueOnce([{ id: 'b' }, { id: 'a' }, { id: 'c' }]);
+    request.mockResolvedValueOnce([]); // nobody busy
     request.mockResolvedValueOnce([
       { assigned_agent: 'a' },
       { assigned_agent: 'a' },
@@ -219,6 +220,23 @@ describe('createRoutingRepo.agentsByLoad', () => {
     ]);
     // b has 0, c has 1, a has 2.
     expect(await repo.agentsByLoad(null)).toEqual(['b', 'c', 'a']);
+  });
+
+  /* Owner, 2026-10-11: an agent who pressed Busy gets no new chats. */
+  it('leaves out an agent who is busy', async () => {
+    rolesRead();
+    request.mockResolvedValueOnce([{ id: 'b' }, { id: 'a' }]);
+    request.mockResolvedValueOnce([{ agent: 'b' }]); // b has an open busy period
+    request.mockResolvedValueOnce([]);
+    expect(await repo.agentsByLoad(null)).toEqual(['a']);
+  });
+
+  it('routes as before when the busy read fails (fail-open)', async () => {
+    rolesRead();
+    request.mockResolvedValueOnce([{ id: 'a' }]);
+    request.mockRejectedValueOnce(new Error('403'));
+    request.mockResolvedValueOnce([]);
+    expect(await repo.agentsByLoad(null)).toEqual(['a']);
   });
 
   it('asks for no conversations at all when nobody is eligible', async () => {

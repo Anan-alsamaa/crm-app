@@ -65,7 +65,8 @@
     "compensationAll": "Compensation",
     "ticketsGroup": "Tickets",
     "aiConfigGroup": "AI",
-    "aiConfigShort": "AI settings"
+    "aiConfigShort": "AI settings",
+    "busyReport": "Busy time"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -998,7 +999,7 @@
     "from": "From",
     "to": "To",
     "target": "Answer within (minutes)",
-    "unassigned": "Unassigned",
+    "unassigned": "General",
     "chats": "Chats",
     "chatsCount": "{{n}} chats",
     "firstResponse": "First response",
@@ -1390,5 +1391,27 @@
       "late_order_action": "Late orders: Action taken",
       "chat": "Inbox: Quick replies"
     }
+  },
+  "busyReport": {
+    "unknown": "Unknown agent",
+    "search": "Agent",
+    "searchPlaceholder": "Agent name",
+    "agent": "Agent",
+    "export": "Export CSV",
+    "kpiTimes": "Times Busy was used",
+    "kpiTotal": "Total busy time",
+    "kpiAgents": "Agents",
+    "error": "Could not load busy time.",
+    "empty": "Nobody used Busy in this period.",
+    "byAgent": "Busy time by agent",
+    "times": "Times",
+    "total": "Total time",
+    "longest": "Longest",
+    "last": "Last used",
+    "periods": "Every busy period",
+    "started": "Started",
+    "ended": "Ended",
+    "duration": "Duration",
+    "ongoing": "Still busy"
   }
 }

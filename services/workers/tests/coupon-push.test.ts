@@ -908,23 +908,37 @@ describe("the payload carries YIJI's own values for the order", () => {
     expect(without.couponUser.coupon).not.toHaveProperty('brandId');
   });
 
-  it('still delivers when the order cannot be read at all', async () => {
-    // Everything the lookup adds is corroboration the endpoint can derive from
-    // orderId itself. Refusing to deliver an approved coupon because a
-    // read-only enrichment call timed out would be the wrong trade by a
-    // distance.
+  /* Changed 2026-10-11 (OPS-NDYVFZZK): the order's OWNER is checked before a
+     coupon is attached, so an unreadable order is retried, never pushed blind. */
+  it('retries, rather than sends blind, when the order cannot be read', async () => {
+    const { deps: d, postCoupon } = deps({
+      readOrder: vi.fn(async () => {
+        throw new Error('order api unreachable');
+      }) as never,
+    });
+    await expect(processCouponPushJob(job(), d)).rejects.toThrow(/check its owner/);
+    expect(postCoupon).not.toHaveBeenCalled();
+  });
+
+  it('REFUSES an order that belongs to a different customer', async () => {
     const {
       deps: d,
       patches,
       postCoupon,
     } = deps({
-      readOrder: vi.fn(async () => {
-        throw new Error('order api unreachable');
-      }) as never,
+      readOrder: vi.fn(async () => ({ ...ORDER, customerPhone: '+966563940549' })) as never,
+    });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(postCoupon).not.toHaveBeenCalled();
+    expect(JSON.stringify(patches)).toMatch(/belongs to a different customer/);
+  });
+
+  it('sends when the order is this customer’s, whatever the phone format', async () => {
+    const { deps: d, postCoupon } = deps({
+      readOrder: vi.fn(async () => ({ ...ORDER, customerPhone: '+966500000000' })) as never,
     });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
     expect(postCoupon).toHaveBeenCalled();
-    expect(patches[0]).toMatchObject({ status: 'assigned' });
   });
 
   it('asks about the order the ticket actually names', async () => {

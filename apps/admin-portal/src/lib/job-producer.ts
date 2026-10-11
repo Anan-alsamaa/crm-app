@@ -100,6 +100,29 @@ export interface PendingBuild {
   changes?: Array<{ version: string; summary: string }>;
 }
 
+/** One Busy stretch (owner, 2026-10-11); ended_at null while it lasts. */
+export interface BusyPeriod {
+  id: string;
+  agent: string | null;
+  set_by: string | null;
+  started_at: string;
+  ended_at: string | null;
+}
+
+/** The Agent KPI "Busy time" report, read by the gateway. */
+export async function busyReport(f: {
+  from?: string;
+  to?: string;
+  agentId?: string;
+}): Promise<BusyPeriod[]> {
+  const q = new URLSearchParams();
+  if (f.from) q.set('from', f.from);
+  if (f.to) q.set('to', f.to);
+  if (f.agentId) q.set('agentId', f.agentId);
+  const res = await get<{ data?: BusyPeriod[] }>(`/jobs/busy/report?${q}`);
+  return res.data ?? [];
+}
+
 export const jobProducer = {
   /* No `enqueueImport`. The contact-CSV import it fed was removed from the
    * console: it bulk-loaded customers from a spreadsheet, in the one portal

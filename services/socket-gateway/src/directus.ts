@@ -1484,6 +1484,81 @@ export class GatewayDirectus {
     )[0]!;
   }
 
+  /* ── Busy (owner, 2026-10-11) ─────────────────────────────────────────────
+   * An agent who is signed in but busy with other work gets no new chats. Each
+   * stretch is one `agent_busy_periods` row (ended_at null while it lasts), so
+   * the Agent KPI report can count the times, the durations and when. */
+
+  /** The agent's open busy period, if any. */
+  async openBusyPeriod(agentId: string): Promise<{ id: string; started_at: string } | null> {
+    const rows = (await this.client.request(
+      readItems(
+        'agent_busy_periods' as never,
+        {
+          filter: { agent: { _eq: agentId }, ended_at: { _null: true } },
+          fields: ['id', 'started_at'],
+          sort: ['-started_at'],
+          limit: 1,
+        } as never,
+      ),
+    )) as Array<{ id: string; started_at: string }>;
+    return rows[0] ?? null;
+  }
+
+  /** Opens a period unless one is already open (a double click is one period). */
+  async startBusy(agentId: string, setBy: string): Promise<{ started_at: string }> {
+    const open = await this.openBusyPeriod(agentId);
+    if (open) return open;
+    const started_at = new Date().toISOString();
+    await this.client.request(
+      createItem(
+        'agent_busy_periods' as never,
+        { agent: agentId, set_by: setBy, started_at } as never,
+      ),
+    );
+    return { started_at };
+  }
+
+  /** Closes every open period of the agent. Returns how many were closed. */
+  async endBusy(agentId: string): Promise<number> {
+    const rows = (await this.client.request(
+      readItems(
+        'agent_busy_periods' as never,
+        {
+          filter: { agent: { _eq: agentId }, ended_at: { _null: true } },
+          fields: ['id'],
+          limit: -1,
+        } as never,
+      ),
+    )) as Array<{ id: string }>;
+    const ended_at = new Date().toISOString();
+    for (const r of rows) {
+      await this.client.request(
+        updateItem('agent_busy_periods' as never, r.id, { ended_at } as never),
+      );
+    }
+    return rows.length;
+  }
+
+  /** Busy periods that overlap [from, to], optionally for one agent. */
+  async busyPeriods(f: { from?: string; to?: string; agentId?: string }): Promise<unknown[]> {
+    const and: Array<Record<string, unknown>> = [];
+    if (f.from) and.push({ _or: [{ ended_at: { _null: true } }, { ended_at: { _gte: f.from } }] });
+    if (f.to) and.push({ started_at: { _lte: `${f.to.slice(0, 10)}T23:59:59.999Z` } });
+    if (f.agentId) and.push({ agent: { _eq: f.agentId } });
+    return (await this.client.request(
+      readItems(
+        'agent_busy_periods' as never,
+        {
+          limit: -1,
+          sort: ['-started_at'],
+          fields: ['id', 'agent', 'set_by', 'started_at', 'ended_at'],
+          ...(and.length ? { filter: { _and: and } } : {}),
+        } as never,
+      ),
+    )) as unknown[];
+  }
+
   /** One service-token read for the agent-performance report (fixed queries only). */
   async readForReport(collection: string, query: Record<string, unknown>): Promise<unknown[]> {
     return (await this.client.request(readItems(collection as never, query as never))) as unknown[];

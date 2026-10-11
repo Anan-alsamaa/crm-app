@@ -253,7 +253,7 @@ export function AgentPerformancePage() {
         agentName: c.agentId
           ? (agentNames.get(c.agentId) ??
             t('performance.unknownAgent', { defaultValue: 'Unknown agent' }))
-          : t('performance.unassigned', { defaultValue: 'Unassigned' }),
+          : t('performance.unassigned', { defaultValue: 'General' }),
       })),
     [timings.data, agentNames, t, chatHours],
   );

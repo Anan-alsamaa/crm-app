@@ -1041,6 +1041,14 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'agent_busy_periods',
+    note: 'One row per time an agent marked themselves Busy (owner, 2026-10-11): routing gives a busy agent no new chats. ended_at is null while the period is open. Written only by the socket-gateway; the Agent KPI "Busy time" report reads it through the gateway.',
+    fields: [
+      { field: 'started_at', type: 'dateTime', required: true, index: true },
+      { field: 'ended_at', type: 'dateTime', index: true },
+    ],
+  },
+  {
     collection: 'late_order_decisions',
     note: 'What an agent decided about a delivery order that ran past the late threshold. The DECISION is append-only; `reason` and `action_taken` may be edited afterwards via the Comments button, because wording gets corrected and a wrong note helps nobody. Written for BOTH outcomes: ignoring is a decision somebody has to stay answerable for, and a queue that forgets what it was told to ignore asks again tomorrow.',
     fields: [
@@ -1436,6 +1444,19 @@ export const relations: RelationSpec[] = [
     collection: 'late_order_decisions',
     field: 'ticket',
     related: 'tickets',
+    onDelete: 'SET NULL',
+  },
+  /* SET NULL: a deleted agent must not erase how long the team was busy. */
+  {
+    collection: 'agent_busy_periods',
+    field: 'agent',
+    related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
+  {
+    collection: 'agent_busy_periods',
+    field: 'set_by',
+    related: 'directus_users',
     onDelete: 'SET NULL',
   },
   /* SET NULL, not CASCADE: a deleted agent must not erase the history of how

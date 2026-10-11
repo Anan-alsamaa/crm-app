@@ -179,7 +179,7 @@ describe('late-orders queue', () => {
     expect(page).toMatch(/vendorDir\.show && vendorDir\.options\.some/);
     expect(page).toMatch(/\{vendorDir\.show && \(/);
     expect(page).toMatch(
-      /useLateOrders\(activeRange, true, showingToday, vendorFilter \|\| undefined\)/,
+      /useLateOrders\(\s*activeRange,\s*true,\s*showingToday,\s*vendorFilter \|\| undefined,\s*liveMode,?\s*\)/,
     );
     expect(page).toMatch(
       /useLateOrderDecisions\(activeRange \?\? undefined, vendorFilter \|\| undefined\)/,

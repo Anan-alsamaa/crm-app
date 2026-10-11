@@ -776,7 +776,7 @@
     "target": "Answer within (minutes)",
     "targetShort": "Target",
     "minutesShort": "min",
-    "unassigned": "Unassigned",
+    "unassigned": "General",
     "chats": "Chats",
     "chatsCount": "{{n}} chats",
     "firstResponse": "First response",
@@ -881,5 +881,19 @@
       "rejected": "Rejected",
       "all": "All"
     }
+  },
+  "busy": {
+    "on": "Busy",
+    "off": "Busy",
+    "onHint": "Busy since {{since}}: you get no new chats. Click to take chats again.",
+    "offHint": "Mark yourself busy: you stay signed in but get no new chats.",
+    "failed": "Could not change your Busy status."
+  },
+  "lateOrders": {
+    "liveOn": "Live orders: ON",
+    "liveOff": "Live orders: OFF",
+    "liveOnHint": "Showing today's orders still in progress, refreshed every 10 seconds. Click to turn off.",
+    "liveOffHint": "Turn on to show live late orders as they arrive.",
+    "new": "New"
   }
 }

@@ -559,7 +559,14 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     export_contacts: [],
     view_ticket_history: [],
     export_ticket_excel: [],
-    work_late_orders: [g('late_order_decisions', 'create'), g('late_order_decisions', 'update')],
+    /* Read too: the queue hides orders already handled, and a role holding
+       ONLY this switch (the TV Screen display, owner 2026-10-11) had no other
+       grant to read them through. */
+    work_late_orders: [
+      ...readOnly('late_order_decisions'),
+      g('late_order_decisions', 'create'),
+      g('late_order_decisions', 'update'),
+    ],
     view_late_orders_report: [...readOnly('late_order_decisions')],
     export_late_orders: [],
     view_order_details: [],

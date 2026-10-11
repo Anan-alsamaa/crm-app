@@ -1080,6 +1080,11 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       { userId, sockets: sidsForUser.length },
       'agent:logout — closing all sockets for user',
     );
+    /* Signing out ends a Busy stretch: busy means "here, but on other work",
+       and the report's duration must stop when the person leaves. */
+    void Promise.resolve()
+      .then(() => directus.endBusy(userId))
+      .catch(() => undefined);
     let presenceWasDropped = false;
     for (const sid of sidsForUser) {
       if (agentPresence.remove(sid, true, () => undefined)) presenceWasDropped = true;
