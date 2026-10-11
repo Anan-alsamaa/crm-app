@@ -45,15 +45,15 @@ _For: the product manager / owner. Every statement is taken from the code as of 
 
 ## 2. Environments & URLs
 
-|                           | Staging                                 | Production                                                                |
-| ------------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
-| API (Directus + gateways) | `crm-api-staging.anan.sa`               | `crm-api.anan.sa`                                                         |
-| Agent portal              | `crm-agent-staging.anan.sa`             | `crm-agent.anan.sa`                                                       |
-| Admin portal              | `crm-admin-staging.anan.sa`             | `crm-admin.anan.sa`                                                       |
-| Chat widget               | `crm-staging.anan.sa`                   | `crm.anan.sa`                                                             |
-| ECS cluster               | `crm-staging` (1 task each)             | `crm-prod` (directus 2, gateway 2, ai 1, workers 1; autoscale at 70% CPU) |
-| Coupon delivery to Yiji   | **off** (`YIJI_COUPON_DELIVERY` ≠ `on`) | on                                                                        |
-| Mock vendors              | allowed (`ALLOW_MOCK_VENDORS=true`)     | refused (services refuse to start)                                        |
+|                           | Staging                                 | Production                                                                              |
+| ------------------------- | --------------------------------------- | --------------------------------------------------------------------------------------- |
+| API (Directus + gateways) | `crm-api-staging.anan.sa`               | `crm-api.anan.sa`                                                                       |
+| Agent portal              | `crm-agent-staging.anan.sa`             | `crm-agent.anan.sa`                                                                     |
+| Admin portal              | `crm-admin-staging.anan.sa`             | `crm-admin.anan.sa`                                                                     |
+| Chat widget               | `crm-staging.anan.sa`                   | `crm.anan.sa`                                                                           |
+| ECS cluster               | `crm-staging` (1 task each)             | `crm-prod` (directus 1, gateway 2, ai 1, workers 1; no autoscaling, checked 2026-10-11) |
+| Coupon delivery to Yiji   | **off** (`YIJI_COUPON_DELIVERY` ≠ `on`) | on                                                                                      |
+| Mock vendors              | allowed (`ALLOW_MOCK_VENDORS=true`)     | refused (services refuse to start)                                                      |
 
 AWS account 408568863712, region us-east-2. Staging uses **Yiji's production APIs** for reads; coupon/push writes are blocked or redirected to a test handset.
 
