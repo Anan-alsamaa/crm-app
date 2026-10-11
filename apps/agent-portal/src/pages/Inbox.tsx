@@ -38,6 +38,7 @@ import {
   useDeleteConversation,
   useInboxCounts,
   useConversationPreviews,
+  markPreviewDirty,
   useUpdateConversation,
   useAddTagToConversation,
   usePrefetchInboxOrders,
@@ -300,7 +301,7 @@ export function Inbox() {
     // The tiles count what the vendor filter shows (MV-7); undefined with one vendor.
     vendor: vendorFilter,
   });
-  const previews = useConversationPreviews((conversations.data ?? []).map((c) => c.id));
+  const previews = useConversationPreviews(conversations.data ?? []);
   // WhatsApp-style second line: the last real message, not a repeat of the
   // name/phone/email. "You:" prefixes agent replies; an image/file-only message
   // shows an attachment label. Shared by the list rows and the welcome pane's
@@ -347,10 +348,21 @@ export function Inbox() {
     void (async () => {
       const socket = await getSocket();
       if (cancelled) return;
-      const onActivity = () => {
-        void qc.invalidateQueries({ queryKey: ['conversations'] });
-        // Keep the WhatsApp-style last-message previews fresh in real time.
-        void qc.invalidateQueries({ queryKey: ['conversation-previews'] });
+      /*
+       * ONE RELOAD PER BURST (owner, 2026-10-11: Directus at 100% CPU). Every
+       * message anywhere reaches every agent; reloading the whole list on each
+       * one was ~3,000 full reads in 6 hours. Events within 1.5 s share one
+       * reload, and the previews re-read ONLY the chats the events named.
+       */
+      let pending: ReturnType<typeof setTimeout> | null = null;
+      const onActivity = (payload?: { conversationId?: string }) => {
+        if (payload?.conversationId) markPreviewDirty(qc, payload.conversationId);
+        if (pending) return;
+        pending = setTimeout(() => {
+          pending = null;
+          void qc.invalidateQueries({ queryKey: ['conversations'] });
+          void qc.invalidateQueries({ queryKey: ['conversation-previews'] });
+        }, 1_500);
       };
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
       /*
@@ -377,6 +389,7 @@ export function Inbox() {
       cleanup = () => {
         socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
         socket.off('connect', onActivity);
+        if (pending) clearTimeout(pending);
       };
     })();
     return () => {

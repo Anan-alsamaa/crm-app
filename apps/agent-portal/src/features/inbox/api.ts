@@ -1,5 +1,5 @@
 import { useCallback, useRef } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority, YijiOrder } from '@yiji/shared-types';
 import { isAutomatedAgentMessage, normaliseTicketStatus } from '@yiji/shared-types';
@@ -524,90 +524,133 @@ export interface ConversationPreview {
 }
 
 /**
- * The latest real message (not an internal note) for each conversation in
- * `conversationIds`, keyed by conversation id — used as the WhatsApp-style
- * second line in the inbox list. One batched query, reduced to first-per-
- * conversation (sorted newest-first). Fails soft to {} so rows still render.
+ * The previews this browser already holds, per conversation, with the
+ * `last_message_at` each was read at. Kept on the QueryClient so it lives as
+ * long as the session's cache (and a test's fresh client starts empty).
  */
-export function useConversationPreviews(conversationIds: string[]) {
+interface PreviewCache {
+  entries: Map<string, { stamp: string | null; preview: ConversationPreview | null }>;
+  /** Conversations an `inbox:activity` named since their preview was read. */
+  dirty: Set<string>;
+}
+const PREVIEW_CACHE_KEY = ['conversation-preview-cache'] as const;
+function previewCacheOf(qc: QueryClient): PreviewCache {
+  let c = qc.getQueryData<PreviewCache>(PREVIEW_CACHE_KEY);
+  if (!c) {
+    c = { entries: new Map(), dirty: new Set() };
+    qc.setQueryData(PREVIEW_CACHE_KEY, c);
+  }
+  return c;
+}
+
+/** A message changed in this conversation: re-read ITS preview, and only its. */
+export function markPreviewDirty(qc: QueryClient, conversationId: string): void {
+  previewCacheOf(qc).dirty.add(conversationId);
+}
+
+/**
+ * The latest real message (not an internal note) for each conversation, keyed
+ * by conversation id — the WhatsApp-style second line in the inbox list.
+ *
+ * ONLY WHAT CHANGED IS READ (owner, 2026-10-11: Directus at 100% CPU).
+ * Every message anywhere fires `inbox:activity` to every agent, and each one
+ * used to re-read the preview of EVERY listed chat - 25 chats x up to 1,000
+ * messages per request: 18,305 requests in 6 hours, half of Directus's work.
+ * Now a preview is read when the chat is new to this browser, its
+ * `last_message_at` moved, or an activity event named it. Fails soft: rows
+ * keep the preview they had.
+ */
+export function useConversationPreviews(
+  conversations: ReadonlyArray<string | { id: string; last_message_at?: string | null }>,
+) {
+  const qc = useQueryClient();
+  const list = conversations.map((c) =>
+    typeof c === 'string' ? { id: c, stamp: null } : { id: c.id, stamp: c.last_message_at ?? null },
+  );
   // Stable key regardless of order so re-sorts don't refetch.
-  const key = [...conversationIds].sort().join(',');
+  const key = list
+    .map((c) => `${c.id}@${c.stamp ?? ''}`)
+    .sort()
+    .join(',');
   return useQuery({
-    enabled: conversationIds.length > 0,
+    enabled: list.length > 0,
     queryKey: ['conversation-previews', key],
     staleTime: 10_000,
     queryFn: async (): Promise<Record<string, ConversationPreview>> => {
-      try {
-        /*
-         * IN SMALL BATCHES (owner, 2026-10-05: every row read "No messages
-         * yet" while the messages were plainly arriving).
-         *
-         * This was ONE request filtering on every listed conversation id.
-         * Measured on production: 233 conversations make a 10,704-character
-         * URL, which CloudFront refuses with HTTP 414 before Directus sees it;
-         * the catch below turned that into an empty map, so the whole inbox
-         * said "No messages yet". And under the limit the single shared
-         * 1,000-message cap starved quiet chats: at 120 conversations only
-         * 103 got a preview.
-         *
-         * 25 conversations per request keeps each URL ~1.2k characters and
-         * each batch's newest-1000 far above what 25 threads hold, so no chat
-         * is starved; four run at once so the list does not wait in series.
-         */
-        const rows = (await readChunked(
-          conversationIds,
-          (ids) =>
-            directus.request(
-              readItems('messages', {
-                filter: {
-                  conversation: { _in: ids },
-                  is_internal_note: { _eq: false },
-                },
-                /* `sender_user` tells the automatic welcome apart (owner,
-                   2026-10-06); unselected it would read as a person's reply. */
-                fields: ['conversation', 'content', 'sender_type', 'sender_user', 'deleted_at'],
-                sort: ['-date_created'],
-                limit: 1000,
-              }),
-            ) as Promise<unknown[]>,
-          25,
-          4,
-        )) as Array<{
-          conversation: string;
-          content: string | null;
-          sender_type: ConversationPreview['sender_type'];
-          sender_user?: string | null;
-          deleted_at?: string | null;
-        }>;
-        const byConv: Record<string, ConversationPreview> = {};
-        for (const r of rows) {
-          if (!r.conversation || byConv[r.conversation]) continue; // first = latest
-          const content = (r.content ?? '').trim();
-          /*
-           * A withdrawn reply has empty content, which would otherwise read as
-           * an attachment-only message ("Photo"). Say what happened instead
-           * (owner, 2026-10-05 (EMA-33)).
-           */
-          if (r.deleted_at) {
+      const cache = previewCacheOf(qc);
+      const needed = list
+        .filter((c) => {
+          const hit = cache.entries.get(c.id);
+          return !hit || hit.stamp !== c.stamp || cache.dirty.has(c.id);
+        })
+        .map((c) => c.id);
+      if (needed.length > 0) {
+        try {
+          const rows = (await readChunked(
+            needed,
+            (ids) =>
+              directus.request(
+                readItems('messages', {
+                  filter: {
+                    conversation: { _in: ids },
+                    is_internal_note: { _eq: false },
+                  },
+                  /* `sender_user` tells the automatic welcome apart (owner,
+                     2026-10-06); unselected it would read as a person's reply. */
+                  fields: ['conversation', 'content', 'sender_type', 'sender_user', 'deleted_at'],
+                  sort: ['-date_created'],
+                  limit: 1000,
+                }),
+              ) as Promise<unknown[]>,
+            25,
+            4,
+          )) as Array<{
+            conversation: string;
+            content: string | null;
+            sender_type: ConversationPreview['sender_type'];
+            sender_user?: string | null;
+            deleted_at?: string | null;
+          }>;
+          const byConv: Record<string, ConversationPreview> = {};
+          for (const r of rows) {
+            if (!r.conversation || byConv[r.conversation]) continue; // first = latest
+            const content = (r.content ?? '').trim();
+            /*
+             * A withdrawn reply has empty content, which would otherwise read as
+             * an attachment-only message ("Photo"). Say what happened instead
+             * (owner, 2026-10-05 (EMA-33)).
+             */
+            if (r.deleted_at) {
+              byConv[r.conversation] = {
+                content: '',
+                sender_type: r.sender_type,
+                hasAttachment: false,
+                deleted: true,
+              };
+              continue;
+            }
             byConv[r.conversation] = {
-              content: '',
+              content,
               sender_type: r.sender_type,
-              hasAttachment: false,
-              deleted: true,
+              hasAttachment: content.length === 0,
+              ...(isAutomatedAgentMessage(r) ? { automated: true } : {}),
             };
-            continue;
           }
-          byConv[r.conversation] = {
-            content,
-            sender_type: r.sender_type,
-            hasAttachment: content.length === 0,
-            ...(isAutomatedAgentMessage(r) ? { automated: true } : {}),
-          };
+          const stampOf = new Map(list.map((c) => [c.id, c.stamp]));
+          for (const id of needed) {
+            cache.entries.set(id, { stamp: stampOf.get(id) ?? null, preview: byConv[id] ?? null });
+            cache.dirty.delete(id);
+          }
+        } catch {
+          /* fail soft: every row keeps the preview it already had */
         }
-        return byConv;
-      } catch {
-        return {};
       }
+      const out: Record<string, ConversationPreview> = {};
+      for (const c of list) {
+        const p = cache.entries.get(c.id)?.preview;
+        if (p) out[c.id] = p;
+      }
+      return out;
     },
   });
 }
