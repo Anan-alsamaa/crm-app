@@ -1,11 +1,11 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { playMessageBeep } from '../../lib/sound.js';
+import { LiveToggle } from './LiveToggle.js';
 import { createItem } from '@directus/sdk';
 import {
   Button,
-  cn,
   ConfirmDialog,
   DateField,
   EmptyState,
@@ -58,6 +58,14 @@ import { useVendorDirectory } from '../../lib/vendors.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { LateOrderDetail } from './OrderDetail.js';
 import { QuickReplies } from '../conversation/QuickReplies.js';
+import { LateOrderColumnsPicker } from './LateOrderColumnsPicker.js';
+import {
+  LATE_ORDER_COLUMN_LABELS,
+  loadLateOrderColumnOrder,
+  loadLateOrderHiddenColumns,
+  visibleLateOrderColumns,
+  type LateOrderColumnKey,
+} from './columns.js';
 import {
   resolveLateOrderContact,
   useLateOrders,
@@ -769,6 +777,18 @@ export function LateOrdersPage() {
    *      than as truncation. See [[silent-empty-failures]].
    */
   const [page, setPage] = useState(1);
+  /* WHICH COLUMNS, AND IN WHAT ORDER (owner, 2026-10-11) — this browser's
+     arrangement, read once; the picker saves every change as it is made. */
+  const [columnOrder, setColumnOrder] = useState<LateOrderColumnKey[]>(() =>
+    loadLateOrderColumnOrder(),
+  );
+  const [hiddenColumns, setHiddenColumns] = useState<Set<LateOrderColumnKey>>(() =>
+    loadLateOrderHiddenColumns(),
+  );
+  const visibleColumns = useMemo(
+    () => visibleLateOrderColumns(columnOrder, hiddenColumns),
+    [columnOrder, hiddenColumns],
+  );
   const [pageSize, setPageSize] = useState(25);
   const pageCount = pageCountOf(rows.length, pageSize);
   /* Clamped rather than stored: narrowing the filters while sitting on page 9
@@ -1144,6 +1164,545 @@ export function LateOrdersPage() {
     }
   };
 
+  /*
+   * THE TABLE AS A KEYED COLUMN LIST (owner, 2026-10-11): each column's header
+   * and cell live together so the picker can hide and reorder them. The cells
+   * are the same JSX they always were, only moved here.
+   */
+  const columnDefs: Record<
+    LateOrderColumnKey,
+    { th: ReactNode; td: (row: (typeof paged)[number]) => ReactNode }
+  > = {
+    created: {
+      th: (
+        <>
+          {/*
+              WHEN THE DECISION WAS TAKEN, and the business day it belongs
+              to (owner, 2026-10-01: the queue should show what the admin
+              register shows). Blank while an order is still pending —
+              nobody has decided anything yet, and dating it "now" would be
+              a claim rather than a fact.
+            */}
+          <Th>{t('lateOrders.col.created', { defaultValue: 'Creation time' })}</Th>
+        </>
+      ),
+      td: (row) => (
+        <>
+          {/* The decision's own timestamp and business day. A
+            pending order has neither — nothing has been
+            decided — and a dash says so honestly. */}
+          {/* WHEN THE ORDER WAS PLACED and its business day
+            (owner, 2026-10-11: "creation time and business day
+            are empty"). They read the decision, which a pending
+            order does not have yet; the order always has both. */}
+          <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
+            {row.placedAt ? formatDateTime(placedIso(row.placedAt)) : '-'}
+          </Td>
+        </>
+      ),
+    },
+    businessDay: {
+      th: <Th>{t('lateOrders.col.businessDay', { defaultValue: 'Business day' })}</Th>,
+      td: (row) => (
+        <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
+          {businessDay(row.placedAt) ?? '-'}
+        </Td>
+      ),
+    },
+    order: {
+      th: <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>,
+      td: (row) => (
+        <Td className="whitespace-nowrap font-medium tabular-nums">
+          {row.orderId}
+          {isNew(row.orderId) && (
+            <span className="ms-2 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              {t('lateOrders.new', { defaultValue: 'New' })}
+            </span>
+          )}
+        </Td>
+      ),
+    },
+    elapsed: {
+      th: (
+        <>
+          {/*
+              "Running" said nothing (owner, 2026-09-28) — running for how
+              long, measured from what? This is the WHOLE age of the order,
+              from the moment it was placed, and it is the number the
+              threshold is applied to. Named for what it measures, and the
+              sub-label says from when, so it cannot be confused with the
+              driver leg beside it.
+            */}
+          <Th>
+            {t('lateOrders.col.elapsed', { defaultValue: 'Total time' })}
+            <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+              {t('lateOrders.col.elapsedHint', { defaultValue: 'since order placed' })}
+            </span>
+          </Th>
+        </>
+      ),
+      td: (row) => (
+        <>
+          {/*
+              A NUMBER, NOT A FILLED PILL (owner, 2026-09-28: "has some
+              orange color which hides the number").
+
+              The amber pill put amber text on an amber ground, so the
+              figure this whole screen exists to communicate was the
+              least readable thing on the row.
+
+              ALWAYS RED, not amber-then-red (owner, 2026-09-28). Every
+              row in this queue is ALREADY past the threshold — that is
+              what put it here — so a two-tone scale was drawing a
+              distinction between "late" and "later" that nobody asked
+              for, and it made half the column the washed-out amber the
+              change set out to remove.
+            */}
+          <Td className="whitespace-nowrap">
+            <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-destructive">
+              <span
+                aria-hidden="true"
+                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
+              />
+              {elapsed(row.minutesElapsed)}
+            </span>
+          </Td>
+        </>
+      ),
+    },
+    service: {
+      th: (
+        <Th>
+          {t('lateOrders.col.service', { defaultValue: 'Service time' })}
+          <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+            {t('lateOrders.col.serviceHint', {
+              defaultValue: 'since driver accepted',
+            })}
+          </span>
+        </Th>
+      ),
+      td: (row) => (
+        <>
+          {/*
+              SERVICE TIME — the DRIVER leg, not the whole order.
+              Closed: close − driver-accept. Live: now − driver-accept.
+              Blank while the batch is still loading, and "-" once we
+              know the driver has not accepted: an empty cell and a
+              confirmed "no driver yet" are different facts.
+            */}
+          <Td className="whitespace-nowrap tabular-nums">
+            {(() => {
+              if (eventTimes.isLoading)
+                return (
+                  /* A skeleton, not a spinner: one spinner per row
+                    reads as a page that is broken, and the width is
+                    known so nothing reflows when the value lands. */
+                  <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
+                );
+              /* `orderEventTimes`, not the old `serviceMinutes`:
+                that one took the queue's `closedAt`, which is the
+                CURRENT status's moment and so reads a force-close as
+                the end. Order 1323407 was closed at 17:30 and
+                force-closed at 22:31, giving 365 minutes where the
+                truth is 64 (owner spec §6). */
+              const mins = timesOf(row.orderId).serviceMinutes;
+              if (mins === null) return <span className="text-muted-foreground/60">&mdash;</span>;
+              /*
+               * A LIVE COUNT LOOKS LIVE; A FINISHED ONE LOOKS FINAL
+               * (owner, 2026-09-28).
+               *
+               * The same "1h 12m" meant two different things — still
+               * climbing, or settled — and nothing on screen said
+               * which. A closed order carries `closedAt`, so the
+               * difference is known per row, not guessed.
+               *
+               * The live one gets a soft pulsing dot and the brand
+               * colour; the closed one is plain and muted. CSS only —
+               * no timer, no per-row state. The number itself
+               * advances with the queue's own 30s refresh, which is
+               * the resolution the data actually has: a per-second
+               * ticker would re-render every row for a figure that
+               * cannot change more often than its source.
+               */
+              const live = !row.closedAt;
+              return live ? (
+                /* Same weight and size as Total time beside it, so
+                  the two read as a pair to compare rather than a
+                  headline and a footnote. */
+                /* AMBER, and deliberately NOT the red beside it
+                  (owner, 2026-09-28: "service time should be in a
+                  color"). Two different measures in the same row
+                  must not wear the same colour, or the eye reads
+                  them as one number split in two. Amber also carries
+                  "still running" on its own. */
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-warning-foreground">
+                  <span
+                    className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning"
+                    aria-hidden="true"
+                  />
+                  {elapsed(mins)}
+                  <span className="sr-only">
+                    {t('lateOrders.serviceLive', {
+                      defaultValue: 'still counting',
+                    })}
+                  </span>
+                </span>
+              ) : (
+                /* Settled: a filled dot rather than a pulsing one, and
+                  muted — the figure is final, not climbing. */
+                <span className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-muted-foreground">
+                  <span
+                    aria-hidden="true"
+                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
+                  />
+                  {elapsed(mins)}
+                </span>
+              );
+            })()}
+          </Td>
+        </>
+      ),
+    },
+    driverArrival: {
+      th: (
+        <>
+          {/*
+              THE THREE LEGS (owner spec §7, 2026-09-29), beside the service
+              time they break down. Each names what it measures underneath,
+              because "Delivery" and "Service" are otherwise indistinguishable
+              at a glance and they start from different moments.
+            */}
+          <Th>
+            {t('lateOrders.col.driverArrival', { defaultValue: 'Driver arrival' })}
+            <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+              {t('lateOrders.col.driverArrivalHint', {
+                defaultValue: 'accept to arrival',
+              })}
+            </span>
+          </Th>
+        </>
+      ),
+      td: (row) => (
+        <>
+          {/* The three legs. Same loading/blank treatment as the
+            service time beside them, via one helper — three copies
+            of "skeleton, else dash, else minutes" is three chances
+            for one of them to say something different. */}
+          <Td className="whitespace-nowrap tabular-nums">
+            <LegTime
+              loading={eventTimes.isLoading}
+              minutes={timesOf(row.orderId).driverArrivalMinutes}
+            />
+          </Td>
+        </>
+      ),
+    },
+    delivery: {
+      th: (
+        <Th>
+          {t('lateOrders.col.delivery', { defaultValue: 'Delivery time' })}
+          <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+            {t('lateOrders.col.deliveryHint', {
+              defaultValue: 'out for delivery to close',
+            })}
+          </span>
+        </Th>
+      ),
+      td: (row) => (
+        <Td className="whitespace-nowrap tabular-nums">
+          <LegTime loading={eventTimes.isLoading} minutes={timesOf(row.orderId).deliveryMinutes} />
+        </Td>
+      ),
+    },
+    preparation: {
+      th: (
+        <Th>
+          {t('lateOrders.col.preparation', { defaultValue: 'Preparation time' })}
+          <span className="block text-[10px] font-normal normal-case text-muted-foreground">
+            {t('lateOrders.col.preparationHint', {
+              defaultValue: 'accepted to ready',
+            })}
+          </span>
+        </Th>
+      ),
+      td: (row) => (
+        <Td className="whitespace-nowrap tabular-nums">
+          <LegTime
+            loading={eventTimes.isLoading}
+            minutes={timesOf(row.orderId).preparationMinutes}
+          />
+        </Td>
+      ),
+    },
+    brand: {
+      th: (
+        <>
+          {/* SPLIT, like the register: brand and restaurant are two
+            facts, and one joined cell cannot be sorted or read as
+            either. */}
+          <Th>{t('lateOrders.col.brandOnly', { defaultValue: 'Brand' })}</Th>
+        </>
+      ),
+      td: (row) => <Td className="max-w-[12rem] truncate">{row.brandName || '-'}</Td>,
+    },
+    restaurant: {
+      th: <Th>{t('lateOrders.col.restaurant', { defaultValue: 'Restaurant' })}</Th>,
+      td: (row) => <Td className="max-w-[14rem] truncate">{row.restaurantName || '-'}</Td>,
+    },
+    customer: {
+      th: <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer mobile' })}</Th>,
+      td: (row) => (
+        <Td className="whitespace-nowrap">
+          {/* NORMALISED FOR DISPLAY, not just for storage. Yiji
+              sends `+9665XXXXXXXX`; every number in this CRM reads
+              `05XXXXXXXX`, and this cell was the one place showing
+              Yiji's shape to an agent (owner, 2026-09-28). */}
+          {displayContactName(row.customerName, row.customerPhone) ||
+            normalizePhone(row.customerPhone) ||
+            '-'}
+        </Td>
+      ),
+    },
+    status: {
+      th: <Th>{t('lateOrders.col.status', { defaultValue: 'Order status' })}</Th>,
+      td: (row) => (
+        <Td className="whitespace-nowrap text-muted-foreground">
+          {t(`commerce.orderStatuses.${row.status}`, {
+            defaultValue: row.status,
+          })}
+        </Td>
+      ),
+    },
+    kind: {
+      th: <Th>{t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}</Th>,
+      td: (row) => (
+        <Td>
+          {/*
+                `SelectMenu`, not a native `<select>`: the OS styles the
+                native menu itself, so it arrived as a boxed grey
+                control that matched nothing else on the page (owner,
+                2026-09-22). This is the same listbox the rest of the
+                portal uses — keyboard, type-ahead and ARIA included —
+                and it renders in a portal so it is never clipped by the
+                table's own scroll.
+
+                The dots carry the meaning at a glance: amber for a
+                kitchen that ran long, blue for a delivery that did.
+              */}
+          <SelectMenu
+            value={kindOf(row)}
+            size="sm"
+            aria-label={t('lateOrders.col.kind', {
+              defaultValue: 'Source of delay',
+            })}
+            onChange={(v) => pickKind(row.orderId, v)}
+            options={causeOptions}
+          />
+        </Td>
+      ),
+    },
+    agent: {
+      th: (
+        <>
+          {/* WHAT WAS DECIDED, and by whom — the three the register
+            carries and the queue did not. */}
+          <Th>{t('lateOrders.col.agent', { defaultValue: 'Agent' })}</Th>
+        </>
+      ),
+      td: (row) => (
+        <>
+          {/*
+              WHAT WAS DECIDED — the three the register carries, so an
+              agent reads the same facts here as a manager reads there
+              (owner, 2026-10-01). Blank on a pending order, because
+              nobody has decided anything yet.
+            */}
+          <Td className="whitespace-nowrap">
+            {decisions.data?.get(row.orderId)?.decided_by?.first_name || '-'}
+          </Td>
+        </>
+      ),
+    },
+    reason: {
+      th: <Th>{t('lateOrders.col.reason', { defaultValue: 'Reason' })}</Th>,
+      td: (row) => (
+        <>
+          {/*
+              THE FULL TEXT ON HOVER (ops, 2026-10-04: *"On hover, the
+              Reason and Action should display the full data"*).
+
+              `title` alone was not enough. It is a native tooltip:
+              invisible on a touch screen, invisible to a keyboard user,
+              slow to appear, and it cannot wrap a long reason legibly —
+              the same objection the quick-replies panel already
+              answered. `LongText` renders the whole value in a panel on
+              hover AND on focus, and keeps `title` as the plain-text
+              fallback.
+            */}
+          <Td className="max-w-[18rem]">
+            <LongText value={decisionOf(row.orderId)?.reason} />
+          </Td>
+        </>
+      ),
+    },
+    actionTaken: {
+      th: <Th>{t('lateOrders.col.actionTaken', { defaultValue: 'Action taken' })}</Th>,
+      td: (row) => (
+        <Td className="max-w-[18rem]">
+          <LongText value={decisionOf(row.orderId)?.action_taken} />
+        </Td>
+      ),
+    },
+    detail: {
+      th: (
+        <>
+          {/*
+              THE ACTIONS, SPLIT INTO THREE (owner, 2026-09-28).
+
+              Four controls sat in one "Decision" cell and read as a wall of
+              buttons — the decision itself, the thing you look at first,
+              and the notes all competing at the same weight. Now: what you
+              LOOK AT, what you DECIDE, and the note. Each column is titled,
+              so the buttons no longer have to carry the grouping on their
+              own.
+            */}
+          <Th>{t('lateOrders.col.detail', { defaultValue: 'Order' })}</Th>
+        </>
+      ),
+      td: (row) => (
+        <>
+          {/*
+              COLUMN 1 — WHAT YOU LOOK AT. Always offered, decided or
+              not: reviewing what was ordered is exactly why somebody
+              opens a handled row.
+            */}
+          <Td>
+            <Button
+              size="sm"
+              variant="secondary"
+              aria-haspopup="dialog"
+              onClick={() => setExpanded(row.orderId)}
+            >
+              {t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
+            </Button>
+          </Td>
+        </>
+      ),
+    },
+    actions: {
+      th: <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>,
+      td: (row) => (
+        <>
+          {/* COLUMN 2 — WHAT YOU DECIDE. */}
+          <Td>
+            {/*
+                A HANDLED historical order shows its decision instead of
+                the buttons: offering "Ignore" on something already
+                ignored invites a second, contradictory record.
+              */}
+            {/*
+                A DECIDED ORDER SHOWS ITS DECISION, IN EVERY VIEW
+                (owner, 2026-09-28).
+
+                This was gated on `range`, so on the live queue a row
+                that had just been decided still offered Assign coupon
+                and Ignore — inviting a second, contradictory record for
+                the same order. What decides this is whether a decision
+                EXISTS, not which view happens to be open.
+              */}
+            {/*
+                `stateOf`, NOT the `handled` set (ops, 2026-10-03).
+
+                `useHandledLateOrders` only ever asks for the last 24
+                HOURS, so an order compensated the day before was absent
+                from it, this test read false, and the row offered
+                "Assign coupon" on an order that plainly had a coupon.
+                Filter by Status = Handled on any older range and EVERY
+                row showed the button.
+
+                The page already knows the right answer — `stateOf` is
+                what the status filter itself uses, and `lateOrderState`
+                has no time bound at all. The same mistake as the `range`
+                gate this replaced: deciding from the view that happens
+                to be loaded rather than from whether a decision EXISTS.
+              */}
+            {stateOf(row.orderId) === 'handled' ? (
+              <Pill tone="success" size="sm">
+                {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
+              </Pill>
+            ) : !canRequestCoupon ? null : (
+              /*
+                  ONE DECISION, AND ONLY ONE (owner spec, 2026-09-29):
+                  assign a coupon. Ignore is gone — it was a second
+                  recorded outcome that meant "no compensation", which
+                  is what a comment already says, and having both invited
+                  two contradictory records for one order.
+                */
+              <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
+                {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
+              </Button>
+            )}
+          </Td>
+        </>
+      ),
+    },
+    comments: {
+      th: (
+        <>
+          {/* COMMENTS, not Notes (owner spec §9, 2026-09-29) — one word
+            for one thing, so the column, the button and the state all
+            read the same. */}
+          <Th>{t('lateOrders.col.comments', { defaultValue: 'Comments' })}</Th>
+        </>
+      ),
+      td: (row) => (
+        <>
+          {/*
+              COLUMN 3 — THE COMMENT, and it is a WRITE (owner spec,
+              2026-09-29).
+
+              First press records the comment and the order becomes
+              `Commented`; later presses arrive populated and save as an
+              edit, so there is one row per order however often it is
+              commented on.
+
+              OFFERED ON A HANDLED ORDER TOO (ops, 2026-10-04:
+              *"Handled orders should also have the Comment button so
+              the agent can edit the reason and action"*).
+
+              It used to disappear once a coupon was given, on the
+              reasoning that the coupon's own reason overrides the
+              comment and editing one nobody reads invites a
+              contradiction. In practice the reason and action recorded
+              WITH the coupon are exactly what gets typed in a hurry and
+              needs correcting afterwards — and with the button gone
+              there was no way to correct them at all.
+
+              Editing a handled row is SAFE because `decisionOutcome`
+              already guards it: an existing decision yields `'update'`,
+              which rewrites the wording and never converts a
+              compensation back into a comment. So this only ever edits
+              text; it cannot unmake a coupon.
+            */}
+          <Td>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => openDecision(row, 'commented', true)}
+            >
+              {stateOf(row.orderId) === 'pending'
+                ? t('lateOrders.comment', { defaultValue: 'Comment' })
+                : /* It is an EDIT once something is recorded, and
+                                     saying so stops an agent fearing they are
+                                     about to add a second, contradictory note. */
+                  t('lateOrders.editComment', { defaultValue: 'Edit' })}
+            </Button>
+          </Td>
+        </>
+      ),
+    },
+  };
+
   return (
     /*
       THE SAME THREE-PART SHELL THE REPORT TABLES USE (owner, 2026-09-30: "make
@@ -1183,42 +1742,7 @@ export function LateOrdersPage() {
           minutes: threshold,
           defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
         })}
-        actions={
-          <button
-            type="button"
-            onClick={() => setLiveMode(!liveMode)}
-            aria-pressed={liveMode}
-            /* Fixed colours, not theme tokens: green ON, red OFF, always. */
-            style={{ backgroundColor: liveMode ? '#16a34a' : '#dc2626' }}
-            title={
-              liveMode
-                ? t('lateOrders.liveOnHint', {
-                    defaultValue:
-                      "Showing today's late orders still Pending or Commented, refreshed every 10 seconds; an order leaves once a coupon is given. Click to turn off.",
-                  })
-                : t('lateOrders.liveOffHint', {
-                    defaultValue: 'Turn on to show live late orders as they arrive.',
-                  })
-            }
-            className={cn(
-              'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white shadow-sm',
-              'transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-              liveMode ? 'hover:brightness-95' : 'hover:brightness-95',
-            )}
-          >
-            <span
-              aria-hidden
-              className={cn(
-                'h-2 w-2 rounded-full bg-white',
-                liveMode && 'motion-safe:animate-pulse',
-              )}
-            />
-
-            {liveMode
-              ? t('lateOrders.liveOn', { defaultValue: 'Live orders: ON' })
-              : t('lateOrders.liveOff', { defaultValue: 'Live orders: OFF' })}
-          </button>
-        }
+        actions={<LiveToggle live={liveMode} onChange={setLiveMode} />}
       />
       {/*
         THE SCROLLPORT. `flex-1 overflow-auto`, and NO vertical padding: `sticky
@@ -1408,6 +1932,21 @@ export function LateOrdersPage() {
               {t('lateOrders.filter.reset', { defaultValue: 'Reset' })}
             </Button>
 
+            {/* Which columns, and in what order — the tickets breakdown's
+            picker (owner, 2026-10-11). A view preference, so Reset above
+            leaves it alone. */}
+            <LateOrderColumnsPicker
+              order={columnOrder}
+              hidden={hiddenColumns}
+              onOrder={setColumnOrder}
+              onHidden={setHiddenColumns}
+              labelOf={(k) =>
+                t(LATE_ORDER_COLUMN_LABELS[k].key, {
+                  defaultValue: LATE_ORDER_COLUMN_LABELS[k].def,
+                })
+              }
+            />
+
             {/* Names the business day, because "today" is not the calendar date
             here: trading runs 08:00 to 04:00, so at 01:00 the answer is still
             yesterday's date and an agent has to see which day they are on. */}
@@ -1482,420 +2021,18 @@ export function LateOrdersPage() {
                 <Table>
                   <thead>
                     <Tr>
-                      {/*
-                  WHEN THE DECISION WAS TAKEN, and the business day it belongs
-                  to (owner, 2026-10-01: the queue should show what the admin
-                  register shows). Blank while an order is still pending —
-                  nobody has decided anything yet, and dating it "now" would be
-                  a claim rather than a fact.
-                */}
-                      <Th>{t('lateOrders.col.created', { defaultValue: 'Creation time' })}</Th>
-                      <Th>{t('lateOrders.col.businessDay', { defaultValue: 'Business day' })}</Th>
-                      <Th>{t('lateOrders.col.order', { defaultValue: 'Order' })}</Th>
-                      {/*
-                  "Running" said nothing (owner, 2026-09-28) — running for how
-                  long, measured from what? This is the WHOLE age of the order,
-                  from the moment it was placed, and it is the number the
-                  threshold is applied to. Named for what it measures, and the
-                  sub-label says from when, so it cannot be confused with the
-                  driver leg beside it.
-                */}
-                      <Th>
-                        {t('lateOrders.col.elapsed', { defaultValue: 'Total time' })}
-                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                          {t('lateOrders.col.elapsedHint', { defaultValue: 'since order placed' })}
-                        </span>
-                      </Th>
-                      <Th>
-                        {t('lateOrders.col.service', { defaultValue: 'Service time' })}
-                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                          {t('lateOrders.col.serviceHint', {
-                            defaultValue: 'since driver accepted',
-                          })}
-                        </span>
-                      </Th>
-                      {/*
-                  THE THREE LEGS (owner spec §7, 2026-09-29), beside the service
-                  time they break down. Each names what it measures underneath,
-                  because "Delivery" and "Service" are otherwise indistinguishable
-                  at a glance and they start from different moments.
-                */}
-                      <Th>
-                        {t('lateOrders.col.driverArrival', { defaultValue: 'Driver arrival' })}
-                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                          {t('lateOrders.col.driverArrivalHint', {
-                            defaultValue: 'accept to arrival',
-                          })}
-                        </span>
-                      </Th>
-                      <Th>
-                        {t('lateOrders.col.delivery', { defaultValue: 'Delivery time' })}
-                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                          {t('lateOrders.col.deliveryHint', {
-                            defaultValue: 'out for delivery to close',
-                          })}
-                        </span>
-                      </Th>
-                      <Th>
-                        {t('lateOrders.col.preparation', { defaultValue: 'Preparation time' })}
-                        <span className="block text-[10px] font-normal normal-case text-muted-foreground">
-                          {t('lateOrders.col.preparationHint', {
-                            defaultValue: 'accepted to ready',
-                          })}
-                        </span>
-                      </Th>
-                      {/* SPLIT, like the register: brand and restaurant are two
-                  facts, and one joined cell cannot be sorted or read as
-                  either. */}
-                      <Th>{t('lateOrders.col.brandOnly', { defaultValue: 'Brand' })}</Th>
-                      <Th>{t('lateOrders.col.restaurant', { defaultValue: 'Restaurant' })}</Th>
-                      <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer mobile' })}</Th>
-                      <Th>{t('lateOrders.col.status', { defaultValue: 'Order status' })}</Th>
-                      <Th>{t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}</Th>
-                      {/* WHAT WAS DECIDED, and by whom — the three the register
-                  carries and the queue did not. */}
-                      <Th>{t('lateOrders.col.agent', { defaultValue: 'Agent' })}</Th>
-                      <Th>{t('lateOrders.col.reason', { defaultValue: 'Reason' })}</Th>
-                      <Th>{t('lateOrders.col.actionTaken', { defaultValue: 'Action taken' })}</Th>
-                      {/*
-                  THE ACTIONS, SPLIT INTO THREE (owner, 2026-09-28).
-
-                  Four controls sat in one "Decision" cell and read as a wall of
-                  buttons — the decision itself, the thing you look at first,
-                  and the notes all competing at the same weight. Now: what you
-                  LOOK AT, what you DECIDE, and the note. Each column is titled,
-                  so the buttons no longer have to carry the grouping on their
-                  own.
-                */}
-                      <Th>{t('lateOrders.col.detail', { defaultValue: 'Order' })}</Th>
-                      <Th>{t('lateOrders.col.actions', { defaultValue: 'Decision' })}</Th>
-                      {/* COMMENTS, not Notes (owner spec §9, 2026-09-29) — one word
-                    for one thing, so the column, the button and the state all
-                    read the same. */}
-                      <Th>{t('lateOrders.col.comments', { defaultValue: 'Comments' })}</Th>
+                      {visibleColumns.map((k) => (
+                        <Fragment key={k}>{columnDefs[k].th}</Fragment>
+                      ))}
                     </Tr>
                   </thead>
                   <tbody>
                     {paged.map((row) => (
                       <Fragment key={row.orderId}>
                         <Tr>
-                          {/* The decision's own timestamp and business day. A
-                              pending order has neither — nothing has been
-                              decided — and a dash says so honestly. */}
-                          {/* WHEN THE ORDER WAS PLACED and its business day
-                              (owner, 2026-10-11: "creation time and business day
-                              are empty"). They read the decision, which a pending
-                              order does not have yet; the order always has both. */}
-                          <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
-                            {row.placedAt ? formatDateTime(placedIso(row.placedAt)) : '-'}
-                          </Td>
-                          <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
-                            {businessDay(row.placedAt) ?? '-'}
-                          </Td>
-                          <Td className="whitespace-nowrap font-medium tabular-nums">
-                            {row.orderId}
-                            {isNew(row.orderId) && (
-                              <span className="ms-2 rounded-full bg-emerald-600 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                                {t('lateOrders.new', { defaultValue: 'New' })}
-                              </span>
-                            )}
-                          </Td>
-                          {/*
-                      A NUMBER, NOT A FILLED PILL (owner, 2026-09-28: "has some
-                      orange color which hides the number").
-
-                      The amber pill put amber text on an amber ground, so the
-                      figure this whole screen exists to communicate was the
-                      least readable thing on the row.
-
-                      ALWAYS RED, not amber-then-red (owner, 2026-09-28). Every
-                      row in this queue is ALREADY past the threshold — that is
-                      what put it here — so a two-tone scale was drawing a
-                      distinction between "late" and "later" that nobody asked
-                      for, and it made half the column the washed-out amber the
-                      change set out to remove.
-                    */}
-                          <Td className="whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-destructive">
-                              <span
-                                aria-hidden="true"
-                                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
-                              />
-                              {elapsed(row.minutesElapsed)}
-                            </span>
-                          </Td>
-                          {/*
-                      SERVICE TIME — the DRIVER leg, not the whole order.
-                      Closed: close − driver-accept. Live: now − driver-accept.
-                      Blank while the batch is still loading, and "-" once we
-                      know the driver has not accepted: an empty cell and a
-                      confirmed "no driver yet" are different facts.
-                    */}
-                          <Td className="whitespace-nowrap tabular-nums">
-                            {(() => {
-                              if (eventTimes.isLoading)
-                                return (
-                                  /* A skeleton, not a spinner: one spinner per row
-                               reads as a page that is broken, and the width is
-                               known so nothing reflows when the value lands. */
-                                  <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
-                                );
-                              /* `orderEventTimes`, not the old `serviceMinutes`:
-                           that one took the queue's `closedAt`, which is the
-                           CURRENT status's moment and so reads a force-close as
-                           the end. Order 1323407 was closed at 17:30 and
-                           force-closed at 22:31, giving 365 minutes where the
-                           truth is 64 (owner spec §6). */
-                              const mins = timesOf(row.orderId).serviceMinutes;
-                              if (mins === null)
-                                return <span className="text-muted-foreground/60">&mdash;</span>;
-                              /*
-                               * A LIVE COUNT LOOKS LIVE; A FINISHED ONE LOOKS FINAL
-                               * (owner, 2026-09-28).
-                               *
-                               * The same "1h 12m" meant two different things — still
-                               * climbing, or settled — and nothing on screen said
-                               * which. A closed order carries `closedAt`, so the
-                               * difference is known per row, not guessed.
-                               *
-                               * The live one gets a soft pulsing dot and the brand
-                               * colour; the closed one is plain and muted. CSS only —
-                               * no timer, no per-row state. The number itself
-                               * advances with the queue's own 30s refresh, which is
-                               * the resolution the data actually has: a per-second
-                               * ticker would re-render every row for a figure that
-                               * cannot change more often than its source.
-                               */
-                              const live = !row.closedAt;
-                              return live ? (
-                                /* Same weight and size as Total time beside it, so
-                             the two read as a pair to compare rather than a
-                             headline and a footnote. */
-                                /* AMBER, and deliberately NOT the red beside it
-                             (owner, 2026-09-28: "service time should be in a
-                             color"). Two different measures in the same row
-                             must not wear the same colour, or the eye reads
-                             them as one number split in two. Amber also carries
-                             "still running" on its own. */
-                                <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-warning-foreground">
-                                  <span
-                                    className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning"
-                                    aria-hidden="true"
-                                  />
-                                  {elapsed(mins)}
-                                  <span className="sr-only">
-                                    {t('lateOrders.serviceLive', {
-                                      defaultValue: 'still counting',
-                                    })}
-                                  </span>
-                                </span>
-                              ) : (
-                                /* Settled: a filled dot rather than a pulsing one, and
-                             muted — the figure is final, not climbing. */
-                                <span className="inline-flex items-center gap-1.5 text-sm font-medium tabular-nums text-muted-foreground">
-                                  <span
-                                    aria-hidden="true"
-                                    className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-muted-foreground/40"
-                                  />
-                                  {elapsed(mins)}
-                                </span>
-                              );
-                            })()}
-                          </Td>
-                          {/* The three legs. Same loading/blank treatment as the
-                        service time beside them, via one helper — three copies
-                        of "skeleton, else dash, else minutes" is three chances
-                        for one of them to say something different. */}
-                          <Td className="whitespace-nowrap tabular-nums">
-                            <LegTime
-                              loading={eventTimes.isLoading}
-                              minutes={timesOf(row.orderId).driverArrivalMinutes}
-                            />
-                          </Td>
-                          <Td className="whitespace-nowrap tabular-nums">
-                            <LegTime
-                              loading={eventTimes.isLoading}
-                              minutes={timesOf(row.orderId).deliveryMinutes}
-                            />
-                          </Td>
-                          <Td className="whitespace-nowrap tabular-nums">
-                            <LegTime
-                              loading={eventTimes.isLoading}
-                              minutes={timesOf(row.orderId).preparationMinutes}
-                            />
-                          </Td>
-                          <Td className="max-w-[12rem] truncate">{row.brandName || '-'}</Td>
-                          <Td className="max-w-[14rem] truncate">{row.restaurantName || '-'}</Td>
-                          <Td className="whitespace-nowrap">
-                            {/* NORMALISED FOR DISPLAY, not just for storage. Yiji
-                          sends `+9665XXXXXXXX`; every number in this CRM reads
-                          `05XXXXXXXX`, and this cell was the one place showing
-                          Yiji's shape to an agent (owner, 2026-09-28). */}
-                            {displayContactName(row.customerName, row.customerPhone) ||
-                              normalizePhone(row.customerPhone) ||
-                              '-'}
-                          </Td>
-                          <Td className="whitespace-nowrap text-muted-foreground">
-                            {t(`commerce.orderStatuses.${row.status}`, {
-                              defaultValue: row.status,
-                            })}
-                          </Td>
-                          <Td>
-                            {/*
-                        `SelectMenu`, not a native `<select>`: the OS styles the
-                        native menu itself, so it arrived as a boxed grey
-                        control that matched nothing else on the page (owner,
-                        2026-09-22). This is the same listbox the rest of the
-                        portal uses — keyboard, type-ahead and ARIA included —
-                        and it renders in a portal so it is never clipped by the
-                        table's own scroll.
-
-                        The dots carry the meaning at a glance: amber for a
-                        kitchen that ran long, blue for a delivery that did.
-                      */}
-                            <SelectMenu
-                              value={kindOf(row)}
-                              size="sm"
-                              aria-label={t('lateOrders.col.kind', {
-                                defaultValue: 'Source of delay',
-                              })}
-                              onChange={(v) => pickKind(row.orderId, v)}
-                              options={causeOptions}
-                            />
-                          </Td>
-                          {/*
-                      WHAT WAS DECIDED — the three the register carries, so an
-                      agent reads the same facts here as a manager reads there
-                      (owner, 2026-10-01). Blank on a pending order, because
-                      nobody has decided anything yet.
-                    */}
-                          <Td className="whitespace-nowrap">
-                            {decisions.data?.get(row.orderId)?.decided_by?.first_name || '-'}
-                          </Td>
-                          {/*
-                      THE FULL TEXT ON HOVER (ops, 2026-10-04: *"On hover, the
-                      Reason and Action should display the full data"*).
-
-                      `title` alone was not enough. It is a native tooltip:
-                      invisible on a touch screen, invisible to a keyboard user,
-                      slow to appear, and it cannot wrap a long reason legibly —
-                      the same objection the quick-replies panel already
-                      answered. `LongText` renders the whole value in a panel on
-                      hover AND on focus, and keeps `title` as the plain-text
-                      fallback.
-                    */}
-                          <Td className="max-w-[18rem]">
-                            <LongText value={decisionOf(row.orderId)?.reason} />
-                          </Td>
-                          <Td className="max-w-[18rem]">
-                            <LongText value={decisionOf(row.orderId)?.action_taken} />
-                          </Td>
-                          {/*
-                      COLUMN 1 — WHAT YOU LOOK AT. Always offered, decided or
-                      not: reviewing what was ordered is exactly why somebody
-                      opens a handled row.
-                    */}
-                          <Td>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              aria-haspopup="dialog"
-                              onClick={() => setExpanded(row.orderId)}
-                            >
-                              {t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' })}
-                            </Button>
-                          </Td>
-                          {/* COLUMN 2 — WHAT YOU DECIDE. */}
-                          <Td>
-                            {/*
-                        A HANDLED historical order shows its decision instead of
-                        the buttons: offering "Ignore" on something already
-                        ignored invites a second, contradictory record.
-                      */}
-                            {/*
-                        A DECIDED ORDER SHOWS ITS DECISION, IN EVERY VIEW
-                        (owner, 2026-09-28).
-
-                        This was gated on `range`, so on the live queue a row
-                        that had just been decided still offered Assign coupon
-                        and Ignore — inviting a second, contradictory record for
-                        the same order. What decides this is whether a decision
-                        EXISTS, not which view happens to be open.
-                      */}
-                            {/*
-                        `stateOf`, NOT the `handled` set (ops, 2026-10-03).
-
-                        `useHandledLateOrders` only ever asks for the last 24
-                        HOURS, so an order compensated the day before was absent
-                        from it, this test read false, and the row offered
-                        "Assign coupon" on an order that plainly had a coupon.
-                        Filter by Status = Handled on any older range and EVERY
-                        row showed the button.
-
-                        The page already knows the right answer — `stateOf` is
-                        what the status filter itself uses, and `lateOrderState`
-                        has no time bound at all. The same mistake as the `range`
-                        gate this replaced: deciding from the view that happens
-                        to be loaded rather than from whether a decision EXISTS.
-                      */}
-                            {stateOf(row.orderId) === 'handled' ? (
-                              <Pill tone="success" size="sm">
-                                {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
-                              </Pill>
-                            ) : !canRequestCoupon ? null : (
-                              /*
-                          ONE DECISION, AND ONLY ONE (owner spec, 2026-09-29):
-                          assign a coupon. Ignore is gone — it was a second
-                          recorded outcome that meant "no compensation", which
-                          is what a comment already says, and having both invited
-                          two contradictory records for one order.
-                        */
-                              <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
-                                {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
-                              </Button>
-                            )}
-                          </Td>
-                          {/*
-                      COLUMN 3 — THE COMMENT, and it is a WRITE (owner spec,
-                      2026-09-29).
-
-                      First press records the comment and the order becomes
-                      `Commented`; later presses arrive populated and save as an
-                      edit, so there is one row per order however often it is
-                      commented on.
-
-                      OFFERED ON A HANDLED ORDER TOO (ops, 2026-10-04:
-                      *"Handled orders should also have the Comment button so
-                      the agent can edit the reason and action"*).
-
-                      It used to disappear once a coupon was given, on the
-                      reasoning that the coupon's own reason overrides the
-                      comment and editing one nobody reads invites a
-                      contradiction. In practice the reason and action recorded
-                      WITH the coupon are exactly what gets typed in a hurry and
-                      needs correcting afterwards — and with the button gone
-                      there was no way to correct them at all.
-
-                      Editing a handled row is SAFE because `decisionOutcome`
-                      already guards it: an existing decision yields `'update'`,
-                      which rewrites the wording and never converts a
-                      compensation back into a comment. So this only ever edits
-                      text; it cannot unmake a coupon.
-                    */}
-                          <Td>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => openDecision(row, 'commented', true)}
-                            >
-                              {stateOf(row.orderId) === 'pending'
-                                ? t('lateOrders.comment', { defaultValue: 'Comment' })
-                                : /* It is an EDIT once something is recorded, and
-                                     saying so stops an agent fearing they are
-                                     about to add a second, contradictory note. */
-                                  t('lateOrders.editComment', { defaultValue: 'Edit' })}
-                            </Button>
-                          </Td>
+                          {visibleColumns.map((k) => (
+                            <Fragment key={k}>{columnDefs[k].td(row)}</Fragment>
+                          ))}
                         </Tr>
                       </Fragment>
                     ))}

@@ -895,6 +895,24 @@
     "liveOff": "Live orders: OFF",
     "liveOnHint": "Showing today's late orders still Pending or Commented, refreshed every 10 seconds; an order leaves once a coupon is given. Click to turn off.",
     "liveOffHint": "Turn on to show live late orders as they arrive.",
-    "new": "New"
+    "new": "New",
+    "live": "LIVE",
+    "stop": "STOP",
+    "goLive": "Go live",
+    "liveTip": "Live: new late orders appear here. Click to stop.",
+    "goLiveTip": "Show late orders live, as they arrive.",
+    "columns": {
+      "button": "Columns",
+      "title": "Columns",
+      "help": "Drag a row to reorder. The order here is the order in the table.",
+      "shownCount": "{{n}} of {{m}} shown",
+      "selectAll": "All",
+      "resetOrder": "Reset order",
+      "find": "Find a column",
+      "findPlaceholder": "Find a column…",
+      "dragHint": "Drag to reorder",
+      "moveUp": "Move {{col}} earlier",
+      "moveDown": "Move {{col}} later"
+    }
   }
 }

@@ -21,8 +21,18 @@ describe('Late orders: live mode', () => {
     expect(header).toBeLessThan(scrollport);
   });
 
-  it('is green when on and red when off, with fixed colours', () => {
-    expect(page).toMatch(/backgroundColor: liveMode \? '#16a34a' : '#dc2626'/);
+  /* Owner, 2026-10-11: LIVE with a light-green record dot; red + STOP on
+     hover; a plain "Go live" when off. */
+  it('reads LIVE with a light-green dot, turns red and says STOP on hover, Go live when off', () => {
+    const toggle = readFileSync(
+      resolve(__dirname, '../src/features/late-orders/LiveToggle.tsx'),
+      'utf8',
+    );
+    expect(page).toMatch(/<LiveToggle live=\{liveMode\} onChange=\{setLiveMode\} \/>/);
+    expect(toggle).toMatch(/border-\[#4ade80\]/);
+    expect(toggle).toMatch(/hover:bg-\[#dc2626\]/);
+    expect(toggle).toMatch(/defaultValue: 'STOP'/);
+    expect(toggle).toMatch(/defaultValue: 'Go live'/);
   });
 
   it('hides an order once it is handled, keeps Pending and Commented', () => {
