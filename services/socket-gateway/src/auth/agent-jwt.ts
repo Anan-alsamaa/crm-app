@@ -75,8 +75,26 @@ export async function validateAgentToken(
       }
     }
     return { id: me.id, role, privileges: rolePrivileges(role, row) };
-  } catch {
-    return null;
+  } catch (err) {
+    /*
+     * ONLY A REFUSAL IS AN INVALID SESSION (owner, 2026-10-11: "users are
+     * logged out too often"). Directus slow, restarting during a deploy, or
+     * unreachable used to come back here as `null` = "invalid agent token" -
+     * and the portal signs out on that. Now only 401/403 means invalid; anything
+     * else throws AuthUnavailableError, which the portal retries quietly.
+     */
+    const status = (err as { response?: { status?: number } } | null)?.response?.status;
+    if (status === 401 || status === 403) return null;
+    throw new AuthUnavailableError();
+  }
+}
+
+/** Directus could not answer whether a session is valid (not "it is invalid"). */
+export class AuthUnavailableError extends Error {
+  constructor() {
+    // Deliberately free of "token"/"unauthorized": the portal signs out on those.
+    super('auth service unavailable, retrying');
+    this.name = 'AuthUnavailableError';
   }
 }
 

@@ -46,7 +46,7 @@ import { createVendorJwtSecrets, registerVendorWebhooks } from './vendor-auth.js
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
-import { validateAgentToken, tokenHasAdminAccess } from './auth/agent-jwt.js';
+import { AuthUnavailableError, validateAgentToken, tokenHasAdminAccess } from './auth/agent-jwt.js';
 import {
   parseReleaseTargets,
   readParkedBuild,
@@ -684,7 +684,17 @@ async function main(): Promise<void> {
       await reply.code(401).send({ ok: false, error: 'missing bearer token' });
       return null;
     }
-    const identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
+    let identity: Awaited<ReturnType<typeof validateAgentToken>>;
+    try {
+      identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
+    } catch (err) {
+      // Directus could not say: "try again", never "you may not" (2026-10-11).
+      if (err instanceof AuthUnavailableError) {
+        await reply.code(503).send({ ok: false, error: err.message });
+        return null;
+      }
+      throw err;
+    }
     if (!identity || !identity.role || !roles.has(identity.role)) {
       await reply.code(403).send({ ok: false, error: denial });
       return null;
@@ -709,7 +719,17 @@ async function main(): Promise<void> {
       await reply.code(401).send({ ok: false, error: 'missing bearer token' });
       return null;
     }
-    const identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
+    let identity: Awaited<ReturnType<typeof validateAgentToken>>;
+    try {
+      identity = await validateAgentToken(config.DIRECTUS_INTERNAL_URL, token);
+    } catch (err) {
+      // Directus could not say: "try again", never "you may not" (2026-10-11).
+      if (err instanceof AuthUnavailableError) {
+        await reply.code(503).send({ ok: false, error: err.message });
+        return null;
+      }
+      throw err;
+    }
     if (!identity || !keys.some((k) => identity.privileges[k] === true)) {
       await reply
         .code(403)

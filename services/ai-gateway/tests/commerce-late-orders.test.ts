@@ -45,6 +45,31 @@ describe('GET /commerce/late-orders', () => {
     expect(res.statusCode).toBe(401);
   });
 
+  /* Owner, 2026-10-11: Yiji also returned 1339586, force-cancelled after
+     9 minutes. An order under the threshold is not late. */
+  it('drops an order that never reached the threshold', async () => {
+    const late = { orderId: '1', status: 'closed', minutesElapsed: 75 };
+    const early = { orderId: '1339586', status: 'force_cancel', minutesElapsed: 9 };
+    const one = await buildApp(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      deps({ yiji: { getLateDeliveryOrders: async () => [late, early] } as any }, 60),
+    );
+    const res = await one.inject({ method: 'GET', url: '/commerce/late-orders', headers: auth });
+    expect((res.json() as { data: { rows: unknown[] } }).data.rows).toEqual([late]);
+  });
+
+  /* Owner, 2026-10-11: Directus slow or restarting must not read as a bad
+     session (it blanked the late-order times and signed agents out). */
+  it('answers 503, not 401, when the session cannot be checked', async () => {
+    const d = deps();
+    d.directus.whoAmI = async () => {
+      throw new Error('directus /users/me answered 503');
+    };
+    const one = await buildApp(d);
+    const res = await one.inject({ method: 'GET', url: '/commerce/late-orders', headers: auth });
+    expect(res.statusCode).toBe(503);
+  });
+
   it('answers with the rows AND the threshold they were selected by', async () => {
     const row = {
       orderId: '1313926',

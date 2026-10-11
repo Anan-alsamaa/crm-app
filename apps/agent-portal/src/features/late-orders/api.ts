@@ -331,7 +331,11 @@ export function useOrderEventTimes(
     queryKey: ['late-orders', 'event-times', key, ...(vendorId ? [vendorId] : [])],
     enabled: orderIds.length > 0,
     staleTime: 60_000,
-    retry: false,
+    /* RETRIED (owner, 2026-10-11: the four times were blank). One passing
+       failure - the gateway briefly unable to check the session - left every
+       time column empty until the page changed. */
+    retry: 3,
+    retryDelay: (n) => Math.min(1_000 * 2 ** n, 8_000),
     queryFn: () =>
       vendorId
         ? commerce.getOrderEventTimes(orderIds, vendorId)

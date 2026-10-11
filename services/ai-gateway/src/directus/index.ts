@@ -118,15 +118,25 @@ export class GatewayDirectus {
         headers: { authorization: `Bearer ${callerToken}` },
         signal: AbortSignal.timeout(5_000),
       });
-      if (!res.ok) return null;
+      /* ONLY A REFUSAL IS AN INVALID SESSION (owner, 2026-10-11). Directus
+         slow (>5 s), restarting or answering 5xx used to read as "invalid or
+         expired session": valid agents got 401s, the late-orders timings went
+         blank. Now those throw, and the caller answers 503 "try again". */
+      if (res.status === 401 || res.status === 403) return null;
+      if (!res.ok) throw new Error(`directus /users/me answered ${res.status}`);
       const body = (await res.json()) as { data?: { id?: string; role?: string | null } };
       const id = body.data?.id;
       if (!id) return null;
       const who = { id, role: body.data?.role ?? null };
       this.whoCache.set(callerToken, { who, at: now });
       return who;
-    } catch {
-      return null;
+    } catch (err) {
+      throw Object.assign(
+        new Error(`session check unavailable: ${String((err as Error)?.message ?? err)}`),
+        {
+          authUnavailable: true,
+        },
+      );
     }
   }
 

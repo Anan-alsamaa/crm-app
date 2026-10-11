@@ -420,7 +420,16 @@ export async function registerCommerceRoutes(
           ttl,
           () => connector.getLateDeliveryOrders(thresholdMinutes, opts),
         );
-        return { rows, thresholdMinutes, builtAt: new Date().toISOString() };
+        /* A LATE order ran past the threshold (owner, 2026-10-11). Yiji's own
+           filter also returned order 1339586, force-cancelled after 9 minutes;
+           an order that never reached the threshold is not late. */
+        return {
+          rows: rows.filter(
+            (r) => !(typeof r.minutesElapsed === 'number' && r.minutesElapsed < thresholdMinutes),
+          ),
+          thresholdMinutes,
+          builtAt: new Date().toISOString(),
+        };
       },
     );
   });

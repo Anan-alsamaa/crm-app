@@ -15,7 +15,7 @@ vi.mock('@directus/sdk', () => {
   };
 });
 
-import { validateAgentToken } from '../src/auth/agent-jwt.js';
+import { AuthUnavailableError, validateAgentToken } from '../src/auth/agent-jwt.js';
 
 beforeEach(() => {
   request.mockReset();
@@ -38,8 +38,21 @@ describe('validateAgentToken', () => {
     });
   });
 
-  it('returns null when the token is rejected (request throws)', async () => {
-    request.mockRejectedValueOnce(new Error('401'));
+  it('returns null when Directus REFUSES the token (401)', async () => {
+    request.mockRejectedValueOnce({ errors: [{ message: 'Invalid' }], response: { status: 401 } });
     expect(await validateAgentToken('http://localhost:8055', 'bad')).toBeNull();
+  });
+
+  /* Owner, 2026-10-11: a slow or restarting Directus signed agents out. An
+     outage is "try again", never "invalid token". */
+  it('throws AuthUnavailableError when Directus cannot answer, never null', async () => {
+    request.mockRejectedValueOnce({ response: { status: 503 } });
+    await expect(validateAgentToken('http://localhost:8055', 'good')).rejects.toBeInstanceOf(
+      AuthUnavailableError,
+    );
+    request.mockRejectedValueOnce(new Error('fetch failed'));
+    const err = await validateAgentToken('http://localhost:8055', 'good').catch((e: Error) => e);
+    // The portal signs out on "token"/"unauthorized" - this message must not say either.
+    expect(String((err as Error).message)).not.toMatch(/token|unauthorized/i);
   });
 });

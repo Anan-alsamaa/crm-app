@@ -60,7 +60,13 @@ export async function verifyCaller(req: FastifyRequest, deps: CallerVerifierDeps
   const token = bearerToken(req);
   if (!token) throw new AuthError('Missing bearer token', 401);
 
-  const who = await deps.whoAmI(token);
+  let who: Awaited<ReturnType<CallerVerifierDeps['whoAmI']>>;
+  try {
+    who = await deps.whoAmI(token);
+  } catch {
+    // Directus could not say whether the session is valid: "try again", not 401.
+    throw new AuthError('Auth service unavailable, try again', 503);
+  }
   if (!who) throw new AuthError('Invalid or expired session', 401);
 
   const isAdmin = who.role ? (await deps.adminRoleIds()).has(who.role) : false;
