@@ -334,6 +334,27 @@ describe('CouponApprovalsPage', () => {
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
   });
 
+  /* Owner, 2026-10-11: Edit lets the admin change the ORDER number and the
+     COUPON CODE too (the code is normalised to Yiji's upper-case form). */
+  it('edits the order number and the coupon code', async () => {
+    const saveMutate = vi.fn((_input, opts?: { onSuccess?: () => void }) => opts?.onSuccess?.());
+    api.useSaveCouponTerms.mockReturnValue({ mutate: saveMutate, isPending: false });
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole('button', { name: 'Edit' }));
+    await user.type(screen.getByLabelText(/reason for the change/i), 'Wrong order number.');
+    const code = screen.getByLabelText('Coupon code');
+    await user.clear(code);
+    await user.type(code, 'ops-new 123');
+    const order = screen.getByLabelText(/yiji order|restaurant order no\./i);
+    await user.clear(order);
+    await user.type(order, '1340000');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const edits = saveMutate.mock.calls[0]![0].edits;
+    expect(edits.coupon_code).toBe('OPS-NEW123');
+    expect(edits.order_id).toBe('1340000');
+  });
+
   /* OPS-SGVAVXW6 (2026-10-07): 56 SAR asked for, a supervisor typed 28 into a
      free "Maximum discount" box, the save wrote the cap alone, and the record
      then failed its own terms check — Approve stayed disabled with no word why. */

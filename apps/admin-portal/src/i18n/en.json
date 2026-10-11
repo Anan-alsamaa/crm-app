@@ -1095,7 +1095,9 @@
     "noOrderNoPhone": "No customer phone on this request, so it cannot reach the customer on Yiji (coupons go to the phone number, never to an order). Approving still records the compensation, but nothing will arrive in the app — add the customer’s number first.",
     "noYijiAccount": "{{phone}} has no Yiji account yet — the coupon is held and sent automatically if they sign up. Until then honour it in the branch.",
     "approvePhoneHint": "No ticket — the coupon goes to {{phone}} directly.",
-    "noTicketHint": "No ticket and no customer phone on this request — there is nobody to send the coupon to."
+    "noTicketHint": "No ticket and no customer phone on this request — there is nobody to send the coupon to.",
+    "codeLocked": "Already on Yiji — the code can no longer change.",
+    "orderEditHint": "For reference — the coupon always goes to the customer’s phone."
   },
   "complaintReport": {
     "any": "Any",

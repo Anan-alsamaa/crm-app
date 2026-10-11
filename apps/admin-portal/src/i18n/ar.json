@@ -722,7 +722,9 @@
     "fixWithEdit": "استخدم «تعديل» لتصحيحه.",
     "restaurantOrder": "رقم طلب المطعم",
     "yijiOrder": "طلب يجي",
-    "approvePhoneHint": "لا توجد تذكرة — يُرسل الكوبون مباشرة إلى {{phone}}."
+    "approvePhoneHint": "لا توجد تذكرة — يُرسل الكوبون مباشرة إلى {{phone}}.",
+    "codeLocked": "موجود على يجي — لم يعد بالإمكان تغيير الرمز.",
+    "orderEditHint": "للمرجع فقط — يُرسل الكوبون دائمًا إلى جوال العميل."
   },
   "couponReport": {
     "noDecisions": "لم يُحسم شيء بعد",

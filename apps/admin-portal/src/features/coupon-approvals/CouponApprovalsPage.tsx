@@ -81,12 +81,14 @@ function EditField({
   onChange,
   type = 'text',
   hint,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: 'text' | 'number' | 'date';
   hint?: string;
+  disabled?: boolean;
 }) {
   return (
     <label className="block space-y-1">
@@ -105,6 +107,7 @@ function EditField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           aria-label={label}
+          disabled={disabled}
         />
       )}
       {hint && <span className="block text-2xs text-muted-foreground">{hint}</span>}
@@ -143,6 +146,10 @@ function Term({
 
 /** The full set of terms a supervisor may amend before approving. */
 export interface TermEdits {
+  /** Editable until the coupon exists on Yiji (owner, 2026-10-11). */
+  coupon_code: string;
+  /** Reference only - coupons go to the phone, never the order (2026-10-11). */
+  order_id: string;
   title: string;
   issuing_side: string;
   delivery_type: string;
@@ -160,6 +167,8 @@ export interface TermEdits {
 function seedEdits(row: CouponApprovalRow): TermEdits {
   const pct = (row.discount_category ?? '').toLowerCase() === 'percentage';
   return {
+    coupon_code: row.coupon_code ?? '',
+    order_id: row.order_id ?? row.ticket?.order_id ?? '',
     title: row.title ?? '',
     issuing_side: row.issuing_side ?? '',
     delivery_type: row.delivery_type ?? '',
@@ -184,6 +193,13 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
   const str = (k: keyof TermEdits, col: string, cur: string | null) => {
     if (e[k].trim() !== (cur ?? '')) out[col] = e[k].trim() || null;
   };
+  /* The CODE, as Yiji will see it: upper-case, no spaces. An emptied box
+     keeps the old code rather than saving none. */
+  const code = e.coupon_code.trim().toUpperCase().replace(/\s+/g, '');
+  if (code && code !== (row.coupon_code ?? '')) out.coupon_code = code;
+  /* The ORDER NUMBER on the request (the reference shown on the card). */
+  const order = e.order_id.trim();
+  if (order !== (row.order_id ?? row.ticket?.order_id ?? '')) out.order_id = order || null;
   str('title', 'title', row.title);
   str('issuing_side', 'issuing_side', row.issuing_side);
   str('delivery_type', 'delivery_type', row.delivery_type);
@@ -1114,6 +1130,37 @@ function Row({
                 <>
                   {editing && (
                     <div className="mb-1 grid w-full gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                      {/* CODE and ORDER, editable (owner, 2026-10-11). The code is
+                          locked once the coupon exists on Yiji: their copy keeps
+                          the code it was created with. */}
+                      <EditField
+                        label={t('coupons.code', { defaultValue: 'Coupon code' })}
+                        value={edits.coupon_code}
+                        onChange={(v) => setEdit('coupon_code', v)}
+                        disabled={Boolean(row.yiji_coupon_user_id || row.yiji_coupon_id)}
+                        hint={
+                          row.yiji_coupon_user_id || row.yiji_coupon_id
+                            ? t('couponApprovals.codeLocked', {
+                                defaultValue: 'Already on Yiji — the code can no longer change.',
+                              })
+                            : undefined
+                        }
+                      />
+                      <EditField
+                        label={
+                          isRestaurantOrderNumber(edits.delivery_type || row.delivery_type)
+                            ? t('couponApprovals.restaurantOrder', {
+                                defaultValue: 'Restaurant order no.',
+                              })
+                            : t('couponApprovals.yijiOrder', { defaultValue: 'Yiji order' })
+                        }
+                        value={edits.order_id}
+                        onChange={(v) => setEdit('order_id', v)}
+                        hint={t('couponApprovals.orderEditHint', {
+                          defaultValue:
+                            'For reference — the coupon always goes to the customer’s phone.',
+                        })}
+                      />
                       <EditField
                         label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
                         value={edits.title}
