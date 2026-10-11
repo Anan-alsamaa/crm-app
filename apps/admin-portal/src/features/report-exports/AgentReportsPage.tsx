@@ -2196,8 +2196,11 @@ function AgentKpiReport({
                   )}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">
+                  {/* "7 · 4 replied" read as a range ("7-4", owner 2026-10-11):
+                      chats the agent STARTED, and in brackets how many the
+                      customer answered. */}
                   {a.agentStarted > 0
-                    ? `${a.agentStarted} · ${a.agentStartedReplied} ${tr('agentReports.replied', { defaultValue: 'replied' })}`
+                    ? `${a.agentStarted} (${a.agentStartedReplied} ${tr('agentReports.replied', { defaultValue: 'replied' })})`
                     : '0'}
                 </Td>
                 <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
