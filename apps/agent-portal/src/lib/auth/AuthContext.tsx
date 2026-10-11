@@ -141,6 +141,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // until the tab is reloaded or closed.
     disconnectSocket();
     await auth.logout();
+    /* Saved page views reset on sign-out (owner, 2026-10-11): Agent
+       performance keeps its date range and filters until the person signs out,
+       then opens on its defaults again. */
+    try {
+      for (const k of Object.keys(sessionStorage)) {
+        if (k.startsWith('agent-performance:')) sessionStorage.removeItem(k);
+      }
+    } catch {
+      /* storage unavailable: nothing was saved */
+    }
     setUser(null);
     setPrivileges(null);
   }, []);

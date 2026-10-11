@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { normalizePhone } from '@yiji/shared-types';
+import { businessDay, normalizePhone } from '@yiji/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { canReadConversation } from '../tickets/api.js';
 import { useTranslation } from 'react-i18next';
@@ -100,6 +100,16 @@ interface SavedView {
   search?: string;
 }
 
+/** Yesterday's business day through today's (business days turn at 08:00 Riyadh). */
+export function defaultPerformanceRange(now: number = Date.now()): { from: string; to: string } {
+  const today =
+    businessDay(new Date(now).toISOString()) ?? new Date(now).toISOString().slice(0, 10);
+  const yesterday =
+    businessDay(new Date(now - 24 * 60 * 60 * 1000).toISOString()) ??
+    new Date(now - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return { from: yesterday, to: today };
+}
+
 export function AgentPerformancePage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -163,8 +173,19 @@ export function AgentPerformancePage() {
     }
     // Read once per user; later writes are this page's own.
   }, [filtersKey]);
+  /*
+   * OPENS ON YESTERDAY'S BUSINESS DAY THROUGH TODAY (owner, 2026-10-11) - the
+   * shift that just ended plus the one running now. Business days turn at
+   * 08:00 Riyadh. Once the agent changes it, their choice is kept (above)
+   * until they sign out; signing out clears it, so the next sign-in opens on
+   * this default again (AuthContext.logout).
+   */
   const [filters, setFilters] = useState<PerformanceFilters>(
-    () => saved?.filters ?? (user?.id ? { agentId: user.id } : {}),
+    () =>
+      saved?.filters ?? {
+        ...(user?.id ? { agentId: user.id } : {}),
+        ...defaultPerformanceRange(),
+      },
   );
   const [targetMin, setTargetMin] = useState(saved?.targetMin ?? DEFAULT_TARGET_MIN);
   /** What is in the box WHILE typing — '' is a legal intermediate state. */

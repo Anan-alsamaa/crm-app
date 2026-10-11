@@ -84,24 +84,35 @@ describe('Agent performance — vendor filter', () => {
     );
     renderPage();
     expect(screen.queryByRole('combobox', { name: 'Vendor' })).toBeNull();
-    expect(lastArg(perf.useChatTimings)).toEqual({ agentId: 'faisal' });
+    expect(lastArg(perf.useChatTimings)).toMatchObject({ agentId: 'faisal' });
+    expect(lastArg(perf.useChatTimings)).not.toHaveProperty('vendor');
   });
 
   it('appears with two vendors; choosing one scopes chats, tickets and coupons', async () => {
     dir.value = { show: true, options: TWO, nameOf: () => null };
     const user = userEvent.setup();
     const view = renderPage();
-    expect(lastArg(perf.useChatTimings)).toEqual({ agentId: 'faisal' });
+    expect(lastArg(perf.useChatTimings)).toMatchObject({ agentId: 'faisal' });
+    expect(lastArg(perf.useChatTimings)).not.toHaveProperty('vendor');
 
     await user.click(screen.getByRole('combobox', { name: 'Vendor' }));
     await user.click(screen.getByRole('button', { name: 'Second' }));
-    expect(lastArg(perf.useChatTimings)).toEqual({ agentId: 'faisal', vendor: 'v-two' });
-    expect(lastArg(perf.useCsatByConversation)).toEqual({ agentId: 'faisal', vendor: 'v-two' });
+    expect(lastArg(perf.useChatTimings)).toMatchObject({ agentId: 'faisal', vendor: 'v-two' });
+    expect(lastArg(perf.useCsatByConversation)).toMatchObject({
+      agentId: 'faisal',
+      vendor: 'v-two',
+    });
 
     await user.click(screen.getByRole('tab', { name: 'Tickets' }));
-    expect(lastArg(perf.useTicketPerformance)).toEqual({ agentId: 'faisal', vendor: 'v-two' });
+    expect(lastArg(perf.useTicketPerformance)).toMatchObject({
+      agentId: 'faisal',
+      vendor: 'v-two',
+    });
     await user.click(screen.getByRole('tab', { name: 'Coupons' }));
-    expect(lastArg(perf.useCouponPerformance)).toEqual({ agentId: 'faisal', vendor: 'v-two' });
+    expect(lastArg(perf.useCouponPerformance)).toMatchObject({
+      agentId: 'faisal',
+      vendor: 'v-two',
+    });
     view.unmount();
   });
 });
