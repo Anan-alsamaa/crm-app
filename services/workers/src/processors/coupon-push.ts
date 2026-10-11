@@ -150,6 +150,40 @@ export const YIJI_COMPENSATION_COUPON_PATH_FORBIDDEN = '/api/CouponUser/AddCompe
 export const YIJI_UNASSIGNED_COUPON_PATH = '/api/Coupon/AddCoupon';
 
 /**
+ * Attach an EXISTING coupon to a customer by its code (verified reachable for
+ * our account, 2026-10-02). Used only to finish a grant whose create step
+ * timed out after Yiji had in fact created the coupon (2026-10-11).
+ */
+export const YIJI_ATTACH_BY_CODE_PATH = '/api/CouponUser/AddCouponToUserByCode';
+
+/**
+ * Is `code` this coupon's alone? An admin can now EDIT a code (2026-10-11), so
+ * "already exists" could name ANOTHER coupon; that one is never attached here.
+ * A failed read answers no: the refusal is then recorded as before.
+ */
+async function codeIsOnlyThisRow(
+  directus: YijiDirectusClient,
+  id: string,
+  code: string,
+): Promise<boolean> {
+  try {
+    const others = (await directus.request(
+      readItems(
+        'coupon_approvals' as never,
+        {
+          filter: { _and: [{ coupon_code: { _eq: code } }, { id: { _neq: id } }] },
+          fields: ['id'],
+          limit: 1,
+        } as never,
+      ),
+    )) as unknown[];
+    return Array.isArray(others) && others.length === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * WHICH PLATFORM GRANTS THE COUPON, KEYED BY VENDOR.
  *
  * One entry today, and deliberately so: Yiji is the only platform that issues
@@ -1749,11 +1783,47 @@ export async function processCouponPushJob(
        * fault that made 88 coupons unredeemable — this path would have made
        * the next one too.
        */
-      const created = await postCoupon<YijiCouponResponse>(
-        YIJI_UNASSIGNED_COUPON_PATH,
-        yijiCouponPayload(row, order, { redirectCouponsTo, withheld: true }),
-        headers,
-      );
+      let created: YijiCouponResponse;
+      try {
+        created = await postCoupon<YijiCouponResponse>(
+          YIJI_UNASSIGNED_COUPON_PATH,
+          yijiCouponPayload(row, order, { redirectCouponsTo, withheld: true }),
+          headers,
+        );
+      } catch (err) {
+        /*
+         * "COUPON WITH CODE ... ALREADY EXISTS" = OUR EARLIER ATTEMPT WORKED
+         * (OPS-WB8WVPSF, OPS-MRNE7C2G, 2026-10-11). Yiji was slow, our 6 s
+         * timeout fired after it had CREATED the coupon, and the retry was
+         * refused - so the code existed on Yiji and the customer never got it.
+         * When the code is this row's alone, attach the existing coupon BY
+         * CODE, and believe it only once the customer's coupons show it.
+         */
+        if (
+          isYijiRefused(err) &&
+          /already exists/i.test(describeRefusal(err.body)) &&
+          row.coupon_code &&
+          (await codeIsOnlyThisRow(directus, id, row.coupon_code))
+        ) {
+          logger.warn(
+            { id, code: row.coupon_code },
+            'coupon already exists on yiji (an earlier attempt created it) — attaching it by code',
+          );
+          try {
+            await postCoupon<unknown>(
+              `${YIJI_ATTACH_BY_CODE_PATH}/${encodeURIComponent(compensationUserId)}/${encodeURIComponent(row.coupon_code)}`,
+              {},
+              headers,
+            );
+          } catch (attachErr) {
+            if (!isYijiRefused(attachErr)) throw attachErr; // an outage: retried
+          }
+          if (await recordIfActuallyHeld('created by an earlier attempt; attached by code')) {
+            return 'delivered';
+          }
+        }
+        throw err;
+      }
       const couponId = readNewCouponId(created);
       if (couponId == null) {
         /* Yiji declined to create it. Recorded, not retried: the same body

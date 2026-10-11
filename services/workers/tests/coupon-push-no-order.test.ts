@@ -8,6 +8,7 @@ import {
   YIJI_COMPENSATION_COUPON_PATH,
   YIJI_COMPENSATION_COUPON_PATH_FORBIDDEN,
   YIJI_UNASSIGNED_COUPON_PATH,
+  YIJI_ATTACH_BY_CODE_PATH,
   type CouponApprovalRow,
 } from '../src/processors/coupon-push.js';
 
@@ -452,5 +453,74 @@ describe('yijiCouponPayload shape by path', () => {
       return rest;
     };
     expect(strip(bare)).toEqual(strip(wrapped.couponUser));
+  });
+});
+
+/*
+ * "COUPON WITH CODE ... ALREADY EXISTS" (OPS-WB8WVPSF, OPS-MRNE7C2G, 2026-10-11).
+ * The first attempt's AddCoupon timed out AFTER Yiji created the coupon; the
+ * retry was refused and the customer never received it. The existing coupon is
+ * now attached BY CODE - and believed only once the customer's coupons show it.
+ */
+describe('a coupon an earlier attempt already created', () => {
+  const exists = () =>
+    Object.assign(new Error('refused'), {
+      name: 'YijiRefusedError',
+      status: 400,
+      body: {
+        result: 2,
+        exceptionMessage: "Message: Coupon with Code 'OPS-433RHNBB' already exists!",
+      },
+    });
+
+  function setup(opts: { otherRowHasCode?: boolean; held?: boolean } = {}) {
+    const base = deps();
+    base.directus.request.mockImplementation(async (arg: unknown) => {
+      const a = arg as Record<string, unknown>;
+      if ('payload' in a) {
+        base.patches.push(a.payload);
+        return {};
+      }
+      // The uniqueness read (readItems) vs the row read (readItem).
+      if ('opts' in a && !('id' in a)) return opts.otherRowHasCode ? [{ id: 'other' }] : [];
+      return NO_ORDER_ROW;
+    });
+    base.postCoupon.mockImplementation(async (path: string) => {
+      if (path === YIJI_UNASSIGNED_COUPON_PATH) throw exists();
+      return {};
+    });
+    const findUserCoupon = vi.fn(async () =>
+      opts.held === false ? null : { couponUserId: '21777', couponId: 73900 },
+    );
+    return {
+      ...base,
+      findUserCoupon,
+      d: { ...base.deps, findUserCoupon: findUserCoupon as never },
+    };
+  }
+
+  it('attaches it by code and records the grant Yiji shows', async () => {
+    const { d, postCoupon, patches } = setup();
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
+    expect(postCoupon.mock.calls[1]![0]).toBe(
+      `${YIJI_ATTACH_BY_CODE_PATH}/yiji-user-abc/OPS-433RHNBB`,
+    );
+    expect(patches).toContainEqual(
+      expect.objectContaining({ status: 'assigned', yiji_coupon_user_id: '21777' }),
+    );
+  });
+
+  it('never attaches when ANOTHER coupon carries that code', async () => {
+    const { d, postCoupon } = setup({ otherRowHasCode: true, held: false });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(postCoupon.mock.calls.map((c) => c[0])).not.toContainEqual(
+      expect.stringContaining(YIJI_ATTACH_BY_CODE_PATH),
+    );
+  });
+
+  it('stays refused when the customer still does not hold it after attaching', async () => {
+    const { d, patches } = setup({ held: false });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(patches).not.toContainEqual(expect.objectContaining({ status: 'assigned' }));
   });
 });
