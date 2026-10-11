@@ -91,16 +91,94 @@ export interface AuthClientOptions {
   mode?: 'cookie' | 'json' | 'session';
 }
 
+type StoredAuth = Awaited<ReturnType<AuthenticationStorage['get']>>;
+
+/** In-memory token store, used when the caller passes none (H-2 default). */
+function memoryAuthStorage(): AuthenticationStorage {
+  let value: StoredAuth = null;
+  return {
+    get: () => value,
+    set: (v) => {
+      value = v;
+    },
+  };
+}
+
+/**
+ * Did Directus REFUSE the session (it is genuinely over), rather than fail to
+ * answer? A refusal carries 400/401/403; a deploy restart, a timeout or a
+ * dropped connection carries a 5xx or no response at all.
+ */
+export function isSessionRefusal(err: unknown): boolean {
+  const status = (err as { response?: { status?: number } } | null)?.response?.status;
+  return status === 400 || status === 401 || status === 403;
+}
+
+/** Refresh this long before the access token expires. */
+const REFRESH_MARGIN_MS = 30_000;
+
 export function createAuthClient({ url, storage, mode = 'cookie' }: AuthClientOptions) {
+  const store = storage ?? memoryAuthStorage();
   const client = createDirectus(url)
     .with(
       authentication(mode, {
         credentials: 'include',
-        autoRefresh: true,
-        ...(storage ? { storage } : {}),
+        /*
+         * NO SDK TIMER (owner, 2026-10-11: "users are logged out too often").
+         * The SDK's refresh ERASES the stored session before it calls the
+         * server, so any refresh that fails for a passing reason - a Directus
+         * restart during a deploy, a dropped connection - left the agent signed
+         * out; and two refreshes at once sent the second with no token at all
+         * (the 400s on /auth/refresh). Its timer calls that refresh directly,
+         * past the guard below, so refreshing is done on demand instead.
+         */
+        autoRefresh: false,
+        storage: store,
       }),
     )
     .with(rest({ credentials: 'include' }));
+
+  /*
+   * ONE REFRESH AT A TIME, AND A FAILED ONE KEEPS THE SESSION.
+   *
+   * Every caller - the SDK's own requests included, which ask `getToken` -
+   * shares one in-flight refresh. If it fails without Directus refusing the
+   * session, the session read before the SDK erased it is put back, and the
+   * next request simply tries again. Only a refusal (400/401/403) signs out.
+   */
+  const sdkRefresh = client.refresh.bind(client);
+  let inflight: Promise<void> | null = null;
+  const safeRefresh = (): Promise<void> => {
+    if (inflight) return inflight;
+    inflight = (async () => {
+      const saved = await store.get();
+      try {
+        await sdkRefresh();
+      } catch (err) {
+        if (!isSessionRefusal(err) && saved?.refresh_token) await store.set(saved);
+        throw err;
+      }
+    })().finally(() => {
+      inflight = null;
+    });
+    return inflight;
+  };
+  const tokenNow = async (): Promise<string | null> => {
+    const data = await store.get();
+    const expiresAt = typeof data?.expires_at === 'number' ? data.expires_at : null;
+    const stale =
+      !data?.access_token || expiresAt === null || expiresAt < Date.now() + REFRESH_MARGIN_MS;
+    if (stale && (data?.refresh_token || mode !== 'json')) {
+      try {
+        await safeRefresh();
+      } catch {
+        /* a passing failure keeps the session; a refusal has cleared it */
+      }
+    }
+    return (await store.get())?.access_token ?? null;
+  };
+  // The SDK's REST layer authenticates every request through `this.getToken()`.
+  Object.assign(client, { refresh: safeRefresh, getToken: tokenNow });
 
   async function me(): Promise<AuthUser | null> {
     // Identity + role name is the reliable core and MUST load for a valid
@@ -165,10 +243,20 @@ export function createAuthClient({ url, storage, mode = 'cookie' }: AuthClientOp
       await client.login(email, password);
     },
     async logout(): Promise<void> {
-      await client.logout();
+      try {
+        await client.logout();
+      } finally {
+        // Signed out here even when the server could not be told.
+        await store.set({
+          access_token: null,
+          refresh_token: null,
+          expires: null,
+          expires_at: null,
+        });
+      }
     },
     async refresh(): Promise<void> {
-      await client.refresh();
+      await safeRefresh();
     },
     /**
      * Current access token (for authenticating the realtime socket).
@@ -187,14 +275,7 @@ export function createAuthClient({ url, storage, mode = 'cookie' }: AuthClientOp
      * resolves null and is treated as expired exactly as before.
      */
     async getToken(): Promise<string | null> {
-      const current = await client.getToken();
-      if (current) return current;
-      try {
-        await client.refresh();
-      } catch {
-        return null; // genuinely signed out — the caller treats this as expiry
-      }
-      return client.getToken();
+      return tokenNow();
     },
     /** Current user with role name + computed admin_access, or null if not authenticated. */
     me,
@@ -239,9 +320,13 @@ export function createAuthClient({ url, storage, mode = 'cookie' }: AuthClientOp
      */
     async restore(): Promise<AuthUser | null> {
       try {
-        await client.refresh();
-      } catch {
-        return null;
+        await safeRefresh();
+      } catch (err) {
+        /* Directus refused the session: genuinely signed out. A PASSING
+           failure (a deploy restart) is not a sign-out: the session is kept
+           and the identity read below decides. */
+        if (isSessionRefusal(err) || (mode === 'json' && !(await store.get())?.refresh_token))
+          return null;
       }
       return me();
     },

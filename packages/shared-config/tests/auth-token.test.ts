@@ -19,17 +19,45 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * "signed out". Only when the refresh itself fails is the session really gone.
  */
 
-const { createDirectus, refresh, getToken } = vi.hoisted(() => {
-  const refresh = vi.fn();
-  const getToken = vi.fn();
-  const client: Record<string, unknown> = { refresh, getToken };
-  client.with = () => client;
-  return { createDirectus: vi.fn(() => client), refresh, getToken };
+/*
+ * The SDK client is simulated faithfully where it matters: its `refresh`
+ * ERASES the stored session before calling the server (as @directus/sdk 17
+ * does), then stores the new tokens - or throws, leaving the session erased.
+ */
+const sdk = vi.hoisted(() => ({
+  storage: null as null | {
+    get: () => unknown;
+    set: (v: unknown) => unknown;
+  },
+  server: vi.fn(),
+}));
+const { createDirectus, refresh, logout } = vi.hoisted(() => {
+  const refresh = vi.fn(async () => {
+    const before = (await sdk.storage!.get()) as { refresh_token?: string | null } | null;
+    await sdk.storage!.set({
+      access_token: null,
+      refresh_token: null,
+      expires: null,
+      expires_at: null,
+    });
+    const next = await sdk.server(before?.refresh_token ?? null);
+    await sdk.storage!.set({ ...next, expires_at: Date.now() + (next.expires as number) });
+  });
+  const logout = vi.fn(async () => undefined);
+  const client: Record<string, unknown> = { refresh, logout, getToken: vi.fn() };
+  client.with = (plugin: (c: unknown) => unknown) => {
+    plugin(client);
+    return client;
+  };
+  return { createDirectus: vi.fn(() => client), refresh, logout };
 });
 
 vi.mock('@directus/sdk', () => ({
   createDirectus,
-  authentication: () => (c: unknown) => c,
+  authentication: (_mode: string, opts: { storage: typeof sdk.storage }) => (c: unknown) => {
+    sdk.storage = opts.storage;
+    return c;
+  },
   rest: () => (c: unknown) => c,
   readMe: () => ({}),
   passwordRequest: () => ({}),
@@ -38,59 +66,91 @@ vi.mock('@directus/sdk', () => ({
 
 import { browserAuthStorage, createAuthClient } from '../src/auth.js';
 
+const fresh = (n: number) => ({
+  access_token: `access-${n}`,
+  refresh_token: `refresh-${n}`,
+  expires: 900_000,
+});
+const refused = (status: number) => Object.assign(new Error('refused'), { response: { status } });
+
+function signedIn(expiresInMs: number) {
+  const auth = createAuthClient({ url: 'http://directus.test', mode: 'json' });
+  void sdk.storage!.set({
+    access_token: 'access-0',
+    refresh_token: 'refresh-0',
+    expires: 900_000,
+    expires_at: Date.now() + expiresInMs,
+  });
+  return auth;
+}
+
 beforeEach(() => {
-  refresh.mockReset();
-  getToken.mockReset();
+  refresh.mockClear();
+  logout.mockReset();
+  sdk.server.mockReset();
 });
 
-describe('getToken — the cold-load gap that logged agents out', () => {
-  it('returns the in-memory token when there is one, without refreshing', async () => {
-    getToken.mockResolvedValue('live-token');
-    const auth = createAuthClient({ url: 'http://directus.test' });
-
-    expect(await auth.getToken()).toBe('live-token');
-    // A perfectly good token must not trigger a network round-trip on every
-    // socket (re)connection — Socket.IO re-invokes the auth callback each time.
+describe('getToken - the session survives everything but a real refusal', () => {
+  it('returns a live token without refreshing', async () => {
+    const auth = signedIn(10 * 60_000);
+    expect(await auth.getToken()).toBe('access-0');
     expect(refresh).not.toHaveBeenCalled();
   });
 
-  it('REFRESHES when memory is empty, which is the state right after a reload', async () => {
-    // First read: nothing in memory (fresh page). After the refresh lands the
-    // SDK holds a real token.
-    getToken.mockResolvedValueOnce(null).mockResolvedValueOnce('restored-token');
-    refresh.mockResolvedValue(undefined);
-    const auth = createAuthClient({ url: 'http://directus.test' });
-
-    expect(await auth.getToken()).toBe('restored-token');
-    expect(refresh).toHaveBeenCalledTimes(1);
+  it('refreshes a token about to expire', async () => {
+    sdk.server.mockResolvedValue(fresh(1));
+    const auth = signedIn(5_000);
+    expect(await auth.getToken()).toBe('access-1');
+    expect(sdk.server).toHaveBeenCalledWith('refresh-0');
   });
 
-  it('still reports null when the refresh itself fails — genuinely signed out', async () => {
-    getToken.mockResolvedValue(null);
-    refresh.mockRejectedValue(new Error('no session cookie'));
-    const auth = createAuthClient({ url: 'http://directus.test' });
+  /* 2026-10-11: two callers at once made two refreshes; the second found the
+     session already erased and sent NO token (the 400s on /auth/refresh). */
+  it('makes ONE refresh for many callers at once', async () => {
+    sdk.server.mockImplementation(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+      return fresh(2);
+    });
+    const auth = signedIn(-1);
+    const tokens = await Promise.all([auth.getToken(), auth.getToken(), auth.getToken()]);
+    expect(tokens).toEqual(['access-2', 'access-2', 'access-2']);
+    expect(sdk.server).toHaveBeenCalledTimes(1);
+  });
 
-    // The caller treats null as expiry and sends them to the login screen,
-    // which is correct HERE and was wrong for the race above.
+  /* 2026-10-11: a refresh during a Directus restart (deploy) signed agents out. */
+  it('KEEPS the session when the refresh fails without a refusal, and retries next time', async () => {
+    sdk.server.mockRejectedValueOnce(refused(503)).mockResolvedValueOnce(fresh(3));
+    const auth = signedIn(-1);
+    await auth.getToken();
+    expect((sdk.storage!.get() as { refresh_token: string }).refresh_token).toBe('refresh-0');
+    expect(await auth.getToken()).toBe('access-3');
+  });
+
+  it('signs out when Directus refuses the session', async () => {
+    sdk.server.mockRejectedValue(refused(401));
+    const auth = signedIn(-1);
     expect(await auth.getToken()).toBeNull();
+    expect((sdk.storage!.get() as { refresh_token: string | null }).refresh_token).toBeNull();
+  });
+
+  it('restore keeps a session through a passing failure, drops it on a refusal', async () => {
+    sdk.server.mockRejectedValueOnce(refused(502));
+    const kept = signedIn(-1);
+    await kept.restore();
+    expect((sdk.storage!.get() as { refresh_token: string }).refresh_token).toBe('refresh-0');
+    sdk.server.mockRejectedValueOnce(refused(401));
+    const gone = signedIn(-1);
+    expect(await gone.restore()).toBeNull();
+  });
+
+  it('logout clears the session even when the server cannot be reached', async () => {
+    logout.mockRejectedValue(new Error('network'));
+    const auth = signedIn(10 * 60_000);
+    await expect(auth.logout()).rejects.toThrow('network');
+    expect((sdk.storage!.get() as { refresh_token: string | null }).refresh_token).toBeNull();
   });
 });
 
-/*
- * TWO AGENTS, ONE MACHINE.
- *
- * The session store must be scoped to the TAB. When it was `localStorage` —
- * shared by every tab on the origin — opening the portal in a second tab
- * adopted whoever the first tab was signed in as, and signing in as somebody
- * else there overwrote the shared key so the first tab became the second agent
- * on its next refresh (owner, 2026-09-16). One desk, two people, each
- * hijacking the other.
- *
- * These pin the property that matters rather than the API used to get it: two
- * stores that do not see each other keep two identities apart, and one shared
- * store does not. The second case is the bug, written down so it cannot come
- * back quietly.
- */
 describe('a signed-in identity belongs to the tab, not the browser', () => {
   /** A Web Storage stand-in. One instance per "tab". */
   const makeStore = () => {
