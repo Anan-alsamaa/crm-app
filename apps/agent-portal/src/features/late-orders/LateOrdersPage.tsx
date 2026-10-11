@@ -1,6 +1,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { playMessageBeep } from '../../lib/sound.js';
 import { createItem } from '@directus/sdk';
 import {
   Button,
@@ -32,6 +33,7 @@ import {
 import {
   lateOrderComplaintType,
   businessDay,
+  parseYijiTimestamp,
   businessDayRange,
   matchStore,
   normalizePhone,
@@ -68,6 +70,12 @@ import {
   lateOrderTicket,
   FALLBACK_THRESHOLD,
 } from './api.js';
+
+/** Yiji stamps are Riyadh wall-clock with no zone; as a real instant for display. */
+function placedIso(raw: string): string {
+  const ms = parseYijiTimestamp(raw);
+  return Number.isFinite(ms) ? new Date(ms).toISOString() : raw;
+}
 
 /** Remembers LIVE ORDERS mode in this browser (the TV screen keeps it). */
 const LIVE_MODE_KEY = 'late-orders-live-mode';
@@ -628,7 +636,11 @@ export function LateOrdersPage() {
   /* The SAME window the queue is showing, so the decisions behind these orders
      are the ones actually fetched — a fixed 30 days left an older search with
      five empty columns and no aged-out rows at all. */
-  const decisions = useLateOrderDecisions(activeRange ?? undefined, vendorFilter || undefined);
+  const decisions = useLateOrderDecisions(
+    activeRange ?? undefined,
+    vendorFilter || undefined,
+    liveMode,
+  );
   /*
    * THE HANDLING STATE of one order: pending, commented or handled.
    *
@@ -688,8 +700,10 @@ export function LateOrdersPage() {
     const order = orderQuery.trim();
     const brand = brandQuery.trim().toLowerCase();
     return allOrders.filter((r) => {
-      // Live mode: only orders still in progress, like an order dashboard.
-      if (liveMode && !r.live) return false;
+      /* LIVE ORDERS (owner, 2026-10-11): every late order of TODAY's business
+         day that is still Pending or Commented. Once it is handled - a coupon
+         given - it drops off; the day turns at 08:00 (`showingToday`). */
+      if (liveMode && stateOf(r.orderId) === 'handled') return false;
       /*
        * TODAY MEANS TODAY'S BUSINESS DAY, not the calendar date.
        *
@@ -801,11 +815,18 @@ export function LateOrdersPage() {
   useEffect(() => {
     const now = Date.now();
     const initial = firstSeen.current.size === 0;
+    let arrived = 0;
     for (const r of queue.data?.rows ?? []) {
       // The first load is the baseline: nothing on it is "new".
-      if (!firstSeen.current.has(r.orderId)) firstSeen.current.set(r.orderId, initial ? 0 : now);
+      if (!firstSeen.current.has(r.orderId)) {
+        firstSeen.current.set(r.orderId, initial ? 0 : now);
+        if (!initial) arrived += 1;
+      }
     }
-  }, [queue.data]);
+    /* A BEEP FOR EVERY NEW LATE ORDER while live (owner, 2026-10-11) - the
+       portal's own message sound, so the Sound toggle in the top bar mutes it. */
+    if (arrived > 0 && liveMode) playMessageBeep();
+  }, [queue.data, liveMode]);
   const isNew = (orderId: string) => {
     const at = firstSeen.current.get(orderId) ?? 0;
     return liveMode && at > 0 && Date.now() - at < NEW_FOR_MS;
@@ -1153,6 +1174,52 @@ export function LateOrdersPage() {
       remainder is measured by flex rather than guessed.
     */
     <div className="flex h-full flex-col overflow-hidden">
+      {/* PINNED, outside the sideways scroll (owner, 2026-10-11): the Live
+          button sat at the far right of a table wider than the screen. */}
+      <PageHeader
+        className="px-4 pt-4"
+        title={t('lateOrders.title', { defaultValue: 'Late orders' })}
+        subtitle={t('lateOrders.subtitle', {
+          minutes: threshold,
+          defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
+        })}
+        actions={
+          <button
+            type="button"
+            onClick={() => setLiveMode(!liveMode)}
+            aria-pressed={liveMode}
+            /* Fixed colours, not theme tokens: green ON, red OFF, always. */
+            style={{ backgroundColor: liveMode ? '#16a34a' : '#dc2626' }}
+            title={
+              liveMode
+                ? t('lateOrders.liveOnHint', {
+                    defaultValue:
+                      "Showing today's late orders still Pending or Commented, refreshed every 10 seconds; an order leaves once a coupon is given. Click to turn off.",
+                  })
+                : t('lateOrders.liveOffHint', {
+                    defaultValue: 'Turn on to show live late orders as they arrive.',
+                  })
+            }
+            className={cn(
+              'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white shadow-sm',
+              'transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+              liveMode ? 'hover:brightness-95' : 'hover:brightness-95',
+            )}
+          >
+            <span
+              aria-hidden
+              className={cn(
+                'h-2 w-2 rounded-full bg-white',
+                liveMode && 'motion-safe:animate-pulse',
+              )}
+            />
+
+            {liveMode
+              ? t('lateOrders.liveOn', { defaultValue: 'Live orders: ON' })
+              : t('lateOrders.liveOff', { defaultValue: 'Live orders: OFF' })}
+          </button>
+        }
+      />
       {/*
         THE SCROLLPORT. `flex-1 overflow-auto`, and NO vertical padding: `sticky
         top-0` pins to this element's CONTENT box, so padding here would leave a
@@ -1170,47 +1237,6 @@ export function LateOrdersPage() {
             never narrower than the viewport, so a wide table stretches this box
             and scrolls it, instead of spilling past the card's edge. */}
         <div className="w-max min-w-full space-y-4 py-4">
-          <PageHeader
-            title={t('lateOrders.title', { defaultValue: 'Late orders' })}
-            subtitle={t('lateOrders.subtitle', {
-              minutes: threshold,
-              defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
-            })}
-            actions={
-              <button
-                type="button"
-                onClick={() => setLiveMode(!liveMode)}
-                aria-pressed={liveMode}
-                title={
-                  liveMode
-                    ? t('lateOrders.liveOnHint', {
-                        defaultValue:
-                          "Showing today's orders still in progress, refreshed every 10 seconds. Click to turn off.",
-                      })
-                    : t('lateOrders.liveOffHint', {
-                        defaultValue: 'Turn on to show live late orders as they arrive.',
-                      })
-                }
-                className={cn(
-                  'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold text-white shadow-sm',
-                  'transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-                  liveMode ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700',
-                )}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    'h-2 w-2 rounded-full bg-white',
-                    liveMode && 'motion-safe:animate-pulse',
-                  )}
-                />
-                {liveMode
-                  ? t('lateOrders.liveOn', { defaultValue: 'Live orders: ON' })
-                  : t('lateOrders.liveOff', { defaultValue: 'Live orders: OFF' })}
-              </button>
-            }
-          />
-
           {/*
         Order id, then dates, then brand/branch — the owner's order (2026-09-21),
         which is also the order an agent narrows in: they usually have a number.
@@ -1556,14 +1582,15 @@ export function LateOrdersPage() {
                           {/* The decision's own timestamp and business day. A
                               pending order has neither — nothing has been
                               decided — and a dash says so honestly. */}
+                          {/* WHEN THE ORDER WAS PLACED and its business day
+                              (owner, 2026-10-11: "creation time and business day
+                              are empty"). They read the decision, which a pending
+                              order does not have yet; the order always has both. */}
                           <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
-                            {decisions.data?.get(row.orderId)?.date_created
-                              ? formatDateTime(decisions.data.get(row.orderId)!.date_created!)
-                              : '-'}
+                            {row.placedAt ? formatDateTime(placedIso(row.placedAt)) : '-'}
                           </Td>
                           <Td className="whitespace-nowrap tabular-nums text-muted-foreground">
-                            {businessDay(decisions.data?.get(row.orderId)?.date_created ?? null) ??
-                              '-'}
+                            {businessDay(row.placedAt) ?? '-'}
                           </Td>
                           <Td className="whitespace-nowrap font-medium tabular-nums">
                             {row.orderId}

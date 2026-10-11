@@ -150,8 +150,11 @@ export function useLateOrderDecisions(
   range?: { from: string; to: string },
   /** The chosen vendor's CRM id (MV-7); unset = every vendor, the filter unchanged. */
   vendorId?: string,
+  /** LIVE ORDERS mode: a coupon given anywhere drops the order off within 10 s. */
+  live = false,
 ) {
   return useQuery({
+    refetchInterval: live ? 10_000 : false,
     /* The range is IN THE KEY. Without it a search for last week would be
        served the cached answer for today and quietly show the wrong rows. */
     queryKey: [
@@ -161,7 +164,7 @@ export function useLateOrderDecisions(
       range?.to ?? null,
       ...(vendorId ? [vendorId] : []),
     ],
-    staleTime: 15_000,
+    staleTime: live ? 5_000 : 15_000,
     queryFn: async (): Promise<Map<string, LateOrderDecisionRow>> => {
       const dateFilter = range
         ? {

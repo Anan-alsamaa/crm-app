@@ -893,7 +893,7 @@
   "lateOrders": {
     "liveOn": "Live orders: ON",
     "liveOff": "Live orders: OFF",
-    "liveOnHint": "Showing today's orders still in progress, refreshed every 10 seconds. Click to turn off.",
+    "liveOnHint": "Showing today's late orders still Pending or Commented, refreshed every 10 seconds; an order leaves once a coupon is given. Click to turn off.",
     "liveOffHint": "Turn on to show live late orders as they arrive.",
     "new": "New"
   }

@@ -182,7 +182,7 @@ describe('late-orders queue', () => {
       /useLateOrders\(\s*activeRange,\s*true,\s*showingToday,\s*vendorFilter \|\| undefined,\s*liveMode,?\s*\)/,
     );
     expect(page).toMatch(
-      /useLateOrderDecisions\(activeRange \?\? undefined, vendorFilter \|\| undefined\)/,
+      /useLateOrderDecisions\(\s*activeRange \?\? undefined,\s*vendorFilter \|\| undefined,\s*liveMode,?\s*\)/,
     );
     expect(page).toMatch(
       /useOrderEventTimes\(\s*paged\.map\(\(r\) => r\.orderId\),\s*vendorFilter \|\| undefined,?\s*\)/,
