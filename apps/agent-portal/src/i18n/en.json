@@ -471,6 +471,7 @@
     "searchCount": "{{shown}} of {{total}} tickets",
     "orderToggle": "Order {{orderId}} details",
     "chatNotVisible": "This chat is assigned to another agent, so its files are not shown here.",
+    "openChat": "Open chat",
     "conversationNotVisible": "chat assigned to another agent",
     "waReply": "WhatsApp the customer",
     "waHint": "Opens the drafted message and records that you made the contact.",

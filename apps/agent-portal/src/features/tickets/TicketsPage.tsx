@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeftIcon,
@@ -11,6 +12,7 @@ import {
   formatDate,
   formatDateTime,
   formatRelative,
+  InboxIcon,
   Input,
   MeterBar,
   Pill,
@@ -46,6 +48,7 @@ import {
   useAddTicketAttachment,
   useRemoveTicketAttachment,
   useConversationAttachments,
+  canReadConversation,
   useCanReadConversation,
   useAttachExistingFileToTicket,
   type ChatAttachment,
@@ -150,6 +153,29 @@ export function TicketsPage() {
   const { t } = useTranslation();
   const { user, isOwner } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  /*
+   * "OPEN CHAT" ON EVERY TICKET (owner, 2026-10-11).
+   *
+   * Checked on click, not per row: a ticket and its chat are scoped separately
+   * (a handover can leave the ticket owner without the chat), and a link that
+   * lands on an empty inbox reads as a broken app. One read when clicked, from
+   * the same cache the detail panel's link uses.
+   */
+  const openChat = async (conversationId: string) => {
+    const ok = await queryClient
+      .fetchQuery({
+        queryKey: ['can-read-conversation', conversationId],
+        staleTime: 60_000,
+        queryFn: () => canReadConversation(conversationId),
+      })
+      .catch(() => true);
+    if (ok) navigate(`/?conv=${encodeURIComponent(conversationId)}`);
+    else
+      toast(
+        t('tickets.conversationNotVisible', { defaultValue: 'chat assigned to another agent' }),
+      );
+  };
   // Single-column below the desktop breakpoint: the list and the detail swap
   // places rather than shrinking the rail to something unreadable.
   const isDesktop = useIsDesktop();
@@ -555,14 +581,14 @@ export function TicketsPage() {
                     const active = selected === r.id;
                     const overdue = isOverdue(r);
                     return (
-                      <li key={r.id}>
+                      <li key={r.id} className="flex items-stretch gap-1">
                         <button
                           type="button"
                           onClick={() => setSelected(r.id)}
                           className={cn(
                             // The inbox's card grammar: a rounded surface that
                             // LIFTS on hover, rather than a strip that tints.
-                            'group relative flex min-h-14 w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-start',
+                            'group relative flex min-h-14 min-w-0 flex-1 items-center gap-3 rounded-2xl px-3 py-2.5 text-start',
                             'transition-[background-color,box-shadow] duration-base ease-out',
                             active
                               ? 'bg-primary/10 shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.5)] ring-1 ring-inset ring-primary/25'
@@ -632,6 +658,19 @@ export function TicketsPage() {
                             </div>
                           </div>
                         </button>
+                        {/* A sibling, not inside the card: a button cannot
+                            hold another button. Only for tickets with a chat. */}
+                        {r.conversation && (
+                          <button
+                            type="button"
+                            onClick={() => void openChat(r.conversation!)}
+                            title={t('tickets.openChat', { defaultValue: 'Open chat' })}
+                            aria-label={t('tickets.openChat', { defaultValue: 'Open chat' })}
+                            className="flex w-9 shrink-0 items-center justify-center rounded-2xl text-muted-foreground transition-colors duration-fast ease-out hover:bg-card hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                          >
+                            <InboxIcon className="h-4 w-4" />
+                          </button>
+                        )}
                       </li>
                     );
                   })}

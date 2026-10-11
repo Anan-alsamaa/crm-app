@@ -703,21 +703,24 @@ export interface ChatAttachment {
  * One cheap id lookup gives the caller that distinction, so a panel can say
  * which of the two it is instead of quietly asserting the friendlier one.
  */
+/** Whether the signed-in agent may open this chat (a row comes back only if so). */
+export async function canReadConversation(conversationId: string): Promise<boolean> {
+  const rows = (await directus.request(
+    readItems('conversations', {
+      filter: { id: { _eq: conversationId } },
+      fields: ['id'],
+      limit: 1,
+    }),
+  )) as Array<{ id: string }>;
+  return rows.length > 0;
+}
+
 export function useCanReadConversation(conversationId: string | null) {
   return useQuery({
     enabled: !!conversationId,
     queryKey: ['can-read-conversation', conversationId],
     staleTime: 60_000,
-    queryFn: async () => {
-      const rows = (await directus.request(
-        readItems('conversations', {
-          filter: { id: { _eq: conversationId } },
-          fields: ['id'],
-          limit: 1,
-        }),
-      )) as Array<{ id: string }>;
-      return rows.length > 0;
-    },
+    queryFn: () => canReadConversation(conversationId!),
   });
 }
 

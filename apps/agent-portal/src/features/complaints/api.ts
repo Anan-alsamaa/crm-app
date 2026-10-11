@@ -40,6 +40,8 @@ export interface AgentComplaintRow extends ComplaintReportRow {
   firstResponseDueAt: string | null;
   /** The ticket's vendor id (MV-4) — badge + filter when 2+ vendors are live. */
   vendor?: string | null;
+  /** The chat this ticket came from, for the row's "Open chat" button. */
+  conversation: string | null;
 }
 
 interface TicketRow {
@@ -71,6 +73,7 @@ interface TicketRow {
   store_snapshot: StoreSnapshot | null;
   contact: { name: string | null; phone: string | null } | null;
   vendor?: string | { id?: string | null } | null;
+  conversation?: string | null;
 }
 
 /** Numeric cell that tolerates the sheet's `-`, `""` and `"102.85 SR"`. */
@@ -117,6 +120,8 @@ const FIELDS = [
   { contact: ['name', 'phone'] },
   // Whose customer (MV-4). `tickets.vendor` predates MV-1, so it is safe here.
   'vendor',
+  // The chat behind the ticket: each row offers "Open chat" (owner, 2026-10-11).
+  'conversation',
 ] as const;
 
 /**
@@ -211,6 +216,7 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
     subject: t.subject ?? '',
     firstRespondedAt: t.first_responded_at ?? null,
     firstResponseDueAt: t.first_response_due_at ?? null,
+    conversation: t.conversation ?? null,
   };
 }
 
