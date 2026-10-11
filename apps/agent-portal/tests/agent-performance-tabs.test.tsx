@@ -334,7 +334,8 @@ describe('Agent performance — search', () => {
       expect(chatRows()).toHaveLength(2);
       await user.type(screen.getByRole('searchbox', { name: 'Search' }), typed);
       await waitFor(() => expect(chatRows()).toHaveLength(1));
-      expect(within(chatRows()[0]!).getByText('Nora')).toBeInTheDocument();
+      // The Customer column shows the PHONE, never the name (owner, 2026-10-11).
+      expect(within(chatRows()[0]!).getByText('0501112222')).toBeInTheDocument();
     },
   );
 
@@ -347,7 +348,7 @@ describe('Agent performance — search', () => {
     await user.clear(box);
     await user.type(box, 'missing item');
     // Waits on the CONTENT: the previous search also left one row.
-    await waitFor(() => expect(within(chatRows()[0]!).getByText('Ali')).toBeInTheDocument());
+    await waitFor(() => expect(within(chatRows()[0]!).getByText('0559998888')).toBeInTheDocument());
     expect(chatRows()).toHaveLength(1);
   });
 

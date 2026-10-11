@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { normalizePhone } from '@yiji/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { canReadConversation } from '../tickets/api.js';
 import { useTranslation } from 'react-i18next';
@@ -966,8 +967,15 @@ export function AgentPerformancePage() {
                                 )}
                               </td>
                               <td className="px-4 py-2.5 text-muted-foreground">
-                                <span className="block max-w-[12rem] truncate">
-                                  {chat.customer ??
+                                {/* The PHONE NUMBER, always (owner, 2026-10-11) -
+                                    never the name, so every row reads the same way
+                                    and can be matched to the customer directly. */}
+                                <span
+                                  className="block max-w-[12rem] truncate tabular-nums"
+                                  dir="ltr"
+                                >
+                                  {(chat.customerPhone && normalizePhone(chat.customerPhone)) ||
+                                    chat.customerPhone ||
                                     t('performance.unknownCustomer', { defaultValue: 'Customer' })}
                                 </span>
                               </td>
