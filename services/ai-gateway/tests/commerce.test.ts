@@ -177,6 +177,7 @@ describe('commerce proxy', () => {
       await registerCommerceRoutes(a, {
         directus,
         connectors: createEnvConnectorRegistry({
+          vendorsColdRetryDelaysMs: [],
           yiji: { client: {} },
           loadVendors: async () => {
             throw new Error('403 FORBIDDEN on vendors');

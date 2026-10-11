@@ -43,6 +43,8 @@ import {
   signWebhook,
   vendorSecretEnvNames,
 } from './lib/vendor-checks.mjs';
+import { installRetryingFetch } from './lib/retry-fetch.mjs';
+installRetryingFetch();
 const API = (process.env.API ?? '').replace(/\/$/, '');
 const ENV = process.env.ENV ?? 'staging';
 if (!API || !process.env.ADMIN_EMAIL || !process.env.ADMIN_PASSWORD) {
@@ -193,7 +195,10 @@ for (const [id, col, fields] of FIELD_QUERIES)
     /* The prod check account cannot read the AI log (v1.41.0 failed on this
        alone); the AI service's own grant is checked separately below. */
     if (col === 'ai_calls' && r.status === 403)
-      return { ok: true, detail: 'check account may not read ai_calls; table verified by the grant check' };
+      return {
+        ok: true,
+        detail: 'check account may not read ai_calls; table verified by the grant check',
+      };
     return {
       ok: r.status === 200,
       detail: r.status === 200 ? '' : `HTTP ${r.status} ${r.error ?? ''}`,
@@ -254,10 +259,15 @@ await check('EMA-28', 'chat gateway may read quick replies', async () => {
   });
   if (convs.status !== 200) return { ok: false, detail: `conversations HTTP ${convs.status}` };
   const ids = (convs.data ?? []).map((c) => c.id);
-  if (!ids.length) return { ok: true, detail: 'no customer chat in the last day — nothing to prove' };
+  if (!ids.length)
+    return { ok: true, detail: 'no customer chat in the last day — nothing to prove' };
   const msgs = await items('messages', {
     filter: JSON.stringify({
-      _and: [{ conversation: { _in: ids } }, { sender_type: { _eq: 'agent' } }, { sender_user: { _null: true } }],
+      _and: [
+        { conversation: { _in: ids } },
+        { sender_type: { _eq: 'agent' } },
+        { sender_user: { _null: true } },
+      ],
     }),
     fields: 'conversation',
     limit: '-1',
@@ -265,7 +275,9 @@ await check('EMA-28', 'chat gateway may read quick replies', async () => {
   const welcomed = new Set((msgs.data ?? []).map((m) => m.conversation));
   // A chat whose customer has not written yet has had no reason to be welcomed.
   const wrote = await items('messages', {
-    filter: JSON.stringify({ _and: [{ conversation: { _in: ids } }, { sender_type: { _eq: 'customer' } }] }),
+    filter: JSON.stringify({
+      _and: [{ conversation: { _in: ids } }, { sender_type: { _eq: 'customer' } }],
+    }),
     fields: 'conversation',
     limit: '-1',
   });
@@ -428,21 +440,31 @@ async function yijiHeldBy(row) {
   const orderId = row.order_id ?? row.ticket?.order_id;
   let userId = null;
   if (orderId) {
-    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, { headers: YH });
+    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderAsync/${orderId}`, {
+      headers: YH,
+    });
     userId = o.ok ? ((await o.json())?.userId ?? null) : null;
   }
   const phone = plusPhone(row)?.slice(1);
   if (!userId && phone) {
-    const r = await fetch(`${Y}/api/User/GetfilteredCustomers?PhoneNumber=${phone}&PageSize=5`, { headers: YH });
+    const r = await fetch(`${Y}/api/User/GetfilteredCustomers?PhoneNumber=${phone}&PageSize=5`, {
+      headers: YH,
+    });
     const list = r.ok ? await r.json() : [];
-    userId = (list ?? []).find((u) => String(u.phoneNumber ?? '').replace(/\D/g, '') === phone)?.id ?? null;
+    userId =
+      (list ?? []).find((u) => String(u.phoneNumber ?? '').replace(/\D/g, '') === phone)?.id ??
+      null;
   }
   if (!userId) return { error: 'customer not found on Yiji' };
-  const r = await fetch(`${Y}/api/CouponUser/GetCouponByUser/${userId}?PageNumber=1&PageSize=500`, { headers: YH });
+  const r = await fetch(`${Y}/api/CouponUser/GetCouponByUser/${userId}?PageNumber=1&PageSize=500`, {
+    headers: YH,
+  });
   const list = r.ok ? await r.json() : [];
   const held = (list ?? []).find((x) => x.couponCode === row.coupon_code);
   if (held?.coupon) return { coupon: held.coupon };
-  return (await spentOrExpired(row, userId, YH)) ?? { error: 'the customer does NOT hold it on Yiji' };
+  return (
+    (await spentOrExpired(row, userId, YH)) ?? { error: 'the customer does NOT hold it on Yiji' }
+  );
 }
 /*
  * A COUPON THE CUSTOMER SPENT LEAVES THEIR WALLET (OPS-HL2WJQ2N, 2026-10-08).
@@ -455,19 +477,28 @@ async function yijiHeldBy(row) {
  */
 async function spentOrExpired(row, userId, YH) {
   if (row.yiji_coupon_user_id) {
-    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderByUser/${userId}`, { headers: YH });
+    const o = await fetch(`https://order.yiji-app.com/api/Order/GetOrderByUser/${userId}`, {
+      headers: YH,
+    });
     const orders = o.ok ? ((await o.json()) ?? []) : [];
     const used = orders.find((x) => String(x.couponId) === String(row.yiji_coupon_user_id));
-    if (used) return { spent: `used in order ${used.orderNumber ?? used.id} on ${String(used.creationTime).slice(0, 10)}` };
+    if (used)
+      return {
+        spent: `used in order ${used.orderNumber ?? used.id} on ${String(used.creationTime).slice(0, 10)}`,
+      };
   }
-  if (row.valid_to && Date.parse(`${String(row.valid_to).slice(0, 10)}T23:59:59+03:00`) < Date.now())
+  if (
+    row.valid_to &&
+    Date.parse(`${String(row.valid_to).slice(0, 10)}T23:59:59+03:00`) < Date.now()
+  )
     return { spent: `expired ${String(row.valid_to).slice(0, 10)}` };
   return null;
 }
 async function pipelineCheck(id, name, filter, fetchCoupon) {
   await check(id, name, async () => {
     if (!yijiToken) return 'skip';
-    if (ENV !== 'prod') return { ok: true, detail: 'production only — staging coupons go to the test handset' };
+    if (ENV !== 'prod')
+      return { ok: true, detail: 'production only — staging coupons go to the test handset' };
     const r = await items('coupon_approvals', {
       filter: JSON.stringify({ _and: [{ yiji_pushed_at: { _gte: PIPE_SINCE } }, ...filter] }),
       fields: PIPE_FIELDS,
@@ -518,7 +549,7 @@ await pipelineCheck(
 );
 await pipelineCheck(
   'COUPON-2',
-  "created but NOT assigned: on Yiji, nobody holds it, every value right",
+  'created but NOT assigned: on Yiji, nobody holds it, every value right',
   [{ delivery_excluded: { _eq: true } }, { yiji_coupon_id: { _nnull: true } }],
   async (row) => {
     const r = await fetch(`${Y}/api/Coupon/GetCoupon/id/${row.yiji_coupon_id}`, {
@@ -705,7 +736,13 @@ await check(
         .readFileSync(envFile, 'utf8')
         .split(/\r?\n/)
         .filter((l) => /^[A-Z_]+=/.test(l))
-        .map((l) => [l.slice(0, l.indexOf('=')), l.slice(l.indexOf('=') + 1).trim().replace(/^["']|["']$/g, '')]),
+        .map((l) => [
+          l.slice(0, l.indexOf('=')),
+          l
+            .slice(l.indexOf('=') + 1)
+            .trim()
+            .replace(/^["']|["']$/g, ''),
+        ]),
     );
     const token = (adm.YIJI_UPDATE_TOKEN ?? '').replace(/^Bearer\s+/i, '');
     if (!token) return 'skip';
@@ -743,10 +780,15 @@ await check(
       limit: '-1',
     });
     let top = Math.max(0, ...(ids.data ?? []).map((x) => Number(x.yiji_coupon_id) || 0));
-    if (!top) return { ok: false, detail: 'no CRM coupon records its Yiji id yet - nothing to start from' };
+    if (!top)
+      return { ok: false, detail: 'no CRM coupon records its Yiji id yet - nothing to start from' };
     for (let misses = 0, id = top + 1; misses < 15; id++) {
       const c = await byId(id);
-      if (c?.denied) return { ok: false, detail: `Yiji GetCoupon HTTP ${c.denied} - the admin token in .env.yiji-admin expired` };
+      if (c?.denied)
+        return {
+          ok: false,
+          detail: `Yiji GetCoupon HTTP ${c.denied} - the admin token in .env.yiji-admin expired`,
+        };
       if (c && c.code) {
         top = id;
         misses = 0;
@@ -762,53 +804,72 @@ await check(
       }
     }
     const want = Object.fromEntries(
-      (crm.data ?? []).map((c) => [c.coupon_code, { general: 0, public: 0, private: 1 }[String(c.coupon_type ?? '').trim().toLowerCase()]]),
+      (crm.data ?? []).map((c) => [
+        c.coupon_code,
+        { general: 0, public: 0, private: 1 }[
+          String(c.coupon_type ?? '')
+            .trim()
+            .toLowerCase()
+        ],
+      ]),
     );
     const wrong = yiji.filter((c) => want[c.code] !== undefined && c.type !== want[c.code]);
     return {
       ok: wrong.length === 0,
       detail: wrong.length
-        ? wrong.map((c) => `${c.code} (#${c.id}) Yiji type ${c.type}, agent chose ${want[c.code]}`).join('; ')
+        ? wrong
+            .map((c) => `${c.code} (#${c.id}) Yiji type ${c.type}, agent chose ${want[c.code]}`)
+            .join('; ')
         : `${yiji.filter((c) => want[c.code] !== undefined).length} CRM coupons among Yiji's newest 150 (ids ${top - 149}-${top}), all match${unreadable ? ` (${unreadable} ids unreadable)` : ''}`,
     };
   },
 );
 
 // ── no delivered coupon silently vanishes (2026-10-08) ────────────────────────
-await check('COUPON-VANISHED', 'coupons delivered in the last 7 days: held, used, expired, or removed on Yiji (listed)', async () => {
-  if (!yijiToken) return 'skip';
-  if (ENV !== 'prod') return { ok: true, detail: 'production only - staging coupons go to the test handset' };
-  /* Found 2026-10-08: 9 coupons granted 1-3 Oct had left their customers'
+await check(
+  'COUPON-VANISHED',
+  'coupons delivered in the last 7 days: held, used, expired, or removed on Yiji (listed)',
+  async () => {
+    if (!yijiToken) return 'skip';
+    if (ENV !== 'prod')
+      return { ok: true, detail: 'production only - staging coupons go to the test handset' };
+    /* Found 2026-10-08: 9 coupons granted 1-3 Oct had left their customers'
      wallets unused and unexpired (3 deleted on Yiji outright). The CRM's Yiji
      role cannot remove coupons (403), so it happened on Yiji's side.
      OWNER, 2026-10-08: that is real production behaviour - never re-grant,
      recreate or raise it with Yiji. So this REPORTS such coupons and never
      fails a release; it fails only if Yiji cannot be read at all. */
-  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
-  const r = await items('coupon_approvals', {
-    filter: JSON.stringify({
-      _and: [{ status: { _eq: 'assigned' } }, { delivery_excluded: { _neq: true } }, { yiji_pushed_at: { _gte: since } }],
-    }),
-    fields: PIPE_FIELDS,
-    limit: '-1',
-  });
-  if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
-  const gone = [];
-  let spent = 0;
-  for (const row of r.data ?? []) {
-    const got = await yijiHeldBy(row);
-    if (got.error) gone.push(`${row.coupon_code} (grant ${row.yiji_coupon_user_id}): ${got.error}`);
-    else if (got.spent) spent += 1;
-  }
-  const n = (r.data ?? []).length;
-  return {
-    ok: true,
-    detail:
-      `${n} delivered this week: ${n - spent - gone.length} held, ${spent} used or expired, ` +
-      `${gone.length} no longer in the customer's wallet (Yiji side, left as is)` +
-      (gone.length ? ` - ${gone.map((g) => g.split(' ')[0]).join(', ')}` : ''),
-  };
-});
+    const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const r = await items('coupon_approvals', {
+      filter: JSON.stringify({
+        _and: [
+          { status: { _eq: 'assigned' } },
+          { delivery_excluded: { _neq: true } },
+          { yiji_pushed_at: { _gte: since } },
+        ],
+      }),
+      fields: PIPE_FIELDS,
+      limit: '-1',
+    });
+    if (r.status !== 200) return { ok: false, detail: `CRM HTTP ${r.status}` };
+    const gone = [];
+    let spent = 0;
+    for (const row of r.data ?? []) {
+      const got = await yijiHeldBy(row);
+      if (got.error)
+        gone.push(`${row.coupon_code} (grant ${row.yiji_coupon_user_id}): ${got.error}`);
+      else if (got.spent) spent += 1;
+    }
+    const n = (r.data ?? []).length;
+    return {
+      ok: true,
+      detail:
+        `${n} delivered this week: ${n - spent - gone.length} held, ${spent} used or expired, ` +
+        `${gone.length} no longer in the customer's wallet (Yiji side, left as is)` +
+        (gone.length ? ` - ${gone.map((g) => g.split(' ')[0]).join(', ')}` : ''),
+    };
+  },
+);
 
 // ── recording (owner, 2026-10-07) ────────────────────────────────────────────
 await check('REC-SOURCE', 'every new message records where its words came from', async () => {
@@ -849,9 +910,13 @@ await check('REC-AI-LOG', 'the AI gateway may write its call log', async () => {
   );
   // The prod release-check account cannot read permissions; the field check
   // above still proves the table exists.
-  if (r.status === 403) return { ok: true, detail: 'permissions unreadable here; table checked above' };
+  if (r.status === 403)
+    return { ok: true, detail: 'permissions unreadable here; table checked above' };
   const actions = ((await r.json())?.data ?? []).map((p) => p.action);
-  return { ok: actions.includes('create'), detail: `svc-ai-gateway on ai_calls: ${actions.join(',') || 'none'}` };
+  return {
+    ok: actions.includes('create'),
+    detail: `svc-ai-gateway on ai_calls: ${actions.join(',') || 'none'}`,
+  };
 });
 
 // ── coupon terms (OPS-SGVAVXW6) ──────────────────────────────────────────────
@@ -871,7 +936,9 @@ await check('COUPON-CAP', 'no waiting Amount coupon has a cap below its value', 
   return {
     ok: bad.length === 0,
     detail: bad.length
-      ? bad.map((c) => `${c.coupon_code} value ${c.coupon_value} cap ${Number(c.max_discount)}`).join('; ')
+      ? bad
+          .map((c) => `${c.coupon_code} value ${c.coupon_value} cap ${Number(c.max_discount)}`)
+          .join('; ')
       : `${(r.data ?? []).length} waiting coupons, all consistent`,
   };
 });
@@ -977,7 +1044,12 @@ if (ENV === 'prod') {
       : 'platform unreadable here; the resolve probes above fail a mock vendor on prod',
   }));
 } else if (mockVendors.length === 0) {
-  report('SKIP', 'MV-6', 'mock test vendor checks', 'no active mock vendor (scripts/seed-test-vendor.mjs)');
+  report(
+    'SKIP',
+    'MV-6',
+    'mock test vendor checks',
+    'no active mock vendor (scripts/seed-test-vendor.mjs)',
+  );
 }
 for (const v of ENV === 'prod' ? [] : mockVendors) {
   const label = `${v.name} (mock)`;
@@ -989,7 +1061,12 @@ for (const v of ENV === 'prod' ? [] : mockVendors) {
   });
   const key = v.webhook_path_key?.trim();
   if (!key) {
-    report('FAIL', 'MV-6', `${label}: webhook_path_key`, 'not set - chat login and webhook cannot work');
+    report(
+      'FAIL',
+      'MV-6',
+      `${label}: webhook_path_key`,
+      'not set - chat login and webhook cannot work',
+    );
     continue;
   }
   await check('MV-6', `${label}: customer chat login`, async () => {
@@ -1010,7 +1087,12 @@ for (const v of ENV === 'prod' ? [] : mockVendors) {
   });
   const secret = process.env[vendorSecretEnvNames(key).webhook];
   if (!secret) {
-    report('SKIP', 'MV-6', `${label}: signed webhook ping`, `${vendorSecretEnvNames(key).webhook} not in this check's env`);
+    report(
+      'SKIP',
+      'MV-6',
+      `${label}: signed webhook ping`,
+      `${vendorSecretEnvNames(key).webhook} not in this check's env`,
+    );
   } else {
     await check('MV-6', `${label}: signed webhook ping is accepted`, async () => {
       const raw = JSON.stringify({ type: 'release-check.ping' });
@@ -1041,39 +1123,58 @@ await check('MV-6', 'svc-ai-gateway and svc-workers may read vendors.platform', 
     { headers: H },
   );
   if (res.status === 403) return { status: 'SKIP', detail: 'permissions unreadable here' };
+  if (!res.ok) return { ok: false, detail: `HTTP ${res.status} reading permissions` };
   const rows = (await res.json())?.data ?? [];
   const missing = ['svc-ai-gateway', 'svc-workers'].filter((svc) => {
     const row = rows.find((p) => String(p.policy?.name ?? '').includes(svc));
     const f = row?.fields ?? [];
     return !(f.includes('*') || f.includes('platform'));
   });
-  return { ok: missing.length === 0, detail: missing.length ? `missing on: ${missing.join(', ')}` : 'both granted' };
+  return {
+    ok: missing.length === 0,
+    detail: missing.length ? `missing on: ${missing.join(', ')}` : 'both granted',
+  };
 });
 
 /* MV-7: the connectors read each vendor's NON-SECRET settings from its record
    in a separate query; without these fields that read 403s and both services
    quietly run on the env settings (logged warning). */
-const MV7_FIELDS = ['webhook_path_key', 'api_base_url', 'admin_api_url', 'tenant_id', 'brand_id', 'notify_settings'];
-await check('MV-7', 'svc-ai-gateway and svc-workers may read the vendor connector settings', async () => {
-  const res = await fetch(
-    `${API}/permissions?${new URLSearchParams({
-      fields: 'fields,policy.name',
-      filter: JSON.stringify({ collection: { _eq: 'vendors' }, action: { _eq: 'read' } }),
-      limit: '-1',
-    })}`,
-    { headers: H },
-  );
-  if (res.status === 403) return { status: 'SKIP', detail: 'permissions unreadable here' };
-  const rows = (await res.json())?.data ?? [];
-  const missing = [];
-  for (const svc of ['svc-ai-gateway', 'svc-workers']) {
-    const f = rows.find((p) => String(p.policy?.name ?? '').includes(svc))?.fields ?? [];
-    if (f.includes('*')) continue;
-    const gap = MV7_FIELDS.filter((x) => !f.includes(x));
-    if (gap.length) missing.push(`${svc}: ${gap.join(',')}`);
-  }
-  return { ok: missing.length === 0, detail: missing.length ? `missing ${missing.join('; ')}` : 'both granted' };
-});
+const MV7_FIELDS = [
+  'webhook_path_key',
+  'api_base_url',
+  'admin_api_url',
+  'tenant_id',
+  'brand_id',
+  'notify_settings',
+];
+await check(
+  'MV-7',
+  'svc-ai-gateway and svc-workers may read the vendor connector settings',
+  async () => {
+    const res = await fetch(
+      `${API}/permissions?${new URLSearchParams({
+        fields: 'fields,policy.name',
+        filter: JSON.stringify({ collection: { _eq: 'vendors' }, action: { _eq: 'read' } }),
+        limit: '-1',
+      })}`,
+      { headers: H },
+    );
+    if (res.status === 403) return { status: 'SKIP', detail: 'permissions unreadable here' };
+    if (!res.ok) return { ok: false, detail: `HTTP ${res.status} reading permissions` };
+    const rows = (await res.json())?.data ?? [];
+    const missing = [];
+    for (const svc of ['svc-ai-gateway', 'svc-workers']) {
+      const f = rows.find((p) => String(p.policy?.name ?? '').includes(svc))?.fields ?? [];
+      if (f.includes('*')) continue;
+      const gap = MV7_FIELDS.filter((x) => !f.includes(x));
+      if (gap.length) missing.push(`${svc}: ${gap.join(',')}`);
+    }
+    return {
+      ok: missing.length === 0,
+      detail: missing.length ? `missing ${missing.join('; ')}` : 'both granted',
+    };
+  },
+);
 
 /* MV-7: the Yiji vendor's record now feeds its connector - its URLs/tenant must
    be the values the env always had, or every Yiji request moves host. */
@@ -1085,15 +1186,23 @@ await check('MV-7', 'Yiji vendor record holds the production Yiji URLs and tenan
     })}`,
     { headers: H },
   );
-  if (res.status === 403) return { status: 'SKIP', detail: 'vendors integration fields unreadable here' };
+  if (res.status === 403)
+    return { status: 'SKIP', detail: 'vendors integration fields unreadable here' };
+  if (!res.ok) return { ok: false, detail: `HTTP ${res.status} reading the vendor record` };
   const v = (await res.json())?.data?.[0];
   if (!v) return { ok: false, detail: 'no vendor with yiji_vendor_id 1' };
   const bad = [];
-  const blankOr = (val, want) => val == null || String(val).trim() === '' || String(val).replace(/\/+$/, '') === want;
-  if (!blankOr(v.api_base_url, 'https://order.yiji-app.com')) bad.push(`api_base_url=${v.api_base_url}`);
-  if (!blankOr(v.admin_api_url, 'https://admin.yiji-app.com')) bad.push(`admin_api_url=${v.admin_api_url}`);
+  const blankOr = (val, want) =>
+    val == null || String(val).trim() === '' || String(val).replace(/\/+$/, '') === want;
+  if (!blankOr(v.api_base_url, 'https://order.yiji-app.com'))
+    bad.push(`api_base_url=${v.api_base_url}`);
+  if (!blankOr(v.admin_api_url, 'https://admin.yiji-app.com'))
+    bad.push(`admin_api_url=${v.admin_api_url}`);
   if (!blankOr(v.tenant_id, '1')) bad.push(`tenant_id=${v.tenant_id}`);
-  return { ok: bad.length === 0, detail: bad.length ? bad.join(', ') : 'record matches (or blank = env)' };
+  return {
+    ok: bad.length === 0,
+    detail: bad.length ? bad.join(', ') : 'record matches (or blank = env)',
+  };
 });
 
 const failed = results.filter((r) => r.status === 'FAIL').length;

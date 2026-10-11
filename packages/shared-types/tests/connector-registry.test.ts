@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   CachedVendorDirectory,
+  errorText,
   vendorsFromRows,
   ConnectorRegistry,
   EnvVendorSettingsSource,
@@ -117,6 +118,7 @@ describe('vendors table directory (ai-gateway: portals send UUID AND yiji_vendor
 
   function dbRegistry(load: () => Promise<ConnectorVendor[]>, onDirectoryFallback?: () => void) {
     return createEnvConnectorRegistry({
+      vendorsColdRetryDelaysMs: [],
       yiji: { client: {} },
       loadVendors: load,
       ...(onDirectoryFallback ? { onDirectoryFallback } : {}),
@@ -224,6 +226,54 @@ describe('CachedVendorDirectory', () => {
     t = 2600;
     await dir.list();
     expect(reads).toBe(3);
+  });
+
+  /* 2026-10-11: a fresh ai-gateway's first read hit a 3-second Directus blip
+     after a deploy; with no last good list the vendor's UUID 404'd. */
+  it('a COLD read retries before falling back, and the vendor UUID resolves', async () => {
+    let reads = 0;
+    const waits: number[] = [];
+    const dir = new CachedVendorDirectory({
+      load: async () => {
+        reads += 1;
+        if (reads < 3) throw { errors: [{ message: 'Service Unavailable' }] };
+        return db;
+      },
+      fallback: env,
+      sleep: async (ms) => void waits.push(ms),
+    });
+    expect(await dir.list()).toEqual(db);
+    expect(reads).toBe(3);
+    expect(waits).toEqual([500, 1500]);
+  });
+
+  it('a cold failure that persists falls back once and retries within seconds, not 30 s', async () => {
+    let t = 0;
+    let reads = 0;
+    const errors: unknown[] = [];
+    const dir = new CachedVendorDirectory({
+      load: async () => {
+        reads += 1;
+        throw new Error('down');
+      },
+      fallback: env,
+      onFallback: (e) => errors.push(e),
+      now: () => t,
+      sleep: async () => undefined,
+    });
+    expect(await dir.list()).toEqual([{ ...yijiVendor, crmId: undefined }]);
+    expect(reads).toBe(3);
+    expect(errors).toHaveLength(1);
+    t = 3_500;
+    await dir.list();
+    expect(reads).toBe(6);
+  });
+
+  it('errorText reads the Directus SDK error shape', () => {
+    expect(errorText({ errors: [{ message: 'Forbidden' }], response: { status: 403 } })).toBe(
+      'HTTP 403 Forbidden',
+    );
+    expect(errorText(new Error('x'))).toBe('x');
   });
 
   it('coalesces concurrent reads into one', async () => {

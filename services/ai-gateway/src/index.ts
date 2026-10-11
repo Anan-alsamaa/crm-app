@@ -23,6 +23,7 @@ import {
   createEnvConnectorRegistry,
   mockVendorsAllowed,
   vendorsFromRows,
+  errorText,
 } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
@@ -168,7 +169,7 @@ async function main(): Promise<void> {
     allowMockVendors: mockVendorsAllowed(process.env),
     onDirectoryFallback: (err) =>
       logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
+        { err: errorText(err) },
         'vendors read failed - commerce is resolving vendors from the last good list / env',
       ),
     /* MV-7: each vendor's NON-SECRET settings (URLs, tenant, brand) from its
@@ -178,7 +179,7 @@ async function main(): Promise<void> {
     credentialEnv: process.env,
     onSettingsFallback: (err) =>
       logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
+        { err: errorText(err) },
         'vendor integration settings read failed - commerce is using the env settings',
       ),
     yiji: {

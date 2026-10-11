@@ -22,6 +22,7 @@ import {
   type RoutingJob,
   type CouponPushJob,
   type CustomerPushJob,
+  errorText,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -201,7 +202,7 @@ const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
       ),
     onDirectoryFallback: (err) =>
       deps.logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
+        { err: errorText(err) },
         'vendors read failed - commerce connectors fall back to the env vendor',
       ),
     /* MV-7: each vendor's NON-SECRET settings (URLs, tenant, brand, notify
@@ -218,7 +219,7 @@ const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
     credentialEnv: process.env,
     onSettingsFallback: (err) =>
       deps.logger.warn(
-        { err: err instanceof Error ? err.message : String(err) },
+        { err: errorText(err) },
         'vendor integration settings read failed - commerce connectors use the env settings',
       ),
     yiji: {

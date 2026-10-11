@@ -15,6 +15,8 @@
  */
 import crypto from 'node:crypto';
 
+import { installRetryingFetch } from './lib/retry-fetch.mjs';
+installRetryingFetch();
 const API = 'https://crm-api-staging.anan.sa';
 const GW = API; // the gateway is path-routed on the same host
 const results = [];
@@ -44,7 +46,8 @@ const call = async (token, method, path, body) => {
 
 const admin = await login(process.env.E, process.env.P);
 if (!admin) throw new Error('admin login failed');
-const role = (await call(admin, 'GET', '/roles?filter[name][_eq]=WeCare%20Agent&fields=id')).data[0];
+const role = (await call(admin, 'GET', '/roles?filter[name][_eq]=WeCare%20Agent&fields=id'))
+  .data[0];
 const vendor = (await call(admin, 'GET', '/items/vendors?limit=1&fields=id')).data[0];
 const pw = crypto.randomBytes(12).toString('hex') + 'A1!';
 const email = `perm-check-${Date.now()}@staff.example.com`;
@@ -96,9 +99,19 @@ try {
     phone: '0500001' + String(Date.now()).slice(-3),
   });
   created.contacts.push(r.data?.id);
-  check('agent adds a customer (create_contacts)', r.status === 200, `HTTP ${r.status} ${r.err ?? ''}`);
-  r = await call(agent, 'PATCH', `/items/contacts/${created.contacts[0]}`, { name: 'Permission check (edited)' });
-  check('agent edits a customer (edit_contacts)', r.status === 200, `HTTP ${r.status} ${r.err ?? ''}`);
+  check(
+    'agent adds a customer (create_contacts)',
+    r.status === 200,
+    `HTTP ${r.status} ${r.err ?? ''}`,
+  );
+  r = await call(agent, 'PATCH', `/items/contacts/${created.contacts[0]}`, {
+    name: 'Permission check (edited)',
+  });
+  check(
+    'agent edits a customer (edit_contacts)',
+    r.status === 200,
+    `HTTP ${r.status} ${r.err ?? ''}`,
+  );
 
   r = await call(agent, 'DELETE', `/users/${created.user}`);
   check('agent cannot delete users', r.status === 403, `HTTP ${r.status}`);
@@ -109,7 +122,11 @@ try {
     headers: { authorization: `Bearer ${agent}`, 'content-type': 'application/json' },
     body: '{}',
   });
-  check('gateway refuses import to a role without import_data', imp.status === 403, `HTTP ${imp.status}`);
+  check(
+    'gateway refuses import to a role without import_data',
+    imp.status === 403,
+    `HTTP ${imp.status}`,
+  );
   const impAdmin = await fetch(`${GW}/jobs/import`, {
     method: 'POST',
     headers: { authorization: `Bearer ${admin}`, 'content-type': 'application/json' },
@@ -134,11 +151,16 @@ try {
     const ll = await fetch(`${GW}/teams/${team.id}/least-loaded`, {
       headers: { authorization: `Bearer ${agent}` },
     });
-    check('agent may ask who on a team takes a chat (not 403)', ll.status === 200, `HTTP ${ll.status}`);
+    check(
+      'agent may ask who on a team takes a chat (not 403)',
+      ll.status === 200,
+      `HTTP ${ll.status}`,
+    );
   }
 } finally {
   if (created.conv) await call(admin, 'DELETE', `/items/conversations/${created.conv}`);
-  for (const id of created.contacts.filter(Boolean)) await call(admin, 'DELETE', `/items/contacts/${id}`);
+  for (const id of created.contacts.filter(Boolean))
+    await call(admin, 'DELETE', `/items/contacts/${id}`);
   if (created.user) await call(admin, 'DELETE', `/users/${created.user}`);
   console.log('cleaned up');
 }

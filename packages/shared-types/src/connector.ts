@@ -428,7 +428,24 @@ export interface CachedVendorDirectoryOptions {
   onFallback?: (err: unknown) => void;
   /** Injectable clock, for tests. */
   now?: () => number;
+  /** Injectable wait between cold-start attempts, for tests. */
+  sleep?: (ms: number) => Promise<void>;
+  /** Waits between cold-start attempts. Default 500 ms then 1500 ms; [] = one try. */
+  coldRetryDelaysMs?: number[];
 }
+
+/**
+ * Waits between attempts while NOTHING has been loaded yet (2026-10-11).
+ *
+ * A freshly started service has no last good list, and the env fallback only
+ * knows `yiji_vendor_id` '1' - not the vendor's CRM UUID the portals send. Its
+ * first read landed in a 3-second Directus blip right after a deploy, and
+ * every order opened by UUID 404'd as `unknown_vendor` for the next 30 s. A
+ * cold read now tries three times before falling back, and a cold failure is
+ * retried after a few seconds, not 30.
+ */
+const COLD_RETRY_DELAYS_MS = [500, 1500];
+const COLD_RETRY_AFTER_MS = 3_000;
 
 /**
  * The vendors table, cached — with the env vendor behind it.
@@ -452,7 +469,10 @@ export class CachedVendorDirectory implements VendorDirectory {
     this.ttlMs = opts.ttlMs ?? 5 * 60_000;
     this.retryMs = opts.retryMs ?? 30_000;
     this.now = opts.now ?? Date.now;
+    this.sleep = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   }
+
+  private readonly sleep: (ms: number) => Promise<void>;
 
   async list(): Promise<ConnectorVendor[]> {
     const t = this.now();
@@ -465,17 +485,24 @@ export class CachedVendorDirectory implements VendorDirectory {
   }
 
   private async refresh(): Promise<ConnectorVendor[]> {
-    try {
-      const vendors = await this.opts.load();
-      if (vendors.length === 0) throw new Error('vendors read returned no rows');
-      this.good = { vendors, at: this.now() };
-      this.retryAt = 0;
-      return [...vendors];
-    } catch (err) {
-      this.retryAt = this.now() + this.retryMs;
-      this.opts.onFallback?.(err);
-      return this.degraded();
+    const cold = this.good === null;
+    const delays = cold ? (this.opts.coldRetryDelaysMs ?? COLD_RETRY_DELAYS_MS) : [];
+    let lastErr: unknown;
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+      if (attempt > 0) await this.sleep(delays[attempt - 1]!);
+      try {
+        const vendors = await this.opts.load();
+        if (vendors.length === 0) throw new Error('vendors read returned no rows');
+        this.good = { vendors, at: this.now() };
+        this.retryAt = 0;
+        return [...vendors];
+      } catch (err) {
+        lastErr = err;
+      }
     }
+    this.retryAt = this.now() + (cold ? Math.min(this.retryMs, COLD_RETRY_AFTER_MS) : this.retryMs);
+    this.opts.onFallback?.(lastErr);
+    return this.degraded();
   }
 
   private async degraded(): Promise<ConnectorVendor[]> {
@@ -915,6 +942,8 @@ export function createEnvConnectorRegistry(opts: {
   loadVendors?: () => Promise<ConnectorVendor[]>;
   onDirectoryFallback?: (err: unknown) => void;
   vendorsTtlMs?: number;
+  /** Waits between cold-start vendor reads (see CachedVendorDirectory). */
+  vendorsColdRetryDelaysMs?: number[];
   /** MV-6: pass `mockVendorsAllowed(process.env)`. Default off. */
   allowMockVendors?: boolean;
   /**
@@ -942,6 +971,9 @@ export function createEnvConnectorRegistry(opts: {
           load: opts.loadVendors,
           fallback: envDirectory,
           ...(opts.vendorsTtlMs != null ? { ttlMs: opts.vendorsTtlMs } : {}),
+          ...(opts.vendorsColdRetryDelaysMs
+            ? { coldRetryDelaysMs: opts.vendorsColdRetryDelaysMs }
+            : {}),
           ...(opts.onDirectoryFallback ? { onFallback: opts.onDirectoryFallback } : {}),
         })
       : envDirectory,
@@ -963,4 +995,25 @@ export function createEnvConnectorRegistry(opts: {
     allowMockVendors: Boolean(opts.allowMockVendors),
     ...(opts.factories ? { factories: opts.factories } : {}),
   });
+}
+
+/**
+ * A readable message for any thrown value. The Directus SDK throws a plain
+ * object (`{ errors: [{ message }], response }`), which logged as
+ * "[object Object]" and hid the cause of the 2026-10-11 failure.
+ */
+export function errorText(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  if (err && typeof err === 'object') {
+    const e = err as { errors?: Array<{ message?: string }>; response?: { status?: number } };
+    const msg = e.errors?.[0]?.message;
+    const status = e.response?.status;
+    if (msg || status) return [status ? `HTTP ${status}` : '', msg ?? ''].filter(Boolean).join(' ');
+    try {
+      return JSON.stringify(err).slice(0, 300);
+    } catch {
+      /* fall through */
+    }
+  }
+  return String(err);
 }

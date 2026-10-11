@@ -19,6 +19,7 @@ export function dbConnectorsFor(
   onDirectoryFallback?: (err: unknown) => void,
 ): ConnectorRegistry {
   return createEnvConnectorRegistry({
+    vendorsColdRetryDelaysMs: [],
     yiji: { client: {} },
     loadVendors: async () => vendorsFromRows(rows),
     ...(onDirectoryFallback ? { onDirectoryFallback } : {}),

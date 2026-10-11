@@ -35,6 +35,8 @@ import { dirname, join } from 'node:path';
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const { io } = createRequire(join(ROOT, 'apps/chat-widget/package.json'))('socket.io-client');
 
+import { installRetryingFetch } from './lib/retry-fetch.mjs';
+installRetryingFetch();
 const API = (process.env.API ?? '').replace(/\/$/, '');
 const ORIGIN = process.env.WIDGET_ORIGIN ?? '';
 const PHONE = process.env.CHECK_PHONE ?? '';
