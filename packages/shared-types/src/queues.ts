@@ -16,6 +16,8 @@ export const QUEUES = {
   routing: 'routing',
   coupons: 'coupons',
   customerPush: 'customer-push',
+  /** The live late-orders poller (owner, 2026-10-12) - one repeatable job a minute. */
+  lateOrders: 'late-orders',
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 

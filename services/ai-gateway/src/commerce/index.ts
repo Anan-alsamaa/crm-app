@@ -1,8 +1,16 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { isUnknownVendor, isYijiUnavailable } from '@yiji/shared-types';
+import {
+  businessDay,
+  filterLateRows,
+  isServableLateOrdersSnapshot,
+  isUnknownVendor,
+  isYijiUnavailable,
+  lateOrdersVendorKey,
+} from '@yiji/shared-types';
 import type { ConnectorRegistry, VendorConnector } from '@yiji/shared-types';
 import { verifyCaller, AuthError, type CallerVerifierDeps } from '../auth/index.js';
 import { COMMERCE_TTL, type CommerceCache } from './cache.js';
+import type { LateOrdersLiveStore } from './late-orders-live.js';
 
 /**
  * Commerce proxy (C-2).
@@ -46,6 +54,13 @@ export interface CommerceDeps {
   connectors: CommerceConnectors;
   /** Read-through cache. Optional so existing tests construct deps unchanged. */
   cache?: CommerceCache;
+  /**
+   * The workers' live late-orders snapshot (owner, 2026-10-12). Optional:
+   * without it every live request asks Yiji through `cache`, as before.
+   */
+  lateOrdersLive?: LateOrdersLiveStore;
+  /** The clock, for the snapshot's freshness. Tests pin it. */
+  now?: () => number;
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -81,6 +96,7 @@ export async function registerCommerceRoutes(
   /** The connector for the vendor a request names. */
   const connectorFor = (vendorKey: string): Promise<VendorConnector> =>
     deps.connectors.connectorFor(vendorKey);
+  const nowMs = deps.now ?? Date.now;
 
   /*
    * The late-orders queue, the cart, the service-time batch and the
@@ -334,11 +350,11 @@ export async function registerCommerceRoutes(
   /**
    * THE LATE-ORDERS QUEUE: live delivery orders past the threshold.
    *
-   * Cached for 20s and coalesced in flight, which is what makes this cheap
-   * enough to poll. Every agent watching the queue refetches every 30s; without
-   * the cache that is one upstream call per agent per poll, against an external
-   * API we do not control. With it, ten agents cost one call — and the answer
-   * is never more than a third of a minute behind.
+   * TODAY'S live queue is answered from the workers' snapshot (owner,
+   * 2026-10-12; see `late-orders-live.ts` in shared-types): one Yiji call a
+   * minute per watched vendor, however many screens are open. A missing or
+   * stale snapshot, and every historical range, take the cached path below -
+   * 60s and coalesced in flight, so ten agents still cost one call.
    *
    * Not `answering(...)`'s 504-on-unavailable by accident: an empty queue and a
    * queue we could not fetch look identical on screen and mean opposite things
@@ -405,6 +421,35 @@ export async function registerCommerceRoutes(
       { route: 'late-orders', thresholdMinutes, from, to, vendorId },
       async () => {
         const connector = await connectorForOptional(vendorId);
+        /*
+         * TODAY'S LIVE QUEUE COMES FROM THE SNAPSHOT (owner, 2026-10-12: Yiji's
+         * load must not depend on how many screens are open).
+         *
+         * The workers poll Yiji once a minute per WATCHED vendor and keep the
+         * answer in Redis; this request records that it is watching (which is
+         * what keeps the poller asking, and hands it the threshold it cannot
+         * read itself) and is answered from the snapshot when it is for this
+         * business day, this threshold, and under three minutes old.
+         *
+         * Anything else - no poller deployed yet, a failed poll, Redis down,
+         * the 08:00 rollover, a threshold just changed - falls through to the
+         * path below, unchanged. A historical range never reaches this.
+         */
+        const today = businessDay(new Date(nowMs()).toISOString());
+        if (deps.lateOrdersLive && live && today && from === today && to === today) {
+          const vendorKey = lateOrdersVendorKey(connector);
+          await deps.lateOrdersLive.registerDemand(vendorKey, thresholdMinutes);
+          const snap = await deps.lateOrdersLive.readSnapshot(vendorKey);
+          if (
+            isServableLateOrdersSnapshot(snap, { day: today, thresholdMinutes, nowMs: nowMs() })
+          ) {
+            return {
+              rows: snap.rows,
+              thresholdMinutes: snap.thresholdMinutes,
+              builtAt: snap.builtAt,
+            };
+          }
+        }
         const rows = await cached(
           /* `live` is part of the KEY: the same dates asked for both ways are two
            different cache entries, so a long-lived historical answer can never
@@ -422,11 +467,10 @@ export async function registerCommerceRoutes(
         );
         /* A LATE order ran past the threshold (owner, 2026-10-11). Yiji's own
            filter also returned order 1339586, force-cancelled after 9 minutes;
-           an order that never reached the threshold is not late. */
+           an order that never reached the threshold is not late. Shared with
+           the workers' poller, so both paths drop exactly the same rows. */
         return {
-          rows: rows.filter(
-            (r) => !(typeof r.minutesElapsed === 'number' && r.minutesElapsed < thresholdMinutes),
-          ),
+          rows: filterLateRows(rows, thresholdMinutes),
           thresholdMinutes,
           builtAt: new Date().toISOString(),
         };

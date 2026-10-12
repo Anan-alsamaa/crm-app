@@ -228,6 +228,14 @@ export const SOCKET_EVENTS = {
    */
   customerLatestOrder: 'customer:latest-order',
   notificationPushed: 'notification:pushed',
+  /**
+   * Server → every agent (`agents:all`). The workers' late-orders poller found
+   * today's queue CHANGED for a vendor (owner, 2026-10-12), so an open Late
+   * orders page refetches now instead of waiting for its slow safety-net poll.
+   * Payload `{ vendorKey, builtAt }`; carries no rows - the page asks the
+   * gateway, which answers from the same snapshot.
+   */
+  lateOrdersChanged: 'late-orders:changed',
   error: 'error',
 } as const;
 

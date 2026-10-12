@@ -46,12 +46,14 @@ describe('late orders on a wall screen', () => {
   });
 });
 
-/* Owner, 2026-10-12: the server refreshes from Yiji once a minute, so a live
-   screen polls every 30 s like any other - not every 10 s. */
+/* Owner, 2026-10-12 (option 2): the workers poll Yiji once a minute and PUSH a
+   change, so today's queue keeps only a slow safety-net poll - live or not,
+   never the old 10 s / 30 s. */
 describe('late orders poll rate', () => {
-  it('polls every 30 s, live or not', () => {
+  it('keeps only the 2-minute safety net, live or not', () => {
     const api = readFileSync(resolve(__dirname, '../src/features/late-orders/api.ts'), 'utf8');
-    expect(api).toMatch(/refetchInterval: history \? false : 30_000,/);
+    expect(api).toMatch(/refetchInterval: history \? false : LATE_ORDERS_SAFETY_POLL_MS,/);
+    expect(api).toMatch(/LATE_ORDERS_SAFETY_POLL_MS = 2 \* 60_000;/);
     expect(api).not.toMatch(/10_000 : 30_000/);
   });
 });

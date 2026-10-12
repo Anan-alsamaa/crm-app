@@ -133,12 +133,41 @@ not expected to change — but if it ever does, it should not need us.
 
 ## Real-time
 
-No new machinery. The agent portal already polls every 30s and pauses on a
+No new machinery (superseded below). The agent portal polled every 30s and pauses on a
 hidden tab (`apps/agent-portal/src/main.tsx`), and the commerce proxy in
 `services/ai-gateway/src/commerce/` already caches through Redis with in-flight
 coalescing, so ten agents watching the same queue cost one upstream call.
 
 The queue is one cached call per poll, not one per order.
+
+### One poller, pushed to the screens (owner, 2026-10-12)
+
+The paragraph above was the first design, and it still left Yiji's load
+following the screens: one call a minute per gateway cache key, all day. Now:
+
+- **workers** (`services/workers/src/processors/late-orders-poll.ts`): a BullMQ
+  job scheduler (`late-orders-poll` on the `late-orders` queue, every
+  `LATE_ORDERS_POLL_MS`, default 60 s) runs ONE job a minute however many
+  worker tasks there are, and a Redis lock (`<ns>:late-orders:poll-lock`, just
+  under the interval) stops an overlapping run. For each vendor a screen asked
+  about in the last 10 minutes it fetches today's queue once, drops rows under
+  the threshold, and writes `<ns>:late-orders:snapshot:<platform>:<vendorId>`
+  (`{ rows, thresholdMinutes, builtAt, day, hash, vendorKey }`).
+- **demand** (`<ns>:late-orders:demand`, one hash): the gateway writes
+  `{ thresholdMinutes, at }` per vendor on every live request. The threshold
+  travels this way because `svc-workers` cannot read `app_settings`.
+- **push**: when the rows' hash changes (it ignores `minutesElapsed`, which ticks
+  every minute) the worker calls the socket-gateway's
+  `POST /jobs/late-orders-changed`, which emits `late-orders:changed` to
+  `agents:all`; the page refetches (debounced) and keeps only a 2-minute
+  safety-net poll.
+- **ai-gateway**: a LIVE request for today's business day is answered from the
+  snapshot when it is the same day and threshold and under 3 minutes old;
+  otherwise the old cached path runs unchanged. History ranges never touch it.
+
+Yiji calls: one a minute per watched vendor (60/hour), none when nobody has the
+page open. A poller that is down only costs the optimisation: the gateway falls
+back within 3 minutes.
 
 ---
 

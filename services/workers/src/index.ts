@@ -22,6 +22,8 @@ import {
   scheduleInactivitySweep,
   runCouponDeliverySweep,
   syncScheduledReports,
+  scheduleLateOrdersPoll,
+  DEFAULT_LATE_ORDERS_POLL_MS,
   type ProcessorDeps,
 } from './processors/index.js';
 import { Registry } from './metrics.js';
@@ -199,6 +201,42 @@ async function main(): Promise<void> {
         }
       : undefined;
 
+  /*
+   * THE LIVE LATE-ORDERS POLLER (owner, 2026-10-12): Yiji is asked for today's
+   * late-orders queue once a minute per vendor a screen is watching, by ONE
+   * job however many worker tasks run, instead of once per gateway cache key
+   * per minute. `LATE_ORDERS_POLL_MS` (default 60000) tunes it; `0` removes
+   * the scheduler, and the gateway then asks Yiji itself, as before.
+   */
+  const lateOrdersPollMs = Number(process.env.LATE_ORDERS_POLL_MS ?? DEFAULT_LATE_ORDERS_POLL_MS);
+  try {
+    await scheduleLateOrdersPoll(queues[QUEUES.lateOrders], lateOrdersPollMs);
+    logger.info({ everyMs: lateOrdersPollMs }, 'late-orders poll scheduled (0 = off)');
+  } catch (err) {
+    /* Not fatal: without the poller the gateway answers from Yiji directly. */
+    logger.warn({ err: (err as Error).message }, 'late-orders poll could not be scheduled');
+  }
+  /*
+   * ...and when the queue CHANGED, the screens are told at once through the
+   * socket-gateway (`late-orders:changed` to every agent), the same service
+   * call the notification push makes. Fire-and-forget: the snapshot is already
+   * written, and a page that misses the push catches up on its slow poll.
+   */
+  const lateOrdersChanged =
+    config.SOCKET_GATEWAY_URL && config.SVC_GATEWAY_TOKEN
+      ? (change: { vendorKey: string; builtAt: string }) => {
+          void fetch(`${config.SOCKET_GATEWAY_URL}/jobs/late-orders-changed`, {
+            method: 'POST',
+            headers: {
+              'content-type': 'application/json',
+              authorization: `Bearer ${config.SVC_GATEWAY_TOKEN}`,
+            },
+            body: JSON.stringify(change),
+            signal: AbortSignal.timeout(5_000),
+          }).catch(() => undefined);
+        }
+      : undefined;
+
   const deps: ProcessorDeps = {
     logger,
     directus,
@@ -217,6 +255,9 @@ async function main(): Promise<void> {
       directusToken: config.SVC_WORKERS_TOKEN,
     },
     inactivityMinutes,
+    redis: connection,
+    onLateOrdersChanged: lateOrdersChanged,
+    lateOrdersPollMs,
   };
   // Bounded parallelism per queue. Jobs are independent, so concurrency is safe
   // (unlike retries) — it just lets a worker process several jobs at once instead

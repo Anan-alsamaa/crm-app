@@ -43,6 +43,12 @@ export { runCouponDeliverySweep } from './coupon-push.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
 import {
+  DEFAULT_LATE_ORDERS_POLL_MS,
+  runLateOrdersPoll,
+  type LateOrdersChange,
+  type PollRedis,
+} from './late-orders-poll.js';
+import {
   createTicketRepo,
   createConversationRepo,
   createNotificationsRepo,
@@ -66,6 +72,12 @@ export interface ProcessorDeps {
   imports?: { directusUrl: string; directusToken: string };
   /** Minutes of silence before a conversation is swept as inactive. */
   inactivityMinutes?: number;
+  /** Redis for the late-orders snapshot + its lock (the BullMQ connection). */
+  redis?: PollRedis;
+  /** Tell every agent's screen the late-orders queue changed (socket-gateway). */
+  onLateOrdersChanged?: (change: LateOrdersChange) => void | Promise<void>;
+  /** The late-orders poll interval, for its lock's lifetime. */
+  lateOrdersPollMs?: number;
 }
 
 export type Processor = (job: Job, deps: ProcessorDeps) => Promise<void>;
@@ -513,8 +525,25 @@ export const processors: Record<QueueName, Processor> = {
       },
     });
   },
+  /*
+   * THE LIVE LATE-ORDERS POLL (owner, 2026-10-12): one Yiji call a minute per
+   * watched vendor, stored for the gateway and pushed to the screens. See
+   * late-orders-poll.ts. Without Redis there is nothing to store it in, and
+   * the gateway keeps asking Yiji itself, exactly as before.
+   */
+  [QUEUES.lateOrders]: async (_job, deps) => {
+    if (!deps.redis) return;
+    await runLateOrdersPoll({
+      redis: deps.redis,
+      connectors: connectorsFor(deps),
+      logger: deps.logger,
+      notify: deps.onLateOrdersChanged,
+      intervalMs: deps.lateOrdersPollMs ?? DEFAULT_LATE_ORDERS_POLL_MS,
+    });
+  },
 };
 
 export { scheduleReconcile } from './sla.js';
+export { scheduleLateOrdersPoll, DEFAULT_LATE_ORDERS_POLL_MS } from './late-orders-poll.js';
 export { scheduleInactivitySweep } from './automation.js';
 export { syncScheduledReports } from './reports.js';

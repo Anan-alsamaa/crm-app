@@ -57,6 +57,7 @@ import {
 import { createProducer } from './queue.js';
 import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
 import { runIdleCloseSweep, withSweepLock } from './idle-close.js';
+import { registerLateOrdersPushRoute, LATE_ORDERS_PUSH_ROOM } from './late-orders-push.js';
 import {
   registerConnection,
   getAgentPresenceSnapshot,
@@ -1593,6 +1594,13 @@ async function main(): Promise<void> {
       conversationId: typeof body.conversationId === 'string' ? body.conversationId : null,
     });
     return reply.send({ ok: true });
+  });
+
+  /* The workers' late-orders poller found the queue changed (owner,
+     2026-10-12): every open Late orders page refetches now. */
+  registerLateOrdersPushRoute(app, {
+    serviceToken: config.SVC_GATEWAY_TOKEN,
+    emitToAgents: (event, payload) => io.to(LATE_ORDERS_PUSH_ROOM).emit(event, payload),
   });
 
   app.post('/jobs/releases/published', async (req, reply) => {

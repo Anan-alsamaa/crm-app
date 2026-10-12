@@ -90,6 +90,7 @@ import {
   lateOrderTicket,
   FALLBACK_THRESHOLD,
 } from './api.js';
+import { useLateOrdersPush } from './live-push.js';
 
 /** Yiji stamps are Riyadh wall-clock with no zone; as a real instant for display. */
 function placedIso(raw: string): string {
@@ -464,6 +465,9 @@ export function LateOrdersPage() {
   /* Today keeps polling — orders cross the threshold while an agent watches.
      A searched range is a fixed answer and does not. */
   const queue = useLateOrders(activeRange, true, showingToday, vendorFilter || undefined, liveMode);
+  /* Today refetches the moment the server's once-a-minute poll finds the queue
+     changed (owner, 2026-10-12) - pushed, not polled for. */
+  useLateOrdersPush(showingToday);
   /* `useHandledLateOrders` is deliberately NOT used here any more (ops,
      2026-10-03). It asked only for the last 24 hours, so an order compensated
      the day before looked unhandled and the row offered a second coupon.

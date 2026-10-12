@@ -18,6 +18,7 @@ import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
 import { CommerceCache } from './commerce/cache.js';
+import { RedisLateOrdersLiveStore } from './commerce/late-orders-live.js';
 import { Registry } from './metrics.js';
 import {
   createEnvConnectorRegistry,
@@ -217,6 +218,9 @@ async function main(): Promise<void> {
     directus,
     connectors,
     cache: new CommerceCache(redis),
+    /* Today's late-orders queue from the workers' once-a-minute snapshot
+       (owner, 2026-10-12); a missing or stale one falls back to Yiji. */
+    lateOrdersLive: new RedisLateOrdersLiveStore(redis),
   });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });

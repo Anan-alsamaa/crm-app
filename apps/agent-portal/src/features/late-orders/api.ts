@@ -31,6 +31,18 @@ import { vendorField } from '../../lib/record-vendor.js';
 export const LATE_ORDERS_KEY = ['late-orders'] as const;
 
 /**
+ * THE SAFETY-NET POLL for today's queue (owner, 2026-10-12): two minutes.
+ *
+ * The page no longer finds out about new late orders by polling. The workers
+ * ask Yiji once a minute, and when the queue CHANGES the socket-gateway sends
+ * `late-orders:changed` and the page refetches at once (`useLateOrdersPush`).
+ * This timer only covers a push that never arrived - a dropped socket, a
+ * gateway deploy - and keeps the minutes-late figures moving on a queue that
+ * has not otherwise changed.
+ */
+export const LATE_ORDERS_SAFETY_POLL_MS = 2 * 60_000;
+
+/**
  * The queue.
  *
  * The threshold arrives WITH the rows rather than being asked for separately,
@@ -59,14 +71,15 @@ export function useLateOrders(
    */
   vendorId?: string,
   /** LIVE ORDERS mode (owner, 2026-10-11): a wall screen keeps polling in the
-      background. Every 30 s like everyone else since 2026-10-12: the server
-      refreshes from Yiji once a minute, so polling faster bought nothing. */
+      background. Pushed on change + the slow safety net since 2026-10-12
+      (see LATE_ORDERS_SAFETY_POLL_MS). */
   fast = false,
 ) {
   /*
    * A PAST RANGE stops the polling.
    *
-   * The live queue is about right-now and refreshes every 30s. A historical
+   * The live queue is about right-now and refreshes on every push (and a
+   * slow safety-net poll). A historical
    * window is a fixed set of finished orders — re-fetching it on a timer would
    * be three upstream pages bought for an answer that cannot change, and it
    * would yank the table under someone reading it.
@@ -88,7 +101,7 @@ export function useLateOrders(
         ? commerce.getLateOrders(range, live, vendorId)
         : commerce.getLateOrders(range, live),
     enabled,
-    refetchInterval: history ? false : 30_000,
+    refetchInterval: history ? false : LATE_ORDERS_SAFETY_POLL_MS,
     staleTime: history ? 5 * 60_000 : 15_000,
     /*
      * RETRIED, and a wall screen keeps polling (owner, 2026-10-11: the TV
