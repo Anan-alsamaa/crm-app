@@ -1707,7 +1707,11 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 })}
                 cut={d.byChain}
                 total={d.total}
-                color="bg-violet-500"
+                /* A THEME TOKEN, never a Tailwind shade (owner, 2026-10-12: the
+                   bars were blank). The preset replaces the `violet` family with
+                   one token, so `bg-violet-500` generated no CSS at all. Green,
+                   not violet: violet is the hue of the area-manager bars beside it. */
+                color="bg-success"
                 onSelect={drillInto(
                   t('complaintDash.byChain', { defaultValue: 'By chain manager' }),
                   (r) => r.chain,
