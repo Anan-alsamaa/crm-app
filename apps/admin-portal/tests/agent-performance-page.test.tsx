@@ -3,6 +3,7 @@ import { render, screen, waitFor, within, fireEvent } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -63,10 +64,14 @@ const messages = [
   { conversation: 'never', sender_type: 'customer', date_created: '2026-08-13T10:00:00.000Z' },
 ];
 
-function renderPage() {
+/* Under a router since the tab lives in the URL (`?tab=tickets`, owner,
+   2026-10-12). */
+function renderPage(url = '/agent-performance') {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const Wrapper = ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    <MemoryRouter initialEntries={[url]}>
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    </MemoryRouter>
   );
   return render(<AgentPerformancePage />, { wrapper: Wrapper });
 }
@@ -88,6 +93,8 @@ function tile(label: string): string {
 
 beforeEach(() => {
   sdk.request.mockReset();
+  // The view (filters, tab, search) is remembered per browser tab; start clean.
+  sessionStorage.clear();
   sdk.request.mockImplementation((req: { kind: string; collection?: string }) => {
     if (req.kind === 'users')
       return Promise.resolve([{ id: 'a1', first_name: 'Sara', email: 'sara@yiji.test' }]);

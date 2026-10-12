@@ -30,7 +30,8 @@ const read = (p: string) => readFileSync(resolve(import.meta.dirname, '..', p), 
 const SURFACES: ReadonlyArray<{ file: string; what: string }> = [
   { file: 'src/features/report-exports/api.ts', what: 'ticket + conversation reports' },
   { file: 'src/features/ticket-ops/api.ts', what: 'ticket operations' },
-  { file: 'src/features/performance/AgentPerformancePage.tsx', what: 'agent performance' },
+  // The chat read moved to the feature's api.ts with the tabs (2026-10-12).
+  { file: 'src/features/performance/api.ts', what: 'agent performance' },
   { file: 'src/features/coupon-approvals/AllCompensationPage.tsx', what: 'all compensation' },
   { file: 'src/features/coupon-approvals/CouponApprovalsPage.tsx', what: 'coupon approvals' },
 ];
@@ -89,7 +90,8 @@ describe('the helper can actually do its job', () => {
   });
 
   it.each([
-    { file: 'src/features/performance/AgentPerformancePage.tsx', what: 'agent performance' },
+    // The chat read moved to the feature's api.ts with the tabs (2026-10-12).
+    { file: 'src/features/performance/api.ts', what: 'agent performance' },
     { file: 'src/features/report-exports/api.ts', what: 'reports' },
   ])('$what fetches the phone too', ({ file }) => {
     /* Multiline-tolerant: prettier may reflow a long field list. */

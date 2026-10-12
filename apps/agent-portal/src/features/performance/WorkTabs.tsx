@@ -10,7 +10,14 @@ import {
   Skeleton,
   TicketIcon,
 } from '@yiji/ui';
-import { formatDuration } from '@yiji/reports';
+import {
+  couponStage,
+  formatDuration,
+  matchesSearch,
+  mean,
+  median,
+  type CouponStage,
+} from '@yiji/reports';
 import {
   businessMsBetween,
   couponOrderId,
@@ -26,7 +33,6 @@ import {
   type PerformanceCouponRow,
   type PerformanceFilters,
 } from './api.js';
-import { couponStage, matchesSearch, mean, median, type CouponStage } from './search.js';
 import { Tile } from './Tile.js';
 
 /**

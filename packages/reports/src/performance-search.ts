@@ -1,4 +1,17 @@
-import { couponDecision, normalizePhone } from '@yiji/shared-types';
+import { businessDay, couponDecision, normalizePhone } from '@yiji/shared-types';
+
+/**
+ * The agent-performance page's search, coupon stages and default range —
+ * SHARED by both portals (owner, 2026-10-12: "in the admin portal, agent
+ * performance page, we need it like the user portal ... a search by order id,
+ * ticket id, coupon code and stuff").
+ *
+ * This lived in the agent portal (features/performance/search.ts). The admin
+ * console now carries the same search box and the same Chats / Tickets /
+ * Coupons tabs, and two copies of "what does a search match" would drift the
+ * way the two copies of the chat timings once did — one portal finding a
+ * customer the other could not. So it lives here, once.
+ */
 
 /**
  * ONE SEARCH BOX FOR THE THREE TABS (owner, 2026-10-07): "search by customer
@@ -81,4 +94,22 @@ export function median(values: number[]): number | null {
 export function mean(values: number[]): number | null {
   if (values.length === 0) return null;
   return Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+}
+
+/**
+ * Yesterday's business day through today's (business days turn at 08:00
+ * Riyadh) — the range the page OPENS on (owner, 2026-10-11).
+ *
+ * The admin console opened on ALL TIME, which is most of why it was slow
+ * (owner, 2026-10-12: "the agent performance page takes time to load"): every
+ * conversation ever, then every message of every one of them. Both portals now
+ * open on the same two shifts; a longer range is one date pick away.
+ */
+export function defaultPerformanceRange(now: number = Date.now()): { from: string; to: string } {
+  const today =
+    businessDay(new Date(now).toISOString()) ?? new Date(now).toISOString().slice(0, 10);
+  const yesterday =
+    businessDay(new Date(now - 24 * 60 * 60 * 1000).toISOString()) ??
+    new Date(now - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return { from: yesterday, to: today };
 }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { businessDay, normalizePhone } from '@yiji/shared-types';
+import { normalizePhone } from '@yiji/shared-types';
 import { useQueryClient } from '@tanstack/react-query';
 import { canReadConversation } from '../tickets/api.js';
 import { useTranslation } from 'react-i18next';
@@ -35,6 +35,8 @@ import {
   timeToSolveSec,
   agentInitiatedSummary,
   awaitingCustomer,
+  defaultPerformanceRange,
+  matchesSearch,
 } from '@yiji/reports';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useSlaHours } from '../../lib/sla-hours.js';
@@ -47,7 +49,6 @@ import {
   type PerformanceFilters,
 } from './api.js';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
-import { matchesSearch } from './search.js';
 import { Tile } from './Tile.js';
 import { CouponsTab, TicketsTab } from './WorkTabs.js';
 
@@ -100,15 +101,9 @@ interface SavedView {
   search?: string;
 }
 
-/** Yesterday's business day through today's (business days turn at 08:00 Riyadh). */
-export function defaultPerformanceRange(now: number = Date.now()): { from: string; to: string } {
-  const today =
-    businessDay(new Date(now).toISOString()) ?? new Date(now).toISOString().slice(0, 10);
-  const yesterday =
-    businessDay(new Date(now - 24 * 60 * 60 * 1000).toISOString()) ??
-    new Date(now - 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  return { from: yesterday, to: today };
-}
+/* The opening range now lives in @yiji/reports, shared with the admin console
+   (owner, 2026-10-12); re-exported so existing callers keep their import. */
+export { defaultPerformanceRange };
 
 export function AgentPerformancePage() {
   const { t } = useTranslation();

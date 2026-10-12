@@ -122,3 +122,17 @@ export type { CouponValueFact, CouponWorth, CouponSideTotal } from './coupon-val
    rejected by CloudFront with a 414 before Directus ever sees it — a fault that
    only appears once real data grows past the limit. See chunk-ids.ts. */
 export { chunkIds, readChunked, IN_FILTER_CHUNK } from './chunk-ids.js';
+
+/* The agent-performance search, coupon stages and opening range — one copy for
+   both portals (owner, 2026-10-12), so a search finds the same rows whichever
+   portal it is typed into. */
+export {
+  couponStage,
+  defaultPerformanceRange,
+  matchesSearch,
+  mean,
+  median,
+  phoneQueryDigits,
+  type CouponStage,
+  type SearchableRow,
+} from './performance-search.js';

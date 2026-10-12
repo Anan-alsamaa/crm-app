@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { readItems, readUsers } from '@directus/sdk';
+import { readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
@@ -18,6 +19,7 @@ import {
   MeterBar,
   Pill,
   ProgressRing,
+  SearchIcon,
   SectionCard,
   SelectMenu,
   Skeleton,
@@ -28,28 +30,33 @@ import {
   UsersIcon,
   ZapIcon,
 } from '@yiji/ui';
-import { normaliseConversationStatus, displayContactName } from '@yiji/shared-types';
 import {
   agentPerformance,
-  chatHandoffs,
   comparisonRows,
-  conversationTimestamps,
-  readChunked,
   dailyTrend,
+  defaultPerformanceRange,
   firstResponseSec,
   formatDuration,
+  matchesSearch,
   performanceSummary,
   timeToSolveSec,
-  type ChatTiming,
   agentInitiatedSummary,
   awaitingCustomer,
 } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { useSlaHours } from '../../lib/sla-hours.js';
-import { businessDayWindow } from '../../lib/date-range.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { exportFileName } from '@yiji/shared-config';
+import { ViewSwitch } from '../../components/ViewSwitch.js';
+import {
+  useChatTimings,
+  useCsatByConversation,
+  type AdminChatTiming,
+  type PerformanceFilters,
+} from './api.js';
+import { NoMatchRow, CouponsTab, TicketsTab } from './WorkTabs.js';
+import { Tile } from './Tile.js';
 
 /**
  * Agent performance for the admin console.
@@ -59,6 +66,12 @@ import { exportFileName } from '@yiji/shared-config';
  * supervisor and an agent can never be looking at different figures for the
  * same week. What differs is only what a row does: nothing here opens a chat,
  * because an admin is reviewing the team rather than working the queue.
+ *
+ * LIKE THE USER PORTAL (owner, 2026-10-12): "we need a search by order id,
+ * ticket id, coupon code and stuff. then we need 3 different: chats, tickets,
+ * coupons". The search and the coupon stages are the agent portal's own, moved
+ * to @yiji/reports so both portals match a query the same way; the Tickets and
+ * Coupons tabs are a port of its WorkTabs (see WorkTabs.tsx).
  *
  * CHARTS ARE GROUPED BY UNIT, never mixed. A count of chats and an average in
  * seconds on one shared axis draws "9 chats" as an invisible sliver beside
@@ -72,262 +85,38 @@ const DEFAULT_TARGET_MIN = 5;
 
 const countFmt = (v: number) => String(v);
 
-interface Filters {
-  from?: string;
-  to?: string;
-  agentId?: string;
+type Filters = PerformanceFilters;
+
+/** Chats, Tickets and Coupons — the agent portal's three sub-pages (owner, 2026-10-12). */
+const TABS = ['chats', 'tickets', 'coupons'] as const;
+type PerformanceTab = (typeof TABS)[number];
+const isTab = (v: unknown): v is PerformanceTab =>
+  typeof v === 'string' && (TABS as readonly string[]).includes(v);
+
+interface SavedView {
+  filters?: Filters;
+  tab?: PerformanceTab;
+  search?: string;
 }
 
-/* The END of a BUSINESS day (owner, 2026-09-30): 04:00 the NEXT morning, not
-   23:59 the same night. A chat solved at 01:00 belongs to the shift that opened
-   the evening before, and `T23:59:59` cut every night's tail off the measure. */
-const endOfDay = (isoDate: string) => businessDayWindow(isoDate, isoDate).toIso;
+/*
+ * The filters survive leaving the page, per tab (owner, 2026-10-07). `:v2`
+ * since the page stopped opening on all time (owner, 2026-10-12): the old key
+ * held `{}` for everyone who had opened the page, which would have kept them on
+ * the slow all-time read the new default exists to avoid.
+ */
+const VIEW_KEY = 'admin-agent-performance:v2';
 
 function useAgentList() {
   return useQuery({
     queryKey: ['perf-agents'],
+    // The roster changes rarely; the portal's 30s poll is for queues.
+    staleTime: 5 * 60_000,
+    refetchInterval: false,
     queryFn: () =>
       directus.request(
         readUsers({ limit: -1, fields: ['id', 'first_name', 'last_name', 'email'] }),
       ) as Promise<Array<{ id: string; first_name: string | null; email: string | null }>>,
-  });
-}
-
-/** A `ChatTiming` plus the day it belongs to, which the trend chart buckets by. */
-type AdminChatTiming = ChatTiming & {
-  startedAt: string | null;
-  /** Who the chat was with — name, else the phone we recognise them by. */
-  customer: string | null;
-  /** What it was ABOUT: the linked ticket's complaint type, else its subject. */
-  subject: string | null;
-};
-
-/**
- * Deliberately does NOT resolve agent names — see the user portal's copy of
- * this hook. The names come from a separate query, and a cache keyed only on
- * the filters will hold rows resolved against an empty map forever, rendering
- * uuids where names belong. Names are attached at render.
- */
-function useChatTimings(filters: Filters) {
-  return useQuery({
-    queryKey: ['admin-chat-timings', filters],
-    queryFn: async (): Promise<AdminChatTiming[]> => {
-      const and: Array<Record<string, unknown>> = [];
-      if (filters.from) and.push({ date_created: { _gte: filters.from } });
-      if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
-      if (filters.agentId) and.push({ assigned_agent: { _eq: filters.agentId } });
-
-      const conversations = (await directus.request(
-        readItems(
-          'conversations' as never,
-          {
-            limit: -1,
-            fields: [
-              'id',
-              'status',
-              'assigned_agent',
-              'solved_at',
-              'date_created',
-              'initiated_by',
-              { contact: ['id', 'name', 'phone'] },
-            ],
-            ...(and.length ? { filter: { _and: and } } : {}),
-          } as never,
-        ),
-      )) as unknown as Array<{
-        id: string;
-        status: string;
-        assigned_agent: string | null;
-        solved_at: string | null;
-        date_created: string | null;
-        initiated_by: string | null;
-        contact: { id: string; name: string | null; phone: string | null } | null;
-      }>;
-      if (conversations.length === 0) return [];
-
-      /* What each chat was about. Read separately — the subject lives on the
-       * ticket, and a chat with no ticket simply has none. Best-effort so a
-       * permissions gap cannot empty the page. */
-      const subjectOf = new Map<string, string>();
-      try {
-        // Chunked: every conversation id in one query string is an HTTP 414
-        // from CloudFront once the count grows. See readChunked.
-        const linked = await readChunked<{
-          conversation: string | null;
-          subject: string | null;
-          complaint_type: string | null;
-        }>(
-          conversations.map((c) => c.id),
-          (ids) =>
-            directus.request(
-              readItems(
-                'tickets' as never,
-                {
-                  limit: -1,
-                  filter: { conversation: { _in: ids } },
-                  fields: ['conversation', 'subject', 'complaint_type'],
-                  sort: ['-date_created'],
-                } as never,
-              ),
-            ) as unknown as Promise<
-              Array<{
-                conversation: string | null;
-                subject: string | null;
-                complaint_type: string | null;
-              }>
-            >,
-        );
-        for (const tk of linked) {
-          if (!tk.conversation) continue;
-          const label = tk.complaint_type?.trim() || tk.subject?.trim();
-          // Newest ticket wins — the sort above puts it first.
-          if (label && !subjectOf.has(tk.conversation)) subjectOf.set(tk.conversation, label);
-        }
-      } catch {
-        /* no ticket read access — rows fall back to the customer alone */
-      }
-
-      // First response needs the messages: the conversation row knows when it
-      // started, never when somebody answered.
-      const messages = await readChunked<{
-        conversation: string;
-        sender_type: string;
-        date_created: string | null;
-      }>(
-        conversations.map((c) => c.id),
-        (ids) =>
-          directus.request(
-            readItems(
-              'messages' as never,
-              {
-                limit: -1,
-                filter: {
-                  conversation: { _in: ids },
-                  is_internal_note: { _eq: false },
-                },
-                /* `sender_user` so a reply is credited to the agent who SENT
-                   it — the ladder moves chats, so the assignee is often not the
-                   replier. */
-                fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
-                sort: ['date_created'],
-              } as never,
-            ),
-          ) as unknown as Promise<
-            Array<{
-              conversation: string;
-              sender_type: string;
-              date_created: string | null;
-              sender_user: string | null;
-            }>
-          >,
-      );
-
-      // Shared with the agent portal — see conversationTimestamps in
-      // @yiji/reports. Two portals reducing the same messages by hand is how
-      // they came to agree on a wrong "No reply".
-      const times = conversationTimestamps(messages);
-
-      /**
-       * Which chats the ladder had to pass on — see chatHandoffs in
-       * @yiji/reports. Those leave the personal first-response population and
-       * become COMMON chats for whoever picked them up, because the wait they
-       * carry was created by the agents who did not answer first.
-       */
-      let handoffs = new Map<string, { passedOn: boolean; takenBy: string | null }>();
-      try {
-        const events = (await readChunked<{
-          conversation: string;
-          agent: string | null;
-          outcome: string;
-          stage: string;
-        }>(
-          conversations.map((c) => c.id),
-          (ids) =>
-            directus.request(
-              readItems(
-                'routing_events' as never,
-                {
-                  limit: -1,
-                  filter: { conversation: { _in: ids } },
-                  fields: ['conversation', 'agent', 'outcome', 'stage'],
-                } as never,
-              ),
-            ) as unknown as Promise<
-              Array<{
-                conversation: string;
-                agent: string | null;
-                outcome: string;
-                stage: string;
-              }>
-            >,
-        )) as unknown as Array<{
-          conversation: string;
-          agent: string | null;
-          outcome: string;
-          stage: string;
-        }>;
-        handoffs = chatHandoffs(events);
-      } catch {
-        /* no routing history readable — every chat counts as cleanly assigned */
-      }
-
-      return conversations.map((c) => ({
-        conversationId: c.id,
-        // No owner = the agent who answered; see the agent portal (2026-10-11).
-        agentId: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? null,
-        // Placeholder; the page replaces it with the resolved name.
-        agentName: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? 'General',
-        firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
-        firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,
-        firstAgentBy: times.get(c.id)?.firstAgentBy ?? null,
-        solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
-        // Carried so a chat nobody ever wrote in still lands on a day in the
-        // trend instead of vanishing from it.
-        startedAt: c.date_created,
-        /* THROUGH `displayContactName` (owner, 2026-10-05): a `+966…` name
-           renders as `05…`. It already falls back to the phone, so the old
-           `?? phone` chain folds into it — null only when nothing is known. */
-        customer: displayContactName(c.contact?.name, c.contact?.phone) || null,
-        subject: subjectOf.get(c.id) ?? null,
-        passedOn: handoffs.get(c.id)?.passedOn ?? false,
-        takenBy: handoffs.get(c.id)?.takenBy ?? null,
-        // Agent-started chats are measured from the customer's reply; one the
-        // customer never answered is not "unanswered" (owner, 2026-10-07).
-        initiatedBy: c.initiated_by === 'agent' ? ('agent' as const) : ('customer' as const),
-        firstOutreachAt: times.get(c.id)?.firstAgentAnyAt ?? null,
-      }));
-    },
-  });
-}
-
-/**
- * CSAT for the chats in range, keyed by conversation — see the agent portal's
- * copy for why it is a separate read.
- */
-function useCsatByConversation(filters: Filters) {
-  return useQuery({
-    queryKey: ['admin-csat-by-conversation', filters],
-    queryFn: async (): Promise<Map<string, number>> => {
-      const and: Array<Record<string, unknown>> = [];
-      if (filters.from) and.push({ submitted_at: { _gte: filters.from } });
-      if (filters.to) and.push({ submitted_at: { _lte: endOfDay(filters.to) } });
-      const rows = (await directus.request(
-        readItems(
-          'csat_responses' as never,
-          {
-            limit: -1,
-            fields: ['conversation', 'score'],
-            ...(and.length ? { filter: { _and: and } } : {}),
-          } as never,
-        ),
-      )) as unknown as Array<{ conversation: string | null; score: number | null }>;
-      const out = new Map<string, number>();
-      for (const r of rows) {
-        if (!r.conversation || typeof r.score !== 'number') continue;
-        out.set(r.conversation, r.score);
-      }
-      return out;
-    },
   });
 }
 
@@ -345,25 +134,63 @@ export function AgentPerformancePage() {
     return m;
   }, [agents.data]);
 
-  /* The filters survive leaving the page, per tab (owner, 2026-10-07). */
-  const [filters, setFilters] = useState<Filters>(() => {
+  const saved = useMemo<SavedView | null>(() => {
     try {
-      const raw = sessionStorage.getItem('admin-agent-performance');
-      return raw ? ((JSON.parse(raw) as { filters?: Filters }).filters ?? {}) : {};
+      const raw = sessionStorage.getItem(VIEW_KEY);
+      return raw ? (JSON.parse(raw) as SavedView) : null;
     } catch {
-      return {};
+      return null;
     }
-  });
+  }, []);
+  /* OPENS ON YESTERDAY'S BUSINESS DAY THROUGH TODAY, as the agent portal does
+     (owner, 2026-10-12). All time was the main reason the page was slow. */
+  const [filters, setFilters] = useState<Filters>(
+    () => saved?.filters ?? { ...defaultPerformanceRange() },
+  );
   const [targetMin, setTargetMin] = useState(DEFAULT_TARGET_MIN);
+
+  /* THE TAB LIVES IN THE URL (`?tab=tickets`), so a link opens that sub-page;
+     with none, the tab last open in this browser tab is restored. */
+  const [params, setParams] = useSearchParams();
+  const urlTab = params.get('tab');
+  const tab: PerformanceTab = isTab(urlTab) ? urlTab : isTab(saved?.tab) ? saved.tab : 'chats';
+  const setTab = (next: PerformanceTab) =>
+    setParams(
+      (p) => {
+        const out = new URLSearchParams(p);
+        if (next === 'chats') out.delete('tab');
+        else out.set('tab', next);
+        return out;
+      },
+      { replace: true },
+    );
+
+  /*
+   * SEARCH (owner, 2026-10-12): order id, ticket id, coupon code, customer
+   * number, title. Applies to the ACTIVE tab's table; the headline numbers keep
+   * counting the whole range. Lightly debounced so a long number does not
+   * re-filter on every digit.
+   */
+  const [searchDraft, setSearchDraft] = useState(saved?.search ?? '');
+  const [search, setSearch] = useState(saved?.search ?? '');
+  useEffect(() => {
+    const id = window.setTimeout(() => setSearch(searchDraft), 200);
+    return () => window.clearTimeout(id);
+  }, [searchDraft]);
+
   useEffect(() => {
     try {
-      sessionStorage.setItem('admin-agent-performance', JSON.stringify({ filters }));
+      const view: SavedView = { filters, tab, search };
+      sessionStorage.setItem(VIEW_KEY, JSON.stringify(view));
     } catch {
       /* storage unavailable: the page simply forgets */
     }
-  }, [filters]);
+  }, [filters, tab, search]);
 
-  const timings = useChatTimings(filters);
+  /* Chats are read only while the Chats tab is open; Tickets and Coupons read
+     inside their own tab components — a tab's data loads when it is opened. */
+  const onChats = tab === 'chats';
+  const timings = useChatTimings(filters, onChats);
   /* WORKING HOURS (owner, 2026-10-08): every duration on this page counts only
      the chat SLA policy's working hours, as the SLA engine does. Stamped on each
      chat so every shared function below reads the same clock. */
@@ -482,7 +309,7 @@ export function AgentPerformancePage() {
   /* CSAT joined onto the same chats the rest of the page measures, so the
      rating can never describe a different population than the timings beside
      it. `null` where nobody rated — an unrated agent is not a zero. */
-  const csat = useCsatByConversation(filters);
+  const csat = useCsatByConversation(filters, onChats);
   const csatByAgent = useMemo(() => {
     const acc = new Map<string, { sum: number; n: number }>();
     for (const c of chats) {
@@ -520,7 +347,7 @@ export function AgentPerformancePage() {
    * shared an ordering rule, and having them disagree would mean the same
    * screen answers differently depending on who opened it.
    */
-  const breakdown = useMemo(
+  const breakdownAll = useMemo(
     () =>
       chats
         .map((c) => ({ chat: c, first: firstResponseSec(c), solve: timeToSolveSec(c) }))
@@ -534,6 +361,18 @@ export function AgentPerformancePage() {
           return bt - at;
         }),
     [chats],
+  );
+  /* The search narrows the TABLE only, never the tiles above it — the agent
+     portal's rule, through the same shared matcher (owner, 2026-10-12). */
+  const breakdown = useMemo(
+    () =>
+      breakdownAll.filter(({ chat }) =>
+        matchesSearch(search, {
+          phones: [chat.customerPhone, chat.customer],
+          text: [chat.conversationId, chat.ticketId, chat.orderId, chat.subject, chat.customer],
+        }),
+      ),
+    [breakdownAll, search],
   );
 
   const dash = <span className="text-muted-foreground/50">—</span>;
@@ -557,7 +396,27 @@ export function AgentPerformancePage() {
           {t('performance.title', { defaultValue: 'Agent performance' })}
         </h1>
         <ToolbarSpacer />
-        {canExport && (
+        {/* With the filters, at the top — where the agent portal has it. Sized
+            on the wrapper: Input's base carries w-full. */}
+        <div className="relative w-[16rem] shrink-0">
+          <SearchIcon
+            size={14}
+            aria-hidden
+            className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+          />
+          <Input
+            type="search"
+            className="h-8 ps-8"
+            value={searchDraft}
+            onChange={(e) => setSearchDraft(e.target.value)}
+            aria-label={t('performance.search', { defaultValue: 'Search' })}
+            placeholder={t('performance.searchPlaceholder', {
+              defaultValue: 'Order, ticket, coupon code or customer number…',
+            })}
+          />
+        </div>
+        {/* Exports the per-agent CHAT totals, so it sits with the Chats tab. */}
+        {canExport && onChats && (
           <Button
             type="button"
             variant="secondary"
@@ -615,526 +474,586 @@ export function AgentPerformancePage() {
                 />
               </span>
             </Field>
-            <Field label={t('performance.target', { defaultValue: 'Answer within (minutes)' })}>
-              <span className="block w-[7rem]">
-                <Input
-                  type="number"
-                  min={1}
-                  className="h-8"
-                  aria-label={t('performance.target', { defaultValue: 'Answer within (minutes)' })}
-                  value={targetMin}
-                  onChange={(e) => setTargetMin(Math.max(1, Number(e.target.value) || 1))}
-                />
-              </span>
-            </Field>
+            {/* The response target only means something for chats. */}
+            {onChats && (
+              <Field label={t('performance.target', { defaultValue: 'Answer within (minutes)' })}>
+                <span className="block w-[7rem]">
+                  <Input
+                    type="number"
+                    min={1}
+                    className="h-8"
+                    aria-label={t('performance.target', {
+                      defaultValue: 'Answer within (minutes)',
+                    })}
+                    value={targetMin}
+                    onChange={(e) => setTargetMin(Math.max(1, Number(e.target.value) || 1))}
+                  />
+                </span>
+              </Field>
+            )}
           </div>
 
-          {timings.isLoading || agents.isLoading || slaHours.isLoading ? (
-            <div className="space-y-4">
-              <Skeleton className="h-[5.5rem] w-full rounded-2xl" />
-              <Skeleton className="h-56 w-full rounded-2xl" />
-            </div>
-          ) : chats.length === 0 ? (
-            // Composed empty state on the card surface — a bare sentence floating
-            // in a screenful of canvas read as a rendering failure.
-            <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-              <EmptyState
-                icon={<InboxIcon size={22} />}
-                title={t('performance.empty', { defaultValue: 'No chats match these filters.' })}
-              />
-            </div>
+          <ViewSwitch
+            value={tab}
+            onChange={setTab}
+            label={t('performance.tabs', { defaultValue: 'Performance views' })}
+            options={[
+              { value: 'chats', label: t('performance.tabChats', { defaultValue: 'Chats' }) },
+              { value: 'tickets', label: t('performance.tabTickets', { defaultValue: 'Tickets' }) },
+              { value: 'coupons', label: t('performance.tabCoupons', { defaultValue: 'Coupons' }) },
+            ]}
+          />
+
+          {tab === 'tickets' ? (
+            <TicketsTab filters={filters} search={search} agentNames={agentNames} />
+          ) : tab === 'coupons' ? (
+            <CouponsTab filters={filters} search={search} />
           ) : (
             <>
-              <section
-                aria-label={t('performance.summary', { defaultValue: 'Summary' })}
-                // Same ladder as the Overview's KPI row — the six-up jump straight
-                // from two columns left mid widths with tiles too narrow to name.
-                className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
-              >
-                <Tile
-                  icon={<InboxIcon size={17} />}
-                  label={t('performance.chats', { defaultValue: 'Chats' })}
-                  value={String(summary.chats)}
-                />
-                <Tile
-                  icon={<BellIcon size={17} />}
-                  chip={summary.unanswered > 0 ? 'destructive' : 'neutral'}
-                  label={t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
-                  value={String(summary.unanswered)}
-                  tone={summary.unanswered > 0 ? 'bad' : 'plain'}
-                />
-                <Tile
-                  icon={<ZapIcon size={17} />}
-                  chip={
-                    summary.metPct == null
-                      ? 'neutral'
-                      : summary.metPct >= 80
-                        ? 'success'
-                        : 'destructive'
-                  }
-                  label={t('performance.metPct', { defaultValue: 'Answered in time' })}
-                  value={summary.metPct == null ? '—' : `${summary.metPct}%`}
-                  tone={summary.metPct == null ? 'plain' : summary.metPct >= 80 ? 'good' : 'bad'}
-                  visual={
-                    summary.metPct == null ? undefined : (
-                      // The board's ring accent — the same figure drawn as an arc.
-                      <ProgressRing
-                        value={summary.metPct}
-                        size={48}
-                        stroke={5}
-                        tone={summary.metPct >= 80 ? 'success' : 'destructive'}
-                        label={`${summary.metPct}%`}
-                      />
-                    )
-                  }
-                />
-                {/* Each average names the population it was taken over.
+              {timings.isLoading || agents.isLoading || slaHours.isLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-[5.5rem] w-full rounded-2xl" />
+                  <Skeleton className="h-56 w-full rounded-2xl" />
+                </div>
+              ) : chats.length === 0 ? (
+                // Composed empty state on the card surface — a bare sentence floating
+                // in a screenful of canvas read as a rendering failure.
+                <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+                  <EmptyState
+                    icon={<InboxIcon size={22} />}
+                    title={t('performance.empty', {
+                      defaultValue: 'No chats match these filters.',
+                    })}
+                  />
+                </div>
+              ) : (
+                <>
+                  <section
+                    aria-label={t('performance.summary', { defaultValue: 'Summary' })}
+                    // Same ladder as the Overview's KPI row — the six-up jump straight
+                    // from two columns left mid widths with tiles too narrow to name.
+                    className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+                  >
+                    <Tile
+                      icon={<InboxIcon size={17} />}
+                      label={t('performance.chats', { defaultValue: 'Chats' })}
+                      value={String(summary.chats)}
+                    />
+                    <Tile
+                      icon={<BellIcon size={17} />}
+                      chip={summary.unanswered > 0 ? 'destructive' : 'neutral'}
+                      label={t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
+                      value={String(summary.unanswered)}
+                      tone={summary.unanswered > 0 ? 'bad' : 'plain'}
+                    />
+                    <Tile
+                      icon={<ZapIcon size={17} />}
+                      chip={
+                        summary.metPct == null
+                          ? 'neutral'
+                          : summary.metPct >= 80
+                            ? 'success'
+                            : 'destructive'
+                      }
+                      label={t('performance.metPct', { defaultValue: 'Answered in time' })}
+                      value={summary.metPct == null ? '—' : `${summary.metPct}%`}
+                      tone={
+                        summary.metPct == null ? 'plain' : summary.metPct >= 80 ? 'good' : 'bad'
+                      }
+                      visual={
+                        summary.metPct == null ? undefined : (
+                          // The board's ring accent — the same figure drawn as an arc.
+                          <ProgressRing
+                            value={summary.metPct}
+                            size={48}
+                            stroke={5}
+                            tone={summary.metPct >= 80 ? 'success' : 'destructive'}
+                            label={`${summary.metPct}%`}
+                          />
+                        )
+                      }
+                    />
+                    {/* Each average names the population it was taken over.
                     They are DISJOINT — first response averages the answered
                     chats, time to solve averages the solved ones — so without
                     the denominators the pair reads as a contradiction: a
                     17-second solve beside a 5-hour first response looks like
                     chats being solved before anyone replies, when it is simply
                     two different handfuls of chats. */}
-                <Tile
-                  icon={<ClockIcon size={17} />}
-                  chip="sky"
-                  label={t('performance.avgFirst', { defaultValue: 'First response' })}
-                  value={formatDuration(summary.avgFirstResponseSec) ?? '—'}
-                  hint={t('performance.avgOverAnswered', {
-                    defaultValue: 'average over {{n}} answered',
-                    n: summary.answered,
-                  })}
-                />
-                <Tile
-                  icon={<ChartIcon size={17} />}
-                  chip="violet"
-                  label={t('performance.avgSolve', { defaultValue: 'Time to solve' })}
-                  value={formatDuration(summary.avgTimeToSolveSec) ?? '—'}
-                  hint={t('performance.avgOverSolved', {
-                    defaultValue: 'average over {{n}} solved',
-                    n: summary.solved,
-                  })}
-                />
-                <Tile
-                  icon={<UsersIcon size={17} />}
-                  chip={summary.commonChats > 0 ? 'success' : 'neutral'}
-                  label={t('performance.commonChats', { defaultValue: 'Common chats taken' })}
-                  value={String(summary.commonChats)}
-                  tone={summary.commonChats > 0 ? 'good' : 'plain'}
-                />
-              </section>
+                    <Tile
+                      icon={<ClockIcon size={17} />}
+                      chip="sky"
+                      label={t('performance.avgFirst', { defaultValue: 'First response' })}
+                      value={formatDuration(summary.avgFirstResponseSec) ?? '—'}
+                      hint={t('performance.avgOverAnswered', {
+                        defaultValue: 'average over {{n}} answered',
+                        n: summary.answered,
+                      })}
+                    />
+                    <Tile
+                      icon={<ChartIcon size={17} />}
+                      chip="violet"
+                      label={t('performance.avgSolve', { defaultValue: 'Time to solve' })}
+                      value={formatDuration(summary.avgTimeToSolveSec) ?? '—'}
+                      hint={t('performance.avgOverSolved', {
+                        defaultValue: 'average over {{n}} solved',
+                        n: summary.solved,
+                      })}
+                    />
+                    <Tile
+                      icon={<UsersIcon size={17} />}
+                      chip={summary.commonChats > 0 ? 'success' : 'neutral'}
+                      label={t('performance.commonChats', { defaultValue: 'Common chats taken' })}
+                      value={String(summary.commonChats)}
+                      tone={summary.commonChats > 0 ? 'good' : 'plain'}
+                    />
+                  </section>
 
-              {/* Chats an AGENT started (owner, 2026-10-07): first response is
+                  {/* Chats an AGENT started (owner, 2026-10-07): first response is
                   not a fair measure for them, and time to solve depends on when
                   the customer answers — so: did the customer answer, how fast,
                   and how long the chat took once they did. */}
-              {outreach.started > 0 && (
-                <section
-                  aria-label={t('performance.outreachTitle', {
-                    defaultValue: 'Chats started by an agent',
-                  })}
-                  className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
-                >
-                  <Tile
-                    label={t('performance.outreachStarted', { defaultValue: 'Started by agent' })}
-                    value={String(outreach.started)}
-                  />
-                  <Tile
-                    label={t('performance.outreachReplied', { defaultValue: 'Customer replied' })}
-                    value={outreach.replyRatePct == null ? '—' : `${outreach.replyRatePct}%`}
-                    hint={t('performance.outreachRepliedHint', {
-                      defaultValue: '{{n}} of {{total}}',
-                      n: outreach.customerReplied,
-                      total: outreach.started,
-                    })}
-                  />
-                  <Tile
-                    label={t('performance.outreachReplyTime', {
-                      defaultValue: 'Customer reply time',
-                    })}
-                    value={formatDuration(outreach.medianCustomerReplySec) ?? '—'}
-                    hint={t('performance.median', { defaultValue: 'median' })}
-                  />
-                  <Tile
-                    label={t('performance.outreachHandling', {
-                      defaultValue: 'Solved after customer replied',
-                    })}
-                    value={formatDuration(outreach.medianHandlingSec) ?? '—'}
-                    hint={t('performance.outreachHandlingHint', {
-                      defaultValue: 'median · {{n}} closed without a reply',
-                      n: outreach.closedWithoutReply,
-                    })}
-                  />
-                </section>
-              )}
+                  {outreach.started > 0 && (
+                    <section
+                      aria-label={t('performance.outreachTitle', {
+                        defaultValue: 'Chats started by an agent',
+                      })}
+                      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+                    >
+                      <Tile
+                        label={t('performance.outreachStarted', {
+                          defaultValue: 'Started by agent',
+                        })}
+                        value={String(outreach.started)}
+                      />
+                      <Tile
+                        label={t('performance.outreachReplied', {
+                          defaultValue: 'Customer replied',
+                        })}
+                        value={outreach.replyRatePct == null ? '—' : `${outreach.replyRatePct}%`}
+                        hint={t('performance.outreachRepliedHint', {
+                          defaultValue: '{{n}} of {{total}}',
+                          n: outreach.customerReplied,
+                          total: outreach.started,
+                        })}
+                      />
+                      <Tile
+                        label={t('performance.outreachReplyTime', {
+                          defaultValue: 'Customer reply time',
+                        })}
+                        value={formatDuration(outreach.medianCustomerReplySec) ?? '—'}
+                        hint={t('performance.median', { defaultValue: 'median' })}
+                      />
+                      <Tile
+                        label={t('performance.outreachHandling', {
+                          defaultValue: 'Solved after customer replied',
+                        })}
+                        value={formatDuration(outreach.medianHandlingSec) ?? '—'}
+                        hint={t('performance.outreachHandlingHint', {
+                          defaultValue: 'median · {{n}} closed without a reply',
+                          n: outreach.closedWithoutReply,
+                        })}
+                      />
+                    </section>
+                  )}
 
-              {/* THE TWO PER-DAY CHARTS COME FIRST (owner, 2026-09-16).
+                  {/* THE TWO PER-DAY CHARTS COME FIRST (owner, 2026-09-16).
                   Shape before attribution: "how busy was it, and were we
                   keeping up" is the question a reviewer opens this page with,
                   and it is answerable for the whole team. The per-agent
                   breakdown below answers "who", which only makes sense once
                   you know there was something to hand out. */}
-              <section className="grid gap-4 lg:grid-cols-2">
-                <Card
-                  title={t('performance.perDayTitle', { defaultValue: 'Chats per day' })}
-                  help={t('performance.perDayHelp', { defaultValue: 'How busy each day was' })}
-                >
-                  <TrendChart
-                    points={trend}
-                    series={volumeSeries}
-                    format={countFmt}
-                    emptyLabel={nothingToChart}
-                  />
-                </Card>
-                <Card
-                  title={t('performance.speedPerDayTitle', {
-                    defaultValue: 'Response times per day',
-                  })}
-                  help={t('performance.speedPerDayHelp', {
-                    defaultValue: 'A gap is a day nothing was measurable',
-                  })}
-                >
-                  <TrendChart
-                    points={trend}
-                    series={timeSeries}
-                    format={durFmt}
-                    emptyLabel={nothingMeasured}
-                  />
-                </Card>
-              </section>
+                  <section className="grid gap-4 lg:grid-cols-2">
+                    <Card
+                      title={t('performance.perDayTitle', { defaultValue: 'Chats per day' })}
+                      help={t('performance.perDayHelp', { defaultValue: 'How busy each day was' })}
+                    >
+                      <TrendChart
+                        points={trend}
+                        series={volumeSeries}
+                        format={countFmt}
+                        emptyLabel={nothingToChart}
+                      />
+                    </Card>
+                    <Card
+                      title={t('performance.speedPerDayTitle', {
+                        defaultValue: 'Response times per day',
+                      })}
+                      help={t('performance.speedPerDayHelp', {
+                        defaultValue: 'A gap is a day nothing was measurable',
+                      })}
+                    >
+                      <TrendChart
+                        points={trend}
+                        series={timeSeries}
+                        format={durFmt}
+                        emptyLabel={nothingMeasured}
+                      />
+                    </Card>
+                  </section>
 
-              {!filters.agentId && (
-                <section className="grid gap-4 lg:grid-cols-2">
-                  <Card
-                    // "Who handled" was a promise the chart could not keep:
-                    // its biggest bar is routinely "Unassigned", which is
-                    // nobody handling anything. The title now says what the
-                    // bars actually measure, and the help line names the
-                    // unassigned row for what it is — a backlog, not a person.
-                    title={t('performance.whoTitle', { defaultValue: 'Where the chats sat' })}
-                    help={t('performance.whoHelp', {
-                      defaultValue:
-                        'Chats assigned in this range. “Unassigned” is work nobody picked up — it is counted, not hidden.',
-                    })}
-                  >
-                    <HBarChart
-                      rows={compare.map((r) => ({ label: r.label, values: r.values }))}
-                      series={volumeSeries}
-                      format={countFmt}
-                      emptyLabel={nothingToChart}
-                    />
-                  </Card>
-                  <Card
-                    /* "General chats answered" (owner, 2026-09-16). The old
+                  {!filters.agentId && (
+                    <section className="grid gap-4 lg:grid-cols-2">
+                      <Card
+                        // "Who handled" was a promise the chart could not keep:
+                        // its biggest bar is routinely "Unassigned", which is
+                        // nobody handling anything. The title now says what the
+                        // bars actually measure, and the help line names the
+                        // unassigned row for what it is — a backlog, not a person.
+                        title={t('performance.whoTitle', { defaultValue: 'Where the chats sat' })}
+                        help={t('performance.whoHelp', {
+                          defaultValue:
+                            'Chats assigned in this range. “Unassigned” is work nobody picked up — it is counted, not hidden.',
+                        })}
+                      >
+                        <HBarChart
+                          rows={compare.map((r) => ({ label: r.label, values: r.values }))}
+                          series={volumeSeries}
+                          format={countFmt}
+                          emptyLabel={nothingToChart}
+                        />
+                      </Card>
+                      <Card
+                        /* "General chats answered" (owner, 2026-09-16). The old
                        title described the mechanism — picked up FOR THE TEAM —
                        which only makes sense if you already know how the
                        routing ladder releases a chat to everybody. The general
                        queue is what agents call it, so the chart is named after
                        the thing rather than the plumbing. */
-                    title={t('performance.commonTitle', {
-                      defaultValue: 'General chats answered',
-                    })}
-                    help={t('performance.commonHelp', {
-                      defaultValue: 'Chats that reached the general queue and this agent answered',
-                    })}
-                  >
-                    <HBarChart
-                      rows={compare.map((r) => ({ label: r.label, values: r.values }))}
-                      series={commonSeries}
-                      format={countFmt}
-                      emptyLabel={nothingToChart}
-                    />
-                  </Card>
-                  <Card
-                    title={t('performance.fastTitle', { defaultValue: 'How fast they replied' })}
-                    help={t('performance.fastHelp', {
-                      defaultValue: 'Averages per agent — shorter is better',
-                    })}
-                    // Full row: three cards on a two-column grid left a dead cell
-                    // beside this one, and its two series per agent want the width.
-                    className="lg:col-span-2"
-                  >
-                    <HBarChart
-                      rows={compare.map((r) => ({
-                        label: r.label,
-                        note: r.note,
-                        values: r.values,
-                      }))}
-                      series={timeSeries}
-                      format={durFmt}
-                      emptyLabel={nothingMeasured}
-                    />
-                  </Card>
-                </section>
-              )}
+                        title={t('performance.commonTitle', {
+                          defaultValue: 'General chats answered',
+                        })}
+                        help={t('performance.commonHelp', {
+                          defaultValue:
+                            'Chats that reached the general queue and this agent answered',
+                        })}
+                      >
+                        <HBarChart
+                          rows={compare.map((r) => ({ label: r.label, values: r.values }))}
+                          series={commonSeries}
+                          format={countFmt}
+                          emptyLabel={nothingToChart}
+                        />
+                      </Card>
+                      <Card
+                        title={t('performance.fastTitle', {
+                          defaultValue: 'How fast they replied',
+                        })}
+                        help={t('performance.fastHelp', {
+                          defaultValue: 'Averages per agent — shorter is better',
+                        })}
+                        // Full row: three cards on a two-column grid left a dead cell
+                        // beside this one, and its two series per agent want the width.
+                        className="lg:col-span-2"
+                      >
+                        <HBarChart
+                          rows={compare.map((r) => ({
+                            label: r.label,
+                            note: r.note,
+                            values: r.values,
+                          }))}
+                          series={timeSeries}
+                          format={durFmt}
+                          emptyLabel={nothingMeasured}
+                        />
+                      </Card>
+                    </section>
+                  )}
 
-              {/* The numbers behind the charts. No row opens anything — this page
+                  {/* The numbers behind the charts. No row opens anything — this page
               reviews the team, it does not work the queue. */}
-              <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-                <header className="flex items-baseline justify-between gap-3  px-5 py-4">
-                  <div>
-                    <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                      {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
-                    </h2>
-                    <p className="mt-0.5 text-2xs text-muted-foreground">
-                      {t('performance.summaryHint', {
-                        defaultValue: 'Every agent with chats in this range, busiest first.',
-                      })}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                    {t('performance.chatsCount', {
-                      defaultValue: '{{n}} chats',
-                      n: rows.reduce((sum, r) => sum + r.chats, 0),
-                    })}
-                  </span>
-                </header>
-                <div className="overflow-x-auto">
-                  <table
-                    className="w-full min-w-max text-sm"
-                    aria-label={t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
-                  >
-                    <thead>
-                      <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                        <th className="h-10 px-5 text-start font-semibold">
-                          {t('performance.agent', { defaultValue: 'Agent' })}
-                        </th>
-                        <th className="h-10 px-5 text-start font-semibold">
-                          {t('performance.chats', { defaultValue: 'Chats' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.avgFirstCol', { defaultValue: 'First response' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.solved', { defaultValue: 'Solved' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.avgSolveCol', { defaultValue: 'Time to solve (avg)' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.csat', { defaultValue: 'Customer rating' })}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y-0">
-                      {rows.map((r) => (
-                        <tr
-                          key={r.agentId ?? 'unassigned'}
-                          className="transition-colors duration-fast hover:bg-primary/[0.06]"
-                        >
-                          <td className="px-5 py-3">
-                            <span className="flex items-center gap-2.5">
-                              <Avatar name={r.agentName} size="sm" />
-                              <span className="truncate font-medium text-foreground">
-                                {r.agentName}
-                              </span>
-                            </span>
-                          </td>
-                          {/* Chats read as a share of the busiest agent, so the
-                              workload spread is visible without the division. */}
-                          <td className="px-5 py-3">
-                            <span className="flex items-center gap-2.5">
-                              <span className="w-6 text-end text-sm font-bold tabular-nums text-foreground">
-                                {r.chats}
-                              </span>
-                              <MeterBar
-                                value={(r.chats / Math.max(1, ...rows.map((x) => x.chats))) * 100}
-                                tone="sky"
-                                className="w-20"
-                              />
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums">
-                            {r.unanswered > 0 ? (
-                              <Pill tone="destructive" size="sm">
-                                {r.unanswered}
-                              </Pill>
-                            ) : (
-                              <span className="text-muted-foreground">0</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums">
-                            {r.commonChats > 0 ? (
-                              <Pill tone="success" size="sm">
-                                {r.commonChats}
-                              </Pill>
-                            ) : (
-                              <span className="text-muted-foreground">0</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums text-foreground">
-                            {formatDuration(r.avgFirstResponseSec) ?? dash}
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums text-foreground">
-                            {r.solved}
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
-                            {formatDuration(r.avgTimeToSolveSec) ?? dash}
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums">
-                            {(() => {
-                              const c = csatByAgent.get(r.agentId ?? '');
-                              if (!c) return <span className="text-muted-foreground">{dash}</span>;
-                              return (
-                                <span
-                                  className={cn(
-                                    'font-semibold',
-                                    c.avg >= 4 ? 'text-success' : 'text-foreground',
-                                  )}
-                                  title={t('performance.csatCount', {
-                                    defaultValue: '{{n}} rated',
-                                    n: c.n,
-                                  })}
-                                >
-                                  {c.avg.toFixed(1)}
+                  <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+                    <header className="flex items-baseline justify-between gap-3  px-5 py-4">
+                      <div>
+                        <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                          {t('performance.summaryTable', { defaultValue: 'Totals per agent' })}
+                        </h2>
+                        <p className="mt-0.5 text-2xs text-muted-foreground">
+                          {t('performance.summaryHint', {
+                            defaultValue: 'Every agent with chats in this range, busiest first.',
+                          })}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                        {t('performance.chatsCount', {
+                          defaultValue: '{{n}} chats',
+                          n: rows.reduce((sum, r) => sum + r.chats, 0),
+                        })}
+                      </span>
+                    </header>
+                    <div className="overflow-x-auto">
+                      <table
+                        className="w-full min-w-max text-sm"
+                        aria-label={t('performance.summaryTable', {
+                          defaultValue: 'Totals per agent',
+                        })}
+                      >
+                        <thead>
+                          <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
+                            <th className="h-10 px-5 text-start font-semibold">
+                              {t('performance.agent', { defaultValue: 'Agent' })}
+                            </th>
+                            <th className="h-10 px-5 text-start font-semibold">
+                              {t('performance.chats', { defaultValue: 'Chats' })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.avgFirstCol', { defaultValue: 'First response' })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.solved', { defaultValue: 'Solved' })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.avgSolveCol', {
+                                defaultValue: 'Time to solve (avg)',
+                              })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.csat', { defaultValue: 'Customer rating' })}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y-0">
+                          {rows.map((r) => (
+                            <tr
+                              key={r.agentId ?? 'unassigned'}
+                              className="transition-colors duration-fast hover:bg-primary/[0.06]"
+                            >
+                              <td className="px-5 py-3">
+                                <span className="flex items-center gap-2.5">
+                                  <Avatar name={r.agentName} size="sm" />
+                                  <span className="truncate font-medium text-foreground">
+                                    {r.agentName}
+                                  </span>
                                 </span>
-                              );
-                            })()}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                              </td>
+                              {/* Chats read as a share of the busiest agent, so the
+                              workload spread is visible without the division. */}
+                              <td className="px-5 py-3">
+                                <span className="flex items-center gap-2.5">
+                                  <span className="w-6 text-end text-sm font-bold tabular-nums text-foreground">
+                                    {r.chats}
+                                  </span>
+                                  <MeterBar
+                                    value={
+                                      (r.chats / Math.max(1, ...rows.map((x) => x.chats))) * 100
+                                    }
+                                    tone="sky"
+                                    className="w-20"
+                                  />
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 text-end tabular-nums">
+                                {r.unanswered > 0 ? (
+                                  <Pill tone="destructive" size="sm">
+                                    {r.unanswered}
+                                  </Pill>
+                                ) : (
+                                  <span className="text-muted-foreground">0</span>
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-end tabular-nums">
+                                {r.commonChats > 0 ? (
+                                  <Pill tone="success" size="sm">
+                                    {r.commonChats}
+                                  </Pill>
+                                ) : (
+                                  <span className="text-muted-foreground">0</span>
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-end tabular-nums text-foreground">
+                                {formatDuration(r.avgFirstResponseSec) ?? dash}
+                              </td>
+                              <td className="px-5 py-3 text-end tabular-nums text-foreground">
+                                {r.solved}
+                              </td>
+                              <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
+                                {formatDuration(r.avgTimeToSolveSec) ?? dash}
+                              </td>
+                              <td className="px-5 py-3 text-end tabular-nums">
+                                {(() => {
+                                  const c = csatByAgent.get(r.agentId ?? '');
+                                  if (!c)
+                                    return <span className="text-muted-foreground">{dash}</span>;
+                                  return (
+                                    <span
+                                      className={cn(
+                                        'font-semibold',
+                                        c.avg >= 4 ? 'text-success' : 'text-foreground',
+                                      )}
+                                      title={t('performance.csatCount', {
+                                        defaultValue: '{{n}} rated',
+                                        n: c.n,
+                                      })}
+                                    >
+                                      {c.avg.toFixed(1)}
+                                    </span>
+                                  );
+                                })()}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
 
-              {/* Chat by chat — the six columns the owner asked for. A row
+                  {/* Chat by chat — the six columns the owner asked for. A row
                   opens the conversation in the agent portal, which is where a
                   supervisor goes to see what was actually said. */}
-              <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-                <header className="flex items-baseline justify-between gap-3  px-5 py-4">
-                  <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                    {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
-                  </h2>
-                  <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                    {breakdown.length}
-                  </span>
-                </header>
-                <div className="max-h-[32rem] overflow-auto">
-                  <table
-                    className="w-full min-w-max text-sm"
-                    aria-label={t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
-                  >
-                    <thead className="sticky top-0 z-10 bg-card">
-                      <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                        <th className="h-10 px-5 text-start font-semibold">
-                          {t('performance.subject', { defaultValue: 'Ticket / chat' })}
-                        </th>
-                        <th className="h-10 px-5 text-start font-semibold">
-                          {t('performance.customer', { defaultValue: 'Customer' })}
-                        </th>
-                        <th className="h-10 px-5 text-start font-semibold">
-                          {t('performance.agent', { defaultValue: 'Agent' })}
-                        </th>
-                        <th className="h-10 px-5 text-start font-semibold">
-                          {t('performance.started', { defaultValue: 'Started' })}
-                        </th>
-                        <th className="h-10 px-5 text-start font-semibold">
-                          {t('performance.startedBy', { defaultValue: 'Started by' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.firstResponse', { defaultValue: 'First response' })}
-                        </th>
-                        <th className="h-10 px-5 text-end font-semibold">
-                          {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y-0">
-                      {breakdown.map(({ chat, first, solve }) => (
-                        <tr
-                          key={chat.conversationId}
-                          className="transition-colors duration-fast hover:bg-primary/[0.06]"
-                        >
-                          <td className="max-w-[20rem] px-5 py-3">
-                            <span
-                              className="block truncate font-medium text-foreground"
-                              title={chat.subject ?? ''}
+                  <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+                    <header className="flex items-baseline justify-between gap-3  px-5 py-4">
+                      <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                        {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
+                      </h2>
+                      <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                        {breakdown.length === breakdownAll.length
+                          ? breakdown.length
+                          : `${breakdown.length} / ${breakdownAll.length}`}
+                      </span>
+                    </header>
+                    <div className="max-h-[32rem] overflow-auto">
+                      <table
+                        className="w-full min-w-max text-sm"
+                        aria-label={t('performance.breakdownTitle', {
+                          defaultValue: 'Chat by chat',
+                        })}
+                      >
+                        <thead className="sticky top-0 z-10 bg-card">
+                          <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
+                            <th className="h-10 px-5 text-start font-semibold">
+                              {t('performance.subject', { defaultValue: 'Ticket / chat' })}
+                            </th>
+                            <th className="h-10 px-5 text-start font-semibold">
+                              {t('performance.customer', { defaultValue: 'Customer' })}
+                            </th>
+                            <th className="h-10 px-5 text-start font-semibold">
+                              {t('performance.agent', { defaultValue: 'Agent' })}
+                            </th>
+                            <th className="h-10 px-5 text-start font-semibold">
+                              {t('performance.started', { defaultValue: 'Started' })}
+                            </th>
+                            <th className="h-10 px-5 text-start font-semibold">
+                              {t('performance.startedBy', { defaultValue: 'Started by' })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.firstResponse', { defaultValue: 'First response' })}
+                            </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y-0">
+                          {breakdown.length === 0 && <NoMatchRow colSpan={7} search={search} />}
+                          {breakdown.map(({ chat, first, solve }) => (
+                            <tr
+                              key={chat.conversationId}
+                              className="transition-colors duration-fast hover:bg-primary/[0.06]"
                             >
-                              {chat.subject ??
-                                t('performance.noSubject', { defaultValue: 'Chat (no ticket)' })}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 text-muted-foreground">
-                            <span className="block max-w-[12rem] truncate">
-                              {chat.customer ??
-                                t('performance.unknownCustomer', { defaultValue: 'Customer' })}
-                            </span>
-                          </td>
-                          <td className="px-5 py-3">
-                            <span className="flex items-center gap-2">
-                              <Avatar name={chat.agentName} size="sm" />
-                              <span className="truncate text-foreground">{chat.agentName}</span>
-                            </span>
-                          </td>
-                          <td className="px-5 py-3 tabular-nums text-muted-foreground">
-                            {chat.startedAt ? formatDateTime(chat.startedAt) : dash}
-                          </td>
-                          <td className="px-5 py-3 text-muted-foreground">
-                            {chat.initiatedBy === 'agent'
-                              ? t('performance.byAgent', { defaultValue: 'Agent' })
-                              : t('performance.byCustomer', { defaultValue: 'Customer' })}
-                          </td>
-                          {/* "No reply" rather than a dash: the worst outcome
+                              <td className="max-w-[20rem] px-5 py-3">
+                                <span
+                                  className="block truncate font-medium text-foreground"
+                                  title={chat.subject ?? ''}
+                                >
+                                  {chat.subject ??
+                                    t('performance.noSubject', {
+                                      defaultValue: 'Chat (no ticket)',
+                                    })}
+                                </span>
+                                {/* The ids a search finds it by (owner, 2026-10-12). */}
+                                {(chat.ticketId || chat.orderId) && (
+                                  <span className="font-mono text-2xs text-muted-foreground">
+                                    {[
+                                      chat.ticketId ? `ID ${chat.ticketId}` : null,
+                                      chat.orderId ? `#${chat.orderId}` : null,
+                                    ]
+                                      .filter(Boolean)
+                                      .join(' · ')}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-muted-foreground">
+                                <span className="block max-w-[12rem] truncate">
+                                  {chat.customer ??
+                                    t('performance.unknownCustomer', { defaultValue: 'Customer' })}
+                                </span>
+                              </td>
+                              <td className="px-5 py-3">
+                                <span className="flex items-center gap-2">
+                                  <Avatar name={chat.agentName} size="sm" />
+                                  <span className="truncate text-foreground">{chat.agentName}</span>
+                                </span>
+                              </td>
+                              <td className="px-5 py-3 tabular-nums text-muted-foreground">
+                                {chat.startedAt ? formatDateTime(chat.startedAt) : dash}
+                              </td>
+                              <td className="px-5 py-3 text-muted-foreground">
+                                {chat.initiatedBy === 'agent'
+                                  ? t('performance.byAgent', { defaultValue: 'Agent' })
+                                  : t('performance.byCustomer', { defaultValue: 'Customer' })}
+                              </td>
+                              {/* "No reply" rather than a dash: the worst outcome
                               on the page must not read as missing data. */}
-                          <td
-                            className={cn(
-                              'px-5 py-3 text-end tabular-nums',
-                              chat.passedOn || awaitingCustomer(chat)
-                                ? 'text-muted-foreground'
-                                : first == null
-                                  ? 'font-semibold text-destructive'
-                                  : 'text-foreground',
-                            )}
-                          >
-                            {awaitingCustomer(chat)
-                              ? t('performance.customerNotReplied', {
-                                  defaultValue: 'Customer hasn’t replied',
-                                })
-                              : first == null
-                                ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
-                                : formatDuration(first)}
-                          </td>
-                          <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
-                            {solve != null
-                              ? formatDuration(solve)
-                              : chat.solvedAt
-                                ? awaitingCustomer(chat)
-                                  ? t('performance.closedNoReply', {
-                                      defaultValue: 'Closed — no customer reply',
+                              <td
+                                className={cn(
+                                  'px-5 py-3 text-end tabular-nums',
+                                  chat.passedOn || awaitingCustomer(chat)
+                                    ? 'text-muted-foreground'
+                                    : first == null
+                                      ? 'font-semibold text-destructive'
+                                      : 'text-foreground',
+                                )}
+                              >
+                                {awaitingCustomer(chat)
+                                  ? t('performance.customerNotReplied', {
+                                      defaultValue: 'Customer hasn’t replied',
                                     })
-                                  : t('performance.closed', { defaultValue: 'Closed' })
-                                : awaitingCustomer(chat)
-                                  ? t('performance.waitingCustomer', {
-                                      defaultValue: 'Waiting for customer',
-                                    })
-                                  : dash}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
+                                  : first == null
+                                    ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
+                                    : formatDuration(first)}
+                              </td>
+                              <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
+                                {solve != null
+                                  ? formatDuration(solve)
+                                  : chat.solvedAt
+                                    ? awaitingCustomer(chat)
+                                      ? t('performance.closedNoReply', {
+                                          defaultValue: 'Closed — no customer reply',
+                                        })
+                                      : t('performance.closed', { defaultValue: 'Closed' })
+                                    : awaitingCustomer(chat)
+                                      ? t('performance.waitingCustomer', {
+                                          defaultValue: 'Waiting for customer',
+                                        })
+                                      : dash}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                </>
+              )}
+
+              <p className="px-1 pb-2 text-2xs leading-relaxed text-muted-foreground">
+                {t('performance.commonBasis', {
+                  defaultValue:
+                    'A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.',
+                })}{' '}
+                {t('performance.basis', {
+                  defaultValue:
+                    'First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.',
+                })}
+              </p>
             </>
           )}
-
-          <p className="px-1 pb-2 text-2xs leading-relaxed text-muted-foreground">
-            {t('performance.commonBasis', {
-              defaultValue:
-                'A chat the system had to pass on is left out of the response-time figures — it carries the wait the earlier agents caused — and counted here instead, for whoever picked it up.',
-            })}{' '}
-            {t('performance.basis', {
-              defaultValue:
-                'First response is measured from the customer’s first message to the first agent reply; internal notes do not count as a reply. Chats nobody has answered are counted under “No reply yet” and left out of the averages, but they still count against “Answered in time”.',
-            })}
-          </p>
         </div>
       </div>
     </div>
@@ -1150,73 +1069,6 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
       </span>
       {children}
     </label>
-  );
-}
-
-/* The boards' KPI chip fills — `--<hue>-tint` + hue pairs, matching the
- * Overview's KPI row so the two console dashboards read as one system.
- * `--warning` stays out: its glyph contrast on the tint fails 3:1 on light. */
-const TILE_CHIPS = {
-  neutral: 'bg-secondary text-foreground',
-  sky: 'bg-sky-tint text-sky',
-  violet: 'bg-violet-tint text-violet',
-  success: 'bg-success-tint text-success',
-  destructive: 'bg-destructive-tint text-destructive',
-} as const;
-
-/** One headline number — board anatomy: icon chip, hue numeral, micro-label, optional data accent. */
-function Tile({
-  label,
-  value,
-  hint,
-  tone = 'plain',
-  chip = 'neutral',
-  icon,
-  visual,
-}: {
-  label: string;
-  value: string;
-  hint?: string;
-  tone?: 'plain' | 'good' | 'bad';
-  /** Chip hue — the tile's identity color, independent of the value's verdict. */
-  chip?: keyof typeof TILE_CHIPS;
-  icon?: ReactNode;
-  visual?: ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-      <div className="flex items-start gap-3">
-        {icon && (
-          <span
-            aria-hidden
-            className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', TILE_CHIPS[chip])}
-          >
-            {icon}
-          </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <div
-            className={cn(
-              'text-2xl font-extrabold leading-none tracking-[-0.03em] tabular-nums',
-              tone === 'bad'
-                ? 'text-destructive'
-                : tone === 'good'
-                  ? 'text-success'
-                  : 'text-foreground',
-            )}
-          >
-            {value}
-          </div>
-          {/* Wraps rather than truncates: at six-up these labels used to shear
-              to "ANSWERED W…", which is a label that names nothing. */}
-          <div className="mt-2 text-2xs font-semibold uppercase leading-snug tracking-[0.12em] text-muted-foreground">
-            {label}
-            {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
-          </div>
-        </div>
-        {visual && <div className="shrink-0 self-center">{visual}</div>}
-      </div>
-    </div>
   );
 }
 
