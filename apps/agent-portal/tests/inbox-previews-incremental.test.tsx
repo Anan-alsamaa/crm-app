@@ -74,3 +74,26 @@ describe('inbox previews are read incrementally', () => {
     expect(request).not.toHaveBeenCalled();
   });
 });
+
+/* 2026-10-12: the cache was a query entry nothing observed, so React Query
+   garbage-collected it after 5 minutes and every agent re-read ~1,000 chats. */
+describe('the preview cache outlives query garbage collection', () => {
+  it('survives the query cache dropping unobserved entries', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 0 } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    request.mockImplementation(async (q: unknown) =>
+      idsIn(q).map((id) => ({ conversation: id, content: id, sender_type: 'customer' })),
+    );
+    const rows = [{ id: 'c1', last_message_at: 't1' }];
+    renderHook(() => useConversationPreviews(rows), { wrapper });
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    // What gcTime does to an unobserved entry, done at once.
+    qc.getQueryCache().clear();
+    request.mockClear();
+    const again = renderHook(() => useConversationPreviews(rows), { wrapper });
+    await waitFor(() => expect(again.result.current.data?.c1?.content).toBe('c1'));
+    expect(request).not.toHaveBeenCalled();
+  });
+});

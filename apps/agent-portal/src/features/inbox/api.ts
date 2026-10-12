@@ -525,20 +525,24 @@ export interface ConversationPreview {
 
 /**
  * The previews this browser already holds, per conversation, with the
- * `last_message_at` each was read at. Kept on the QueryClient so it lives as
- * long as the session's cache (and a test's fresh client starts empty).
+ * `last_message_at` each was read at.
+ *
+ * A WeakMap per QueryClient, NOT a query-cache entry: an entry nothing
+ * observes is garbage-collected after 5 minutes, which threw every preview
+ * away and re-read all ~1,000 chats per agent every 5 minutes (prod,
+ * 2026-10-12). Per client, so a test's fresh client still starts empty.
  */
 interface PreviewCache {
   entries: Map<string, { stamp: string | null; preview: ConversationPreview | null }>;
   /** Conversations an `inbox:activity` named since their preview was read. */
   dirty: Set<string>;
 }
-const PREVIEW_CACHE_KEY = ['conversation-preview-cache'] as const;
+const previewCaches = new WeakMap<QueryClient, PreviewCache>();
 function previewCacheOf(qc: QueryClient): PreviewCache {
-  let c = qc.getQueryData<PreviewCache>(PREVIEW_CACHE_KEY);
+  let c = previewCaches.get(qc);
   if (!c) {
     c = { entries: new Map(), dirty: new Set() };
-    qc.setQueryData(PREVIEW_CACHE_KEY, c);
+    previewCaches.set(qc, c);
   }
   return c;
 }
