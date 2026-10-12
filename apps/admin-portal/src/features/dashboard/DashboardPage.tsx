@@ -31,7 +31,9 @@ export function DashboardPage() {
   const { t } = useTranslation();
   const { user, can, isOwner } = useAuth();
   const firstName = user?.first_name || user?.email?.split('@')[0] || '';
-  const canSeeAgent = can('view_all_chats');
+  // Each board is its own switch (owner, 2026-10-12). The Agent one defaults to
+  // the old rule - open the page AND see all chats - so nobody's view changed.
+  const canSeeAgent = isOwner || can('view_agent_dashboard');
   // The operations board is its own privilege now: the desk is not shown the
   // branch/brand/area-manager cuts unless told, and operations is not shown
   // the desk. The owner sees both.

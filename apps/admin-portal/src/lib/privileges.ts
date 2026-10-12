@@ -11,6 +11,8 @@ export {
   effectivePrivileges,
   isOwnerPrivilege,
   ADMIN_PORTAL_PRIVILEGES as PORTAL_PRIVILEGES,
+  DASHBOARD_PRIVILEGES,
+  REPORT_ACCESS_PRIVILEGES,
   type Privilege,
   type PrivilegeGroup,
 } from '@yiji/shared-types';

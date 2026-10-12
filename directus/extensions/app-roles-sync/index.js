@@ -195,6 +195,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
     view_compensation_reports: holds('approve_coupons'),
     delete_compensation: never,
+    view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
     view_agent_reports: holds('view_all_chats'),
     view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
     delete_users: nameIn('administrator', 'wecare admin'),
@@ -204,6 +205,14 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     manage_notification_defaults: never,
   };
   const OWNER_PRIVILEGES = Object.keys(OWNER_PRIVILEGE_DEFAULTS);
+  /** Mirrors REPORT_ACCESS_PRIVILEGES in packages/shared-types. */
+  const REPORT_ACCESS = [
+    'view_agent_dashboard',
+    'view_ops_dashboard',
+    'view_agent_reports',
+    'view_sla_report',
+    'view_late_orders_report',
+  ];
   const isOwnerPrivilege = (k) => Object.prototype.hasOwnProperty.call(OWNER_PRIVILEGE_DEFAULTS, k);
 
   function effectivePrivileges(stored, roleName) {
@@ -211,6 +220,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     const role = String(roleName ?? '')
       .trim()
       .toLowerCase();
+    // Mirrors packages/shared-types: the Operations board's old fallback.
+    if (typeof p.view_ops_dashboard !== 'boolean') {
+      p.view_ops_dashboard = p.view_dashboard === true && p.view_all_chats !== true;
+    }
     for (const key of OWNER_PRIVILEGES) {
       if (typeof p[key] !== 'boolean') p[key] = OWNER_PRIVILEGE_DEFAULTS[key](p, role);
     }
@@ -574,6 +587,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_coupon_spend: [],
     view_compensation_reports: [g('coupon_approvals', 'read')],
     delete_compensation: [g('coupon_approvals', 'delete')],
+    view_agent_dashboard: [], // UI gate; its reads come with REPORT_ACCESS below
     view_agent_reports: [],
     view_sla_report: [],
     delete_users: [g('directus_users', 'delete')],
@@ -651,6 +665,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       grants.push({ ...grant, filter: grant.filter });
     };
     BASELINE.forEach(add);
+    /*
+     * EVERY DASHBOARD AND REPORT LINE BRINGS THE DATA IT IS BUILT FROM (owner,
+     * 2026-10-12). Those reads used to come with `view_dashboard` alone - the
+     * one line for everything. Now each dashboard and report is its own line,
+     * so any of them grants the same reads.
+     */
+    if (REPORT_ACCESS.some((k) => privileges?.[k] === true)) CATALOG.view_dashboard.forEach(add);
     for (const [priv, on] of Object.entries(privileges ?? {})) {
       if (!on) continue;
       const blocks = CATALOG[priv];

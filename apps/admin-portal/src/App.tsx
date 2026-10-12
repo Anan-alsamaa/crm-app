@@ -119,7 +119,7 @@ const AiConfigPage = lazy(() =>
 
 import type { TFunction } from 'i18next';
 import type { NavSection } from './nav.js';
-import type { Privilege } from './lib/privileges.js';
+import { DASHBOARD_PRIVILEGES, type Privilege } from './lib/privileges.js';
 import { ReportGroupTabs } from './components/ReportGroupTabs.js';
 
 /* Colorful nav: each item's icon sits in its own vivid tinted tile that pops
@@ -311,7 +311,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/dashboard',
-          requires: 'view_dashboard' as const,
+          // Either board opens the page (owner, 2026-10-12: one line each).
+          requiresAny: DASHBOARD_PRIVILEGES,
           label: t('nav.dashboard', { defaultValue: 'Dashboard' }),
           icon: ChartIcon,
         },
@@ -501,6 +502,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       ...section,
       items: section.items.flatMap((it) => {
         if (it.requires && !can(it.requires)) return [];
+        if (it.requiresAny && !it.requiresAny.some((p) => can(p))) return [];
         // Owner-only entries are not privileges; nobody but the owner sees them.
         if ((it as { ownerOnly?: boolean }).ownerOnly && !isOwner) return [];
         /*
@@ -716,7 +718,7 @@ export function App() {
           <Route
             path="/dashboard"
             element={
-              <ProtectedRoute requires="view_dashboard">
+              <ProtectedRoute requiresAny={DASHBOARD_PRIVILEGES}>
                 <Shell>
                   <DashboardPage />
                 </Shell>

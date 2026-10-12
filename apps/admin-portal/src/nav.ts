@@ -35,6 +35,8 @@ export interface NavItem {
    * it can actually read.
    */
   requires?: Privilege;
+  /** Shown when the role holds ANY of these (the Dashboard: either board). */
+  requiresAny?: readonly Privilege[];
   /**
    * Owner-only entry: shown to the project owner (Directus admin_access) and
    * nobody else. Not a privilege — no role edit can widen it.

@@ -1346,13 +1346,14 @@
       "viewCouponSpend": "رؤية مبالغ الكوبونات المصروفة",
       "viewCompensationReports": "عرض تقارير التعويضات والكوبونات",
       "deleteCompensation": "حذف سجل تعويض",
-      "viewAgentReports": "تقارير أداء الموظفين ومؤشراتهم",
-      "viewSlaReport": "تقرير مواعيد التذاكر (SLA)",
+      "viewAgentReports": "عرض تقارير ملخص الوكلاء (ملخص الوكلاء، حالة المحادثات، وقت الانشغال، أداء الوكلاء)",
+      "viewSlaReport": "عرض تقرير مواعيد التذاكر",
       "deleteUsers": "حذف المستخدمين",
       "manageTeams": "إدارة الفرق",
       "editYijiBranchId": "تعديل رقم مطعم الفرع في ييجي",
       "manageStoreNotifications": "تنبيهات الفروع",
-      "manageNotificationDefaults": "إعدادات التنبيهات الافتراضية للمنشأة"
+      "manageNotificationDefaults": "إعدادات التنبيهات الافتراضية للمنشأة",
+      "viewAgentDashboard": "عرض لوحة الوكلاء"
     },
     "pending": "قيد التطبيق…",
     "privCount": "{{n}} صلاحية",

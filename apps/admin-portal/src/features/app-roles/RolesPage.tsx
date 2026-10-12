@@ -25,6 +25,8 @@ import {
   ALL_PRIVILEGES,
   PRIVILEGES,
   PRIVILEGE_GROUP,
+  DASHBOARD_PRIVILEGES,
+  REPORT_ACCESS_PRIVILEGES,
   effectivePrivileges,
   isOwnerPrivilege,
   type Privilege,
@@ -57,7 +59,27 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 const toPrivs = (keys: readonly Privilege[]) =>
   keys.map((key) => ({ key, group: PRIVILEGE_GROUP[key] as string }));
 const SHARED_PRIVS = toPrivs(PRIVILEGES);
-const OWNER_PRIVS = toPrivs(ALL_PRIVILEGES);
+/* The owner sees one line per dashboard and per report instead of the old
+   "View dashboards & reports" (owner, 2026-10-12); `view_dashboard` becomes
+   plumbing, set on save from those lines (see `ownerSaveShape`). */
+const OWNER_PRIVS = toPrivs(ALL_PRIVILEGES.filter((k) => k !== 'view_dashboard'));
+
+/**
+ * What the owner's save stores. The two boards are written out explicitly -
+ * the value the editor showed, defaults included - so later changes elsewhere
+ * cannot move them; and `view_dashboard`, no longer a line, follows the
+ * dashboard and report lines: on if any of them is.
+ */
+export function ownerSaveShape(
+  privileges: Record<string, boolean>,
+  roleName: string,
+): Record<string, boolean> {
+  const eff = effectivePrivileges(privileges, roleName);
+  const next = { ...privileges };
+  for (const k of DASHBOARD_PRIVILEGES) next[k] = eff[k] === true;
+  next.view_dashboard = REPORT_ACCESS_PRIVILEGES.some((k) => eff[k] === true);
+  return next;
+}
 
 /* One hue per capability area, so a role's shape is legible before reading a
  * single label: chat is sky, tickets jade, reporting violet, administration
@@ -202,12 +224,13 @@ export function RolesPage() {
   };
 
   const invalidate = () => void qc.invalidateQueries({ queryKey: ['app-roles'] });
+  const { isOwner: ownerEditing } = useAuth();
   const save = useMutation({
     mutationFn: (d: Draft) => {
       const body = {
         name: d.name.trim(),
         description: d.description.trim() || null,
-        privileges: d.privileges,
+        privileges: ownerEditing ? ownerSaveShape(d.privileges, d.name) : d.privileges,
         brands: d.brands.length ? d.brands : null,
         stores: d.stores.length ? d.stores : null,
       };
@@ -338,6 +361,7 @@ export function RolesPage() {
     delete_tickets: t('roles.p.deleteTickets', { defaultValue: 'Delete tickets' }),
     approve_coupons: t('roles.p.approveCoupons', { defaultValue: 'Approve coupons' }),
     view_dashboard: t('roles.p.viewDashboard', { defaultValue: 'View dashboards & reports' }),
+    view_agent_dashboard: t('roles.p.viewAgentDashboard', { defaultValue: 'View agent dashboard' }),
     export_data: t('roles.p.exportData', { defaultValue: 'Export to Excel/CSV' }),
     import_data: t('roles.p.importData', { defaultValue: 'Import tickets' }),
     manage_lists: t('roles.p.manageLists', { defaultValue: 'Edit dropdown lists & settings' }),
@@ -346,7 +370,7 @@ export function RolesPage() {
     }),
     manage_users: t('roles.p.manageUsers', { defaultValue: 'Manage users' }),
     view_ops_dashboard: t('roles.p.viewOpsDashboard', {
-      defaultValue: 'View the Operations dashboard',
+      defaultValue: 'View operations dashboard',
     }),
     schedule_reports: t('roles.p.scheduleReports', { defaultValue: 'Schedule reports' }),
     manage_sla: t('roles.p.manageSla', { defaultValue: 'Edit SLA policies' }),
@@ -388,7 +412,7 @@ export function RolesPage() {
       defaultValue: 'Work late orders (handle, ignore, comment)',
     }),
     view_late_orders_report: t('roles.p.viewLateOrdersReport', {
-      defaultValue: 'View the late-orders report',
+      defaultValue: 'View late orders report',
     }),
     export_late_orders: t('roles.p.exportLateOrders', {
       defaultValue: 'Export the late-orders report',
@@ -405,9 +429,10 @@ export function RolesPage() {
       defaultValue: 'Delete a compensation record',
     }),
     view_agent_reports: t('roles.p.viewAgentReports', {
-      defaultValue: 'Agent KPI and performance reports',
+      defaultValue:
+        'View agent summary reports (Agent summary, Chat status, Busy time, Agent performance)',
     }),
-    view_sla_report: t('roles.p.viewSlaReport', { defaultValue: 'SLA report' }),
+    view_sla_report: t('roles.p.viewSlaReport', { defaultValue: 'View ticket deadline report' }),
     delete_users: t('roles.p.deleteUsers', { defaultValue: 'Delete users' }),
     manage_teams: t('roles.p.manageTeams', { defaultValue: 'Manage teams' }),
     edit_yiji_branch_id: t('roles.p.editYijiBranchId', {

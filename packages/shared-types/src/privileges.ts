@@ -133,6 +133,8 @@ export const OWNER_PRIVILEGES = [
   'view_compensation_reports',
   'delete_compensation',
   // ── reporting ───────────────────────────────────────────────────────────
+  /** The Agent tab of the Dashboard (owner, 2026-10-12: its own line). */
+  'view_agent_dashboard',
   'view_agent_reports',
   'view_sla_report',
   // ── administration ──────────────────────────────────────────────────────
@@ -205,6 +207,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
   view_compensation_reports: holds('approve_coupons'),
   delete_compensation: never, // no role could (the grant never existed)
+  // The Dashboard page showed its Agent tab to whoever could open the page
+  // AND see all chats.
+  view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
   view_agent_reports: holds('view_all_chats'),
   view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
   delete_users: nameIn('administrator', 'wecare admin'),
@@ -228,11 +233,37 @@ export function effectivePrivileges(
   const role = String(roleName ?? '')
     .trim()
     .toLowerCase();
+  /*
+   * THE OPERATIONS DASHBOARD'S OLD FALLBACK, kept (owner, 2026-10-12). The
+   * Dashboard page used to show its Operations board to anyone who could open
+   * the page but not the Agent tab - every Area Manager and the TV Screen saw
+   * it with no switch saying so. Unset, the switch keeps that; once ticked or
+   * unticked, the switch decides.
+   */
+  if (typeof p.view_ops_dashboard !== 'boolean') {
+    p.view_ops_dashboard = p.view_dashboard === true && p.view_all_chats !== true;
+  }
   for (const key of OWNER_PRIVILEGES) {
     if (typeof p[key] !== 'boolean') p[key] = OWNER_PRIVILEGE_DEFAULTS[key](p, role);
   }
   return p;
 }
+
+/** The two dashboards, each its own switch (owner, 2026-10-12). */
+export const DASHBOARD_PRIVILEGES = ['view_agent_dashboard', 'view_ops_dashboard'] as const;
+
+/**
+ * EVERY DASHBOARD AND REPORT LINE (owner, 2026-10-12: "for each and
+ * everything an access rule"). Any one of them opens the admin portal and
+ * brings the read access the dashboards and reports are built from - which
+ * `view_dashboard` used to carry alone, as one line for everything.
+ */
+export const REPORT_ACCESS_PRIVILEGES: readonly Privilege[] = [
+  ...DASHBOARD_PRIVILEGES,
+  'view_agent_reports',
+  'view_sla_report',
+  'view_late_orders_report',
+];
 
 export type PrivilegeGroup =
   | 'chat'
@@ -260,13 +291,14 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_ticket_history: 'tickets',
   export_ticket_excel: 'tickets',
   work_late_orders: 'lateOrders',
-  view_late_orders_report: 'lateOrders',
+  view_late_orders_report: 'reporting',
   export_late_orders: 'lateOrders',
   view_order_details: 'lateOrders',
   request_coupons: 'coupons',
   view_compensation_reports: 'coupons',
   view_coupon_spend: 'coupons',
   delete_compensation: 'coupons',
+  view_agent_dashboard: 'reporting',
   view_agent_reports: 'reporting',
   view_sla_report: 'reporting',
   delete_users: 'admin',
@@ -308,6 +340,12 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
 export const ADMIN_PORTAL_PRIVILEGES: readonly Privilege[] = [
   'view_dashboard',
   'view_ops_dashboard',
+  // Each dashboard and report on its own opens the door (owner, 2026-10-12):
+  // a TV given only the late-orders report must be able to sign in.
+  'view_agent_dashboard',
+  'view_agent_reports',
+  'view_sla_report',
+  'view_late_orders_report',
   'view_all_tickets',
   'view_all_chats',
   'approve_coupons',

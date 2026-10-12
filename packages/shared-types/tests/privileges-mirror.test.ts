@@ -154,9 +154,15 @@ describe('effectivePrivileges', () => {
     expect(effectivePrivileges({}, 'WeCare Agent').view_order_details).toBe(true);
   });
 
-  it('never adds a shared key', () => {
+  it('never adds a shared key - except the Operations board fallback', () => {
     const eff = effectivePrivileges({}, 'Administrator');
-    for (const key of PRIVILEGES) expect(eff[key]).toBeUndefined();
+    /* The one exception (owner, 2026-10-12): `view_ops_dashboard` carries the
+       Dashboard page's old fallback when unset - see
+       dashboard-report-privileges.test.ts. With nothing stored it is off. */
+    for (const key of PRIVILEGES) {
+      if (key === 'view_ops_dashboard') expect(eff[key]).toBe(false);
+      else expect(eff[key]).toBeUndefined();
+    }
   });
 });
 

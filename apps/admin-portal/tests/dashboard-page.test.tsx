@@ -36,7 +36,9 @@ const chatPrivilege = vi.hoisted(() => ({ granted: true }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({
     user: { first_name: 'Test', email: 'test@example.com' },
-    can: (priv: string) => (priv === 'view_all_chats' ? chatPrivilege.granted : true),
+    // The Agent board is its own switch since 2026-10-12 (it defaults to the old
+    // view_all_chats rule; that default is tested in shared-types).
+    can: (priv: string) => (priv === 'view_agent_dashboard' ? chatPrivilege.granted : true),
   }),
 }));
 
