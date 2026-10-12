@@ -58,7 +58,9 @@ export function useLateOrders(
    * are exactly what they were before (no `vendorId` = the legacy vendor).
    */
   vendorId?: string,
-  /** LIVE ORDERS mode (owner, 2026-10-11): a wall screen refreshes every 10 s. */
+  /** LIVE ORDERS mode (owner, 2026-10-11): a wall screen keeps polling in the
+      background. Every 30 s like everyone else since 2026-10-12: the server
+      refreshes from Yiji once a minute, so polling faster bought nothing. */
   fast = false,
 ) {
   /*
@@ -86,8 +88,8 @@ export function useLateOrders(
         ? commerce.getLateOrders(range, live, vendorId)
         : commerce.getLateOrders(range, live),
     enabled,
-    refetchInterval: history ? false : fast ? 10_000 : 30_000,
-    staleTime: history ? 5 * 60_000 : fast ? 5_000 : 15_000,
+    refetchInterval: history ? false : 30_000,
+    staleTime: history ? 5 * 60_000 : 15_000,
     /*
      * RETRIED, and a wall screen keeps polling (owner, 2026-10-11: the TV
      * showed "Could not load late orders"). One passing failure - a gateway

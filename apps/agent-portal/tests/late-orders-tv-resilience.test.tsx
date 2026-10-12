@@ -45,3 +45,13 @@ describe('late orders on a wall screen', () => {
     expect(page).toMatch(/lateOrders\.staleNotice/);
   });
 });
+
+/* Owner, 2026-10-12: the server refreshes from Yiji once a minute, so a live
+   screen polls every 30 s like any other - not every 10 s. */
+describe('late orders poll rate', () => {
+  it('polls every 30 s, live or not', () => {
+    const api = readFileSync(resolve(__dirname, '../src/features/late-orders/api.ts'), 'utf8');
+    expect(api).toMatch(/refetchInterval: history \? false : 30_000,/);
+    expect(api).not.toMatch(/10_000 : 30_000/);
+  });
+});

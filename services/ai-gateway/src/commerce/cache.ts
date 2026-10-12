@@ -90,10 +90,11 @@ export const COMMERCE_TTL = {
   /**
    * The late-orders queue, polled by every agent watching it every 30s.
    *
-   * Short, because this is the one answer that is ABOUT elapsed time — a
-   * minute-old queue misreports how late every row in it is. Twenty seconds
-   * keeps the figure honest while still collapsing a room full of agents onto
-   * one upstream call per poll.
+   * SIXTY SECONDS (owner, 2026-10-12: "this is putting too much load on
+   * yiji"). Twenty fetched a whole business day from Yiji three times a
+   * minute, all day, to catch orders that only count as late after 60
+   * minutes - a minute's staleness changes nothing an agent does. One
+   * upstream call a minute however many screens are open.
    */
-  lateOrders: 20,
+  lateOrders: 60,
 } as const;

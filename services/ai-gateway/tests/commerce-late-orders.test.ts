@@ -142,3 +142,12 @@ describe('GET /commerce/late-orders', () => {
     expect(res.json()).toEqual({ error: 'commerce_unavailable' });
   });
 });
+
+/* Owner, 2026-10-12: "this is putting too much load on yiji". The queue is
+   fetched from Yiji at most once a minute, however many screens are open. */
+describe('late-orders load on Yiji', () => {
+  it('reuses Yiji answer for 60 seconds', async () => {
+    const { COMMERCE_TTL } = await import('../src/commerce/cache.js');
+    expect(COMMERCE_TTL.lateOrders).toBeGreaterThanOrEqual(60);
+  });
+});
