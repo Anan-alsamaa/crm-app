@@ -26,6 +26,7 @@ import {
   displayContactName,
   normalizePhone,
   type StoreIndex,
+  normalizeOrderId,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { businessDayWindow } from '../../lib/date-range.js';
@@ -199,7 +200,8 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
   if (code && code !== (row.coupon_code ?? '')) out.coupon_code = code;
   /* The ORDER NUMBER on the request (the reference shown on the card). */
   const order = e.order_id.trim();
-  if (order !== (row.order_id ?? row.ticket?.order_id ?? '')) out.order_id = order || null;
+  if (order !== (row.order_id ?? row.ticket?.order_id ?? ''))
+    out.order_id = normalizeOrderId(order);
   str('title', 'title', row.title);
   str('issuing_side', 'issuing_side', row.issuing_side);
   str('delivery_type', 'delivery_type', row.delivery_type);

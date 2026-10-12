@@ -7,6 +7,7 @@ import {
   type StoreNotificationSkip,
   type StoreSnapshot,
   type TicketStatus,
+  withNormalizedOrderId,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { notifyAssignmentBestEffort } from '../../lib/job-producer.js';
@@ -353,7 +354,9 @@ export function useCreateTicket() {
     mutationFn: (input: CreateTicketInput) => {
       assertStore(input);
       // `pending`: the one unfinished state of the two (owner, 2026-10-07).
-      return directus.request(createItem('tickets', { ...input, status: 'pending' } as never));
+      return directus.request(
+        createItem('tickets', { ...withNormalizedOrderId(input), status: 'pending' } as never),
+      );
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['tickets'] });
@@ -476,7 +479,7 @@ export function useCreateTicketFromConversation() {
       assertStore(ticket);
       const created = (await directus.request(
         // `pending`, not the retired `open` — see TicketStatus (owner, 2026-10-07).
-        createItem('tickets', { ...ticket, status: 'pending' } as never),
+        createItem('tickets', { ...withNormalizedOrderId(ticket), status: 'pending' } as never),
       )) as { id: string };
       if (attachmentFileIds && attachmentFileIds.length > 0) {
         await Promise.allSettled(
@@ -562,7 +565,7 @@ export function useUpdateTicket() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, patch }: { id: string; patch: UpdateTicketInput }) =>
-      directus.request(updateItem('tickets', id, patch as never)),
+      directus.request(updateItem('tickets', id, withNormalizedOrderId(patch) as never)),
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['tickets'] });
       void qc.invalidateQueries({ queryKey: ['ticket', vars.id] });
