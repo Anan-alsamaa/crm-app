@@ -45,6 +45,8 @@ import {
   isUnmappedStore,
   resolveStoreAttribution,
   TicketStatus,
+  orderLabel,
+  normalizeOrderId,
 } from '@yiji/shared-types';
 import {
   useAgentReportData,
@@ -2351,7 +2353,7 @@ function ConversationReport({
     },
     {
       header: tr('agentReports.col.orderNumber', { defaultValue: 'Order' }),
-      value: (r) => r.orderId,
+      value: (r) => orderLabel(r.orderId),
     },
     {
       header: tr('agentReports.col.lastMessage', { defaultValue: 'Last message' }),
@@ -2517,7 +2519,7 @@ function ConversationReport({
                               {r.customerPhone && r.customerName && (
                                 <span className="text-muted-foreground">{r.customerName}</span>
                               )}
-                              {r.orderId && (
+                              {normalizeOrderId(r.orderId) && (
                                 <span className="font-mono text-2xs text-muted-foreground">
                                   #{r.orderId}
                                 </span>
@@ -2702,7 +2704,7 @@ function ConversationReport({
                         : tr('agentReports.startedByCustomer', { defaultValue: 'Customer' })}
                     </Td>
                     <Td className="font-mono tabular-nums text-muted-foreground">
-                      {r.orderId || '—'}
+                      {orderLabel(r.orderId)}
                     </Td>
                     <Td className="tabular-nums text-muted-foreground">
                       {r.lastMessageAt ? fmtDateTime(r.lastMessageAt) : '—'}

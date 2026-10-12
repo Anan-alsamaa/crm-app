@@ -26,13 +26,7 @@ import {
   type ParseTicketsResult,
   type TicketCsvRow,
 } from '@yiji/reports';
-import {
-  matchStore,
-  normalizePhone,
-  type StoreIndex,
-  type StoreMatch,
-  normalizeOrderId,
-} from '@yiji/shared-types';
+import { matchStore, normalizePhone, type StoreIndex, type StoreMatch } from '@yiji/shared-types';
 
 /** A row that will be created, with everything already resolved. */
 export interface PlannedTicket {
@@ -130,9 +124,7 @@ function idNumber(v: unknown): string {
 export function ticketIdentity(t: TicketIdentityFields): string {
   return [
     idText(t.complaint_date).slice(0, 19),
-    /* "0" and no order are the same identity: tickets loaded on 5 Oct stored
-       "0", a re-import of that sheet now stores none, and must still match. */
-    normalizeOrderId(t.order_id) ?? '',
+    idText(t.order_id),
     idText(t.description),
     idText(t.coupon_code),
     idNumber(t.coupon_value),
@@ -218,9 +210,7 @@ export function planImport(rows: readonly TicketCsvRow[], ctx: PlanContext): Imp
       capturedAt,
     });
     // Persist the order number so this row's identity can be rebuilt later.
-    // "0" in the sheet means no order (5 Oct import: 25 tickets carried it).
-    const orderId = normalizeOrderId(row.orderNumber);
-    if (orderId) payload.order_id = orderId;
+    if (row.orderNumber) payload.order_id = String(row.orderNumber).trim();
 
     /*
      * Identity from the PAYLOAD — exactly what will be stored — so it is built

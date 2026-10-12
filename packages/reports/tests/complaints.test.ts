@@ -443,3 +443,15 @@ describe('the Date column', () => {
     expect(complaintCell(row, 'date', t)).toBe('');
   });
 });
+
+/* Owner, 2026-10-12: where there is no order the column says "-" - "0"
+   included (the 5 Oct import stored "0" on 25 tickets). Display only. */
+describe('the Order number column', () => {
+  const tt = ((_k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? _k) as never;
+  it.each([[''], ['0'], ['000']])('shows "-" for %j', (orderNumber) => {
+    expect(complaintCell({ orderNumber } as never, 'orderNumber', tt)).toBe('-');
+  });
+  it('shows a real order number as it is', () => {
+    expect(complaintCell({ orderNumber: '1340626' } as never, 'orderNumber', tt)).toBe('1340626');
+  });
+});

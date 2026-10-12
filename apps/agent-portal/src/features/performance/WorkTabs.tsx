@@ -24,6 +24,7 @@ import {
   displayContactName,
   normaliseTicketStatus,
   normalizePhone,
+  normalizeOrderId,
 } from '@yiji/shared-types';
 import { isForbidden } from '../../lib/directus.js';
 import { useSlaHours } from '../../lib/sla-hours.js';
@@ -348,7 +349,7 @@ export function TicketsTab({
                       t('performance.ticketNoSubject', { defaultValue: 'Ticket' })}
                   </span>
                   <span className="font-mono text-2xs text-muted-foreground">
-                    {r.orderId ? `#${r.orderId}` : `ID ${r.id}`}
+                    {normalizeOrderId(r.orderId) ? `#${r.orderId}` : `ID ${r.id}`}
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">

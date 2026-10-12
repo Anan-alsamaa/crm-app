@@ -108,26 +108,6 @@ describe('planImport', () => {
     expect(p.newContacts).toBe(0);
   });
 
-  /* 2026-10-12: "0" in the order column means no order (the 5 Oct import
-     stored it on 25 tickets and the inbox asked Yiji for order 0). */
-  it('stores no order for order number 0, and still matches a ticket stored with "0"', () => {
-    const line =
-      '2026-01-01,10:00,LCP,LCP-038 Yarmouk Plaza,Delivery,Accuracy,0510103375,Late,0,Faisal';
-    const p = plan(`${HEADER}
-${line}`);
-    expect(p.create[0]!.payload.order_id).toBeUndefined();
-    // A ticket loaded earlier with order_id "0" has the same identity: no duplicate.
-    const stored = ticketIdentity({ ...p.create[0]!.payload, order_id: '0' } as never);
-    expect(stored).toBe(p.create[0]!.ref);
-    expect(
-      plan(
-        `${HEADER}
-${line}`,
-        { existing: new Set([stored]) },
-      ).create,
-    ).toHaveLength(0);
-  });
-
   it('skips rows already in the database', () => {
     const line =
       '2026-01-01,10:00,LCP,LCP-038 Yarmouk Plaza,Delivery,Accuracy,0510103375,Late,7,Faisal';

@@ -21,6 +21,7 @@ import {
   resolveStoreAttribution,
   type StoreIndex,
   type StoreSnapshot,
+  orderLabel,
 } from '@yiji/shared-types';
 import type { CellValue, Sheet } from './xlsx.js';
 
@@ -305,7 +306,9 @@ export function complaintCell(
     responseDesc: (r) => r.responseDesc,
     complaintSource: (r) => r.complaintSource,
     orderAmount: (r) => r.orderAmount ?? '',
-    orderNumber: (r) => r.orderNumber,
+    // "-" when there is no order, "0" included (owner, 2026-10-12). Display
+    // only: the row keeps the stored value for search.
+    orderNumber: (r) => orderLabel(r.orderNumber),
     communicationMethod: (r) => r.communicationMethod,
     couponCode: (r) => r.couponCode,
     couponValue: (r) => r.couponValue ?? '',

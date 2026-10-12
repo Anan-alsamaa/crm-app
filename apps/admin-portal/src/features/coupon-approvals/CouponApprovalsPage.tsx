@@ -200,8 +200,7 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
   if (code && code !== (row.coupon_code ?? '')) out.coupon_code = code;
   /* The ORDER NUMBER on the request (the reference shown on the card). */
   const order = e.order_id.trim();
-  if (order !== (row.order_id ?? row.ticket?.order_id ?? ''))
-    out.order_id = normalizeOrderId(order);
+  if (order !== (row.order_id ?? row.ticket?.order_id ?? '')) out.order_id = order || null;
   str('title', 'title', row.title);
   str('issuing_side', 'issuing_side', row.issuing_side);
   str('delivery_type', 'delivery_type', row.delivery_type);
@@ -517,7 +516,7 @@ function Row({
           <Pill tone={TONE[row.status] ?? 'success'} size="sm">
             {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
           </Pill>
-          {(row.ticket?.order_id || row.order_id) && (
+          {normalizeOrderId(row.ticket?.order_id || row.order_id) && (
             <span className="shrink-0 font-mono text-2xs text-muted-foreground">
               #{row.ticket?.order_id || row.order_id}
             </span>
@@ -685,7 +684,7 @@ function Row({
               <dd className="min-w-0 truncate font-medium text-foreground">
                 {[
                   row.ticket?.subject,
-                  row.ticket?.order_id ? `#${row.ticket.order_id}` : null,
+                  normalizeOrderId(row.ticket?.order_id) ? `#${row.ticket?.order_id}` : null,
                   row.ticket?.priority,
                   row.ticket?.status,
                 ]

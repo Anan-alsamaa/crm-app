@@ -1,22 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeOrderId, withNormalizedOrderId } from '../src/order-id.js';
+import { normalizeOrderId, orderLabel } from '../src/order-id.js';
 
-/* 2026-10-12: the 5 Oct import wrote order "0" on 25 tickets, and the inbox
-   asked Yiji for order 0 ~48 times a day. Blank or all-zero = no order. */
-describe('normalizeOrderId', () => {
-  it.each([[null], [undefined], [''], ['  '], ['0'], ['000'], [0]])('%j is no order', (v) => {
+/* Owner, 2026-10-12: where there is no order it says "-". Display only:
+   stored tickets keep exactly what was saved. */
+describe('order number display', () => {
+  it.each([[null], [undefined], [''], ['  '], ['0'], ['000'], [0]])('%j shows "-"', (v) => {
     expect(normalizeOrderId(v)).toBeNull();
+    expect(orderLabel(v)).toBe('-');
   });
-  it('keeps a real order number, trimmed', () => {
-    expect(normalizeOrderId(' 1340626 ')).toBe('1340626');
-    expect(normalizeOrderId(1340626)).toBe('1340626');
-    expect(normalizeOrderId('1300')).toBe('1300');
-  });
-  it('touches a payload only when it carries order_id', () => {
-    expect(withNormalizedOrderId({ subject: 'x' })).toEqual({ subject: 'x' });
-    expect(withNormalizedOrderId({ order_id: '0', subject: 'x' })).toEqual({
-      order_id: null,
-      subject: 'x',
-    });
+  it('shows a real order number, trimmed', () => {
+    expect(orderLabel(' 1340626 ')).toBe('1340626');
+    expect(orderLabel(1340626)).toBe('1340626');
+    expect(orderLabel('1300')).toBe('1300');
   });
 });

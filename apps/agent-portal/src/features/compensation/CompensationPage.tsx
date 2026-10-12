@@ -1,3 +1,4 @@
+import { normalizeOrderId, orderLabel } from '@yiji/shared-types';
 import { useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
@@ -193,7 +194,7 @@ function QueueCard({ row, onOpen }: { row: CompensationRow; onOpen: () => void }
       <div className="mt-2.5 flex items-baseline gap-3 border-t border-foreground/[0.06] pt-2 text-2xs text-muted-foreground">
         <span className="min-w-0 truncate">
           {[row.brand_name, row.restaurant_name].filter(Boolean).join(' · ') || '—'}
-          {row.order_id ? ` · #${row.order_id}` : ''}
+          {normalizeOrderId(row.order_id) ? ` · #${row.order_id}` : ''}
         </span>
         <span className="ms-auto shrink-0 tabular-nums">
           {fmtDate(row.date_created).split(',')[0]}
@@ -301,7 +302,7 @@ function RequestDetail({ id }: { id: string }) {
             </h2>
             <p className="mt-1 text-xs text-muted-foreground">
               {[r.brand_name, r.restaurant_name].filter(Boolean).join(' · ') || '—'}
-              {r.order_id ? ` · #${r.order_id}` : ''}
+              {normalizeOrderId(r.order_id) ? ` · #${r.order_id}` : ''}
             </p>
           </div>
           <div className="text-end">
@@ -338,7 +339,7 @@ function RequestDetail({ id }: { id: string }) {
           <Row label="ID" value={r.customer_id ?? '—'} />
         </Section>
         <Section title={t('compensation.order', { defaultValue: 'Order' })}>
-          <Row label="#" value={r.order_id ?? '—'} />
+          <Row label="#" value={orderLabel(r.order_id)} />
           <Row
             label={t('compensation.brand', { defaultValue: 'Brand' })}
             value={r.brand_name ?? '—'}

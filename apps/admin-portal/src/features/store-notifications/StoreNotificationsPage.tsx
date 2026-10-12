@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pill, SectionCard, Skeleton, cn, toast } from '@yiji/ui';
-import { ComplaintType } from '@yiji/shared-types';
+import { ComplaintType, normalizeOrderId } from '@yiji/shared-types';
 import {
   useSetStoreNotifyRule,
   useStoreNotifications,
@@ -75,7 +75,7 @@ function Preview({ row }: { row: StoreNotificationRow }) {
         <span className="text-muted-foreground">
           {t('storeNotify.order', { defaultValue: 'Order' })}:{' '}
         </span>
-        {row.order_id ? <span className="font-mono">#{row.order_id}</span> : none}
+        {normalizeOrderId(row.order_id) ? <span className="font-mono">#{row.order_id}</span> : none}
       </p>
       {row.order_items && row.order_items.length > 0 && (
         <p className="line-clamp-2 text-muted-foreground">

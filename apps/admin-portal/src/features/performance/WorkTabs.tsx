@@ -23,6 +23,7 @@ import {
   displayContactName,
   normaliseTicketStatus,
   normalizePhone,
+  normalizeOrderId,
 } from '@yiji/shared-types';
 import { useSlaHours } from '../../lib/sla-hours.js';
 import {
@@ -367,7 +368,7 @@ export function TicketsTab({
                       caller reads out. */}
                   <span className="font-mono text-2xs text-muted-foreground">
                     ID {r.id}
-                    {r.orderId ? ` · #${r.orderId}` : ''}
+                    {normalizeOrderId(r.orderId) ? ` · #${r.orderId}` : ''}
                   </span>
                 </td>
                 <td className="px-4 py-2.5 text-muted-foreground">
@@ -588,9 +589,12 @@ export function CouponsTab({ filters, search }: { filters: PerformanceFilters; s
                       {t('performance.noTicket', { defaultValue: 'No ticket' })}
                     </span>
                   )}
-                  {(r.ticketId || r.orderId) && (
+                  {(r.ticketId || normalizeOrderId(r.orderId)) && (
                     <span className="font-mono text-2xs text-muted-foreground">
-                      {[r.ticketId ? `ID ${r.ticketId}` : null, r.orderId ? `#${r.orderId}` : null]
+                      {[
+                        r.ticketId ? `ID ${r.ticketId}` : null,
+                        normalizeOrderId(r.orderId) ? `#${r.orderId}` : null,
+                      ]
                         .filter(Boolean)
                         .join(' · ')}
                     </span>

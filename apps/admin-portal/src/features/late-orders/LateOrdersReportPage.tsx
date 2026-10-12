@@ -22,7 +22,13 @@ import {
   formatDate,
   formatDateTime,
 } from '@yiji/ui';
-import { businessDay, causeLabel, orderEventTimes, type LateOrderState } from '@yiji/shared-types';
+import {
+  businessDay,
+  causeLabel,
+  orderEventTimes,
+  type LateOrderState,
+  orderLabel,
+} from '@yiji/shared-types';
 import {
   LATE_ORDERS_REPORT_ORDER_KEY,
   loadColumnOrder,
@@ -703,7 +709,7 @@ export function LateOrdersReportPage() {
       key: 'order',
       label: t('lateOrdersReport.col.order', { defaultValue: 'Order' }),
       tdClass: 'whitespace-nowrap tabular-nums',
-      render: (r) => r.order_id ?? '-',
+      render: (r) => orderLabel(r.order_id),
       get: (r) => r.order_id ?? '',
     },
     /* §14 — BRAND AND RESTAURANT AS SEPARATE NAMED COLUMNS, plus the customer's
