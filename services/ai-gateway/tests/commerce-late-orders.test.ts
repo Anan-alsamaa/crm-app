@@ -151,3 +151,31 @@ describe('late-orders load on Yiji', () => {
     expect(COMMERCE_TTL.lateOrders).toBeGreaterThanOrEqual(60);
   });
 });
+
+/* 2026-10-12: a chat saved with order number 0 had the inbox ask Yiji for it
+   ~48 times a day (Yiji answers 500, retried). Never sent upstream. */
+describe('GET /commerce/order with order "0"', () => {
+  it('answers "no such order" without calling Yiji', async () => {
+    let called = 0;
+    const app = await buildApp(
+      deps({
+        yiji: {
+          getLateDeliveryOrders: async () => [],
+          getOrder: async () => {
+            called++;
+            return null;
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any,
+      }),
+    );
+    const res = await app.inject({
+      method: 'GET',
+      url: '/commerce/order?vendorId=v1&orderId=0',
+      headers: auth,
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ data: null });
+    expect(called).toBe(0);
+  });
+});

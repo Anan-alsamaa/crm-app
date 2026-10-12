@@ -237,6 +237,10 @@ export async function registerCommerceRoutes(
     const vendorId = str(q.vendorId);
     const orderId = str(q.orderId);
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
+    /* ORDER "0" IS NO ORDER (2026-10-12): a chat saved with order number 0 had
+       the inbox ask Yiji for it ~48 times a day; Yiji answers 500, which was
+       retried. "No such order" at once, without calling Yiji. */
+    if (/^0+$/.test(orderId)) return reply.send({ data: null });
     return answering(reply, { route: 'order', vendorId, orderId }, async () =>
       orderDetail(await connectorFor(vendorId), vendorId, orderId),
     );
