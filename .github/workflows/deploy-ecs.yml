@@ -38,6 +38,7 @@ on:
 permissions:
   contents: read
   id-token: write # REQUIRED for OIDC. Without it the token exchange fails.
+  actions: read # the Directus wait reads this run's start time
 
 concurrency:
   # Never let two deploys to the same environment overlap; queue instead of
@@ -585,17 +586,29 @@ jobs:
       # `:main`, so "directus runs :main" is true before it has moved at all.
       # Every leg starts together after the approval, so Directus's new
       # deployment is created after this step begins (a minute of slack).
+      # WAITS FOR THIS RELEASE'S IMAGE, not for a recent timestamp (2026-10-12).
+      # It used to accept only a Directus rollout that STARTED within 60 s of
+      # this job starting. With 2 Directus tasks the rollout takes longer, so it
+      # began before that window: v1.50.3's gateway jobs waited 30 minutes for a
+      # rollout that had already completed, then failed undeployed.
       - name: Wait for Directus to go live first
         if: matrix.service != 'directus'
         env:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+          IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          SINCE=$(( $(date +%s) - 60 ))
+          # The RUN's start, not this job's: matrix jobs start minutes apart.
+          # Staging always runs `:main`, so the tag alone cannot tell a new
+          # Directus from the old one - the rollout must also postdate the run.
+          RUN_START=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" --jq .run_started_at)
+          SINCE=$(date -d "$RUN_START" +%s)
           for i in $(seq 1 90); do
-            read -r CREATED STATE < <(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services directus --query 'services[0].deployments[?status==`PRIMARY`]|[0].[createdAt,rolloutState]' --output text)
+            read -r TD STATE CREATED < <(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services directus --query 'services[0].deployments[?status==`PRIMARY`]|[0].[taskDefinition,rolloutState,createdAt]' --output text)
             CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null || echo 0)
-            if [ "$CREATED_S" -ge "$SINCE" ] && [ "$STATE" = "COMPLETED" ]; then
-              echo "::notice::directus live (rollout started $CREATED) — deploying ${{ matrix.service }}"
+            IMAGE=$(aws ecs describe-task-definition --task-definition "$TD" --query 'taskDefinition.containerDefinitions[0].image' --output text 2>/dev/null || echo "")
+            if [ "$STATE" = "COMPLETED" ] && [ "${IMAGE##*:}" = "$IMAGE_TAG" ] && [ "$CREATED_S" -ge "$SINCE" ]; then
+              echo "::notice::directus live on :$IMAGE_TAG — deploying ${{ matrix.service }}"
               exit 0
             fi
             sleep 20
