@@ -1,3 +1,4 @@
+import { ModifierBreakdown } from './ModifierBreakdown.js';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -437,7 +438,7 @@ export function OrderDetails({
                 {/* `truncate` only while there is nothing beneath: a modifier line
                   renders as a block inside this span, and a truncated parent
                   would clip it to one line and hide the rest. */}
-                <span className={mods.length ? 'min-w-0' : 'min-w-0 truncate'}>
+                <span className={mods.length ? 'min-w-0 flex-1' : 'min-w-0 truncate'}>
                   <span className="text-foreground/80 tabular-nums">{it.qty}×</span> {it.name}
                   {it.qty > 1 && (
                     <span className="ms-1 text-2xs text-muted-foreground tabular-nums">
@@ -454,9 +455,12 @@ export function OrderDetails({
                     Broccoli" is what answers an accuracy complaint, and the
                     money view alone never showed it. */}
                   {mods.length > 0 && (
-                    <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
-                      {mods.join(' · ')}
-                    </span>
+                    <ModifierBreakdown
+                      groups={it.modifierGroups}
+                      names={mods}
+                      currency={order.currency}
+                      money={money}
+                    />
                   )}
                 </span>
                 <span className="shrink-0 tabular-nums text-foreground">

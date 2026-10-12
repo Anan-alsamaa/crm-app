@@ -585,3 +585,52 @@ describe('LatestOrder — when the commerce proxy is unreachable', () => {
     expect(client.getOrders).toHaveBeenCalledTimes(1);
   });
 });
+
+/* Owner, 2026-10-12: the add-ons read as one dotted paragraph. They show as
+   Yiji's own screen does - each group a heading, each option on its own row,
+   with its price beside it. */
+describe('LatestOrder - add-ons line by line with their prices', () => {
+  it('groups the options and prices each one', async () => {
+    client.getOrders.mockResolvedValue([summary('1340626', '2026-10-12T01:02:00')]);
+    client.getOrder.mockResolvedValue(
+      full('1340626', {
+        items: [
+          {
+            sku: '9',
+            name: 'Fettuccine Alfredo Chicken',
+            qty: 1,
+            price: 30,
+            modifiers: ['Light Spicy', 'Extra Spicy', 'Green & Red Pepper', '2x Cheese +5'],
+            modifierGroups: [
+              {
+                name: 'Extra',
+                options: [
+                  { name: 'Light Spicy', qty: 1, price: 0 },
+                  { name: 'Extra Spicy', qty: 1, price: 0 },
+                  { name: 'Cheese', qty: 2, price: 5 },
+                ],
+              },
+              {
+                name: 'Vegetables Type',
+                options: [{ name: 'Green & Red Pepper', qty: 1, price: 0 }],
+              },
+            ],
+          },
+        ],
+      }),
+    );
+    renderView(<LatestOrder vendorId="v1" customerId="cust-guid" />);
+    await waitFor(() => expect(screen.getByText('Vegetables Type')).toBeInTheDocument());
+    expect(screen.getByText('Extra')).toBeInTheDocument();
+    // One row per option, not a joined paragraph.
+    expect(screen.getByText('Light Spicy').closest('li')).not.toBe(
+      screen.getByText('Extra Spicy').closest('li'),
+    );
+    expect(screen.queryByText(/Light Spicy · Extra Spicy/)).toBeNull();
+    // Its own price: 2 x 5 = +10, and a free option shows 0.
+    const cheese = screen.getByText('Cheese').closest('li')!;
+    expect(cheese.textContent).toMatch(/2×/);
+    expect(cheese.textContent).toMatch(/\+.*10/);
+    expect(screen.getByText('Green & Red Pepper').closest('li')!.textContent).toMatch(/0/);
+  });
+});

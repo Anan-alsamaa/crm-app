@@ -27,6 +27,19 @@ export interface YijiOrderItem {
    * place.
    */
   modifiers?: string[];
+  /** The same choices, grouped and priced, for a line-by-line breakdown. */
+  modifierGroups?: YijiModifierGroup[];
+}
+
+/**
+ * ONE MODIFIER GROUP on a line - "Extra", "Vegetables Type" - with each chosen
+ * option, its quantity and its price (owner, 2026-10-12: show the add-ons line
+ * by line with their prices, as Yiji's own order screen does, not as a
+ * paragraph). `price` is one unit of the option; 0 means included.
+ */
+export interface YijiModifierGroup {
+  name: string;
+  options: Array<{ name: string; qty: number; price: number }>;
 }
 
 export interface YijiOrder {
@@ -102,6 +115,8 @@ export interface YijiCartLine {
   category?: string;
   /** Modifier / element names, flattened for display. */
   modifiers: string[];
+  /** The same choices, grouped and priced (see `YijiModifierGroup`). */
+  modifierGroups?: YijiModifierGroup[];
 }
 
 /**

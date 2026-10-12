@@ -1,3 +1,4 @@
+import { ModifierBreakdown } from './ModifierBreakdown.js';
 import { useTranslation } from 'react-i18next';
 import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -94,9 +95,14 @@ function CartLines({ orderId, vendorId }: { orderId: string; vendorId: string | 
                 accuracy complaint, and the money view alone never showed it.
                 Sits under the NAME, in the name's own column. */}
             {l.modifiers.length > 0 && (
-              <span className="col-start-2 col-end-4 text-xs leading-relaxed text-muted-foreground">
-                {l.modifiers.join(' · ')}
-              </span>
+              <div className="col-start-2 col-end-4">
+                <ModifierBreakdown
+                  groups={l.modifierGroups}
+                  names={l.modifiers}
+                  currency="SAR"
+                  money={(n) => String(n)}
+                />
+              </div>
             )}
           </li>
         ))}

@@ -18,6 +18,7 @@ import {
 import { normalizePhone } from './phone.js';
 import type {
   YijiCartLine,
+  YijiModifierGroup,
   YijiOrderCart,
   YijiClient,
   YijiCustomer,
@@ -460,6 +461,36 @@ export function lineModifiers(item: {
 }
 
 /**
+ * The choices on a line, GROUPED and PRICED (owner, 2026-10-12): "Extra" ->
+ * Light Spicy 0, Extra Spicy 0; "Vegetables Type" -> Green & Red Pepper 0.
+ * A group with no chosen element is left out - it is a heading with nothing
+ * under it.
+ */
+export function lineModifierGroups(item: {
+  extraModifiers?: Array<{
+    extraModifierName?: string | null;
+    elements?: Array<{
+      elementName?: string | null;
+      quantity?: number | null;
+      elementPrice?: number | null;
+    }> | null;
+  }> | null;
+}): YijiModifierGroup[] {
+  const out: YijiModifierGroup[] = [];
+  for (const mod of item.extraModifiers ?? []) {
+    const options = (mod.elements ?? [])
+      .filter((e) => !!e.elementName?.trim())
+      .map((e) => ({
+        name: e.elementName!.trim(),
+        qty: typeof e.quantity === 'number' && e.quantity > 0 ? e.quantity : 1,
+        price: typeof e.elementPrice === 'number' ? e.elementPrice : 0,
+      }));
+    if (options.length) out.push({ name: mod.extraModifierName?.trim() || '', options });
+  }
+  return out;
+}
+
+/**
  * One row of `GetFilteredOrders`.
  *
  * The response is a bare ARRAY (not `{ items: [] }`), and the real order is
@@ -533,7 +564,8 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
       category: it.itemCategory ?? undefined,
       ...(() => {
         const m = lineModifiers(it);
-        return m.length ? { modifiers: m } : {};
+        const g = lineModifierGroups(it);
+        return m.length ? { modifiers: m, ...(g.length ? { modifierGroups: g } : {}) } : {};
       })(),
     })),
     restaurantId: raw.restaurantId != null ? String(raw.restaurantId) : undefined,
@@ -1375,12 +1407,14 @@ export class HttpYijiClient implements YijiClient {
     if (!order) return null;
     const lines: YijiCartLine[] = (order.orderItems ?? []).map((it) => {
       const modifiers = lineModifiers(it);
+      const modifierGroups = lineModifierGroups(it);
       return {
         name: it.itemName?.trim() || 'item',
         qty: it.quantity ?? 1,
         price: it.itemPrice ?? 0,
         category: it.itemCategory?.trim() || undefined,
         modifiers,
+        ...(modifierGroups.length ? { modifierGroups } : {}),
       };
     });
     const num = (v: number | null | undefined) => (typeof v === 'number' ? v : undefined);
