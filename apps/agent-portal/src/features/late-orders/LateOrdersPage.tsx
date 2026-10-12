@@ -1,19 +1,10 @@
-import {
-  Fragment,
-  type ReactNode,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  cloneElement,
-  type ReactElement,
-} from 'react';
+import { Fragment, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { playMessageBeep } from '../../lib/sound.js';
 import { LiveToggle } from './LiveToggle.js';
 import { useColumnResize } from './useColumnResize.js';
+import { headerWithHandle } from './header-cell.js';
 import { createItem } from '@directus/sdk';
 import {
   Button,
@@ -2079,18 +2070,13 @@ export function LateOrdersPage() {
                   <thead ref={headerRowRef}>
                     <Tr>
                       {visibleColumns.map((k) => {
-                        const th = columnDefs[k].th as ReactElement<{
-                          className?: string;
-                          children?: ReactNode;
-                        }>;
                         /* The column's own header, plus a drag handle on its
-                           trailing edge (owner, 2026-10-11). */
+                           trailing edge (owner, 2026-10-11) - always INSIDE
+                           the cell (see headerWithHandle). */
                         return (
                           <Fragment key={k}>
-                            {cloneElement(
-                              th,
-                              { className: cn(th.props.className, 'relative') },
-                              th.props.children,
+                            {headerWithHandle(
+                              columnDefs[k].th,
                               <span
                                 role="separator"
                                 aria-orientation="vertical"
