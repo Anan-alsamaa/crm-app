@@ -14,6 +14,10 @@ import type { AiUsage } from './provider/types.js';
 
 /** USD per 1M tokens, [input, output]. Thinking tokens are billed as output. */
 const PRICES: Array<[RegExp, number, number]> = [
+  /* Gemini 3.8 Flash: introductory list price to 2026-12-31 ($1.50 / $7.50
+     from 2027-01-01 - update this row then). Owner asked for the cost,
+     2026-10-13. */
+  [/^gemini-3\.8-flash/, 0.75, 3.75],
   [/^gemini-2\.5-flash-lite/, 0.1, 0.4],
   [/^gemini-2\.5-flash/, 0.3, 2.5],
   [/^gemini-2\.5-pro/, 1.25, 10],

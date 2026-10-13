@@ -112,4 +112,15 @@ describe('AI call log', () => {
     expect(estimateCostUsd('mystery-model', { inputTokens: 5 })).toBeNull();
     expect(estimateCostUsd('gemini-2.5-flash', undefined)).toBeNull();
   });
+
+  it('prices Gemini 3.8 Flash, thinking billed as output', () => {
+    // 1M in at $0.75 + (0.5M out + 0.5M thinking) at $3.75 = $4.50
+    expect(
+      estimateCostUsd('gemini-3.8-flash', {
+        inputTokens: 1_000_000,
+        outputTokens: 500_000,
+        thinkingTokens: 500_000,
+      }),
+    ).toBeCloseTo(4.5, 6);
+  });
 });

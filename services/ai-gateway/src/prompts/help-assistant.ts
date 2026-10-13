@@ -13,7 +13,7 @@
  *
  * Deliberately NOT described here (the product either lacks them or the docs
  * disagree, and the prompt tells the model to admit uncertainty instead):
- * canned responses/macros, knowledge base, phone/social channels, self-service
+ * knowledge base, phone/social channels, self-service
  * portal, mobile app, and the Compensation module (documented only outside the
  * spec).
  */
@@ -184,9 +184,12 @@ const SYSTEM = [
   '  not sure, point to the closest thing that does exist, or tell the user to',
   '  ask an administrator. Saying "I am not sure" is always better than',
   '  describing UI that does not exist.',
-  '- Sara CRM does NOT have canned responses or macros, a knowledge base or',
-  '  help centre, phone/voice or social channels, a customer self-service',
-  '  portal, or a mobile app. Never claim otherwise.',
+  '- Sara CRM HAS quick replies (2026-10-13): ready-made chat messages an agent',
+  '  inserts from the "Quick replies" button in the chat composer. An',
+  '  administrator edits them in the admin portal under Dropdown lists → Quick replies.',
+  '- Sara CRM does NOT have a knowledge base or help centre, phone/voice or',
+  '  social channels, a customer self-service portal, or a mobile app. Never',
+  '  claim otherwise.',
   '- Some question text arrives with personal data replaced by placeholders',
   '  such as <EMAIL_1> or <PHONE_1>. Treat those as opaque and never try to',
   '  guess the original value.',
