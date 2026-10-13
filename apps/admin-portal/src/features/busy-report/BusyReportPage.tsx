@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
@@ -19,6 +20,7 @@ import {
 import { formatDuration } from '@yiji/reports';
 import { exportFileName } from '@yiji/shared-config';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { ViewSwitch } from '../../components/ViewSwitch.js';
 import { lastMonth, useRememberedRange } from '../../lib/date-range.js';
 import { busyReport } from '../../lib/job-producer.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
@@ -31,12 +33,31 @@ import { summarize, toRows } from './busy.js';
  * Every time an agent pressed Busy (no new chats while signed in): how many
  * times, for how long in total, and each stretch with its start, end and
  * duration. Filter by one agent or all agents.
+ *
+ * TWO SUB-PAGES (owner, 2026-10-13): "By agent" (the totals) and "Every
+ * period" (each stretch), one table each, in the same page shell as the other
+ * reports - padding on the content, the page owns the scroll.
  */
+
+type View = 'agents' | 'periods';
+
 export function BusyReportPage() {
   const { t } = useTranslation();
   const { from, to, setFrom, setTo, reset } = useRememberedRange('busy-report-range', lastMonth);
   const [agent, setAgent] = useState('');
   const [search, setSearch] = useState('');
+  const [params, setParams] = useSearchParams();
+  const view: View = params.get('view') === 'periods' ? 'periods' : 'agents';
+  const setView = (v: View) =>
+    setParams(
+      (p) => {
+        const out = new URLSearchParams(p);
+        if (v === 'agents') out.delete('view');
+        else out.set('view', v);
+        return out;
+      },
+      { replace: true },
+    );
   const users = useUsers();
   const nameOf = useMemo(() => {
     const m = new Map<string, string>();
@@ -84,138 +105,165 @@ export function BusyReportPage() {
     );
 
   return (
-    <div className="flex flex-col gap-4">
-      <ReportFilterBar
-        searchLabel={t('busyReport.search', { defaultValue: 'Agent' })}
-        searchPlaceholder={t('busyReport.searchPlaceholder', { defaultValue: 'Agent name' })}
-        search={search}
-        onSearch={setSearch}
-        from={from}
-        to={to}
-        onFrom={setFrom}
-        onTo={setTo}
-        selects={[
-          {
-            key: 'agent',
-            label: t('busyReport.agent', { defaultValue: 'Agent' }),
-            value: agent,
-            onChange: setAgent,
-            options: agentOptions,
-          },
-        ]}
-        filtering={!!agent || !!search}
-        onClear={() => {
-          setAgent('');
-          setSearch('');
-          reset();
-        }}
-        actions={
-          <Button variant="secondary" size="sm" onClick={exportCsv} disabled={rows.length === 0}>
-            {t('busyReport.export', { defaultValue: 'Export CSV' })}
-          </Button>
-        }
-      />
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex-1 overflow-auto px-5">
+        <div className="mx-auto max-w-6xl space-y-5 py-5">
+          <ReportFilterBar
+            searchLabel={t('busyReport.search', { defaultValue: 'Agent' })}
+            searchPlaceholder={t('busyReport.searchPlaceholder', { defaultValue: 'Agent name' })}
+            search={search}
+            onSearch={setSearch}
+            from={from}
+            to={to}
+            onFrom={setFrom}
+            onTo={setTo}
+            selects={[
+              {
+                key: 'agent',
+                label: t('busyReport.agent', { defaultValue: 'Agent' }),
+                value: agent,
+                onChange: setAgent,
+                options: agentOptions,
+              },
+            ]}
+            filtering={!!agent || !!search}
+            onClear={() => {
+              setAgent('');
+              setSearch('');
+              reset();
+            }}
+            actions={
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={exportCsv}
+                disabled={rows.length === 0}
+              >
+                {t('busyReport.export', { defaultValue: 'Export CSV' })}
+              </Button>
+            }
+          />
 
-      <ReportKpiStrip>
-        <ReportKpi
-          tone="blue"
-          label={t('busyReport.kpiTimes', { defaultValue: 'Times Busy was used' })}
-          value={String(rows.length)}
-        />
-        <ReportKpi
-          tone="amber"
-          label={t('busyReport.kpiTotal', { defaultValue: 'Total busy time' })}
-          value={formatDuration(totalSec) ?? '0s'}
-        />
-        <ReportKpi
-          tone="violet"
-          label={t('busyReport.kpiAgents', { defaultValue: 'Agents' })}
-          value={String(perAgent.length)}
-        />
-      </ReportKpiStrip>
+          <ReportKpiStrip>
+            <ReportKpi
+              tone="blue"
+              label={t('busyReport.kpiTimes', { defaultValue: 'Times Busy was used' })}
+              value={String(rows.length)}
+            />
+            <ReportKpi
+              tone="amber"
+              label={t('busyReport.kpiTotal', { defaultValue: 'Total busy time' })}
+              value={formatDuration(totalSec) ?? '0s'}
+            />
+            <ReportKpi
+              tone="violet"
+              label={t('busyReport.kpiAgents', { defaultValue: 'Agents' })}
+              value={String(perAgent.length)}
+            />
+          </ReportKpiStrip>
 
-      {q.isLoading ? (
-        <Skeleton className="h-40 w-full" />
-      ) : q.isError ? (
-        <ErrorState
-          title={t('busyReport.error', { defaultValue: 'Could not load busy time.' })}
-          onRetry={() => void q.refetch()}
-        />
-      ) : rows.length === 0 ? (
-        <EmptyState
-          title={t('busyReport.empty', { defaultValue: 'Nobody used Busy in this period.' })}
-        />
-      ) : (
-        <>
-          <TableSurface>
-            <Table aria-label={t('busyReport.byAgent', { defaultValue: 'Busy time by agent' })}>
-              <thead>
-                <tr>
-                  <Th>{t('busyReport.agent', { defaultValue: 'Agent' })}</Th>
-                  <Th className="text-end">{t('busyReport.times', { defaultValue: 'Times' })}</Th>
-                  <Th className="text-end">
-                    {t('busyReport.total', { defaultValue: 'Total time' })}
-                  </Th>
-                  <Th className="text-end">
-                    {t('busyReport.longest', { defaultValue: 'Longest' })}
-                  </Th>
-                  <Th>{t('busyReport.last', { defaultValue: 'Last used' })}</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {perAgent.map((a) => (
-                  <Tr key={a.agent ?? 'unknown'}>
-                    <Td className="font-medium">{nameOf(a.agent)}</Td>
-                    <Td className="text-end tabular-nums">{a.times}</Td>
-                    <Td className="text-end tabular-nums">{formatDuration(a.totalSec) ?? '0s'}</Td>
-                    <Td className="text-end tabular-nums">
-                      {formatDuration(a.longestSec) ?? '0s'}
-                    </Td>
-                    <Td className="tabular-nums">
-                      {a.lastStartedAt ? formatDateTime(a.lastStartedAt) : '—'}
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </Table>
-          </TableSurface>
+          <ViewSwitch
+            value={view}
+            onChange={setView}
+            label={t('busyReport.views', { defaultValue: 'Busy time views' })}
+            options={[
+              {
+                value: 'agents',
+                label: t('busyReport.byAgentTab', { defaultValue: 'By agent' }),
+                count: perAgent.length,
+              },
+              {
+                value: 'periods',
+                label: t('busyReport.periodsTab', { defaultValue: 'Every period' }),
+                count: rows.length,
+              },
+            ]}
+          />
 
-          <TableSurface maxHeight="30rem">
-            <Table aria-label={t('busyReport.periods', { defaultValue: 'Every busy period' })}>
-              <thead>
-                <tr>
-                  <Th>{t('busyReport.agent', { defaultValue: 'Agent' })}</Th>
-                  <Th>{t('busyReport.started', { defaultValue: 'Started' })}</Th>
-                  <Th>{t('busyReport.ended', { defaultValue: 'Ended' })}</Th>
-                  <Th className="text-end">
-                    {t('busyReport.duration', { defaultValue: 'Duration' })}
-                  </Th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <Tr key={r.id}>
-                    <Td className="font-medium">{nameOf(r.agent)}</Td>
-                    <Td className="tabular-nums">{formatDateTime(r.started_at)}</Td>
-                    <Td className="tabular-nums">
-                      {r.ended_at ? (
-                        formatDateTime(r.ended_at)
-                      ) : (
-                        <Pill tone="warning" size="sm">
-                          {t('busyReport.ongoing', { defaultValue: 'Still busy' })}
-                        </Pill>
-                      )}
-                    </Td>
-                    <Td className="text-end tabular-nums">
-                      {formatDuration(r.durationSec) ?? '0s'}
-                    </Td>
-                  </Tr>
-                ))}
-              </tbody>
-            </Table>
-          </TableSurface>
-        </>
-      )}
+          {q.isLoading ? (
+            <Skeleton className="h-40 w-full" />
+          ) : q.isError ? (
+            <ErrorState
+              title={t('busyReport.error', { defaultValue: 'Could not load busy time.' })}
+              onRetry={() => void q.refetch()}
+            />
+          ) : rows.length === 0 ? (
+            <EmptyState
+              title={t('busyReport.empty', { defaultValue: 'Nobody used Busy in this period.' })}
+            />
+          ) : view === 'agents' ? (
+            <TableSurface>
+              <Table aria-label={t('busyReport.byAgent', { defaultValue: 'Busy time by agent' })}>
+                <thead>
+                  <tr>
+                    <Th>{t('busyReport.agent', { defaultValue: 'Agent' })}</Th>
+                    <Th className="text-end">{t('busyReport.times', { defaultValue: 'Times' })}</Th>
+                    <Th className="text-end">
+                      {t('busyReport.total', { defaultValue: 'Total time' })}
+                    </Th>
+                    <Th className="text-end">
+                      {t('busyReport.longest', { defaultValue: 'Longest' })}
+                    </Th>
+                    <Th>{t('busyReport.last', { defaultValue: 'Last used' })}</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {perAgent.map((a) => (
+                    <Tr key={a.agent ?? 'unknown'}>
+                      <Td className="font-medium">{nameOf(a.agent)}</Td>
+                      <Td className="text-end tabular-nums">{a.times}</Td>
+                      <Td className="text-end tabular-nums">
+                        {formatDuration(a.totalSec) ?? '0s'}
+                      </Td>
+                      <Td className="text-end tabular-nums">
+                        {formatDuration(a.longestSec) ?? '0s'}
+                      </Td>
+                      <Td className="tabular-nums">
+                        {a.lastStartedAt ? formatDateTime(a.lastStartedAt) : '—'}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableSurface>
+          ) : (
+            <TableSurface>
+              <Table aria-label={t('busyReport.periods', { defaultValue: 'Every busy period' })}>
+                <thead>
+                  <tr>
+                    <Th>{t('busyReport.agent', { defaultValue: 'Agent' })}</Th>
+                    <Th>{t('busyReport.started', { defaultValue: 'Started' })}</Th>
+                    <Th>{t('busyReport.ended', { defaultValue: 'Ended' })}</Th>
+                    <Th className="text-end">
+                      {t('busyReport.duration', { defaultValue: 'Duration' })}
+                    </Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <Tr key={r.id}>
+                      <Td className="font-medium">{nameOf(r.agent)}</Td>
+                      <Td className="tabular-nums">{formatDateTime(r.started_at)}</Td>
+                      <Td className="tabular-nums">
+                        {r.ended_at ? (
+                          formatDateTime(r.ended_at)
+                        ) : (
+                          <Pill tone="warning" size="sm">
+                            {t('busyReport.ongoing', { defaultValue: 'Still busy' })}
+                          </Pill>
+                        )}
+                      </Td>
+                      <Td className="text-end tabular-nums">
+                        {formatDuration(r.durationSec) ?? '0s'}
+                      </Td>
+                    </Tr>
+                  ))}
+                </tbody>
+              </Table>
+            </TableSurface>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
