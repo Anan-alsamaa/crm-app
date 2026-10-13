@@ -725,7 +725,14 @@ await check(
         { headers: YH },
       );
       const list = u.ok ? await u.json() : [];
-      const acct = (list ?? []).find((x) => last9(x.phoneNumber) === last9(want));
+      /* EXACT +966 first, as the delivery does: the last 9 digits alone are
+         ambiguous. 2026-10-13, OPS-MSCGRLEK: +9616556761363 also ends in
+         556761363, came back first, and the check reported a correctly
+         delivered coupon as missing. */
+      const digits = (v) => String(v ?? '').replace(/D/g, '');
+      const acct =
+        (list ?? []).find((x) => digits(x.phoneNumber) === `966${last9(want)}`) ??
+        (list ?? []).find((x) => last9(x.phoneNumber) === last9(want));
       if (!acct) {
         wrong.push(`${row.coupon_code}: ${want} has no Yiji account`);
         continue;
