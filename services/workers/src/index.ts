@@ -233,7 +233,24 @@ async function main(): Promise<void> {
             },
             body: JSON.stringify(change),
             signal: AbortSignal.timeout(5_000),
-          }).catch(() => undefined);
+          })
+            /* LOGGED, not swallowed (2026-10-13): a broken push used to leave
+               no trace at all. Still not retried - screens catch up on their
+               2-minute safety poll. */
+            .then((res) => {
+              if (!res.ok) {
+                logger.warn(
+                  { status: res.status, vendorKey: change.vendorKey },
+                  'late-orders push refused by the socket-gateway',
+                );
+              }
+            })
+            .catch((err: unknown) => {
+              logger.warn(
+                { err: (err as Error)?.message ?? String(err), vendorKey: change.vendorKey },
+                'late-orders push failed - screens catch up on their safety poll',
+              );
+            });
         }
       : undefined;
 
