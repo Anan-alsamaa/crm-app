@@ -947,10 +947,13 @@ export function AgentPerformancePage() {
                             <th className="h-10 px-5 text-end font-semibold">
                               {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
                             </th>
+                            <th className="h-10 px-5 text-end font-semibold">
+                              {t('performance.csat', { defaultValue: 'Customer rating' })}
+                            </th>
                           </tr>
                         </thead>
                         <tbody className="divide-y-0">
-                          {breakdown.length === 0 && <NoMatchRow colSpan={7} search={search} />}
+                          {breakdown.length === 0 && <NoMatchRow colSpan={8} search={search} />}
                           {breakdown.map(({ chat, first, solve }) => (
                             <tr
                               key={chat.conversationId}
@@ -1017,6 +1020,13 @@ export function AgentPerformancePage() {
                                   : first == null
                                     ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
                                     : formatDuration(first)}
+                                {/* Why this row is not counted against the target,
+                                    as in the agent portal (owner, 2026-10-13). */}
+                                {chat.passedOn && (
+                                  <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                    {t('performance.commonChat', { defaultValue: 'common' })}
+                                  </span>
+                                )}
                               </td>
                               <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
                                 {solve != null
@@ -1032,6 +1042,15 @@ export function AgentPerformancePage() {
                                           defaultValue: 'Waiting for customer',
                                         })
                                       : dash}
+                              </td>
+                              {/* This chat's own rating, as in the agent portal;
+                                  empty when the customer did not rate (owner,
+                                  2026-10-13). */}
+                              <td className="px-5 py-3 text-end tabular-nums text-foreground">
+                                {(() => {
+                                  const score = csat.data?.get(chat.conversationId);
+                                  return typeof score === 'number' ? `${score}/5` : '';
+                                })()}
                               </td>
                             </tr>
                           ))}
