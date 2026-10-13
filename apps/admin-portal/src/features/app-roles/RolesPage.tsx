@@ -395,6 +395,9 @@ export function RolesPage() {
     receive_chats: t('roles.p.receiveChats', {
       defaultValue: 'Show as online and receive auto-assigned chats',
     }),
+    mark_busy: t('roles.p.markBusy', {
+      defaultValue: 'Use Busy (pause new chats); busy time is recorded',
+    }),
     no_agents_alert: t('roles.p.noAgentsAlert', {
       defaultValue: 'Receive the "no agents available" alert',
     }),

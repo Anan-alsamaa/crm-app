@@ -113,6 +113,7 @@ export const OWNER_PRIVILEGES = [
   'delete_chats',
   'edit_own_messages',
   'receive_chats',
+  'mark_busy',
   'no_agents_alert',
   // ── customers ───────────────────────────────────────────────────────────
   'view_contacts',
@@ -150,6 +151,15 @@ export type Privilege = (typeof PRIVILEGES)[number] | OwnerPrivilege;
 
 /** Every key, in editor order: the shared list, then the owner's. */
 export const ALL_PRIVILEGES: readonly Privilege[] = [...PRIVILEGES, ...OWNER_PRIVILEGES];
+
+/**
+ * Switches that describe the PERSON'S WORK, not their authority, so holding
+ * everything (the owner, the row-less Administrator/Admin) does NOT imply them.
+ * The owner, 2026-10-13: Busy is for the three WeCare roles only - "for the
+ * rest it must be off", the Administrator included. They resolve from the
+ * role's stored tick or its default, like any role.
+ */
+export const ROLE_SPECIFIC_PRIVILEGES: readonly Privilege[] = ['mark_busy'];
 
 export function isOwnerPrivilege(key: string): key is OwnerPrivilege {
   return (OWNER_PRIVILEGES as readonly string[]).includes(key);
@@ -190,6 +200,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   edit_own_messages: holds('use_chat'),
   // The gateway's PRESENCE_ROLES / the workers' ROUTABLE_ROLES.
   receive_chats: nameIn('wecare agent', 'wecare supervisor'),
+  /* The Busy button and its time records (owner, 2026-10-13): the three
+     WeCare roles only, off for every other role. */
+  mark_busy: nameIn('wecare agent', 'wecare supervisor', 'wecare admin'),
   // The workers' SUPERVISOR_ROLES.
   no_agents_alert: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
   view_contacts: holds('use_chat'),
@@ -283,6 +296,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   delete_chats: 'chat',
   edit_own_messages: 'chat',
   receive_chats: 'chat',
+  mark_busy: 'chat',
   no_agents_alert: 'chat',
   view_contacts: 'customers',
   create_contacts: 'customers',

@@ -8,14 +8,15 @@ import { getBusy, setBusy, type BusyState } from '../lib/job-producer.js';
  * BUSY (owner, 2026-10-11).
  *
  * Signed in, but no new chats: the agent is on other work, or an admin opened
- * the account to monitor. Shown only to people chats are routed to (the
- * `receive_chats` privilege - WeCare Agent / Supervisor by default). Each
+ * the account to monitor. Shown only to roles with the `mark_busy` privilege
+ * (owner, 2026-10-13: the three WeCare roles by default, off for the rest -
+ * the Administrator included, see ROLE_SPECIFIC_PRIVILEGES). Each
  * stretch is recorded for the Agent KPI "Busy time" report; signing out ends it.
  */
 export function BusyToggle() {
   const { t } = useTranslation();
   const { can } = useAuth();
-  const allowed = can('receive_chats');
+  const allowed = can('mark_busy');
   const qc = useQueryClient();
   const state = useQuery({
     queryKey: ['my-busy'],

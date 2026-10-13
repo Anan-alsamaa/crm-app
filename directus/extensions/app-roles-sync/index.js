@@ -180,6 +180,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     delete_chats: never,
     edit_own_messages: holds('use_chat'),
     receive_chats: nameIn('wecare agent', 'wecare supervisor'),
+    mark_busy: nameIn('wecare agent', 'wecare supervisor', 'wecare admin'),
     no_agents_alert: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
     view_contacts: holds('use_chat'),
     create_contacts: holds('use_chat'),
@@ -561,6 +562,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     delete_chats: [g('conversations', 'delete')],
     edit_own_messages: [], // the gateway's message edit/delete
     receive_chats: [], // the gateway's presence + the workers' routing
+    mark_busy: [], // the gateway's /jobs/busy
     no_agents_alert: [], // the workers' alert
     view_contacts: [],
     create_contacts: [g('contacts', 'create')],

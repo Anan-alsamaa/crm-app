@@ -766,13 +766,13 @@ async function main(): Promise<void> {
    * Open to whoever receives chats (WeCare Agent / Supervisor by default).
    */
   app.get('/jobs/busy', async (req, reply) => {
-    const me = await requirePrivilege(req, reply, 'receive_chats');
+    const me = await requirePrivilege(req, reply, 'mark_busy');
     if (!me) return reply;
     const open = await directus.openBusyPeriod(me.id);
     return reply.send({ ok: true, busy: !!open, since: open?.started_at ?? null });
   });
   app.post('/jobs/busy', async (req, reply) => {
-    const me = await requirePrivilege(req, reply, 'receive_chats');
+    const me = await requirePrivilege(req, reply, 'mark_busy');
     if (!me) return reply;
     const busy = (req.body as { busy?: unknown } | null)?.busy;
     if (typeof busy !== 'boolean')

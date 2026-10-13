@@ -11,7 +11,13 @@ import { useTranslation } from 'react-i18next';
 import { toast } from '@yiji/ui';
 import type { AuthUser } from '@yiji/shared-config';
 import { readItems } from '@directus/sdk';
-import { PRIVILEGES, effectivePrivileges, opensPortal, type Privilege } from '@yiji/shared-types';
+import {
+  PRIVILEGES,
+  ROLE_SPECIFIC_PRIVILEGES,
+  effectivePrivileges,
+  opensPortal,
+  type Privilege,
+} from '@yiji/shared-types';
 import { auth, directus } from '../directus.js';
 import { disconnectSocket, setSessionExpiredHandler } from '../socket.js';
 
@@ -189,9 +195,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
   const can = useCallback(
     (priv: Privilege): boolean =>
-      isOwner ||
-      (privileges === null && legacyPrivileges?.[priv] === true) ||
-      privileges?.[priv] === true,
+      /* Holding everything does not imply a role-specific switch (Busy). */
+      ROLE_SPECIFIC_PRIVILEGES.includes(priv)
+        ? privileges?.[priv] === true
+        : isOwner ||
+          (privileges === null && legacyPrivileges?.[priv] === true) ||
+          privileges?.[priv] === true,
     [isOwner, legacyPrivileges, privileges],
   );
   const canUsePortal =

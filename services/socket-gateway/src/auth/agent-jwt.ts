@@ -1,5 +1,5 @@
 import { createDirectus, rest, staticToken, readMe, readItems } from '@directus/sdk';
-import { ALL_PRIVILEGES, effectivePrivileges } from '@yiji/shared-types';
+import { ALL_PRIVILEGES, ROLE_SPECIFIC_PRIVILEGES, effectivePrivileges } from '@yiji/shared-types';
 
 /**
  * Validate an agent's Directus access token by calling /users/me as that user
@@ -28,7 +28,14 @@ export function rolePrivileges(
   row: { privileges: unknown } | null,
 ): Record<string, boolean> {
   if (!row && ROWLESS_FULL_ROLES.includes(String(roleName ?? '').toLowerCase())) {
-    return Object.fromEntries(ALL_PRIVILEGES.map((k) => [k, true]));
+    // Everything - except the switches holding everything does not imply.
+    const role = effectivePrivileges(null, roleName);
+    return Object.fromEntries(
+      ALL_PRIVILEGES.map((k) => [
+        k,
+        ROLE_SPECIFIC_PRIVILEGES.includes(k) ? role[k] === true : true,
+      ]),
+    );
   }
   const raw = row?.privileges;
   let stored: Record<string, boolean> | null = null;
