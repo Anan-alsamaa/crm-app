@@ -1324,7 +1324,8 @@
       "viewAgentDashboard": "View agent dashboard",
       "viewLateOrdersReport": "View late orders report",
       "viewAgentReports": "View agent summary reports (Agent summary, Chat status, Busy time, Agent performance)",
-      "viewSlaReport": "View ticket deadline report"
+      "viewSlaReport": "View ticket deadline report",
+      "markBusy": "Use Busy (pause new chats); busy time is recorded"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1476,6 +1477,7 @@
     "ongoing": "Still busy",
     "views": "Busy time views",
     "byAgentTab": "By agent",
-    "periodsTab": "Every period"
+    "periodsTab": "Every period",
+    "role": "Role"
   }
 }

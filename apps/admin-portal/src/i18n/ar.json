@@ -1353,7 +1353,8 @@
       "editYijiBranchId": "تعديل رقم مطعم الفرع في ييجي",
       "manageStoreNotifications": "تنبيهات الفروع",
       "manageNotificationDefaults": "إعدادات التنبيهات الافتراضية للمنشأة",
-      "viewAgentDashboard": "عرض لوحة الوكلاء"
+      "viewAgentDashboard": "عرض لوحة الوكلاء",
+      "markBusy": "استخدام وضع \"مشغول\" (إيقاف المحادثات الجديدة مؤقتاً) مع تسجيل وقت الانشغال"
     },
     "pending": "قيد التطبيق…",
     "privCount": "{{n}} صلاحية",
@@ -1982,6 +1983,7 @@
     "ongoing": "ما زال مشغولًا",
     "views": "عروض وقت الانشغال",
     "byAgentTab": "حسب الموظف",
-    "periodsTab": "كل الفترات"
+    "periodsTab": "كل الفترات",
+    "role": "الدور"
   }
 }

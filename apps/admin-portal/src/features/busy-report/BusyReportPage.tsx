@@ -45,6 +45,9 @@ export function BusyReportPage() {
   const { t } = useTranslation();
   const { from, to, setFrom, setTo, reset } = useRememberedRange('busy-report-range', lastMonth);
   const [agent, setAgent] = useState('');
+  /* By ROLE too (owner, 2026-10-13): the Administrator, WeCare Supervisor,
+     WeCare Admin... - each agent's CURRENT role. */
+  const [role, setRole] = useState('');
   const [search, setSearch] = useState('');
   const [params, setParams] = useSearchParams();
   const view: View = params.get('view') === 'periods' ? 'periods' : 'agents';
@@ -68,16 +71,28 @@ export function BusyReportPage() {
     return (id: string | null) =>
       id ? (m.get(id) ?? id) : t('busyReport.unknown', { defaultValue: 'Unknown agent' });
   }, [users.data, t]);
+  const roleOf = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const u of users.data ?? []) if (u.role?.name) m.set(u.id, u.role.name);
+    return (id: string | null) => (id ? (m.get(id) ?? '') : '');
+  }, [users.data]);
+  const roleOptions = useMemo(
+    () =>
+      [...new Set((users.data ?? []).map((u) => u.role?.name).filter((n): n is string => !!n))]
+        .sort((a, b) => a.localeCompare(b))
+        .map((n) => ({ value: n, label: n })),
+    [users.data],
+  );
 
   const q = useQuery({
     queryKey: ['busy-report', from, to, agent],
     queryFn: () => busyReport({ from, to, ...(agent ? { agentId: agent } : {}) }),
   });
   const rows = useMemo(() => {
-    const all = toRows(q.data ?? []);
+    const all = toRows(q.data ?? []).filter((r) => !role || roleOf(r.agent) === role);
     const needle = search.trim().toLowerCase();
     return needle ? all.filter((r) => nameOf(r.agent).toLowerCase().includes(needle)) : all;
-  }, [q.data, search, nameOf]);
+  }, [q.data, search, nameOf, role, roleOf]);
   const perAgent = useMemo(() => summarize(rows), [rows]);
   const totalSec = rows.reduce((s, r) => s + r.durationSec, 0);
 
@@ -94,9 +109,10 @@ export function BusyReportPage() {
     downloadCsv(
       exportFileName('busy-time'),
       toCsv(
-        ['Agent', 'Started', 'Ended', 'Duration (minutes)'],
+        ['Agent', 'Role', 'Started', 'Ended', 'Duration (minutes)'],
         rows.map((r) => [
           nameOf(r.agent),
+          roleOf(r.agent),
           r.started_at,
           r.ended_at ?? 'ongoing',
           Math.round(r.durationSec / 60),
@@ -125,10 +141,18 @@ export function BusyReportPage() {
                 onChange: setAgent,
                 options: agentOptions,
               },
+              {
+                key: 'role',
+                label: t('busyReport.role', { defaultValue: 'Role' }),
+                value: role,
+                onChange: setRole,
+                options: roleOptions,
+              },
             ]}
-            filtering={!!agent || !!search}
+            filtering={!!agent || !!search || !!role}
             onClear={() => {
               setAgent('');
+              setRole('');
               setSearch('');
               reset();
             }}
