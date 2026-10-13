@@ -173,6 +173,8 @@ export interface ConnectionDeps {
     touch(userId: string): Promise<void>;
     /** Cross-instance count; optional so older callers/tests still satisfy this. */
     onlineCount?(): Promise<number>;
+    /** Present on any instance; optional like onlineCount. */
+    isOnline?(userId: string): Promise<boolean>;
   };
 }
 
@@ -679,6 +681,7 @@ export function registerConnection(deps: ConnectionDeps): void {
             void reclaimConversationsOf(leavingAgentId, deps).catch((err: unknown) =>
               logger.warn({ err, agentId: leavingAgentId }, 'reclaim scheduling failed'),
             );
+            endBusyIfStillGone(leavingAgentId, deps);
           } else {
             // No agentId to remove from the shared registry, but the local count
             // still changed, so the announcement must still go out. Moving the
@@ -691,6 +694,42 @@ export function registerConnection(deps: ConnectionDeps): void {
     });
   });
   logger.info('connection handlers registered');
+}
+
+/** How long a gone agent may stay Busy before the stretch is closed. */
+export const BUSY_OFFLINE_WAIT_MS = 2 * 60_000;
+
+/**
+ * A SIGNED-OUT AGENT IS NOT BUSY (owner, 2026-10-13).
+ *
+ * Pressing Log out already ends a Busy stretch. Closing the browser, shutting
+ * the PC or losing the network did not, so the report counted the whole time
+ * the agent was away - overnight included - as busy time.
+ *
+ * Called once the agent's last socket has been gone for the presence grace.
+ * Waits BUSY_OFFLINE_WAIT_MS more (a reload or a short Wi-Fi drop must not end
+ * it), then - if they are back on NO gateway instance - closes the stretch AT
+ * THE MOMENT THEY LEFT, so none of the away time counts.
+ */
+export function endBusyIfStillGone(
+  agentId: string,
+  deps: Pick<ConnectionDeps, 'directus' | 'logger' | 'presenceStore'>,
+  waitMs: number = BUSY_OFFLINE_WAIT_MS,
+): void {
+  const leftAt = new Date().toISOString();
+  const timer = setTimeout(() => {
+    void (async () => {
+      if (agentPresence.socketsForUser(agentId).length > 0) return;
+      if (await deps.presenceStore?.isOnline?.(agentId)) return;
+      const closed = await deps.directus.endBusy(agentId, leftAt);
+      if (closed > 0) {
+        deps.logger.info({ agentId, leftAt }, 'busy ended - the agent went offline');
+      }
+    })().catch((err: unknown) =>
+      deps.logger.warn({ err, agentId }, 'ending busy for an offline agent failed'),
+    );
+  }, waitMs);
+  timer.unref?.();
 }
 
 /**

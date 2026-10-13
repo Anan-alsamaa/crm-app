@@ -1519,8 +1519,12 @@ export class GatewayDirectus {
     return { started_at };
   }
 
-  /** Closes every open period of the agent. Returns how many were closed. */
-  async endBusy(agentId: string): Promise<number> {
+  /**
+   * Closes every open period of the agent. Returns how many were closed.
+   * `endedAt` backdates the end - to when the agent LEFT, for a stretch closed
+   * because they went offline (owner, 2026-10-13).
+   */
+  async endBusy(agentId: string, endedAt?: string): Promise<number> {
     const rows = (await this.client.request(
       readItems(
         'agent_busy_periods' as never,
@@ -1531,7 +1535,7 @@ export class GatewayDirectus {
         } as never,
       ),
     )) as Array<{ id: string }>;
-    const ended_at = new Date().toISOString();
+    const ended_at = endedAt ?? new Date().toISOString();
     for (const r of rows) {
       await this.client.request(
         updateItem('agent_busy_periods' as never, r.id, { ended_at } as never),

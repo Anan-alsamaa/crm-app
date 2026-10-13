@@ -43,6 +43,8 @@ export interface PresenceStore {
    * Membership is the question; recency is a different one.
    */
   onlineCount(): Promise<number>;
+  /** Present on ANY gateway instance (in the shared set and not expired). */
+  isOnline(userId: string): Promise<boolean>;
   /**
    * Keep every currently-connected agent's entry fresh.
    *
@@ -74,6 +76,10 @@ export function createPresenceStore(redis: Redis | Cluster): PresenceStore {
       // signed out must not resurrect them.
       const score = await redis.zscore(KEY, userId);
       if (score !== null) await redis.zadd(KEY, now(), userId);
+    },
+    async isOnline(userId) {
+      const score = await redis.zscore(KEY, userId);
+      return score !== null && Number(score) > now() - PRESENCE_TTL_MS;
     },
     async onlineCount() {
       /*
