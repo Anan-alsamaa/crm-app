@@ -912,6 +912,97 @@ await check(
   },
 );
 
+await check(
+  'COUPON-HOLDERS',
+  'no CRM coupon is held by any account other than the customer it was issued to',
+  async () => {
+    /*
+     * OWNER, 2026-10-12: OPS-KUFLUUKK, given to 0536150460, turned up on
+     * 0509751218's account. Coupons created as General before v1.38.8 had been
+     * added BY CODE to 964 other accounts (1,848 copies of 6 codes); every one
+     * was removed on 2026-10-13. "They should not even have these coupons."
+     *
+     * For each CRM coupon, Yiji's holder list (by coupon name = the customer's
+     * phone) against the one grant the CRM made. Yiji's removal is a SOFT
+     * delete that list still shows, so every other holder is confirmed from
+     * the CUSTOMER'S OWN coupon list before it counts. Owner login from the
+     * git-ignored `.env.yiji-admin`; SKIP without it - never a silent pass.
+     */
+    const fs = await import('node:fs');
+    const envFile = new URL('../../.env.yiji-admin', import.meta.url);
+    if (!fs.existsSync(envFile)) return 'skip';
+    const line = fs
+      .readFileSync(envFile, 'utf8')
+      .split(/\r?\n/)
+      .find((l) => l.startsWith('YIJI_UPDATE_TOKEN='));
+    const token = (line ?? '')
+      .slice('YIJI_UPDATE_TOKEN='.length)
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .replace(/^Bearer\s+/i, '');
+    if (!token) return 'skip';
+    const yh = { authorization: `Bearer ${token}`, tenantid: '1', accept: 'application/json' };
+    const get = async (path) => {
+      for (let t = 0; t < 2; t++) {
+        try {
+          const r = await fetch(`https://admin.yiji-app.com${path}`, {
+            headers: yh,
+            signal: AbortSignal.timeout(15000),
+          });
+          if (r.status === 401 || r.status === 403) return { denied: r.status };
+          if (r.ok) return await r.json();
+        } catch {
+          /* retry once */
+        }
+      }
+      return null;
+    };
+    const crm = await items('coupon_approvals', {
+      filter: JSON.stringify({ yiji_coupon_user_id: { _nnull: true } }),
+      fields: 'coupon_code,title,yiji_coupon_user_id',
+      limit: '-1',
+    });
+    if (crm.status !== 200) return { ok: false, detail: `CRM HTTP ${crm.status}` };
+    const suspects = []; // [userId, code]
+    for (const c of crm.data ?? []) {
+      if (!c.title || !c.coupon_code) continue;
+      for (let page = 1; page < 50; page++) {
+        const rows = await get(
+          `/api/CouponUser/GetFilteredData?CouponName=${encodeURIComponent(c.title)}&PageNumber=${page}&PageSize=100`,
+        );
+        if (rows?.denied)
+          return { ok: false, detail: `Yiji refused the holder list (${rows.denied})` };
+        const list = Array.isArray(rows) ? rows : [];
+        for (const g of list) {
+          if (g.couponCode === c.coupon_code && String(g.id) !== String(c.yiji_coupon_user_id)) {
+            suspects.push([g.userId, c.coupon_code]);
+          }
+        }
+        if (list.length < 100) break;
+      }
+    }
+    const byUser = new Map();
+    for (const [u, code] of suspects) byUser.set(u, (byUser.get(u) ?? new Set()).add(code));
+    const holding = [];
+    const users = [...byUser.entries()];
+    for (let i = 0; i < users.length; i += 8) {
+      await Promise.all(
+        users.slice(i, i + 8).map(async ([u, codes]) => {
+          const own = await get(`/api/CouponUser/GetCouponByUser/${u}?PageNumber=1&PageSize=500`);
+          const held = (Array.isArray(own) ? own : []).filter((x) => codes.has(x.couponCode));
+          for (const h of held) holding.push(`${h.couponCode} on account ${String(u).slice(0, 8)}`);
+        }),
+      );
+    }
+    return {
+      ok: holding.length === 0,
+      detail: holding.length
+        ? `${holding.length} wrong holder(s): ${holding.slice(0, 10).join('; ')}`
+        : `${(crm.data ?? []).length} coupons; ${users.length} former extra holders confirmed removed`,
+    };
+  },
+);
+
 // ── no delivered coupon silently vanishes (2026-10-08) ────────────────────────
 await check(
   'COUPON-VANISHED',
