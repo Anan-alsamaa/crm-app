@@ -417,6 +417,7 @@
     "slaSection": "SLA",
     "contactSearchPrompt": "Type a phone number or name to find a contact.",
     "viewConversation": "View chat →",
+    "viewCustomerChatHint": "This ticket was not raised from a chat - opens the customer's latest chat",
     "viewTicket": "View ticket",
     "fromChat": "From this chat",
     "includeOrder": "Attach order details",

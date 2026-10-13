@@ -89,7 +89,7 @@ import {
   parseLegacyOrderBlock,
 } from './OrderSnapshotCard.js';
 import { LateOrderDecisionCard } from '../late-orders/LateOrderDecisionCard.js';
-import { useContact } from '../contacts/api.js';
+import { useContact, useContactConversations } from '../contacts/api.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
 import { useRequestCouponApproval, useTicketCoupons } from '../coupons/api.js';
@@ -990,6 +990,14 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
   // Whether this agent may read that chat at all — a ticket and its conversation
   // are scoped separately, so a handover can leave the two disagreeing.
   const chatVisible = useCanReadConversation(ticket.data?.conversation ?? null);
+  /* A ticket raised from the Tickets page (not from inside a chat) has no
+     linked conversation, so "View chat" never showed (owner, 2026-10-13).
+     Fall back to the customer's most recent chat. Directus returns only the
+     chats this agent may read, so an empty list means no button. */
+  const customerChats = useContactConversations(
+    ticket.data && !ticket.data.conversation ? (ticket.data.contact?.id ?? '') : '',
+  );
+  const fallbackChatId = customerChats.data?.[0]?.id ?? null;
   // Legacy tickets (created before `order_snapshot`) carry the order as prose in
   // the description; recover the id so it can be re-fetched and rendered as a
   // proper card, and drop that block from the description we display.
@@ -1270,6 +1278,19 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     </button>
                   )}
                 </>
+              )}
+              {!tk.conversation && fallbackChatId && (
+                <button
+                  type="button"
+                  onClick={() => navigate(`/?conv=${fallbackChatId}`)}
+                  title={t('tickets.viewCustomerChatHint', {
+                    defaultValue:
+                      "This ticket was not raised from a chat - opens the customer's latest chat",
+                  })}
+                  className="pb-px text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                >
+                  {t('tickets.viewConversation', { defaultValue: 'View chat →' })}
+                </button>
               )}
             </div>
           </div>

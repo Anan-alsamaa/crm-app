@@ -521,6 +521,7 @@
     "slaSection": "اتفاقية الخدمة",
     "contactSearchPrompt": "اكتب رقم جوال أو اسمًا للبحث عن جهة اتصال.",
     "viewConversation": "عرض المحادثة →",
+    "viewCustomerChatHint": "لم تُنشأ هذه التذكرة من محادثة - يفتح آخر محادثة للعميل",
     "viewTicket": "عرض التذكرة",
     "fromChat": "من هذه المحادثة",
     "includeOrder": "إرفاق تفاصيل الطلب",
