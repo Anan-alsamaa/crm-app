@@ -19,16 +19,26 @@ import { loadConfig } from '../src/config.js';
  */
 const REQUIRED = { YIJI_JWT_SECRET: 'secret', SVC_GATEWAY_TOKEN: 'tok' };
 
-/** Build the app the way the gateway does, and ask it what it thinks the ip is. */
+/**
+ * Build the app the way the gateway does, and ask it what it thinks the ip is.
+ *
+ * Through `inject` with the peer set to 127.0.0.1 (standing in for the ALB),
+ * not a real socket + global `fetch`: in the one-process suite the network
+ * round-trip intermittently came back without `ip` (2026-10-13, twice in a
+ * day), failing a test about proxy trust for reasons that had nothing to do
+ * with it. `inject` runs the same trustProxy resolution, deterministically.
+ */
 async function ipSeenBy(trustProxy: string[] | false, headers: Record<string, string>) {
   const app: FastifyInstance = Fastify({ trustProxy });
   app.get('/ip', async (req) => ({ ip: req.ip }));
-  await app.listen({ port: 0, host: '127.0.0.1' });
   try {
-    const addr = app.server.address();
-    const port = typeof addr === 'object' && addr ? addr.port : 0;
-    const res = await fetch(`http://127.0.0.1:${port}/ip`, { headers });
-    return (await res.json()).ip as string;
+    const res = await app.inject({
+      method: 'GET',
+      url: '/ip',
+      headers,
+      remoteAddress: '127.0.0.1',
+    });
+    return res.json<{ ip: string }>().ip;
   } finally {
     await app.close();
   }
