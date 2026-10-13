@@ -67,6 +67,7 @@ import {
   type LateOrderRegisterRow,
 } from './api.js';
 import { useVendorDirectory } from '../vendors/api.js';
+import { usePinnedWidth } from '../../lib/pinned-width.js';
 
 /**
  * Rows per page. The same ladder the ticket reports use, 1000 included — a
@@ -180,6 +181,7 @@ function Leg({ loading, minutes }: { loading: boolean; minutes: number | null })
  */
 export function LateOrdersReportPage() {
   const { t } = useTranslation();
+  const pinRef = usePinnedWidth();
   /*
    * The range was REMEMBERED but unchangeable — the page read it and rendered
    * no control, so it sat on its default month for ever. `ReportFilterBar` is
@@ -989,7 +991,14 @@ export function LateOrdersReportPage() {
           scrollbars are styled visibly because the app's global thumb is
           deliberately faint, which is right for a page and wrong for the one
           control that reaches half a report's columns. */}
-      <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5">
+      {/* The scrollport tells the filter bar, figures and view switch how wide the
+          visible area is (--pin-w), so they stay in view and only the TABLE
+          scrolls sideways (owner, 2026-10-13). Without it they took the table's
+          full width and the date fields sat off to the right. */}
+      <div
+        ref={pinRef}
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5"
+      >
         <div className="w-max min-w-full space-y-6 py-5">
           <ReportFilterBar
             searchLabel={t('lateOrdersReport.filter.search', { defaultValue: 'Order or branch' })}
@@ -1100,7 +1109,7 @@ export function LateOrdersReportPage() {
             vendorFilter
           />
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <div className="sticky start-0 grid w-[var(--pin-w,100%)] grid-cols-2 gap-3 lg:grid-cols-4">
             <ReportKpi
               label={t('lateOrdersReport.total', { defaultValue: 'Late orders' })}
               value={String(totals.total)}
@@ -1170,7 +1179,7 @@ export function LateOrdersReportPage() {
           */}
               <nav
                 aria-label={t('lateOrdersReport.views', { defaultValue: 'View' })}
-                className="flex items-center gap-1"
+                className="sticky start-0 flex w-[var(--pin-w,100%)] items-center gap-1"
               >
                 {(
                   [

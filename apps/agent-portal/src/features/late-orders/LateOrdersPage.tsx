@@ -54,6 +54,7 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { useStoreIndex } from '../tickets/useStoreMatch.js';
+import { usePinnedWidth } from '../../lib/pinned-width.js';
 /* The ticket path's own shaper — one idea of what an order snapshot is. */
 import { orderToSnapshot } from '../tickets/OrderSnapshotCard.js';
 import { useVendors } from '../tickets/api.js';
@@ -320,6 +321,8 @@ export function writeStoredKinds(next: Record<string, string>): void {
 
 export function LateOrdersPage() {
   const { t } = useTranslation();
+  /* Filters stay in view; only the TABLE scrolls sideways (owner, 2026-10-13). */
+  const pinRef = usePinnedWidth();
   const { user, can } = useAuth();
   // Assigning a coupon is `request_coupons` (owner, 2026-10-06); the page itself
   // is `work_late_orders`, so commenting needs nothing more.
@@ -1765,7 +1768,10 @@ export function LateOrdersPage() {
         deliberately faint, which is right for a page and wrong for the one
         control that reaches the far columns of a wide table.
       */}
-      <div className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4">
+      <div
+        ref={pinRef}
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4"
+      >
         {/* `w-max min-w-full` is the part that fixes "records outside the
             table": it lets the content be as wide as the table needs while
             never narrower than the viewport, so a wide table stretches this box
@@ -1775,7 +1781,7 @@ export function LateOrdersPage() {
         Order id, then dates, then brand/branch — the owner's order (2026-09-21),
         which is also the order an agent narrows in: they usually have a number.
       */}
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-end gap-2">
             <label className="flex flex-col gap-1">
               <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                 {t('lateOrders.filter.order', { defaultValue: 'Order number' })}
@@ -1984,7 +1990,7 @@ export function LateOrdersPage() {
           {queue.isError && queue.data && (
             <div
               role="status"
-              className="mb-2 flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+              className="sticky start-0 mb-2 flex w-[var(--pin-w,100%)] items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-xs text-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
             >
               <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500" />
               {t('lateOrders.staleNotice', {
