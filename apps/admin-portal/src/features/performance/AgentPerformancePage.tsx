@@ -396,25 +396,6 @@ export function AgentPerformancePage() {
           {t('performance.title', { defaultValue: 'Agent performance' })}
         </h1>
         <ToolbarSpacer />
-        {/* With the filters, at the top — where the agent portal has it. Sized
-            on the wrapper: Input's base carries w-full. */}
-        <div className="relative w-[16rem] shrink-0">
-          <SearchIcon
-            size={14}
-            aria-hidden
-            className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <Input
-            type="search"
-            className="h-8 ps-8"
-            value={searchDraft}
-            onChange={(e) => setSearchDraft(e.target.value)}
-            aria-label={t('performance.search', { defaultValue: 'Search' })}
-            placeholder={t('performance.searchPlaceholder', {
-              defaultValue: 'Order, ticket, coupon code or customer number…',
-            })}
-          />
-        </div>
         {/* Exports the per-agent CHAT totals, so it sits with the Chats tab. */}
         {canExport && onChats && (
           <Button
@@ -435,6 +416,28 @@ export function AgentPerformancePage() {
       <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
         <div className="mx-auto max-w-6xl space-y-4">
           <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+            {/* In the filter card with the agent and the dates, not up beside
+                Export CSV (owner, 2026-10-13). Sized on the wrapper: Input's
+                base carries w-full. */}
+            <Field label={t('performance.search', { defaultValue: 'Search' })}>
+              <span className="relative block w-[16rem]">
+                <SearchIcon
+                  size={14}
+                  aria-hidden
+                  className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+                />
+                <Input
+                  type="search"
+                  className="h-8 ps-8"
+                  value={searchDraft}
+                  onChange={(e) => setSearchDraft(e.target.value)}
+                  aria-label={t('performance.search', { defaultValue: 'Search' })}
+                  placeholder={t('performance.searchPlaceholder', {
+                    defaultValue: 'Order, ticket, coupon code or customer number…',
+                  })}
+                />
+              </span>
+            </Field>
             <Field label={t('performance.agent', { defaultValue: 'Agent' })}>
               <SelectMenu
                 size="sm"
