@@ -34,6 +34,8 @@ import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 import { NewMessageSound } from './components/NewMessageSound.js';
+import { ChatAlerts } from './components/ChatAlerts.js';
+import { ChatAlertsToggle } from './components/ChatAlertsToggle.js';
 
 // Route pages are code-split so the initial bundle stays lean; each loads on
 // first navigation behind the shared Suspense fallback below.
@@ -404,6 +406,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             <PageRefresh />
             <NotificationBell />
             <HelpAssistant />
+            <ChatAlertsToggle />
             <SoundToggle />
             <LanguageToggle />
           </div>
@@ -422,6 +425,7 @@ function Shell({ children }: { children: React.ReactNode }) {
               <PageRefresh />
               <NotificationBell />
               <HelpAssistant />
+              <ChatAlertsToggle />
               <SoundToggle />
               <LanguageToggle />
             </div>
@@ -475,6 +479,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <NewVersionBanner />
       <AppKeyboardShortcuts />
       <NewMessageSound />
+      <ChatAlerts />
       <Toaster position="bottom" />
     </>
   );

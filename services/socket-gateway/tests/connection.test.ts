@@ -837,6 +837,24 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
       expect((await got).conversationId).toBe('conv-99');
     });
 
+    it('a sent message tells every inbox WHO sent it, and never the content', async () => {
+      /* The portal's new-chat alert (owner, 2026-10-13) fires on CUSTOMER
+         messages only and clears on an agent's reply - it reads `senderType`.
+         The content must not ride this broadcast: it reaches every agent. */
+      harness = await startGateway(makeStubs());
+      const a1 = await connectedAgent();
+      const a2 = await connectedAgent();
+      const got = waitFor<Record<string, unknown>>(a2, SOCKET_EVENTS.inboxActivity);
+      a1.emit(SOCKET_EVENTS.messageSend, {
+        conversationId: 'conv-1',
+        content: 'private reply text',
+        clientMsgId: 'alert-msg-1',
+      });
+      const e = await got;
+      expect(e).toMatchObject({ conversationId: 'conv-1', senderType: 'agent' });
+      expect(JSON.stringify(e)).not.toContain('private reply text');
+    });
+
     it('conversation:updated that closes a conversation notifies the customer (CSAT)', async () => {
       harness = await startGateway(
         makeStubs({ getConversationStatus: vi.fn(async () => 'closed') }),

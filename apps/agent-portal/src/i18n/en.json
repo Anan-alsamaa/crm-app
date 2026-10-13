@@ -918,5 +918,18 @@
     },
     "resizeColumn": "Drag to resize; double-click to reset",
     "staleNotice": "Reconnecting… showing the list as of {{time}}."
+  },
+  "chatAlerts": {
+    "waitingTitle": "New chat waiting — {{name}}",
+    "mineTitle": "New message — {{name}}",
+    "waitingLabel": "New chat waiting",
+    "mineLabel": "New message",
+    "attachment": "Sent an attachment",
+    "open": "Open chat",
+    "later": "Later",
+    "more": "+{{n}} more waiting",
+    "turnOn": "Turn on new-chat alerts",
+    "turnOff": "Turn off new-chat alerts",
+    "blocked": "New-chat alerts are on, but Windows pop-ups are blocked for this site. Allow notifications in the browser’s site settings (the icon left of the address)."
   }
 }

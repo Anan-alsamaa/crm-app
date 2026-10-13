@@ -1250,7 +1250,14 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       };
       io.to(rooms.conversation(convId)).emit(SOCKET_EVENTS.messageNew, payload);
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
-      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, { conversationId: convId });
+      /* `senderType` lets the portal raise its new-chat alert for a CUSTOMER
+         message only, never an agent's own reply (owner, 2026-10-13). No
+         content travels here: this room reaches every agent, including ones
+         who may not read this chat - the portal reads the preview itself. */
+      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, {
+        conversationId: convId,
+        senderType,
+      });
 
       /*
        * THE AUTOMATIC WELCOME, ONCE PER SESSION (owner, 2026-10-06).
