@@ -111,7 +111,7 @@
     "col.noReply": "بلا رد بعد",
     "col.inTime": "الرد في الوقت",
     "col.firstResponseMedian": "وسيط زمن أول رد",
-    "col.timeToSolve": "متوسط زمن الحل",
+    "col.timeToSolve": "متوسط زمن حل المحادثات",
     "col.commonTaken": "محادثات مشتركة تم تولّيها",
     "statusAll": "الكل",
     "exportFiltered": "تصدير {{count}} بعد التصفية",

@@ -755,7 +755,7 @@ describe('AgentReportsPage — agent KPI report', () => {
     // sort the reader just applied is the order the rows come out in.
     const lines = await csvText(dl.blobs[0]!);
     expect(lines[0]).toBe(
-      'Agent,Chats,Not replied,Replied within 5 min,First response (median),Time to solve (avg),Ticket solve time (median),Common chats taken,Started by agent,Customer replied (agent-started),Tickets,Customer rating (1-5)',
+      'Agent,Chats,Not replied,Replied within 5 min,First response (median),Chats solve time (avg),Ticket solve time (median),Common chats taken,Started by agent,Customer replied (agent-started),Tickets,Customer rating (1-5)',
     );
     expect(lines[1]!.startsWith('Unassigned,')).toBe(true);
     expect(lines[2]!.startsWith('Ann Lee,')).toBe(true);

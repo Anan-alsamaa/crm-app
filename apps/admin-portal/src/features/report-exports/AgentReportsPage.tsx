@@ -2090,7 +2090,7 @@ function AgentKpiReport({
       ],
     },
     timeToSolve: {
-      label: tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
+      label: tr('agentReports.col.timeToSolve', { defaultValue: 'Chats solve time (avg)' }),
       sortKey: 'avgTimeToSolveSec',
       td: (a) => (
         <Td className="text-end tabular-nums text-muted-foreground">
@@ -2099,7 +2099,7 @@ function AgentKpiReport({
       ),
       csv: [
         {
-          header: tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
+          header: tr('agentReports.col.timeToSolve', { defaultValue: 'Chats solve time (avg)' }),
           value: (a) => formatDuration(a.avgTimeToSolveSec),
         },
       ],

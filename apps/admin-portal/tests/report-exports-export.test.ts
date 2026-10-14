@@ -252,7 +252,7 @@ describe('buildAgentKpiSheets', () => {
       'No reply yet',
       'Answered in time',
       'First response (median)',
-      'Time to solve (avg)',
+      'Chats solve time (avg)',
       'Ticket solve time (median)',
       'Common chats taken',
       'Tickets',

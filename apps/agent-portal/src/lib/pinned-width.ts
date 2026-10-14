@@ -1,4 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useMemo, useRef } from 'react';
+
+/** A callback ref that ALSO reads like a RefObject (`.current`), so the
+ *  components that take the scrollport as a RefObject keep working. */
+export type PinnedRef<T> = ((el: T | null) => void) & { current: T | null };
 
 /**
  * Publishes the scrollport's own width as `--pin-w`, for blocks that must stay
@@ -28,39 +32,51 @@ import { useEffect, useRef } from 'react';
  * variable is absent, which is every page that does not scroll sideways.
  */
 export function usePinnedWidth<T extends HTMLElement = HTMLDivElement>() {
-  const ref = useRef<T | null>(null);
+  /*
+   * A CALLBACK REF, not useRef + a mount effect (2026-10-14). The effect ran
+   * once, at mount - and a page that shows a loading state first mounts its
+   * scrollport LATER, so the effect saw null and never measured. The Late
+   * orders report did exactly that: --pin-w was never set, the pinned filter
+   * bar took the table's width, and the date fields sat off to the right.
+   * A callback ref runs whenever the scrollport is attached or replaced.
+   */
+  const cleanup = useRef<(() => void) | null>(null);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof window === 'undefined') return;
+  return useMemo(() => {
+    const ref = ((el: T | null) => {
+      ref.current = el;
+      cleanup.current?.();
+      cleanup.current = null;
+      if (!el || typeof window === 'undefined') return;
 
-    const measure = () => {
-      // clientWidth EXCLUDES the vertical scrollbar but INCLUDES the
-      // scrollport's own padding, and the pinned blocks sit inside that
-      // padding — so the padding has to come off, or every one of them
-      // overhangs the right edge by exactly the gutter.
-      const cs = getComputedStyle(el);
-      const pad = parseFloat(cs.paddingLeft || '0') + parseFloat(cs.paddingRight || '0');
-      const w = el.clientWidth - pad;
-      if (w > 0) el.style.setProperty('--pin-w', `${w}px`);
-    };
+      const measure = () => {
+        // clientWidth EXCLUDES the vertical scrollbar but INCLUDES the
+        // scrollport's own padding, and the pinned blocks sit inside that
+        // padding — so the padding has to come off, or every one of them
+        // overhangs the right edge by exactly the gutter.
+        const cs = getComputedStyle(el);
+        const pad = parseFloat(cs.paddingLeft || '0') + parseFloat(cs.paddingRight || '0');
+        const w = el.clientWidth - pad;
+        if (w > 0) el.style.setProperty('--pin-w', `${w}px`);
+      };
 
-    measure();
-    window.addEventListener('resize', measure);
-    let ro: ResizeObserver | undefined;
-    // Guarded: this is an enhancement, and an environment without
-    // ResizeObserver (jsdom) must still render the report.
-    if (typeof ResizeObserver !== 'undefined') {
-      ro = new ResizeObserver(measure);
-      ro.observe(el);
-    }
-    return () => {
-      window.removeEventListener('resize', measure);
-      ro?.disconnect();
-    };
+      measure();
+      window.addEventListener('resize', measure);
+      let ro: ResizeObserver | undefined;
+      // Guarded: this is an enhancement, and an environment without
+      // ResizeObserver (jsdom) must still render the report.
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(measure);
+        ro.observe(el);
+      }
+      cleanup.current = () => {
+        window.removeEventListener('resize', measure);
+        ro?.disconnect();
+      };
+    }) as PinnedRef<T>;
+    ref.current = null;
+    return ref;
   }, []);
-
-  return ref;
 }
 
 /**

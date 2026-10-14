@@ -235,7 +235,7 @@ export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[
       width: 19,
     },
     {
-      header: t('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
+      header: t('agentReports.col.timeToSolve', { defaultValue: 'Chats solve time (avg)' }),
       width: 19,
     },
     {
