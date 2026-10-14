@@ -653,7 +653,8 @@
       "inTime": "Replied within 5 min",
       "noReply": "Not replied",
       "customer": "Customer",
-      "orderNumber": "Order"
+      "orderNumber": "Order",
+      "ticketSolveMedian": "Ticket solve time (median)"
     },
     "ticketsTitle": "Tickets",
     "ticketsSubtitle": "Every ticket with SLA timings and the linked customer order — export to CSV.",

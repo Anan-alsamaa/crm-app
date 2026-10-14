@@ -220,6 +220,7 @@ describe('buildAgentKpiSheets', () => {
       agentStartedReplied: 0,
       medianFirstResponseSec: 125,
       avgTimeToSolveSec: 7300,
+      medianTicketSolveSec: 5400,
       inTimePct: 85.4,
     },
     {
@@ -237,6 +238,7 @@ describe('buildAgentKpiSheets', () => {
       agentStartedReplied: 0,
       medianFirstResponseSec: null,
       avgTimeToSolveSec: null,
+      medianTicketSolveSec: null,
       inTimePct: null,
     },
   ];
@@ -251,6 +253,7 @@ describe('buildAgentKpiSheets', () => {
       'Answered in time',
       'First response (median)',
       'Time to solve (avg)',
+      'Ticket solve time (median)',
       'Common chats taken',
       'Tickets',
       'CSAT avg (1–5)',
@@ -259,12 +262,12 @@ describe('buildAgentKpiSheets', () => {
 
   it('formats durations, rounds the percent, and keeps CSAT to one decimal', () => {
     const [sheet] = buildAgentKpiSheets(agents, makeT());
-    expect(sheet!.rows[0]).toEqual(['Ann Lee', 9, 2, '85%', '2m 5s', '2h 1m', 3, 5, 4.3]);
+    expect(sheet!.rows[0]).toEqual(['Ann Lee', 9, 2, '85%', '2m 5s', '2h 1m', '1h 30m', 3, 5, 4.3]);
   });
 
   it('blanks the derived cells for an agent with nothing measured', () => {
     const [sheet] = buildAgentKpiSheets(agents, makeT());
-    expect(sheet!.rows[1]).toEqual(['Unassigned', 0, 0, '', '', '', 0, 1, '']);
+    expect(sheet!.rows[1]).toEqual(['Unassigned', 0, 0, '', '', '', '', 0, 1, '']);
   });
 });
 

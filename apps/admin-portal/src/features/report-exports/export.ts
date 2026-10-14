@@ -239,6 +239,12 @@ export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[
       width: 19,
     },
     {
+      header: t('agentReports.col.ticketSolveMedian', {
+        defaultValue: 'Ticket solve time (median)',
+      }),
+      width: 22,
+    },
+    {
       header: t('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' }),
       width: 19,
     },
@@ -253,6 +259,7 @@ export function buildAgentKpiSheets(agents: AgentKpiRow[], t: Translate): Sheet[
     a.inTimePct == null ? '' : `${Math.round(a.inTimePct)}%`,
     formatDuration(a.medianFirstResponseSec) ?? '',
     formatDuration(a.avgTimeToSolveSec) ?? '',
+    formatDuration(a.medianTicketSolveSec) ?? '',
     a.commonTaken,
     a.tickets,
     round1(a.csatAvg),

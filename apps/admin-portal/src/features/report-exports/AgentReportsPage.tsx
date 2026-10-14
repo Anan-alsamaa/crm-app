@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readUsers } from '@directus/sdk';
@@ -62,6 +62,7 @@ import { useStoreIndex } from '../restaurants/api.js';
 import { directus } from '../../lib/directus.js';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { ColumnScroller } from '../../components/ColumnScroller.js';
+import { ColumnArranger } from '../../components/ColumnArranger.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
@@ -318,7 +319,39 @@ const AGENT_SORT: Record<string, (r: AgentKpiRow) => string | number | null | un
   agentStarted: (r) => r.agentStarted,
   tickets: (r) => r.tickets,
   csatAvg: (r) => r.csatAvg,
+  medianTicketSolveSec: (r) => r.medianTicketSolveSec,
 };
+
+/*
+ * AGENT SUMMARY COLUMNS (owner, 2026-10-13): arrangeable and hideable, as on
+ * the Ticket breakdown. "Agent" stays first. Saved per browser; a column added
+ * later appears in its default place (reconcileColumnOrder).
+ */
+type AgentColKey =
+  | 'chats'
+  | 'noReply'
+  | 'inTime'
+  | 'firstResponse'
+  | 'timeToSolve'
+  | 'ticketSolve'
+  | 'commonTaken'
+  | 'agentStarted'
+  | 'tickets'
+  | 'csat';
+const AGENT_COL_KEYS: readonly AgentColKey[] = [
+  'chats',
+  'noReply',
+  'inTime',
+  'firstResponse',
+  'timeToSolve',
+  'ticketSolve',
+  'commonTaken',
+  'agentStarted',
+  'tickets',
+  'csat',
+];
+const AGENT_ORDER_KEY = 'yiji.agentSummary.columnOrder';
+const AGENT_HIDDEN_KEY = 'yiji.agentSummary.hiddenColumns';
 
 /** Page + size state, with the clamping every paged table needs. */
 function usePaged<T>(rows: T[], initialSize = 25) {
@@ -1968,52 +2001,227 @@ function AgentKpiReport({
     align,
   });
 
-  /** The columns of the table, as the file. Same order, same headings. */
-  const csvColumns: CsvColumn<AgentKpiRow>[] = [
-    { header: tr('agentReports.col.agent', { defaultValue: 'Agent' }), value: (a) => a.agentName },
-    { header: tr('agentReports.col.chats', { defaultValue: 'Chats' }), value: (a) => a.chats },
+  /** Every arrangeable column: heading, sort key, cell, and its file column(s). */
+  const agentCols: Record<
+    AgentColKey,
     {
-      header: tr('agentReports.col.noReply', { defaultValue: 'Not replied' }),
-      value: (a) => a.noReply,
+      label: string;
+      sortKey: string;
+      td: (a: AgentKpiRow) => JSX.Element;
+      csv: CsvColumn<AgentKpiRow>[];
+    }
+  > = {
+    chats: {
+      label: tr('agentReports.col.chats', { defaultValue: 'Chats' }),
+      sortKey: 'chats',
+      td: (a) => <Td className="text-end tabular-nums font-semibold">{a.chats}</Td>,
+      csv: [
+        { header: tr('agentReports.col.chats', { defaultValue: 'Chats' }), value: (a) => a.chats },
+      ],
     },
-    {
-      header: tr('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' }),
-      // The screen shows a percentage sign; the file gives the number, so the
-      // column can be averaged in a spreadsheet without stripping characters.
-      value: (a) => (a.inTimePct == null ? null : Math.round(a.inTimePct)),
+    noReply: {
+      label: tr('agentReports.col.noReply', { defaultValue: 'Not replied' }),
+      sortKey: 'noReply',
+      td: (a) => (
+        <Td className="text-end tabular-nums">
+          {a.noReply > 0 ? (
+            <span className="font-semibold text-destructive">{a.noReply}</span>
+          ) : (
+            <span className="text-muted-foreground">0</span>
+          )}
+        </Td>
+      ),
+      csv: [
+        {
+          header: tr('agentReports.col.noReply', { defaultValue: 'Not replied' }),
+          value: (a) => a.noReply,
+        },
+      ],
     },
-    {
-      header: tr('agentReports.col.firstResponseMedian', {
+    inTime: {
+      label: tr('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' }),
+      sortKey: 'inTimePct',
+      td: (a) => (
+        <Td className="text-end tabular-nums text-muted-foreground">
+          {a.inTimePct == null ? (
+            '—'
+          ) : (
+            /* Number + thin meter, boards-style: the magnitude stays
+               tabular, the bar makes the laggard visible at a scan. */
+            <span className="flex items-center justify-end gap-2">
+              <MeterBar
+                value={a.inTimePct}
+                tone={a.inTimePct >= 90 ? 'success' : a.inTimePct >= 75 ? 'primary' : 'destructive'}
+                className="w-12"
+              />
+              {fmtPct(a.inTimePct)}
+            </span>
+          )}
+        </Td>
+      ),
+      csv: [
+        {
+          header: tr('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' }),
+          // The screen shows a percentage sign; the file gives the number, so the
+          // column can be averaged in a spreadsheet without stripping characters.
+          value: (a) => (a.inTimePct == null ? null : Math.round(a.inTimePct)),
+        },
+      ],
+    },
+    // The MEDIAN (owner, 2026-10-05): one chat answered the next morning
+    // outweighed hundreds of quick replies in the mean.
+    firstResponse: {
+      label: tr('agentReports.col.firstResponseMedian', {
         defaultValue: 'First response (median)',
       }),
-      value: (a) => formatDuration(a.medianFirstResponseSec),
+      sortKey: 'medianFirstResponseSec',
+      td: (a) => (
+        <Td className="text-end tabular-nums text-muted-foreground">
+          {formatDuration(a.medianFirstResponseSec) ?? '—'}
+        </Td>
+      ),
+      csv: [
+        {
+          header: tr('agentReports.col.firstResponseMedian', {
+            defaultValue: 'First response (median)',
+          }),
+          value: (a) => formatDuration(a.medianFirstResponseSec),
+        },
+      ],
     },
-    {
-      header: tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
-      value: (a) => formatDuration(a.avgTimeToSolveSec),
+    timeToSolve: {
+      label: tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
+      sortKey: 'avgTimeToSolveSec',
+      td: (a) => (
+        <Td className="text-end tabular-nums text-muted-foreground">
+          {formatDuration(a.avgTimeToSolveSec) ?? '—'}
+        </Td>
+      ),
+      csv: [
+        {
+          header: tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' }),
+          value: (a) => formatDuration(a.avgTimeToSolveSec),
+        },
+      ],
     },
-    {
-      header: tr('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' }),
-      value: (a) => a.commonTaken,
-    },
-    {
-      header: tr('agentReports.col.agentStarted', { defaultValue: 'Started by agent' }),
-      value: (a) => a.agentStarted,
-    },
-    {
-      header: tr('agentReports.col.agentStartedReplied', {
-        defaultValue: 'Customer replied (agent-started)',
+    // Opened -> resolved for the agent's tickets, in ticket working hours
+    // (owner, 2026-10-13). The median, for the same reason as first response.
+    ticketSolve: {
+      label: tr('agentReports.col.ticketSolveMedian', {
+        defaultValue: 'Ticket solve time (median)',
       }),
-      value: (a) => a.agentStartedReplied,
+      sortKey: 'medianTicketSolveSec',
+      td: (a) => (
+        <Td className="text-end tabular-nums text-muted-foreground">
+          {formatDuration(a.medianTicketSolveSec) ?? '—'}
+        </Td>
+      ),
+      csv: [
+        {
+          header: tr('agentReports.col.ticketSolveMedian', {
+            defaultValue: 'Ticket solve time (median)',
+          }),
+          value: (a) => formatDuration(a.medianTicketSolveSec),
+        },
+      ],
     },
-    {
-      header: tr('agentReports.col.tickets', { defaultValue: 'Tickets' }),
-      value: (a) => a.tickets,
+    commonTaken: {
+      label: tr('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' }),
+      sortKey: 'commonTaken',
+      td: (a) => (
+        <Td className="text-end tabular-nums">
+          {a.commonTaken > 0 ? (
+            <span className="font-semibold text-success">{a.commonTaken}</span>
+          ) : (
+            <span className="text-muted-foreground">0</span>
+          )}
+        </Td>
+      ),
+      csv: [
+        {
+          header: tr('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' }),
+          value: (a) => a.commonTaken,
+        },
+      ],
     },
-    {
-      header: tr('agentReports.col.csatAvg', { defaultValue: 'Customer rating (1-5)' }),
-      value: (a) => a.csatAvg,
+    // Chats the agent STARTED, and how many the customer answered (owner,
+    // 2026-10-07) — kept out of "Not replied".
+    agentStarted: {
+      label: tr('agentReports.col.agentStarted', { defaultValue: 'Started by agent' }),
+      sortKey: 'agentStarted',
+      td: (a) => (
+        <Td className="text-end tabular-nums text-muted-foreground">
+          {a.agentStarted > 0
+            ? `${a.agentStarted} (${a.agentStartedReplied} ${tr('agentReports.replied', { defaultValue: 'replied' })})`
+            : '0'}
+        </Td>
+      ),
+      csv: [
+        {
+          header: tr('agentReports.col.agentStarted', { defaultValue: 'Started by agent' }),
+          value: (a) => a.agentStarted,
+        },
+        {
+          header: tr('agentReports.col.agentStartedReplied', {
+            defaultValue: 'Customer replied (agent-started)',
+          }),
+          value: (a) => a.agentStartedReplied,
+        },
+      ],
     },
+    tickets: {
+      label: tr('agentReports.col.tickets', { defaultValue: 'Tickets' }),
+      sortKey: 'tickets',
+      td: (a) => <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>,
+      csv: [
+        {
+          header: tr('agentReports.col.tickets', { defaultValue: 'Tickets' }),
+          value: (a) => a.tickets,
+        },
+      ],
+    },
+    csat: {
+      label: tr('agentReports.col.csatAvg', { defaultValue: 'Customer rating (1-5)' }),
+      sortKey: 'csatAvg',
+      td: (a) => <Td className="text-end tabular-nums font-semibold">{fmtScore(a.csatAvg)}</Td>,
+      csv: [
+        {
+          header: tr('agentReports.col.csatAvg', { defaultValue: 'Customer rating (1-5)' }),
+          value: (a) => a.csatAvg,
+        },
+      ],
+    },
+  };
+
+  const [showCols, setShowCols] = useState(false);
+  const [colOrder, setColOrder] = useState<AgentColKey[]>(() =>
+    reconcileColumnOrder(loadColumnOrder<AgentColKey>(AGENT_ORDER_KEY), AGENT_COL_KEYS),
+  );
+  const [hiddenCols, setHiddenCols] = useState<Set<AgentColKey>>(
+    () => new Set(loadColumnOrder<AgentColKey>(AGENT_HIDDEN_KEY)),
+  );
+  const visibleCols = useMemo(
+    () => new Set(AGENT_COL_KEYS.filter((k) => !hiddenCols.has(k))),
+    [hiddenCols],
+  );
+  const shownCols = colOrder.filter((k) => visibleCols.has(k));
+  const reorder = (next: AgentColKey[]) => {
+    setColOrder(next);
+    saveColumnOrder(AGENT_ORDER_KEY, next);
+  };
+  const toggleCol = (k: AgentColKey) =>
+    setHiddenCols((prev) => {
+      const next = new Set(prev);
+      if (next.has(k)) next.delete(k);
+      else if (AGENT_COL_KEYS.length - next.size > 1) next.add(k); // keep one column
+      saveColumnOrder(AGENT_HIDDEN_KEY, [...next]);
+      return next;
+    });
+
+  /** The columns of the table, as the file: same order, same headings. */
+  const csvColumns: CsvColumn<AgentKpiRow>[] = [
+    { header: tr('agentReports.col.agent', { defaultValue: 'Agent' }), value: (a) => a.agentName },
+    ...shownCols.flatMap((k) => agentCols[k].csv),
   ];
 
   const onExport = (scope: 'view' | 'all') => {
@@ -2084,26 +2292,44 @@ function AgentKpiReport({
           setPage(1);
         }}
         actions={
-          canExport && (
-            <ExportButtons
-              visibleCount={sorted.length}
-              totalCount={agents.length}
-              onExportView={() => onExport('view')}
-              onExportAll={() => onExport('all')}
-              labelPlain={t('agentReports.exportCsvCount', {
-                count: sorted.length,
-                defaultValue: 'Export CSV ({{count}})',
-              })}
-              labelView={t('agentReports.exportCsvFiltered', {
-                count: sorted.length,
-                defaultValue: 'Export {{count}} shown',
-              })}
-              labelAll={t('agentReports.exportCsvAll', {
-                count: agents.length,
-                defaultValue: 'Export all {{count}}',
-              })}
+          <div className="flex items-center gap-2">
+            <Button variant="secondary" size="sm" onClick={() => setShowCols(true)}>
+              {t('agentReports.columns', { defaultValue: 'Columns' })}
+              <span className="ms-1 tabular-nums opacity-70">
+                {shownCols.length}/{AGENT_COL_KEYS.length}
+              </span>
+            </Button>
+            <ColumnArranger
+              open={showCols}
+              onClose={() => setShowCols(false)}
+              order={colOrder}
+              onOrder={reorder}
+              visible={visibleCols}
+              onToggle={toggleCol}
+              defaults={AGENT_COL_KEYS}
+              labelOf={(k) => agentCols[k].label}
             />
-          )
+            {canExport && (
+              <ExportButtons
+                visibleCount={sorted.length}
+                totalCount={agents.length}
+                onExportView={() => onExport('view')}
+                onExportAll={() => onExport('all')}
+                labelPlain={t('agentReports.exportCsvCount', {
+                  count: sorted.length,
+                  defaultValue: 'Export CSV ({{count}})',
+                })}
+                labelView={t('agentReports.exportCsvFiltered', {
+                  count: sorted.length,
+                  defaultValue: 'Export {{count}} shown',
+                })}
+                labelAll={t('agentReports.exportCsvAll', {
+                  count: agents.length,
+                  defaultValue: 'Export all {{count}}',
+                })}
+              />
+            )}
+          </div>
         }
         rangePreset={<RangePreset range={range} />}
       />
@@ -2115,98 +2341,20 @@ function AgentKpiReport({
               <SortTh {...sp('agent')}>
                 {tr('agentReports.col.agent', { defaultValue: 'Agent' })}
               </SortTh>
-              <SortTh {...sp('chats', 'end')}>
-                {tr('agentReports.col.chats', { defaultValue: 'Chats' })}
-              </SortTh>
-              <SortTh {...sp('noReply', 'end')}>
-                {tr('agentReports.col.noReply', { defaultValue: 'Not replied' })}
-              </SortTh>
-              <SortTh {...sp('inTimePct', 'end')}>
-                {tr('agentReports.col.inTime', { defaultValue: 'Replied within 5 min' })}
-              </SortTh>
-              {/* The MEDIAN (owner, 2026-10-05): one chat answered the next
-                  morning outweighed hundreds of quick replies in the mean. */}
-              <SortTh {...sp('medianFirstResponseSec', 'end')}>
-                {tr('agentReports.col.firstResponseMedian', {
-                  defaultValue: 'First response (median)',
-                })}
-              </SortTh>
-              <SortTh {...sp('avgTimeToSolveSec', 'end')}>
-                {tr('agentReports.col.timeToSolve', { defaultValue: 'Time to solve (avg)' })}
-              </SortTh>
-              <SortTh {...sp('commonTaken', 'end')}>
-                {tr('agentReports.col.commonTaken', { defaultValue: 'Common chats taken' })}
-              </SortTh>
-              {/* Chats the agent STARTED, and how many the customer answered
-                  (owner, 2026-10-07) — kept out of "Not replied" above. */}
-              <SortTh {...sp('agentStarted', 'end')}>
-                {tr('agentReports.col.agentStarted', { defaultValue: 'Started by agent' })}
-              </SortTh>
-              <SortTh {...sp('tickets', 'end')}>
-                {tr('agentReports.col.tickets', { defaultValue: 'Tickets' })}
-              </SortTh>
-              <SortTh {...sp('csatAvg', 'end')}>
-                {tr('agentReports.col.csatAvg', { defaultValue: 'Customer rating (1-5)' })}
-              </SortTh>
+              {shownCols.map((k) => (
+                <SortTh key={k} {...sp(agentCols[k].sortKey, 'end')}>
+                  {agentCols[k].label}
+                </SortTh>
+              ))}
             </tr>
           </thead>
           <tbody>
             {pageRows.map((a) => (
               <Tr key={a.agentId ?? '__unassigned__'}>
                 <Td className="font-medium">{a.agentName}</Td>
-                <Td className="text-end tabular-nums font-semibold">{a.chats}</Td>
-                <Td className="text-end tabular-nums">
-                  {a.noReply > 0 ? (
-                    <span className="font-semibold text-destructive">{a.noReply}</span>
-                  ) : (
-                    <span className="text-muted-foreground">0</span>
-                  )}
-                </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">
-                  {a.inTimePct == null ? (
-                    '—'
-                  ) : (
-                    /* Number + thin meter, boards-style: the magnitude stays
-                       tabular, the bar makes the laggard visible at a scan. */
-                    <span className="flex items-center justify-end gap-2">
-                      <MeterBar
-                        value={a.inTimePct}
-                        tone={
-                          a.inTimePct >= 90
-                            ? 'success'
-                            : a.inTimePct >= 75
-                              ? 'primary'
-                              : 'destructive'
-                        }
-                        className="w-12"
-                      />
-                      {fmtPct(a.inTimePct)}
-                    </span>
-                  )}
-                </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">
-                  {formatDuration(a.medianFirstResponseSec) ?? '—'}
-                </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">
-                  {formatDuration(a.avgTimeToSolveSec) ?? '—'}
-                </Td>
-                <Td className="text-end tabular-nums">
-                  {a.commonTaken > 0 ? (
-                    <span className="font-semibold text-success">{a.commonTaken}</span>
-                  ) : (
-                    <span className="text-muted-foreground">0</span>
-                  )}
-                </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">
-                  {/* "7 · 4 replied" read as a range ("7-4", owner 2026-10-11):
-                      chats the agent STARTED, and in brackets how many the
-                      customer answered. */}
-                  {a.agentStarted > 0
-                    ? `${a.agentStarted} (${a.agentStartedReplied} ${tr('agentReports.replied', { defaultValue: 'replied' })})`
-                    : '0'}
-                </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">{a.tickets}</Td>
-                <Td className="text-end tabular-nums font-semibold">{fmtScore(a.csatAvg)}</Td>
+                {shownCols.map((k) => (
+                  <Fragment key={k}>{agentCols[k].td(a)}</Fragment>
+                ))}
               </Tr>
             ))}
           </tbody>

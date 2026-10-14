@@ -21,6 +21,7 @@ import {
   agentInitiatedSummary,
   conversationTimestamps,
   firstResponseSec,
+  median,
   readChunked,
   splitLocalDateTime,
   type ComplaintReportRow,
@@ -243,6 +244,12 @@ export interface AgentKpiRow {
   medianFirstResponseSec: number | null;
   /** Mean seconds from first message to solved. */
   avgTimeToSolveSec: number | null;
+  /**
+   * Median working-hours seconds from a ticket being opened to it being
+   * resolved, over this agent's resolved tickets in range (owner, 2026-10-13).
+   * The ticket SLA's working hours, as the Ticket deadlines report counts.
+   */
+  medianTicketSolveSec: number | null;
   /** % of own answered chats answered within the 5-minute target. */
   inTimePct: number | null;
 }
@@ -695,6 +702,30 @@ async function loadAgentReport(
         return out;
       };
 
+      /* Opened -> resolved for each RESOLVED ticket, for the Agent summary's
+         median solve time (owner, 2026-10-13). Three small fields, not the
+         rows; same window and fallback as the count. */
+      const readTicketSolvePairs = async (): Promise<
+        Array<{ assigned_agent: string | null; date_created: string; resolved_at: string }>
+      > => {
+        if (!needs.ticketCounts) return [];
+        const query = (filter: unknown) =>
+          directus.request(
+            readItems('tickets', {
+              filter: { _and: [filter, { resolved_at: { _nnull: true } }] } as never,
+              fields: ['assigned_agent', 'date_created', 'resolved_at'] as never,
+              limit: -1,
+            }),
+          ) as unknown as Promise<
+            Array<{ assigned_agent: string | null; date_created: string; resolved_at: string }>
+          >;
+        try {
+          return await query(ticketWindow);
+        } catch {
+          return await query(byVendor(inRange('date_created')));
+        }
+      };
+
       /*
        * EVERY INDEPENDENT READ IN ONE BATCH (2026-10-05).
        *
@@ -708,6 +739,7 @@ async function loadAgentReport(
       const [
         tickets,
         ticketCounts,
+        ticketSolvePairs,
         conversations,
         csat,
         users,
@@ -718,6 +750,7 @@ async function loadAgentReport(
       ] = await Promise.all([
         readTickets(),
         readTicketCounts(),
+        readTicketSolvePairs(),
         needs.chats
           ? (directus.request(
               readItems('conversations', {
@@ -1277,6 +1310,27 @@ async function loadAgentReport(
         ensure(id, agentOf(id));
       }
 
+      /* Median ticket solve time per agent, from the light pairs (Agent
+         summary) or from the full rows when they were fetched anyway. */
+      const solveSecsBy = new Map<string, number[]>();
+      const solvePairs = needs.ticketCounts
+        ? ticketSolvePairs
+        : tickets
+            .filter((t) => !!t.resolved_at)
+            .map((t) => ({
+              assigned_agent: t.assigned_agent,
+              date_created: t.date_created,
+              resolved_at: t.resolved_at as string,
+            }));
+      for (const t of solvePairs) {
+        const sec = businessSecondsBetween(t.date_created, t.resolved_at, slaHours.ticket);
+        if (sec == null || sec < 0) continue;
+        const key = realAgentId(t.assigned_agent) ?? '';
+        const list = solveSecsBy.get(key) ?? [];
+        list.push(sec);
+        solveSecsBy.set(key, list);
+      }
+
       const agents: AgentKpiRow[] = Array.from(accs.values())
         .map((a) => {
           const perf = perfRows.get(a.agentId ?? '');
@@ -1300,6 +1354,7 @@ async function loadAgentReport(
             })(),
             medianFirstResponseSec: perf?.medianFirstResponseSec ?? null,
             avgTimeToSolveSec: perf?.avgTimeToSolveSec ?? null,
+            medianTicketSolveSec: median(solveSecsBy.get(a.agentId ?? '') ?? []),
             inTimePct: it && it.answered > 0 ? (it.inTime / it.answered) * 100 : null,
           };
         })

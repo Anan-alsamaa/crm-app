@@ -89,7 +89,8 @@
       "orderNumber": "الطلب",
       "agentStarted": "بدأها الموظف",
       "agentStartedReplied": "ردّ العميل (محادثات بدأها الموظف)",
-      "startedBy": "بدأها"
+      "startedBy": "بدأها",
+      "ticketSolveMedian": "وقت حل التذكرة (الوسيط)"
     },
     "ticketsTitle": "التذاكر",
     "ticketsSubtitle": "كل تذكرة مع أزمنة SLA والطلب المرتبط بالعميل — قابلة للتصدير إلى CSV.",

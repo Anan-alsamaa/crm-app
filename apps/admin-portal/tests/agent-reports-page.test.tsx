@@ -209,6 +209,7 @@ const agents = [
     commonTaken: 2,
     medianFirstResponseSec: 125,
     avgTimeToSolveSec: 7300,
+    medianTicketSolveSec: 5400,
     inTimePct: 85.4,
   },
   {
@@ -224,6 +225,7 @@ const agents = [
     commonTaken: 0,
     medianFirstResponseSec: null,
     avgTimeToSolveSec: null,
+    medianTicketSolveSec: null,
     inTimePct: null,
   },
 ];
@@ -707,10 +709,32 @@ describe('AgentReportsPage — agent KPI report', () => {
     expect(body.getByText('85%')).toBeInTheDocument(); // in-time 85.4 %
     expect(body.getByText('2m 5s')).toBeInTheDocument(); // first response 125s
     expect(body.getByText('2h 1m')).toBeInTheDocument(); // time to solve 7300s
+    expect(body.getByText('1h 30m')).toBeInTheDocument(); // ticket solve median 5400s
     expect(body.getByText('4.26')).toBeInTheDocument(); // CSAT to 2 dp
     // The Unassigned bucket has nothing measured -> em dashes in the in-time,
-    // first-response, time-to-solve and CSAT cells.
-    expect(body.getAllByText('—').length).toBe(4);
+    // first-response, time-to-solve, ticket-solve and CSAT cells.
+    expect(body.getAllByText('—').length).toBe(5);
+  });
+
+  it('arranges columns: a hidden column leaves the table and the file (owner, 2026-10-13)', async () => {
+    localStorage.removeItem('yiji.agentSummary.hiddenColumns');
+    localStorage.removeItem('yiji.agentSummary.columnOrder');
+    api.useAgentReportData.mockReturnValue(ok);
+    const dl = captureDownloads();
+    const { container } = renderPage('agents');
+    const heads = () =>
+      [...container.querySelectorAll('thead th')].map((th) => th.textContent?.trim() ?? '');
+    expect(heads()).toContain('Ticket solve time (median)');
+
+    await userEvent.click(screen.getByRole('button', { name: /Columns/ }));
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Ticket solve time (median)' }));
+    expect(heads()).not.toContain('Ticket solve time (median)');
+
+    await userEvent.click(screen.getByText('Export CSV (2)'));
+    const lines = await csvText(dl.blobs[0]!);
+    expect(lines[0]).not.toContain('Ticket solve time (median)');
+    dl.restore();
+    localStorage.removeItem('yiji.agentSummary.hiddenColumns');
   });
 
   it('sorts the agent table and exports the KPI workbook', async () => {
@@ -731,7 +755,7 @@ describe('AgentReportsPage — agent KPI report', () => {
     // sort the reader just applied is the order the rows come out in.
     const lines = await csvText(dl.blobs[0]!);
     expect(lines[0]).toBe(
-      'Agent,Chats,Not replied,Replied within 5 min,First response (median),Time to solve (avg),Common chats taken,Started by agent,Customer replied (agent-started),Tickets,Customer rating (1-5)',
+      'Agent,Chats,Not replied,Replied within 5 min,First response (median),Time to solve (avg),Ticket solve time (median),Common chats taken,Started by agent,Customer replied (agent-started),Tickets,Customer rating (1-5)',
     );
     expect(lines[1]!.startsWith('Unassigned,')).toBe(true);
     expect(lines[2]!.startsWith('Ann Lee,')).toBe(true);
