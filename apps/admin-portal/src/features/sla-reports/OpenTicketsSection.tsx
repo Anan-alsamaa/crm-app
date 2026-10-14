@@ -4,8 +4,6 @@ import {
   ClockIcon,
   InboxIcon,
   Pill,
-  ReportKpi,
-  ReportKpiStrip,
   ShieldIcon,
   Spinner,
   Table,
@@ -16,6 +14,7 @@ import {
   ZapIcon,
 } from '@yiji/ui';
 import { DUE_SOON_HOURS, useOpenTicketStats, type OpenBacklogRow } from './open-tickets.js';
+import { Kpi } from './KpiTile.js';
 
 const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
   low: 'muted',
@@ -69,20 +68,20 @@ export function OpenTicketsSection() {
         </p>
       ) : (
         <>
-          <ReportKpiStrip>
-            <ReportKpi
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <Kpi
               label={String(t('slaReports.open.kpiPending', { defaultValue: 'Pending' }))}
               value={String(d.total)}
               tone="blue"
               icon={<InboxIcon size={18} />}
             />
-            <ReportKpi
+            <Kpi
               label={String(t('slaReports.open.kpiOverdue', { defaultValue: 'Overdue' }))}
               value={String(d.overdue)}
-              tone="amber"
+              tone={d.overdue > 0 ? 'crimson' : 'green'}
               icon={<ShieldIcon size={18} />}
             />
-            <ReportKpi
+            <Kpi
               label={String(
                 t('slaReports.open.kpiDueSoon', {
                   hours: DUE_SOON_HOURS,
@@ -90,16 +89,16 @@ export function OpenTicketsSection() {
                 }),
               )}
               value={String(d.dueSoon)}
-              tone="violet"
+              tone="amber"
               icon={<ClockIcon size={18} />}
             />
-            <ReportKpi
+            <Kpi
               label={String(t('slaReports.open.kpiNoDeadline', { defaultValue: 'No deadline' }))}
               value={String(d.noDeadline)}
               tone="green"
               icon={<ZapIcon size={18} />}
             />
-          </ReportKpiStrip>
+          </div>
 
           {d.total > 0 && (
             <>

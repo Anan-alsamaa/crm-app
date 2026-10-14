@@ -565,7 +565,9 @@
     "search": "Search subject or agent",
     "naFilter": "No target",
     "searchHint": "Ticket subject, agent or id",
-    "noneInRange": "No tickets match these filters. Widen the dates, or clear them."
+    "noneInRange": "No tickets match these filters. Widen the dates, or clear them.",
+    "windowTitle": "Deadlines in the selected dates",
+    "windowNote": "Tickets raised between From and To below, judged against their deadline."
   },
   "app": {
     "console": "Admin console"

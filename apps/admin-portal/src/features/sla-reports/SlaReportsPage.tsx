@@ -23,7 +23,6 @@ import {
   Th,
   TicketIcon,
   Tr,
-  type MetricTone,
   ZapIcon,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
@@ -33,6 +32,7 @@ import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { TicketStatus } from '@yiji/shared-types';
 import { OpenTicketsSection } from './OpenTicketsSection.js';
+import { Kpi, RING_TONE, pctKpiTone } from './KpiTile.js';
 
 /* These reports open on the LAST 30 DAYS, not today's business day: one day of
    KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
@@ -115,117 +115,6 @@ function SlaPill({ cell }: { cell: SlaCell }) {
         {label}
       </Pill>
     </span>
-  );
-}
-
-/* Vibrant tinted KPI card — matches the Ticket report / export reports. */
-type KpiTone = 'blue' | 'green' | 'amber' | 'crimson';
-/* Colour as ACCENT, not surface. Solid saturated tiles read as a toy dashboard
- * (and here the numeral was the SAME colour as its fill — invisible). White
- * card + ink numeral is also the strongest contrast available (~19.5:1); the
- * tone survives as a state-indicator dot, which is what SLA green/amber/red
- * actually is. */
-const KPI_DOT: Record<KpiTone, string> = {
-  blue: 'bg-sky',
-  green: 'bg-success',
-  amber: 'bg-warning',
-  crimson: 'bg-destructive',
-};
-/* Icon chips take tint + hue token pairs, same anatomy as the export reports'
- * tiles; amber stays NEUTRAL — warning is a light token and a warning-tinted
- * chip fails contrast on the light theme. */
-const KPI_CHIP: Record<KpiTone, string> = {
-  blue: 'bg-sky-tint text-sky',
-  green: 'bg-success-tint text-success',
-  amber: 'bg-secondary text-muted-foreground',
-  crimson: 'bg-destructive-tint text-destructive',
-};
-/** Green ≥90, amber ≥75, red below (no data → blue). */
-const pctKpiTone = (n: number | null): KpiTone =>
-  n == null ? 'blue' : n >= 90 ? 'green' : n >= 75 ? 'amber' : 'crimson';
-/* Ring accents for the % tiles. MetricTone deliberately has no warning/amber
- * (a light token), so the amber band falls back to jade. */
-/* The SURFACE carries the hue, like every other report's tiles — this page
- * was the last one left showing four white boxes. */
-const KPI_SURFACE: Record<KpiTone, string> = {
-  blue: 'bg-gradient-to-br from-sky-tint/70 to-card',
-  green: 'bg-gradient-to-br from-success-tint/70 to-card',
-  amber: 'bg-gradient-to-br from-warning-tint/70 to-card',
-  crimson: 'bg-gradient-to-br from-destructive-tint/70 to-card',
-};
-const KPI_NUMERAL: Record<KpiTone, string> = {
-  blue: 'text-[oklch(0.48_0.16_264)]',
-  green: 'text-[oklch(0.45_0.13_155)]',
-  amber: 'text-[oklch(0.5_0.13_75)]',
-  crimson: 'text-destructive',
-};
-
-const RING_TONE: Record<KpiTone, MetricTone> = {
-  blue: 'sky',
-  green: 'success',
-  amber: 'primary',
-  crimson: 'destructive',
-};
-
-function Kpi({
-  label,
-  value,
-  tone = 'blue',
-  icon,
-  visual,
-}: {
-  label: string;
-  value: string;
-  tone?: KpiTone;
-  /** Rendered in a tinted rounded-square chip at the start of the line. */
-  icon?: ReactNode;
-  /** End-aligned data accent — a `<ProgressRing>` for the % tiles. */
-  visual?: ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        // ONE LINE, matching @yiji/ui's ReportKpi.
-        //
-        // These four opened this report at ~150px — a chip row, a 4xl numeral
-        // and a label, stacked. With the toolbar, the description and a
-        // two-row filter bar above them, the table began 560px down and
-        // floored at its minimum on a 900px screen. This report keeps its OWN
-        // tile rather than using the shared one because it needs a `crimson`
-        // tone the shared vocabulary has no seat for, and red for a badly
-        // missed SLA is the whole point of colouring these at all.
-        'flex items-center gap-3 rounded-xl px-3.5 py-2.5',
-        'shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_10px_26px_-14px_oklch(var(--shadow-color)/0.18)]',
-        'transition-[box-shadow] duration-base ease-out',
-        KPI_SURFACE[tone],
-      )}
-    >
-      {icon && (
-        <span
-          aria-hidden
-          className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg', KPI_CHIP[tone])}
-        >
-          {icon}
-        </span>
-      )}
-      <div
-        data-kpi-value
-        className={cn(
-          'shrink-0 text-2xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
-          KPI_NUMERAL[tone],
-        )}
-      >
-        {value}
-      </div>
-      <div
-        data-kpi-label
-        className="flex min-w-0 items-center gap-1.5 text-2xs font-semibold uppercase leading-tight tracking-[0.1em] text-muted-foreground"
-      >
-        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
-        <span className="min-w-0">{label}</span>
-      </div>
-      {visual && <div className="ms-auto shrink-0">{visual}</div>}
-    </div>
   );
 }
 
@@ -421,46 +310,66 @@ export function SlaReportsPage() {
             {/* KPI strip — the % tiles carry a progress ring, boards-style: the
                 numeral stays the reading, the arc makes the shortfall visible
                 at a glance. */}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              <Kpi
-                label={t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
-                value={String(totals?.tickets ?? 0)}
-                tone="blue"
-                icon={<TicketIcon size={18} />}
-              />
-              <Kpi
-                label={t('slaReports.kpiFirstResponse', {
-                  defaultValue: 'Chat first response',
-                })}
-                value={fmtPct(totals?.frPct ?? null)}
-                tone={pctKpiTone(totals?.frPct ?? null)}
-                icon={<ZapIcon size={18} />}
-                visual={
-                  totals?.frPct != null ? (
-                    <ProgressRing value={totals.frPct} tone={RING_TONE[pctKpiTone(totals.frPct)]} />
-                  ) : undefined
-                }
-              />
-              <Kpi
-                label={t('slaReports.kpiResolution', { defaultValue: 'Ticket time to solve' })}
-                value={fmtPct(totals?.resPct ?? null)}
-                tone={pctKpiTone(totals?.resPct ?? null)}
-                icon={<ClockIcon size={18} />}
-                visual={
-                  totals?.resPct != null ? (
-                    <ProgressRing
-                      value={totals.resPct}
-                      tone={RING_TONE[pctKpiTone(totals.resPct)]}
-                    />
-                  ) : undefined
-                }
-              />
-              <Kpi
-                label={t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })}
-                value={String(resolutionBreaches)}
-                tone={resolutionBreaches > 0 ? 'crimson' : 'green'}
-                icon={<ShieldIcon size={18} />}
-              />
+            {/* Row 2 of 2, with its own heading (owner, 2026-10-14): the same
+                tile and grid as "Open tickets" above, so the columns line up,
+                and a title so it reads as the DATE RANGE's figures rather than
+                a second copy of the first row. */}
+            <div className="sticky start-0 w-[var(--pin-w,100%)] space-y-3 pt-3">
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-border pt-4">
+                <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                  {t('slaReports.windowTitle', { defaultValue: 'Deadlines in the selected dates' })}
+                </h2>
+                <p className="min-w-0 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+                  {t('slaReports.windowNote', {
+                    defaultValue:
+                      'Tickets raised between From and To below, judged against their deadline.',
+                  })}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Kpi
+                  label={t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
+                  value={String(totals?.tickets ?? 0)}
+                  tone="blue"
+                  icon={<TicketIcon size={18} />}
+                />
+                <Kpi
+                  label={t('slaReports.kpiFirstResponse', {
+                    defaultValue: 'Chat first response',
+                  })}
+                  value={fmtPct(totals?.frPct ?? null)}
+                  tone={pctKpiTone(totals?.frPct ?? null)}
+                  icon={<ZapIcon size={18} />}
+                  visual={
+                    totals?.frPct != null ? (
+                      <ProgressRing
+                        value={totals.frPct}
+                        tone={RING_TONE[pctKpiTone(totals.frPct)]}
+                      />
+                    ) : undefined
+                  }
+                />
+                <Kpi
+                  label={t('slaReports.kpiResolution', { defaultValue: 'Ticket time to solve' })}
+                  value={fmtPct(totals?.resPct ?? null)}
+                  tone={pctKpiTone(totals?.resPct ?? null)}
+                  icon={<ClockIcon size={18} />}
+                  visual={
+                    totals?.resPct != null ? (
+                      <ProgressRing
+                        value={totals.resPct}
+                        tone={RING_TONE[pctKpiTone(totals.resPct)]}
+                      />
+                    ) : undefined
+                  }
+                />
+                <Kpi
+                  label={t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })}
+                  value={String(resolutionBreaches)}
+                  tone={resolutionBreaches > 0 ? 'crimson' : 'green'}
+                  icon={<ShieldIcon size={18} />}
+                />
+              </div>
             </div>
 
             {/* Says which question this report answers and which it does not.
