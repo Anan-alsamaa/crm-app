@@ -198,6 +198,7 @@ async function main(): Promise<void> {
     provider,
     // One row per AI call: tokens, estimated cost, latency (owner, 2026-10-07).
     logAiCall: (row) => directus.logAiCall(row),
+    serviceToken: config.SVC_AI_TOKEN,
     directus,
     configStore,
     cache,

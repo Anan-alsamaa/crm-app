@@ -6,6 +6,8 @@ import {
   IntentRequest,
   LocalizedConversationRef,
   SuggestReplyRequest,
+  AutoReplyRequest,
+  type AutoReplyResponse,
   SemanticSearchRequest,
   HelpAssistantRequest,
   AuraAction,
@@ -26,6 +28,8 @@ import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.
 import { ResponseCache } from './cache/index.js';
 import { redactDeep, unredact } from './redaction/index.js';
 import { prompts } from './prompts/index.js';
+import { autoReplyPrompt } from './prompts/auto-reply.js';
+import { preCheck, postCheck } from './autoreply-guard.js';
 import type { AIProvider } from './provider/types.js';
 import { AiProviderError } from './provider/types.js';
 import { conversationIdOf, estimateCostUsd, type AiCallRow, type AiCallSink } from './usage-log.js';
@@ -48,6 +52,8 @@ export interface RouteDeps {
   helpDailyQuota: DailyQuota;
   /** Per-call log sink (owner, 2026-10-07). Optional so tests need not wire it. */
   logAiCall?: AiCallSink;
+  /** The workers' token: the only caller /auto-reply accepts. */
+  serviceToken?: string;
 }
 
 type Json = Record<string, unknown>;
@@ -329,6 +335,92 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
         (text) => ({ reply: text }),
       );
       return reply.send(result);
+    } catch (err) {
+      handleProviderError(reply, err);
+    }
+  });
+
+  /* ── /auto-reply (owner, 2026-10-13) ─────────────────────────────
+   * Service-only: the workers ask, a browser never may. Shadow mode stores the
+   * answer for agents; nothing here sends anything to a customer. */
+  app.post(AI_ENDPOINTS.autoReply, async (req, reply) => {
+    const m = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '');
+    if (!m) return reply.code(401).send({ error: 'unauthorized' });
+    if (!deps.serviceToken || m[1]?.trim() !== deps.serviceToken) {
+      return reply.code(403).send({ error: 'service_only' });
+    }
+    const caller = await authOrReply(req, reply);
+    if (!caller) return;
+    const body = AutoReplyRequest.safeParse(req.body);
+    if (!body.success)
+      return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
+    const ctx = await deps.directus.getConversation(body.data.conversationId);
+    if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
+    const scoped = scopeCallerToVendor(caller, ctx.vendor);
+
+    const visible = ctx.messages.filter((x) => !x.is_internal_note);
+    const lastCustomer = [...visible].reverse().find((x) => x.sender_type === 'customer');
+    if (!lastCustomer) return reply.code(409).send({ error: 'no_customer_message' });
+
+    // The hard limits that need no model: a person, money back, or "are you a bot".
+    const early = preCheck(lastCustomer.content ?? '');
+    if (early) {
+      const config = await deps.configStore.get(scoped.vendorId);
+      if (!config.autoReply) return reply.code(403).send({ error: 'feature_disabled' });
+      const out: AutoReplyResponse = {
+        action: 'handover',
+        reply: null,
+        reason: early,
+        blocked: false,
+      };
+      return reply.send(out);
+    }
+
+    const cacheKey = `auto:${body.data.conversationId}:${lastCustomer.id}`;
+    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.autoReply, cacheKey, req.ip);
+    if (!gateRes) return;
+    if (gateRes.cached) return reply.send(gateRes.cached as AutoReplyResponse);
+
+    const source = await deps.directus.getAutoReplyContext(body.data.conversationId, ctx.vendor);
+    const p = autoReplyPrompt({
+      transcript: visible
+        .filter((x) => x.sender_type === 'customer' || x.sender_type === 'agent')
+        .map((x) => ({
+          from: x.sender_type === 'customer' ? ('customer' as const) : ('support' as const),
+          text: x.content ?? '',
+        })),
+      knowledge: source.knowledge,
+      order: source.order,
+      arabic: /[؀-ۿ]/.test(lastCustomer.content ?? ''),
+    });
+    const schema = z.object({
+      action: z.enum(['reply', 'handover']),
+      reply: z.string().nullable().optional(),
+      reason: z.string().nullable().optional(),
+    });
+    try {
+      const raw = await runWith(
+        { caller: scoped, conversationId: body.data.conversationId },
+        AI_ENDPOINTS.autoReply,
+        cacheKey,
+        p.system,
+        p.user,
+        schema,
+        (text) => parseJson(text, schema),
+      );
+      let out: AutoReplyResponse = {
+        action: raw.action,
+        reply: raw.action === 'reply' ? (raw.reply ?? '').trim() || null : null,
+        reason: raw.reason ?? null,
+        blocked: false,
+      };
+      if (out.action === 'reply' && !out.reply) {
+        out = { action: 'handover', reply: null, reason: 'empty_reply', blocked: false };
+      }
+      // The model's answer is checked in code before anyone can use it.
+      const broken = out.reply ? postCheck(out.reply) : null;
+      if (broken) out = { action: 'handover', reply: null, reason: broken, blocked: true };
+      return reply.send(out);
     } catch (err) {
       handleProviderError(reply, err);
     }

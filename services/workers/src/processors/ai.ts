@@ -6,6 +6,8 @@ import {
   type AiJob,
   type SummaryResponse,
   type LeadScoreResponse,
+  type AutoReplyResponse,
+  type AiDraft,
 } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 
@@ -101,5 +103,60 @@ export async function processAiJob(job: Job<AiJob>, deps: AiDeps): Promise<void>
     return;
   }
 
+  if (kind === 'auto_reply') {
+    await autoReplyDraft(deps, conversationId, vendorId);
+    return;
+  }
+
   deps.logger.warn({ kind, conversationId }, 'unknown ai job kind');
+}
+
+/**
+ * AI AUTO-REPLY, SHADOW MODE (owner, 2026-10-13; docs/AI-AUTO-REPLY-PLAN.md).
+ *
+ * Asks the gateway what it WOULD say to the latest customer message and stores
+ * it on the conversation (`ai_draft`) for agents to compare - nothing is sent
+ * to the customer. Stands down when the chat is solved or a person has already
+ * answered; a disabled feature (403) is a quiet no-op, not a failure.
+ */
+async function autoReplyDraft(deps: AiDeps, conversationId: string, vendorId: string) {
+  const { readItem, readItems } = await import('@directus/sdk');
+  const conv = (await deps.directus.request(
+    readItem('conversations', conversationId, { fields: ['status'] }),
+  )) as { status?: string } | null;
+  if (!conv || conv.status === 'solved') return;
+  const [last] = (await deps.directus.request(
+    readItems('messages', {
+      filter: { conversation: { _eq: conversationId }, is_internal_note: { _neq: true } },
+      fields: ['id', 'sender_type'],
+      sort: ['-date_created'],
+      limit: 1,
+    }),
+  )) as Array<{ id: string; sender_type: string }>;
+  if (!last || last.sender_type !== 'customer') return;
+
+  const res = await fetch(`${deps.gatewayUrl}${AI_ENDPOINTS.autoReply}`, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      authorization: `Bearer ${deps.gatewayToken}`,
+      'x-yiji-user': deps.workerUserId,
+      'x-yiji-vendor': vendorId,
+    },
+    body: JSON.stringify({ conversationId }),
+  });
+  if (res.status === 403 || res.status === 409) return; // off, or nothing to answer
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`AI gateway auto-reply → ${res.status}: ${text}`);
+  }
+  const out = (await res.json()) as AutoReplyResponse;
+  const draft: AiDraft = { ...out, forMessageId: last.id, at: new Date().toISOString() };
+  await deps.directus.request(
+    updateItem('conversations', conversationId, { ai_draft: draft } as never),
+  );
+  deps.logger.info(
+    { conversationId, action: out.action, blocked: out.blocked },
+    'ai auto-reply draft stored (shadow)',
+  );
 }

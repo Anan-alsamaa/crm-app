@@ -1394,6 +1394,11 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
             outboundCountAtSchedule: 0,
           })
           .catch((err: unknown) => logger.warn({ err }, 'auto-assign enqueue failed'));
+        /* AI auto-reply draft (shadow, owner 2026-10-13). The worker asks the
+           AI gateway, which says no when the feature is off for this vendor. */
+        void producer
+          .enqueueAiAutoReply?.(convId)
+          .catch((err: unknown) => logger.warn({ err, convId }, 'ai auto-reply enqueue failed'));
       }
       // Agent activity pushes them to the back of the idle queue, so the next
       // conversation goes to whoever has been waiting longest.

@@ -51,8 +51,17 @@ export interface SideEffectProducer {
    * the chat does not need a notification about the message on their screen.
    */
   enqueueCustomerPush(job: CustomerPushJob): Promise<string | null>;
+  /**
+   * AI auto-reply draft for a customer message (owner, 2026-10-13). Delayed a
+   * few seconds so a burst of messages is answered once; no custom jobId (a
+   * BullMQ id blocks the next add). Optional: test stubs need not provide it.
+   */
+  enqueueAiAutoReply?(conversationId: string): Promise<void>;
   close(): Promise<void>;
 }
+
+/** Coalesces a burst of customer messages into one AI draft. */
+const AI_AUTO_REPLY_DELAY_MS = 4_000;
 
 class NoopProducer implements SideEffectProducer {
   constructor(private readonly logger: Logger) {}
@@ -97,6 +106,7 @@ class BullProducer implements SideEffectProducer {
   private readonly routing: Queue;
   private readonly coupons: Queue;
   private readonly customerPush: Queue;
+  private readonly ai: Queue;
   private readonly connection: Redis | Cluster;
   /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua
    * scripts fail with CROSSSLOT — hence the hash tag. undefined on
@@ -131,6 +141,14 @@ class BullProducer implements SideEffectProducer {
       connection: this.connection,
       prefix: this.prefix,
     });
+    this.ai = new Queue(QUEUES.ai, { connection: this.connection, prefix: this.prefix });
+  }
+  async enqueueAiAutoReply(conversationId: string): Promise<void> {
+    await this.ai.add(
+      'auto_reply',
+      { job: 'auto_reply', conversationId },
+      { ...DEFAULT_JOB_OPTIONS, delay: AI_AUTO_REPLY_DELAY_MS },
+    );
   }
   async enqueueImport(job: ImportJob): Promise<string | null> {
     const added = await this.imports.add('import', job, DEFAULT_JOB_OPTIONS);
@@ -262,6 +280,7 @@ class BullProducer implements SideEffectProducer {
   }
   async close(): Promise<void> {
     await this.automation.close();
+    await this.ai.close();
     await this.imports.close();
     await this.reports.close();
     await this.notifications.close();

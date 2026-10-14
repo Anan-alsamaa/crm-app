@@ -17,6 +17,7 @@ import {
 import type { AiFeatureConfig } from '@yiji/shared-types';
 import { aiAdmin } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { KnowledgeBaseSection } from './KnowledgeBaseSection.js';
 
 type Config = typeof AiFeatureConfig._type;
 
@@ -140,6 +141,13 @@ const FEATURES: Array<{ key: keyof Config; label: string; hint: string; glyph: G
     label: 'Help assistant',
     hint: 'Lets staff ask short “how do I…?” questions about this CRM.',
     glyph: HelpAssistantGlyph,
+  },
+  {
+    /* AI auto-reply, SHADOW mode (owner, 2026-10-13): off by default. */
+    key: 'autoReply',
+    label: 'AI auto-reply (shadow)',
+    hint: 'For each customer message, drafts what the AI would answer - shown to agents only. Nothing is sent to customers. Answers come from the Knowledge base.',
+    glyph: SuggestReplyGlyph,
   },
 ];
 
@@ -409,6 +417,8 @@ export function AiConfigPage() {
             </FormField>
           </div>
         </section>
+
+        <KnowledgeBaseSection />
       </div>
     </div>
   );

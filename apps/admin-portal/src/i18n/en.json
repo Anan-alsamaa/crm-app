@@ -318,7 +318,8 @@
     "helpBudgetHint": "Max help-assistant questions each staff member can ask per day. 0 = unlimited.",
     "helpDailyPerUser": "Daily questions per user",
     "feature": {
-      "helpAssistant": "Help assistant"
+      "helpAssistant": "Help assistant",
+      "autoReply": "AI auto-reply (shadow)"
     }
   },
   "helpAssistant": {
@@ -1480,5 +1481,28 @@
     "byAgentTab": "By agent",
     "periodsTab": "Every period",
     "role": "Role"
+  },
+  "kb": {
+    "title": "Knowledge base",
+    "hint": "What the AI auto-reply may answer from: FAQs and policies. If an answer is not here, the AI hands the chat to an agent. It never offers coupons or compensation.",
+    "add": "Add topic",
+    "addTitle": "Add topic",
+    "editTitle": "Edit topic",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteTitle": "Delete this topic?",
+    "save": "Save",
+    "saved": "Saved.",
+    "saveFailed": "Not saved.",
+    "loadFailed": "Could not load the knowledge base.",
+    "empty": "No topics yet. With an empty knowledge base the AI hands every chat over.",
+    "off": "Off",
+    "required": "A topic needs a title and an answer.",
+    "topic": "Topic",
+    "topicHint": "e.g. Delivery areas",
+    "answer": "Answer",
+    "answerHint": "The answer the AI may give.",
+    "language": "Language",
+    "active": "In use"
   }
 }

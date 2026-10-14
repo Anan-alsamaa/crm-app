@@ -931,5 +931,10 @@
     "turnOn": "Turn on new-chat alerts",
     "turnOff": "Turn off new-chat alerts",
     "blocked": "New-chat alerts are on, but Windows pop-ups are blocked for this site. Allow notifications in the browser’s site settings (the icon left of the address)."
+  },
+  "aiDraft": {
+    "title": "AI suggestion - not sent",
+    "use": "Use this",
+    "handover": "The AI would hand this chat to an agent: {{reason}}"
   }
 }

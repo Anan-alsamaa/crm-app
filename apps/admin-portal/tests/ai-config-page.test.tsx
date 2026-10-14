@@ -45,6 +45,8 @@ const baseConfig = {
   helpAssistant: false,
   monthlyCap: 1000,
   helpDailyPerUser: 20,
+  autoReply: false,
+  autoReplyMaxTurns: 3,
 };
 
 beforeEach(() => {
@@ -60,7 +62,12 @@ describe('AiConfigPage', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: 'AI assistance', level: 1 })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('Summarize conversation')).toBeInTheDocument());
-    expect(screen.getAllByRole('switch').length).toBe(8);
+    expect(screen.getAllByRole('switch').length).toBe(9);
+    // AI auto-reply (owner, 2026-10-13) is off unless someone turns it on.
+    expect(screen.getByRole('switch', { name: 'AI auto-reply (shadow)' })).toHaveAttribute(
+      'aria-checked',
+      'false',
+    );
   });
 
   it('renders the help-assistant toggle and its daily allowance field', async () => {

@@ -305,6 +305,51 @@ export class GatewayDirectus {
     }
   }
 
+  /**
+   * What the AI auto-reply answers FROM (owner, 2026-10-13): the active
+   * knowledge-base entries for this vendor (or shared) and the conversation's
+   * stored latest order. Never throws - an empty knowledge base means the AI
+   * hands everything over, which is the safe failure.
+   */
+  async getAutoReplyContext(
+    conversationId: string,
+    vendorId: string | null,
+  ): Promise<{ knowledge: Array<{ title: string; content: string }>; order: unknown }> {
+    let knowledge: Array<{ title: string; content: string }> = [];
+    let order: unknown = null;
+    try {
+      knowledge = (await this.client.request(
+        readItems(
+          'ai_knowledge' as never,
+          {
+            filter: {
+              _and: [
+                { active: { _eq: true } },
+                vendorId
+                  ? { _or: [{ vendor: { _null: true } }, { vendor: { _eq: vendorId } }] }
+                  : { vendor: { _null: true } },
+              ],
+            },
+            fields: ['title', 'content'],
+            sort: ['sort', 'title'],
+            limit: 200,
+          } as never,
+        ),
+      )) as Array<{ title: string; content: string }>;
+    } catch {
+      knowledge = [];
+    }
+    try {
+      const conv = (await this.client.request(
+        readItem('conversations', conversationId, { fields: ['last_order_snapshot'] } as never),
+      )) as { last_order_snapshot?: unknown } | null;
+      order = conv?.last_order_snapshot ?? null;
+    } catch {
+      order = null;
+    }
+    return { knowledge, order };
+  }
+
   async getConversation(
     conversationId: string,
     messageLimit = 50,

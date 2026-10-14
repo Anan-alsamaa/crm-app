@@ -76,6 +76,7 @@ export const REMOVE_ORDER = [
   'store_notify_rules',
   'quick_replies',
   'sla_policies',
+  'ai_knowledge',
   'stores',
   'brands',
   'tickets',

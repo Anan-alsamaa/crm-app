@@ -42,7 +42,7 @@ export type NotificationJob = z.infer<typeof NotificationJob>;
 
 // --- ai ---
 export const AiJob = z.object({
-  job: z.enum(['summarize', 'score_lead']),
+  job: z.enum(['summarize', 'score_lead', 'auto_reply']),
   conversationId: z.string(),
 });
 export type AiJob = z.infer<typeof AiJob>;

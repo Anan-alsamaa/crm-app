@@ -365,6 +365,11 @@ export const collections: CollectionSpec[] = [
         note: 'The order as it stood when this chat was worked. Rendered while the live copy revalidates, so the panel is never blank.',
       },
       {
+        field: 'ai_draft',
+        type: 'json',
+        note: 'AI auto-reply, SHADOW mode (owner, 2026-10-13): what the AI would have answered to the latest customer message - reply or handover, with a reason. Shown to agents only; never sent to the customer. See docs/AI-AUTO-REPLY-PLAN.md.',
+      },
+      {
         field: 'last_order_at',
         type: 'dateTime',
         note: 'When the snapshot was taken — NOT when the order was placed. Says how stale the painted panel may be.',
@@ -762,6 +767,22 @@ export const collections: CollectionSpec[] = [
         defaultValue: 'chat',
         note: 'WHICH LIBRARY this row belongs to. `chat` is the inbox composer; `late_order_reason` and `late_order_action` are the two boxes on a late-order decision. They are deliberately SEPARATE sets (ops, 2026-10-04): a reason explains why an order was late, an action says what was done about it, and neither is a reply to a customer — one shared list would offer an agent mostly wrong answers in all three places. Rows written before this existed have no value and read as `chat`, which is where they came from.',
       },
+      { field: 'sort', type: 'integer', defaultValue: 0 },
+      { field: 'active', type: 'boolean', defaultValue: true },
+    ],
+  },
+  {
+    collection: 'ai_knowledge',
+    note: 'What the AI auto-reply may answer FROM (owner, 2026-10-13): FAQs and policies the team writes. If an answer is not here, the AI hands the chat to an agent. NULL vendor = every vendor.',
+    fields: [
+      {
+        field: 'title',
+        type: 'string',
+        required: true,
+        note: 'The question or topic, e.g. "Delivery areas".',
+      },
+      { field: 'content', type: 'text', required: true, note: 'The answer, as the AI may use it.' },
+      { field: 'lang', type: 'string', choices: ['en', 'ar'], defaultValue: 'ar' },
       { field: 'sort', type: 'integer', defaultValue: 0 },
       { field: 'active', type: 'boolean', defaultValue: true },
     ],
@@ -1315,7 +1336,11 @@ export const VENDOR_RECORD_COLLECTIONS = [
 ] as const;
 
 /** Tables whose NULL vendor means "every vendor". Never backfilled. */
-export const VENDOR_SHARED_CONFIG_COLLECTIONS = ['quick_replies', 'sla_policies'] as const;
+export const VENDOR_SHARED_CONFIG_COLLECTIONS = [
+  'quick_replies',
+  'sla_policies',
+  'ai_knowledge',
+] as const;
 
 function vendorScopedRelations(): RelationSpec[] {
   const rel = (collection: string, note: string): RelationSpec => ({

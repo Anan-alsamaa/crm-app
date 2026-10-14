@@ -15,6 +15,7 @@ export const AI_ENDPOINTS = {
   semanticSearch: '/semantic-search',
   scoreLead: '/score-lead',
   helpAssistant: '/help-assistant',
+  autoReply: '/auto-reply',
 } as const;
 export type AiEndpoint = (typeof AI_ENDPOINTS)[keyof typeof AI_ENDPOINTS];
 
@@ -50,6 +51,31 @@ export const SuggestReplyRequest = z.object({
 export type SuggestReplyRequest = z.infer<typeof SuggestReplyRequest>;
 export const SuggestReplyResponse = z.object({ reply: z.string() });
 export type SuggestReplyResponse = z.infer<typeof SuggestReplyResponse>;
+
+/**
+ * AI AUTO-REPLY (owner, 2026-10-13; docs/AI-AUTO-REPLY-PLAN.md). Service-only:
+ * the workers ask, never a browser. `handover` means a person must take it.
+ * In SHADOW mode the result is stored as an agents-only draft and never sent.
+ */
+export const AutoReplyRequest = z.object({ conversationId: z.string().uuid() });
+export type AutoReplyRequest = z.infer<typeof AutoReplyRequest>;
+export const AutoReplyResponse = z.object({
+  action: z.enum(['reply', 'handover']),
+  /** The message for the customer; null on a handover. */
+  reply: z.string().nullable(),
+  /** Why it handed over (or a short note on the reply), for the agent. */
+  reason: z.string().nullable(),
+  /** True when the hard-limit check turned a reply into a handover. */
+  blocked: z.boolean().default(false),
+});
+export type AutoReplyResponse = z.infer<typeof AutoReplyResponse>;
+
+/** The draft stored on a conversation for agents (conversations.ai_draft). */
+export interface AiDraft extends AutoReplyResponse {
+  /** The customer message this draft answers. */
+  forMessageId: string | null;
+  at: string;
+}
 
 export const SentimentResponse = z.object({
   label: z.enum(['positive', 'neutral', 'negative']),
@@ -201,5 +227,12 @@ export const AiFeatureConfig = z.object({
    * 0 = unlimited.
    */
   helpDailyPerUser: z.number().int().nonnegative().default(20),
+  /**
+   * AI auto-reply (owner, 2026-10-13). OFF by default everywhere; staging turns
+   * it on. Only SHADOW exists yet: drafts for agents, nothing sent to customers.
+   */
+  autoReply: z.boolean().default(false),
+  /** Hand over after this many AI replies in one session. */
+  autoReplyMaxTurns: z.number().int().min(1).max(10).default(3),
 });
 export type AiFeatureConfig = z.infer<typeof AiFeatureConfig>;

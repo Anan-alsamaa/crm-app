@@ -48,6 +48,7 @@ import { ConversationSidebar } from './ConversationSidebar.js';
 import { QuickReplies } from './QuickReplies.js';
 import { EnhanceButton } from './EnhanceButton.js';
 import { PushUnreachableNotice } from './PushUnreachableNotice.js';
+import { AiDraftCard } from './AiDraftCard.js';
 import { resolveMentions } from './mentions.js';
 import { InlineMessageEditor, MessageActions } from './MessageEditControls.js';
 import {
@@ -502,6 +503,14 @@ export function ConversationView({
     [threadMessages],
   );
   const notes = useMemo(() => all.filter((m) => m.is_internal_note), [all]);
+  /* The customer message still waiting for an answer - what the AI shadow
+     draft (owner, 2026-10-13) is about. Null once anyone has replied. */
+  const awaitingMessageId = useMemo(() => {
+    const last = threadMessages[threadMessages.length - 1];
+    return last && last.sender_type === 'customer'
+      ? { id: String(last.id), at: String(last.date_created ?? '') }
+      : null;
+  }, [threadMessages]);
   const grouped = useMemo(() => groupRuns(threadMessages), [threadMessages]);
 
   // Mark the conversation read on VIEW so its inbox unread badge clears — not
@@ -1533,6 +1542,15 @@ export function ConversationView({
                 puts them here and agents already reach for them there. Hidden on
                 an internal note: a canned customer reply is never the right
                 thing to say to the team. */}
+            {!internalNote && (
+              <AiDraftCard
+                className="mb-2"
+                conversationId={conversationId}
+                awaitingMessageId={awaitingMessageId?.id ?? null}
+                awaitingAt={awaitingMessageId?.at ?? null}
+                onUse={(text) => applyEnhanced(text, 'ai_suggestion')}
+              />
+            )}
             {!internalNote && (
               <div className="mb-1 flex items-start gap-2">
                 <QuickReplies
