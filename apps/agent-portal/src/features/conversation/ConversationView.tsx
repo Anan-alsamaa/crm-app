@@ -49,6 +49,11 @@ import { QuickReplies } from './QuickReplies.js';
 import { EnhanceButton } from './EnhanceButton.js';
 import { PushUnreachableNotice } from './PushUnreachableNotice.js';
 import { AiDraftCard } from './AiDraftCard.js';
+import { runtimeConfig } from '@yiji/shared-config';
+
+/* AI auto-reply is parked (owner, 2026-10-14): its shadow drafts exist on
+   staging only, and production has no ai_draft field to read. */
+const SHOW_AI_DRAFTS = runtimeConfig().ENVIRONMENT === 'staging';
 import { resolveMentions } from './mentions.js';
 import { InlineMessageEditor, MessageActions } from './MessageEditControls.js';
 import {
@@ -1542,7 +1547,7 @@ export function ConversationView({
                 puts them here and agents already reach for them there. Hidden on
                 an internal note: a canned customer reply is never the right
                 thing to say to the team. */}
-            {!internalNote && (
+            {!internalNote && SHOW_AI_DRAFTS && (
               <AiDraftCard
                 className="mb-2"
                 conversationId={conversationId}

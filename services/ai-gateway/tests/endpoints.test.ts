@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import RedisMock from 'ioredis-mock';
 import type { Redis } from 'ioredis';
 import { AI_ENDPOINTS } from '@yiji/shared-types';
+import { envKey } from '@yiji/shared-config/redis';
 import { registerAiRoutes } from '../src/routes.js';
 import { AiConfigStore } from '../src/aiconfig/index.js';
 import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from '../src/ratelimit/index.js';
@@ -426,7 +427,7 @@ describe('admin endpoints', () => {
     expect(r.json().suggestReply).toBe(false);
     expect(r.json().monthlyCap).toBe(5000);
     // verify persisted
-    const raw = await redis.get('ai:config:global');
+    const raw = await redis.get(envKey('ai:config:global'));
     expect(JSON.parse(raw!).suggestReply).toBe(false);
   });
 

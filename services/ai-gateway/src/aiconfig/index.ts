@@ -1,4 +1,5 @@
 import type { Redis } from 'ioredis';
+import { envKey } from '@yiji/shared-config/redis';
 import { AiFeatureConfig } from '@yiji/shared-types';
 
 /**
@@ -15,8 +16,17 @@ import { AiFeatureConfig } from '@yiji/shared-types';
  * (today, for every vendor) reads exactly the global config.
  */
 
-const KEY = 'ai:config:global';
-export const vendorConfigKey = (vendorId: string): string => `ai:config:vendor:${vendorId}`;
+/*
+ * PER ENVIRONMENT (2026-10-14). Staging and production share one Redis
+ * cluster, and these keys were bare - so switching an AI feature on in the
+ * STAGING admin portal switched it on in production too. They are namespaced
+ * now (envKey); the bare key is read once as a fallback so production keeps
+ * the settings it has until someone saves again.
+ */
+const LEGACY_KEY = 'ai:config:global';
+const legacyVendorKey = (vendorId: string): string => `ai:config:vendor:${vendorId}`;
+const KEY = (): string => envKey(LEGACY_KEY);
+export const vendorConfigKey = (vendorId: string): string => envKey(legacyVendorKey(vendorId));
 
 type Config = typeof AiFeatureConfig._type;
 
@@ -36,8 +46,12 @@ export class AiConfigStore {
   /** The config for `vendorId` (its override over the global), or the global one. */
   async get(vendorId?: string): Promise<Config> {
     const [globalRaw, vendorRaw] = await Promise.all([
-      this.redis.get(KEY),
-      vendorId ? this.redis.get(vendorConfigKey(vendorId)) : Promise.resolve(null),
+      this.redis.get(KEY()).then((v) => v ?? this.redis.get(LEGACY_KEY)),
+      vendorId
+        ? this.redis
+            .get(vendorConfigKey(vendorId))
+            .then((v) => v ?? this.redis.get(legacyVendorKey(vendorId)))
+        : Promise.resolve(null),
     ]);
     const global = parseObject(globalRaw) ?? {};
     const override = parseObject(vendorRaw) ?? {};
@@ -56,7 +70,7 @@ export class AiConfigStore {
 
   async set(input: unknown): Promise<Config> {
     const config = AiFeatureConfig.parse(input);
-    await this.redis.set(KEY, JSON.stringify(config));
+    await this.redis.set(KEY(), JSON.stringify(config));
     return config;
   }
 

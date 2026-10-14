@@ -144,6 +144,11 @@ class BullProducer implements SideEffectProducer {
     this.ai = new Queue(QUEUES.ai, { connection: this.connection, prefix: this.prefix });
   }
   async enqueueAiAutoReply(conversationId: string): Promise<void> {
+    /* Parked (owner, 2026-10-14): nothing is queued unless this environment
+       sets AI_AUTO_REPLY=on. Without it every customer message would queue a
+       job that can only be refused - and on production, where the worker
+       cannot reach the AI gateway, fail and retry into the logs. */
+    if (process.env.AI_AUTO_REPLY !== 'on') return;
     await this.ai.add(
       'auto_reply',
       { job: 'auto_reply', conversationId },
