@@ -676,7 +676,7 @@
     "col.noReply": "No reply yet",
     "col.inTime": "Answered in time",
     "col.firstResponseMedian": "First response (median)",
-    "col.timeToSolve": "Chats solve time (avg)",
+    "col.timeToSolve": "Chat Solve Time",
     "col.commonTaken": "Common chats taken",
     "byDay": "By day",
     "dayCount": "{{count}} days",
