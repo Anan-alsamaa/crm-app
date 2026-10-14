@@ -18,6 +18,11 @@ import type { AiFeatureConfig } from '@yiji/shared-types';
 import { aiAdmin } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { KnowledgeBaseSection } from './KnowledgeBaseSection.js';
+import { runtimeConfig } from '@yiji/shared-config';
+
+/* AI auto-reply is parked (owner, 2026-10-14): its switch and knowledge base
+   are staging-only - production has no ai_knowledge table. */
+const AUTO_REPLY_HERE = runtimeConfig().ENVIRONMENT === 'staging';
 
 type Config = typeof AiFeatureConfig._type;
 
@@ -298,7 +303,7 @@ export function AiConfigPage() {
             </ul>
           ) : (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {FEATURES.map((f) => {
+              {FEATURES.filter((f) => f.key !== 'autoReply' || AUTO_REPLY_HERE).map((f) => {
                 const enabled = draft[f.key] as boolean;
                 const Glyph = f.glyph;
                 return (
@@ -418,7 +423,7 @@ export function AiConfigPage() {
           </div>
         </section>
 
-        <KnowledgeBaseSection />
+        {AUTO_REPLY_HERE && <KnowledgeBaseSection />}
       </div>
     </div>
   );

@@ -21,6 +21,11 @@ const aiAdmin = vi.hoisted(() => ({
   getUsage: vi.fn(),
 }));
 vi.mock('../src/lib/ai-client.js', () => ({ aiAdmin }));
+// The parked auto-reply switch shows on STAGING only (owner, 2026-10-14).
+vi.mock('@yiji/shared-config', async (orig) => ({
+  ...(await orig<typeof import('@yiji/shared-config')>()),
+  runtimeConfig: () => ({ ENVIRONMENT: 'staging' }),
+}));
 
 import { AiConfigPage } from '../src/features/ai-config/AiConfigPage.js';
 
