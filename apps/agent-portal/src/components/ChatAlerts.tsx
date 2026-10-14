@@ -13,6 +13,10 @@ import type { BusyState } from '../lib/job-producer.js';
 
 /** Re-raise a still-unanswered chat's Windows notification once, after this. */
 const REPEAT_MS = 60_000;
+/** A banner on the inbox hides itself this long after the agent could see it. */
+const BANNER_MS = 10_000;
+/** At most this many banners stacked at once. */
+const MAX_BANNERS = 3;
 
 interface Alert {
   conversationId: string;
@@ -35,9 +39,16 @@ interface Tracked {
  * an alert that fires all day is an alert nobody reads. Directus decides what
  * this agent may read, so a chat outside their scope raises nothing.
  *
- * WHERE: the centre card whenever the portal is open (it waits there if the
- * agent is away), plus a Windows notification while the portal is not the
- * window in front. Opening the chat, or any agent replying, clears both.
+ * WHERE (owner, 2026-10-14):
+ *  - the portal is NOT the window in front (another tab, another program,
+ *    minimised): a Windows notification that stays until clicked, repeated
+ *    once after a minute if still unanswered;
+ *  - in the portal on any page but the INBOX: the centre card;
+ *  - on the INBOX, working in a chat: a WhatsApp-style banner at the top that
+ *    never blocks typing - the centre card there would interrupt a reply;
+ *  - on the inbox with THAT chat open: nothing, the message is on screen.
+ * What waits for the agent while they are away is shown the same way when
+ * they come back. Opening the chat, or any agent replying, clears it all.
  */
 export function ChatAlerts() {
   const { t } = useTranslation();
@@ -47,6 +58,27 @@ export function ChatAlerts() {
   const qc = useQueryClient();
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const tracked = useRef(new Map<string, Tracked>());
+  const onInbox = location.pathname === '/';
+  /* Is the portal the window in front? Banners only start their countdown
+     once the agent can actually see them. */
+  const [inFrontNow, setInFrontNow] = useState(
+    () =>
+      typeof document !== 'undefined' &&
+      document.visibilityState === 'visible' &&
+      document.hasFocus(),
+  );
+  useEffect(() => {
+    const update = () =>
+      setInFrontNow(document.visibilityState === 'visible' && document.hasFocus());
+    window.addEventListener('focus', update);
+    window.addEventListener('blur', update);
+    document.addEventListener('visibilitychange', update);
+    return () => {
+      window.removeEventListener('focus', update);
+      window.removeEventListener('blur', update);
+      document.removeEventListener('visibilitychange', update);
+    };
+  }, []);
 
   /* Handlers live in a socket subscription made once; refs keep them reading
      the current user, route and query cache. */
@@ -83,7 +115,8 @@ export function ChatAlerts() {
   // Opening the chat by any route is the answer to its alert.
   useEffect(() => {
     const id = openConv.current;
-    if (id && tracked.current.has(id)) clear(id);
+    // Unconditional: the tracking map resets when the subscription is remade.
+    if (id) clear(id);
   }, [location.search, clear]);
 
   useEffect(() => {
@@ -218,7 +251,7 @@ export function ChatAlerts() {
         if (!e?.conversationId || e.silent) return;
         // Somebody answered: the alert has done its job, on every screen.
         if (e.senderType === 'agent') {
-          if (tracked.current.has(e.conversationId)) clear(e.conversationId);
+          clear(e.conversationId);
           return;
         }
         if (e.senderType !== 'customer') return;
@@ -241,17 +274,89 @@ export function ChatAlerts() {
   }, [clear, qc, t]);
 
   useEffect(() => {
-    if (alerts.length === 0) return;
+    if (alerts.length === 0 || onInbox) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') dismissAll();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [alerts.length, dismissAll]);
+  }, [alerts.length, dismissAll, onInbox]);
+
+  // Inbox banners hide themselves once seen for BANNER_MS.
+  const bannerKey = onInbox && inFrontNow ? alerts.map((a) => a.conversationId).join(',') : '';
+  useEffect(() => {
+    if (!bannerKey) return;
+    const timers = bannerKey
+      .split(',')
+      .map((id) => window.setTimeout(() => dismissBanner(id), BANNER_MS));
+    return () => timers.forEach((x) => window.clearTimeout(x));
+  }, [bannerKey]);
+  /* Hides the banner only: the Windows reminder for an unanswered chat stays
+     armed, because a banner nobody clicked is not an answer. */
+  function dismissBanner(conversationId: string) {
+    setAlerts((list) => list.filter((a) => a.conversationId !== conversationId));
+  }
 
   const top = alerts[0];
   if (!top) return null;
   const more = alerts.length - 1;
+
+  if (onInbox) {
+    return (
+      <div
+        aria-live="polite"
+        className="pointer-events-none fixed end-4 top-16 z-[70] flex w-[min(24rem,calc(100vw-2rem))] flex-col gap-2"
+      >
+        {alerts.slice(0, MAX_BANNERS).map((a) => (
+          <div
+            key={a.conversationId}
+            role="status"
+            className="pointer-events-auto flex items-start gap-3 rounded-2xl bg-card p-3 shadow-2xl ring-1 ring-foreground/10 motion-safe:animate-slide-down-and-fade"
+          >
+            <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+              <InboxIcon size={16} aria-hidden />
+            </span>
+            <button
+              type="button"
+              onClick={() => open(a.conversationId)}
+              className="min-w-0 flex-1 text-start focus-visible:outline-none"
+            >
+              <div className="flex items-baseline gap-2">
+                <span className="truncate text-sm font-semibold text-foreground">{a.name}</span>
+                <span className="shrink-0 text-2xs font-semibold uppercase tracking-[0.1em] text-primary">
+                  {a.waiting
+                    ? t('chatAlerts.waitingLabel', { defaultValue: 'New chat waiting' })
+                    : t('chatAlerts.mineLabel', { defaultValue: 'New message' })}
+                </span>
+              </div>
+              <p
+                dir="auto"
+                className="mt-0.5 line-clamp-2 break-words text-xs text-muted-foreground"
+              >
+                {a.preview}
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => dismissBanner(a.conversationId)}
+              aria-label={t('chatAlerts.close', { defaultValue: 'Close' })}
+              className="shrink-0 rounded px-1 text-muted-foreground hover:text-foreground"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+        {alerts.length > MAX_BANNERS && (
+          <p className="pointer-events-auto self-end rounded-full bg-card px-3 py-1 text-xs text-muted-foreground shadow ring-1 ring-foreground/10">
+            {t('chatAlerts.more', {
+              defaultValue: '+{{n}} more waiting',
+              n: alerts.length - MAX_BANNERS,
+            })}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div
