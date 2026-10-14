@@ -20,6 +20,8 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+/** Who the chat in the fixture belongs to; null = a general (waiting) chat. */
+const owner = vi.hoisted(() => ({ current: 'me' as string | null }));
 const handlers = vi.hoisted(() => new Map<string, (e: unknown) => void>());
 vi.mock('../src/lib/socket.js', () => ({
   getSocket: vi.fn().mockResolvedValue({
@@ -35,7 +37,7 @@ vi.mock('../src/lib/directus.js', () => ({
             {
               id: 'c-1',
               status: 'open',
-              assigned_agent: 'me',
+              assigned_agent: owner.current,
               contact: { name: 'Sara Ahmed', phone: '0500000001' },
             },
           ]
@@ -70,6 +72,7 @@ async function customerWrites(conversationId = 'c-1') {
 }
 
 beforeEach(() => {
+  owner.current = 'me';
   handlers.clear();
   vi.spyOn(document, 'hasFocus').mockReturnValue(true);
 });
@@ -105,5 +108,20 @@ describe('ChatAlerts', () => {
       handlers.get('inbox:activity')?.({ conversationId: 'c-1', senderType: 'agent' });
     });
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  // WHO is told (owner, 2026-10-14): the assigned agent only; a general chat, everyone.
+  it('a chat assigned to ANOTHER agent alerts nobody else', async () => {
+    owner.current = 'someone-else';
+    renderAt('/tickets');
+    await customerWrites();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+  });
+
+  it('a general chat (no agent yet) alerts every agent', async () => {
+    owner.current = null;
+    renderAt('/tickets');
+    await customerWrites();
+    expect(screen.getByRole('alertdialog')).toHaveTextContent('New chat waiting');
   });
 });
