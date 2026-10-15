@@ -269,13 +269,35 @@ describe('admin agent performance — search and the three tabs', () => {
       'admin-agent-performance:v2',
       JSON.stringify({ filters: { agentId: 'a1' }, tab: 'tickets' }),
     );
-    renderPage();
+    renderPage('/agent-performance?tab=tickets');
     await waitFor(() =>
       expect(screen.getByRole('table', { name: 'Ticket by ticket' })).toBeInTheDocument(),
     );
     const read = calls('tickets').find((r) => !JSON.stringify(r.query).includes('"conversation"'))!;
     expect(JSON.stringify(read.query)).toContain(
       '{"_or":[{"assigned_agent":{"_eq":"a1"}},{"user_created":{"_eq":"a1"}}]}',
+    );
+  });
+
+  // Owner, 2026-10-15: Chats would not open - dropping ?tab fell back to the
+  // REMEMBERED tab (Tickets). With no ?tab the page is always on Chats.
+  it('Chats opens on click even when Tickets was the last tab used', async () => {
+    sessionStorage.setItem('admin-agent-performance:v2', JSON.stringify({ tab: 'tickets' }));
+    renderPage('/agent-performance?tab=tickets');
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Ticket by ticket' })).toBeInTheDocument(),
+    );
+    fireEvent.click(screen.getByRole('tab', { name: 'Chats' }));
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Chat by chat' })).toBeInTheDocument(),
+    );
+  });
+
+  it('opens on Chats by default, whatever tab was used last', async () => {
+    sessionStorage.setItem('admin-agent-performance:v2', JSON.stringify({ tab: 'coupons' }));
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('table', { name: 'Chat by chat' })).toBeInTheDocument(),
     );
   });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -155,8 +155,10 @@ describe('SlaReportsPage', () => {
     api.useSlaReports.mockReturnValue({ isLoading: true, data: undefined });
     renderPage();
     expect(screen.getByText('Ticket deadlines')).toBeInTheDocument();
-    // KPI strip / tables not rendered yet.
-    expect(screen.queryByText('Tickets')).not.toBeInTheDocument();
+    // The panels hold their place while loading (owner, 2026-10-15): the
+    // labels show with a dash, never a number that is not known yet.
+    const windowPanel = screen.getByRole('region', { name: 'Selected dates' });
+    expect(windowPanel.querySelectorAll('[data-kpi-value]')[0]!.textContent).toBe('–');
     // Spinner is a bordered span, not an svg — assert the ROLE it exposes,
     // which is what a screen reader is told and what cannot drift with the
     // styling.
@@ -202,7 +204,8 @@ describe('SlaReportsPage', () => {
     // ticket is raised out of a conversation that was already answered, so
     // judging its first response re-judged a reply made before it existed.
     // Only resolution is measured for tickets now.
-    expect(screen.queryByText('Pending')).toBeNull();
+    // (The Open tickets PANEL has a "Pending" figure; the table must not.)
+    expect(within(screen.getByRole('table')).queryByText('Pending')).toBeNull();
   });
 
   it('narrows to an explicit date range, which beats the rolling window', async () => {

@@ -151,10 +151,12 @@ export function AgentPerformancePage() {
   const [targetMin, setTargetMin] = useState(DEFAULT_TARGET_MIN);
 
   /* THE TAB LIVES IN THE URL (`?tab=tickets`), so a link opens that sub-page;
-     with none, the tab last open in this browser tab is restored. */
+     with none it is Chats (owner, 2026-10-15). The remembered tab is NOT
+     restored any more: clicking Chats drops `?tab`, and falling back to the
+     remembered Tickets then made Chats impossible to open. */
   const [params, setParams] = useSearchParams();
   const urlTab = params.get('tab');
-  const tab: PerformanceTab = isTab(urlTab) ? urlTab : isTab(saved?.tab) ? saved.tab : 'chats';
+  const tab: PerformanceTab = isTab(urlTab) ? urlTab : 'chats';
   const setTab = (next: PerformanceTab) =>
     setParams(
       (p) => {
