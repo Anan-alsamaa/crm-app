@@ -102,7 +102,7 @@ export function OpenTicketsSection() {
                 ))}
               </div>
 
-              <div className="grid max-w-6xl gap-3 lg:grid-cols-2">
+              <div className="grid gap-3 lg:grid-cols-2">
                 <BacklogTable
                   label={String(t('slaReports.open.byAgent', { defaultValue: 'By agent' }))}
                   nameHeader={String(t('slaReports.colAgent', { defaultValue: 'Agent' }))}

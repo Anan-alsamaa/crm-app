@@ -326,7 +326,6 @@ export function SlaReportsPage() {
                 ),
                 value: fmtPct(totals?.frPct ?? null),
                 tone: pctKpiTone(totals?.frPct ?? null),
-                ring: totals?.frPct ?? null,
               },
               {
                 label: String(
@@ -334,7 +333,6 @@ export function SlaReportsPage() {
                 ),
                 value: fmtPct(totals?.resPct ?? null),
                 tone: pctKpiTone(totals?.resPct ?? null),
-                ring: totals?.resPct ?? null,
               },
               {
                 label: String(t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })),
