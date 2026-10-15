@@ -469,6 +469,7 @@
     "anyStatus": "Any status",
     "statusLabel": "Status",
     "clearSearch": "Clear",
+    "emptyRange": "Showing tickets raised {{from}} to {{to}} (business days). Change the dates to see older ones.",
     "searchCount": "{{shown}} of {{total}} tickets",
     "orderToggle": "Order {{orderId}} details",
     "chatNotVisible": "This chat is assigned to another agent, so its files are not shown here.",

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readItems, readUsers } from '@directus/sdk';
@@ -36,12 +36,20 @@ import {
   moveColumn,
   reconcileColumnOrder,
   saveColumnOrder,
+  readChunked,
   toCsv,
 } from '@yiji/reports';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 import { TicketHistoryDrawer } from '../report-exports/TicketHistoryDrawer.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import {
+  compensatedItem,
+  isUndecided,
+  lateOrderKey,
+  noteCell,
+  type SnapshotItems,
+} from './compensation-cells.js';
 
 /**
  * The master record of every coupon the business has ever issued.
@@ -89,6 +97,10 @@ interface Row {
   brand_id: string | null;
   restaurant_id: string | null;
   item_name: string | null;
+  /** The picked line's sku — sometimes saved without its name. */
+  item_sku: string | null;
+  /** Why a withheld coupon was never sent — a note in all but name. */
+  delivery_excluded_reason: string | null;
   /**
    * The order this coupon is FOR, when no ticket carries it.
    *
@@ -102,6 +114,8 @@ interface Row {
   customer_phone: string | null;
   ticket: {
     order_id: string | null;
+    /** The order's lines — where Item comes from when none was picked. */
+    order_snapshot: SnapshotItems | null;
     store: {
       code: string | null;
       name: string | null;
@@ -155,6 +169,8 @@ export function useAllCoupons() {
               'brand_id',
               'restaurant_id',
               'item_name',
+              'item_sku',
+              'delivery_excluded_reason',
               // See the note on `order_id` above: without this the Order column
               // is empty for every coupon raised from a late order.
               'order_id',
@@ -162,7 +178,15 @@ export function useAllCoupons() {
               /* The BRANCH, not just its id: this report shows the store by
                  name, and `restaurant_id` is Yiji's numeric identifier that
                  nobody reading a compensation report can interpret. */
-              { ticket: ['order_id', { store: ['code', 'name', { brand: ['name'] }] }] },
+              {
+                ticket: [
+                  'order_id',
+                  // The order's lines: the Item column's fallback when the
+                  // agent picked no item (most coupons — see compensation-cells).
+                  'order_snapshot',
+                  { store: ['code', 'name', { brand: ['name'] }] },
+                ],
+              },
               { requested_by: ['id', 'first_name', 'email'] },
               { decided_by: ['id', 'first_name', 'email'] },
               { contact: ['name', 'phone'] },
@@ -170,6 +194,60 @@ export function useAllCoupons() {
           } as never,
         ),
       )) as unknown as Row[],
+  });
+}
+
+/**
+ * The order snapshot of each TICKETLESS coupon's late-order decision.
+ *
+ * A late-order coupon has no ticket, so its order lines live only on the
+ * `late_order_decisions` row for the same `order_id` — the Item column's
+ * source for those coupons. Chunked: one id per coupon is an `_in` filter that
+ * CloudFront answers with a 414 once the list grows (see `readChunked`).
+ *
+ * A failure here leaves those Item cells blank rather than failing the report.
+ */
+function useLateOrderSnapshots(orderIds: readonly string[]) {
+  const ids = useMemo(() => [...new Set(orderIds)].sort(), [orderIds]);
+  return useQuery({
+    queryKey: ['all-compensation-late-snapshots', ids],
+    enabled: ids.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const rows = await readChunked(
+        ids,
+        (chunk) =>
+          directus.request(
+            readItems(
+              'late_order_decisions' as never,
+              {
+                filter: { order_id: { _in: chunk } },
+                fields: ['order_id', 'action', 'order_snapshot'],
+                sort: ['-date_created'],
+                limit: -1,
+              } as never,
+            ) as never,
+          ) as Promise<
+            Array<{
+              order_id: string | null;
+              action: string | null;
+              order_snapshot: SnapshotItems | null;
+            }>
+          >,
+      );
+      const byOrder = new Map<string, SnapshotItems>();
+      /* The COMPENSATED decision first (it is the one the coupon came from),
+         then any other with lines; newest first within each. */
+      for (const pass of [true, false]) {
+        for (const r of rows) {
+          const key = r.order_id?.trim();
+          if (!key || byOrder.has(key) || !r.order_snapshot?.items?.length) continue;
+          if (pass && r.action !== 'compensated') continue;
+          byOrder.set(key, r.order_snapshot);
+        }
+      }
+      return byOrder;
+    },
   });
 }
 
@@ -327,6 +405,17 @@ export function AllCompensationPage() {
   const [dragKey, setDragKey] = useState<CompensationColumnKey | null>(null);
 
   const list = useMemo(() => rows.data ?? [], [rows.data]);
+  const lateKeys = useMemo(
+    () => list.map(lateOrderKey).filter((k): k is string => k !== null),
+    [list],
+  );
+  const lateSnapshots = useLateOrderSnapshots(lateKeys);
+  const lateData = lateSnapshots.data;
+  const itemOf = useCallback(
+    (r: Row) => compensatedItem(r, lateData?.get((r.order_id ?? r.ticket?.order_id ?? '').trim())),
+    [lateData],
+  );
+  const pendingLabel = String(t('compensationAll.notDecided', { defaultValue: 'Pending' }));
 
   /** Only names that actually appear — an empty filter option helps nobody. */
   const agents = useMemo(() => {
@@ -361,7 +450,7 @@ export function AllCompensationPage() {
           r.customer_phone,
           r.brand_id,
           r.restaurant_id,
-          r.item_name,
+          itemOf(r),
           r.ticket?.order_id,
           r.order_id,
           r.coupon_type,
@@ -373,7 +462,7 @@ export function AllCompensationPage() {
       }
       return true;
     });
-  }, [list, from, to, agent, status, query]);
+  }, [list, from, to, agent, status, query, itemOf]);
 
   /**
    * This report's own headline numbers, over the FILTERED set — a summary that
@@ -490,7 +579,7 @@ export function AllCompensationPage() {
     {
       key: 'item',
       label: t('coupons.itemShort', { defaultValue: 'Item' }),
-      get: (r) => r.item_name ?? '',
+      get: itemOf,
     },
     {
       key: 'issuing',
@@ -553,7 +642,8 @@ export function AllCompensationPage() {
     {
       key: 'decidedBy',
       label: t('compensationAll.decidedBy', { defaultValue: 'Approved by' }),
-      get: (r) => who(r.decided_by),
+      /* A pending coupon has no decider YET — say so instead of a gap. */
+      get: (r) => who(r.decided_by) || (isUndecided(r) ? pendingLabel : ''),
     },
     {
       key: 'raised',
@@ -563,7 +653,7 @@ export function AllCompensationPage() {
     {
       key: 'decidedAt',
       label: t('compensationAll.decidedAt', { defaultValue: 'Date' }),
-      get: (r) => formatDate(r.decided_at),
+      get: (r) => formatDate(r.decided_at) || (isUndecided(r) ? pendingLabel : ''),
     },
     {
       key: 'reason',
@@ -573,7 +663,11 @@ export function AllCompensationPage() {
     {
       key: 'note',
       label: t('compensationAll.note', { defaultValue: 'Note' }),
-      get: (r) => r.decision_note ?? '',
+      get: (r) =>
+        noteCell(r, {
+          pending: pendingLabel,
+          noNote: String(t('compensationAll.noNote', { defaultValue: 'No note' })),
+        }),
     },
   ];
 
@@ -967,7 +1061,7 @@ export function AllCompensationPage() {
                           }
                           // Free text is capped so one wordy complaint cannot
                           // push the terms off the side of the table.
-                          const wide = c.key === 'reason' || c.key === 'note';
+                          const wide = c.key === 'reason' || c.key === 'note' || c.key === 'item';
                           return (
                             <td
                               key={c.key}

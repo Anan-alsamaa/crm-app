@@ -60,6 +60,7 @@ import { WhatsAppReply } from './WhatsAppReply.js';
 import { ChangeHistory } from './ChangeHistory.js';
 import { exportTicketWorkbook } from './export-ticket.js';
 import {
+  defaultPerformanceRange,
   distinctValues,
   filterTickets,
   formatDuration,
@@ -149,6 +150,67 @@ const STATUS_DOT: Record<TicketStatus, string> = {
   solved: 'bg-success',
 };
 
+type TicketsRange = { from: string; to: string };
+
+const TICKETS_RANGE_PREFIX = 'agent-tickets:';
+
+/**
+ * THE TICKETS DATE RANGE, REMEMBERED THE WAY AGENT PERFORMANCE REMEMBERS ITS
+ * FILTERS (owner, 2026-10-07 / 2026-10-15).
+ *
+ * - Opens on `defaultPerformanceRange()`: yesterday's business day through
+ *   today's (business days turn at 08:00 Riyadh) — the app-wide default.
+ * - A CUSTOM range is kept per TAB (sessionStorage — sessions here are per
+ *   tab) and per signed-in user, so leaving the page and coming back keeps it.
+ * - The DEFAULT is never stored: someone who kept it gets the default again,
+ *   recomputed, so a tab left open overnight moves on with the day instead of
+ *   freezing on the dates it first opened with.
+ * - Signing out clears it (AuthContext.logout), so the next sign-in opens on
+ *   the default.
+ * Storage can be unavailable; then it simply starts fresh.
+ */
+function useTicketsRange(userId: string | undefined): TicketsRange & {
+  isCustom: boolean;
+  setFrom: (v: string) => void;
+  setTo: (v: string) => void;
+  reset: () => void;
+} {
+  const key = `${TICKETS_RANGE_PREFIX}${userId ?? 'anon'}`;
+  const [custom, setCustom] = useState<TicketsRange | null>(() => {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<TicketsRange>;
+      // Both halves or neither: half a range answers a different question.
+      if (typeof parsed.from !== 'string' || typeof parsed.to !== 'string') return null;
+      return { from: parsed.from, to: parsed.to };
+    } catch {
+      return null;
+    }
+  });
+  const range = custom ?? defaultPerformanceRange();
+  useEffect(() => {
+    try {
+      if (custom) sessionStorage.setItem(key, JSON.stringify(custom));
+      else sessionStorage.removeItem(key);
+    } catch {
+      /* private mode or full storage: the page still works, it just forgets */
+    }
+  }, [key, custom]);
+  const update = (next: TicketsRange) => {
+    const d = defaultPerformanceRange();
+    // Picking the default dates by hand is keeping the default.
+    setCustom(next.from === d.from && next.to === d.to ? null : next);
+  };
+  return {
+    ...range,
+    isCustom: custom !== null,
+    setFrom: (from) => update({ ...range, from }),
+    setTo: (to) => update({ ...range, to }),
+    reset: () => setCustom(null),
+  };
+}
+
 export function TicketsPage() {
   const { t } = useTranslation();
   const { user, isOwner, can } = useAuth();
@@ -183,8 +245,17 @@ export function TicketsPage() {
     [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim() ||
     user?.email ||
     t('complaints.you', { defaultValue: 'You' });
-  // No date window: a range here would quietly hide older tickets an agent
-  // still has to work. The export names itself accordingly.
+  /*
+   * A DATE WINDOW, BY DEFAULT YESTERDAY -> TODAY (owner, 2026-10-15).
+   *
+   * This page used to have none, on the grounds that a range would quietly
+   * hide older tickets an agent still has to work. The owner has now asked
+   * for the default range explicitly (for the CEO, applied to everyone), so
+   * the page opens on yesterday's business day through today's, and the empty
+   * state names the dates so a short list never reads as missing tickets.
+   * See `useTicketsRange` for how it is remembered.
+   */
+  const ticketsRange = useTicketsRange(user?.id);
   /*
    * WHOSE TICKETS (owner, 2026-09-30).
    *
@@ -206,7 +277,10 @@ export function TicketsPage() {
   const [scope, setScope] = useState<ComplaintScope>(
     isOwner || !can('can_be_assigned') ? 'all' : 'me',
   );
-  const complaints = useMyComplaints(null, agentName, scope);
+  const complaints = useMyComplaints(null, agentName, scope, {
+    from: ticketsRange.from,
+    to: ticketsRange.to,
+  });
   const agentOptions = useAgents();
   const { index: storeIndex } = useStoreIndex();
   const [selected, setSelected] = useState<string | null>(null);
@@ -518,8 +592,8 @@ export function TicketsPage() {
                     </span>
                     <DateField
                       size="sm"
-                      value={criteria.from ?? ''}
-                      onChange={(v) => setCriteria((c) => ({ ...c, from: v }))}
+                      value={ticketsRange.from}
+                      onChange={ticketsRange.setFrom}
                       aria-label={t('performance.from', { defaultValue: 'From' })}
                       className="w-full"
                     />
@@ -530,22 +604,27 @@ export function TicketsPage() {
                     </span>
                     <DateField
                       size="sm"
-                      value={criteria.to ?? ''}
-                      onChange={(v) => setCriteria((c) => ({ ...c, to: v }))}
+                      value={ticketsRange.to}
+                      onChange={ticketsRange.setTo}
                       aria-label={t('performance.to', { defaultValue: 'To' })}
                       className="w-full"
                     />
                   </label>
                 </div>
               </>
-              {!isEmptyFilter(criteria) && (
+              {(!isEmptyFilter(criteria) || ticketsRange.isCustom) && (
                 // Undo lives with the controls it undoes. The "what is the
                 // queue showing" count moved to the rail's foot, which shows
                 // it whether or not a filter is on — one count, one place.
                 <div className="flex justify-end">
                   <button
                     type="button"
-                    onClick={() => setCriteria({})}
+                    onClick={() => {
+                      setCriteria({});
+                      // Back to the default dates too: Clear puts the page back
+                      // the way it opened.
+                      ticketsRange.reset();
+                    }}
                     className="h-7 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
                   >
                     {t('tickets.clearSearch', { defaultValue: 'Clear' })}
@@ -710,6 +789,17 @@ export function TicketsPage() {
                           : t('tickets.emptyHint', {
                               defaultValue: 'Tickets are created from chats that need follow-up.',
                             })}
+                    </p>
+                    {/* The date window is the other filter that can hide
+                        everything; name it, so an empty page is not read as
+                        lost tickets (owner, 2026-10-15). */}
+                    <p className="text-xs text-muted-foreground">
+                      {t('tickets.emptyRange', {
+                        defaultValue:
+                          'Showing tickets raised {{from}} to {{to}} (business days). Change the dates to see older ones.',
+                        from: ticketsRange.from ? formatDate(ticketsRange.from) : '…',
+                        to: ticketsRange.to ? formatDate(ticketsRange.to) : '…',
+                      })}
                     </p>
                   </div>
                 </div>
