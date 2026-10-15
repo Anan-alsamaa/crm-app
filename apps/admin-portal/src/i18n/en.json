@@ -964,7 +964,7 @@
     "chipSolved": "Solved",
     "chipWaiting": "Chats waiting",
     "heatmap": "Weekly activity",
-    "heatmapHint": "Last six weeks. A darker cell is a busier day.",
+    "heatmapHint": "Last six weeks — a darker cell is a busier day.",
     "funnel": "Tickets funnel",
     "funnelHint": "Each stage against everything logged in range.",
     "funnelLogged": "Logged",
@@ -994,13 +994,7 @@
     "outOfFive": "/ 5",
     "avgBasis": "{{rated}} ratings · {{pct}}% rated 4 or 5",
     "notRatedYet": "No ratings yet",
-    "ratedNone": "Customers have not rated these yet",
-    "vsLastMonth": "vs last month",
-    "progress": "Ticket progress",
-    "progressHint": "Solved and still open, in the selected range.",
-    "progressSolved": "solved",
-    "legendSolved": "Solved",
-    "legendOpen": "Open"
+    "ratedNone": "Customers have not rated these yet"
   },
   "performance": {
     "title": "Agent performance",

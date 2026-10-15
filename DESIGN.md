@@ -93,26 +93,6 @@ avatar hues are part of the vibrancy. Outside conversation surfaces the
 restrained rules still apply: CTAs default to near-black
 (`--foreground`), decorative color stays banned.
 
-### Dashboard 2026-10-15 — one hero tile, bento cards, motion (owner)
-
-The owner asked for a "modern, sleek and dynamic" dashboard after a bento
-SaaS reference. The building blocks live in
-`apps/admin-portal/src/components/dash/Dash.tsx` and are the pattern for every
-admin page that adopts it:
-
-- **One HERO tile per row** in the deep indigo gradient (`HERO_SURFACE`) with
-  white ink; every other tile stays white with an ink numeral (the rule below
-  still holds for them). Not a coloured tile per metric - that is the
-  "childish" failure below.
-- Every tile that leads somewhere carries a **round arrow button** and the
-  whole tile is the target.
-- **Pill columns on a hatched track** (`PillColumns`, `HATCH`), the tallest in
-  the hero colour with its value in a bubble; a **semicircle gauge** (`Gauge`)
-  for a share; **bento cards** (`BentoCard`, radius 1.4rem) side by side.
-- **Motion** via the `motion` package: staggered spring entrance, counting
-  numbers, growing bars. Always `useReducedMotion`-aware; numbers render final
-  when motion or IntersectionObserver is unavailable.
-
 ### KPI tiles — colour as accent, never as surface (settled 2026-08-04)
 
 The canonical stat/KPI tile is a **white card, ink numeral, coloured
