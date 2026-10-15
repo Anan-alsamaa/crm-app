@@ -1,20 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import {
-  Avatar,
-  ClockIcon,
-  InboxIcon,
-  Pill,
-  ShieldIcon,
-  Spinner,
-  Table,
-  TableSurface,
-  Td,
-  Th,
-  Tr,
-  ZapIcon,
-} from '@yiji/ui';
+import { Avatar, Pill, Table, TableSurface, Td, Th, Tr } from '@yiji/ui';
 import { DUE_SOON_HOURS, useOpenTicketStats, type OpenBacklogRow } from './open-tickets.js';
-import { Kpi } from './KpiTile.js';
+import { StatPanel } from './KpiTile.js';
 
 const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructive'> = {
   low: 'muted',
@@ -31,6 +18,53 @@ const PRIORITY_TONE: Record<string, 'muted' | 'neutral' | 'warning' | 'destructi
  * numbers that does not move when the dates change reads as broken unless it
  * explains itself.
  */
+/**
+ * The live backlog as one panel (owner, 2026-10-15): four figures, a one-line
+ * note. Sits beside the date-range panel; the breakdown stays below.
+ */
+export function OpenTicketsPanel() {
+  const { t } = useTranslation();
+  const q = useOpenTicketStats();
+  const d = q.data;
+  return (
+    <StatPanel
+      id="sla-open-tickets"
+      title={String(t('slaReports.open.title', { defaultValue: 'Open tickets' }))}
+      note={String(
+        t('slaReports.open.noteShort', { defaultValue: 'Still pending right now, from any date.' }),
+      )}
+      loading={q.isLoading || !d}
+      cells={[
+        {
+          label: String(t('slaReports.open.kpiPending', { defaultValue: 'Pending' })),
+          value: String(d?.total ?? 0),
+          tone: 'blue',
+        },
+        {
+          label: String(t('slaReports.open.kpiOverdue', { defaultValue: 'Overdue' })),
+          value: String(d?.overdue ?? 0),
+          tone: (d?.overdue ?? 0) > 0 ? 'crimson' : 'green',
+        },
+        {
+          label: String(
+            t('slaReports.open.kpiDueSoon', {
+              hours: DUE_SOON_HOURS,
+              defaultValue: 'Due within {{hours}}h',
+            }),
+          ),
+          value: String(d?.dueSoon ?? 0),
+          tone: 'amber',
+        },
+        {
+          label: String(t('slaReports.open.kpiNoDeadline', { defaultValue: 'No deadline' })),
+          value: String(d?.noDeadline ?? 0),
+          tone: 'green',
+        },
+      ]}
+    />
+  );
+}
+
 export function OpenTicketsSection() {
   const { t } = useTranslation();
   const q = useOpenTicketStats();
@@ -41,26 +75,10 @@ export function OpenTicketsSection() {
 
   return (
     <section
-      aria-labelledby="sla-open-tickets"
+      aria-label={String(t('slaReports.open.title', { defaultValue: 'Open tickets' }))}
       className="sticky start-0 w-[var(--pin-w,100%)] space-y-3"
     >
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h2 id="sla-open-tickets" className="text-sm font-semibold tracking-tight text-foreground">
-          {t('slaReports.open.title', { defaultValue: 'Open tickets' })}
-        </h2>
-        <p className="min-w-0 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-          {t('slaReports.open.note', {
-            defaultValue:
-              'Every ticket still pending, as of now — not limited to the dates below, because a ticket raised months ago and still unsolved is open work today.',
-          })}
-        </p>
-      </div>
-
-      {q.isLoading ? (
-        <div className="flex h-16 items-center justify-center">
-          <Spinner />
-        </div>
-      ) : !d ? (
+      {q.isLoading ? null : !d ? (
         <p className="rounded-xl bg-secondary/50 px-4 py-3 text-xs text-muted-foreground">
           {t('slaReports.open.failed', {
             defaultValue: 'The open-ticket figures could not be loaded. Refresh to try again.',
@@ -68,38 +86,6 @@ export function OpenTicketsSection() {
         </p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <Kpi
-              label={String(t('slaReports.open.kpiPending', { defaultValue: 'Pending' }))}
-              value={String(d.total)}
-              tone="blue"
-              icon={<InboxIcon size={18} />}
-            />
-            <Kpi
-              label={String(t('slaReports.open.kpiOverdue', { defaultValue: 'Overdue' }))}
-              value={String(d.overdue)}
-              tone={d.overdue > 0 ? 'crimson' : 'green'}
-              icon={<ShieldIcon size={18} />}
-            />
-            <Kpi
-              label={String(
-                t('slaReports.open.kpiDueSoon', {
-                  hours: DUE_SOON_HOURS,
-                  defaultValue: 'Due within {{hours}}h',
-                }),
-              )}
-              value={String(d.dueSoon)}
-              tone="amber"
-              icon={<ClockIcon size={18} />}
-            />
-            <Kpi
-              label={String(t('slaReports.open.kpiNoDeadline', { defaultValue: 'No deadline' }))}
-              value={String(d.noDeadline)}
-              tone="green"
-              icon={<ZapIcon size={18} />}
-            />
-          </div>
-
           {d.total > 0 && (
             <>
               {/* By priority as counted pills: four numbers are a line to read,

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { cn, type MetricTone } from '@yiji/ui';
+import { cn, ProgressRing, type MetricTone } from '@yiji/ui';
 
 /*
  * The Ticket deadlines report's own tile, shared by BOTH stat rows (owner,
@@ -116,5 +116,89 @@ export function Kpi({
       </div>
       {visual && <div className="ms-auto shrink-0">{visual}</div>}
     </div>
+  );
+}
+
+/*
+ * ONE PANEL, FOUR FIGURES (owner, 2026-10-15: "the 2 cards and everything look
+ * very weird ... needs to be beautiful"). The page's two stat groups sit side
+ * by side as two calm panels instead of two stacked rows of tinted tiles with
+ * a paragraph over each. The tone colours only the NUMBER and its dot.
+ */
+export interface StatCell {
+  label: string;
+  value: string;
+  tone?: KpiTone;
+  /** A small ring beside the number, for the % figures. */
+  ring?: number | null;
+}
+
+export function StatPanel({
+  id,
+  title,
+  note,
+  aside,
+  cells,
+  loading,
+}: {
+  id: string;
+  title: string;
+  note: string;
+  /** Right of the title: a date chip, an info hint. */
+  aside?: ReactNode;
+  cells: StatCell[];
+  loading?: boolean;
+}) {
+  return (
+    <section
+      aria-labelledby={id}
+      className="flex flex-col rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]"
+    >
+      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+        <div className="min-w-0">
+          <h2 id={id} className="text-sm font-semibold tracking-tight text-foreground">
+            {title}
+          </h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
+        </div>
+        {aside && <div className="flex shrink-0 items-center gap-2">{aside}</div>}
+      </header>
+      <div className="mt-4 grid grid-cols-2 gap-y-4 sm:grid-cols-4 sm:divide-x sm:divide-border rtl:sm:divide-x-reverse">
+        {cells.map((c) => (
+          <div key={c.label} className="flex min-w-0 items-center gap-3 sm:px-4 sm:first:ps-0">
+            <div className="min-w-0">
+              <div
+                data-kpi-value
+                className={cn(
+                  'text-2xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
+                  loading ? 'text-muted-foreground/40' : KPI_NUMERAL[c.tone ?? 'blue'],
+                )}
+              >
+                {loading ? '–' : c.value}
+              </div>
+              <div
+                data-kpi-label
+                className="mt-1.5 flex min-w-0 items-center gap-1.5 text-2xs font-medium text-muted-foreground"
+              >
+                <span
+                  aria-hidden
+                  className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[c.tone ?? 'blue'])}
+                />
+                <span className="truncate">{c.label}</span>
+              </div>
+            </div>
+            {!loading && c.ring != null && (
+              <ProgressRing
+                className="ms-auto hidden xl:block"
+                value={c.ring}
+                size={36}
+                stroke={4}
+                tone={RING_TONE[c.tone ?? 'blue']}
+              />
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }

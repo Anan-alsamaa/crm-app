@@ -4,15 +4,13 @@ import { ColumnScroller } from '../../components/ColumnScroller.js';
 import { useTranslation } from 'react-i18next';
 import {
   Avatar,
-  ClockIcon,
+  InfoIcon,
   cn,
   EmptyState,
   ExportButtons,
   formatDateTime,
   Pill,
-  ProgressRing,
   SelectMenu,
-  ShieldIcon,
   Spinner,
   pageCountOf,
   Table,
@@ -23,7 +21,6 @@ import {
   Th,
   TicketIcon,
   Tr,
-  ZapIcon,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
 import { exportCsv, reportFilename, type CsvColumn } from '@yiji/reports';
@@ -31,8 +28,8 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 import { defaultReportRange, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { TicketStatus } from '@yiji/shared-types';
-import { OpenTicketsSection } from './OpenTicketsSection.js';
-import { Kpi, RING_TONE, pctKpiTone } from './KpiTile.js';
+import { OpenTicketsPanel, OpenTicketsSection } from './OpenTicketsSection.js';
+import { StatPanel, pctKpiTone } from './KpiTile.js';
 
 /* These reports open on the LAST 30 DAYS, not today's business day: one day of
    KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
@@ -286,9 +283,68 @@ export function SlaReportsPage() {
           </p>
         </div>
 
-        {/* The live backlog first — what is still pending NOW — then the
-            window's deadline report below it (owner, 2026-10-07). Outside the
-            loading branch: it has its own query and its own date rules. */}
+        {/* TWO PANELS SIDE BY SIDE (owner, 2026-10-15: the two stacked rows of
+            tiles, each under its own paragraph, "look very weird"). Left: what
+            is pending right now, from any date. Right: the date range's
+            deadline figures. The long explanation is behind the info mark. */}
+        <div className="sticky start-0 mt-3 grid w-[var(--pin-w,100%)] gap-3 lg:grid-cols-2">
+          <OpenTicketsPanel />
+          <StatPanel
+            id="sla-window"
+            title={String(t('slaReports.windowTitleShort', { defaultValue: 'Selected dates' }))}
+            note={String(
+              t('slaReports.windowNoteShort', {
+                defaultValue:
+                  'Tickets raised in the From - To range below, against their deadline.',
+              }),
+            )}
+            aside={
+              <span
+                tabIndex={0}
+                role="note"
+                title={String(
+                  t('slaReports.scopeNote', {
+                    defaultValue:
+                      'One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure conversations, not tickets, so their numbers are not these ones.',
+                  }),
+                )}
+                className="grid h-7 w-7 cursor-help place-items-center rounded-full text-muted-foreground ring-1 ring-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <InfoIcon size={14} />
+              </span>
+            }
+            loading={report.isLoading || !report.data}
+            cells={[
+              {
+                label: String(t('slaReports.kpiTickets', { defaultValue: 'Tickets' })),
+                value: String(totals?.tickets ?? 0),
+                tone: 'blue',
+              },
+              {
+                label: String(
+                  t('slaReports.kpiFirstResponse', { defaultValue: 'Chat first response' }),
+                ),
+                value: fmtPct(totals?.frPct ?? null),
+                tone: pctKpiTone(totals?.frPct ?? null),
+                ring: totals?.frPct ?? null,
+              },
+              {
+                label: String(
+                  t('slaReports.kpiResolution', { defaultValue: 'Ticket time to solve' }),
+                ),
+                value: fmtPct(totals?.resPct ?? null),
+                tone: pctKpiTone(totals?.resPct ?? null),
+                ring: totals?.resPct ?? null,
+              },
+              {
+                label: String(t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })),
+                value: String(resolutionBreaches),
+                tone: resolutionBreaches > 0 ? 'crimson' : 'green',
+              },
+            ]}
+          />
+        </div>
+        {/* The backlog's breakdown (by priority, agent, brand) under the panels. */}
         <div className="mt-3">
           <OpenTicketsSection />
         </div>
@@ -307,83 +363,6 @@ export function SlaReportsPage() {
           />
         ) : (
           <div className="mt-3 w-max min-w-full space-y-3 pb-4 sm:pb-5">
-            {/* KPI strip — the % tiles carry a progress ring, boards-style: the
-                numeral stays the reading, the arc makes the shortfall visible
-                at a glance. */}
-            {/* Row 2 of 2, with its own heading (owner, 2026-10-14): the same
-                tile and grid as "Open tickets" above, so the columns line up,
-                and a title so it reads as the DATE RANGE's figures rather than
-                a second copy of the first row. */}
-            <div className="sticky start-0 w-[var(--pin-w,100%)] space-y-3 pt-3">
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-border pt-4">
-                <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                  {t('slaReports.windowTitle', { defaultValue: 'Deadlines in the selected dates' })}
-                </h2>
-                <p className="min-w-0 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-                  {t('slaReports.windowNote', {
-                    defaultValue:
-                      'Tickets raised between From and To below, judged against their deadline.',
-                  })}
-                </p>
-              </div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Kpi
-                  label={t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
-                  value={String(totals?.tickets ?? 0)}
-                  tone="blue"
-                  icon={<TicketIcon size={18} />}
-                />
-                <Kpi
-                  label={t('slaReports.kpiFirstResponse', {
-                    defaultValue: 'Chat first response',
-                  })}
-                  value={fmtPct(totals?.frPct ?? null)}
-                  tone={pctKpiTone(totals?.frPct ?? null)}
-                  icon={<ZapIcon size={18} />}
-                  visual={
-                    totals?.frPct != null ? (
-                      <ProgressRing
-                        value={totals.frPct}
-                        tone={RING_TONE[pctKpiTone(totals.frPct)]}
-                      />
-                    ) : undefined
-                  }
-                />
-                <Kpi
-                  label={t('slaReports.kpiResolution', { defaultValue: 'Ticket time to solve' })}
-                  value={fmtPct(totals?.resPct ?? null)}
-                  tone={pctKpiTone(totals?.resPct ?? null)}
-                  icon={<ClockIcon size={18} />}
-                  visual={
-                    totals?.resPct != null ? (
-                      <ProgressRing
-                        value={totals.resPct}
-                        tone={RING_TONE[pctKpiTone(totals.resPct)]}
-                      />
-                    ) : undefined
-                  }
-                />
-                <Kpi
-                  label={t('slaReports.kpiBreaches', { defaultValue: 'Breaches' })}
-                  value={String(resolutionBreaches)}
-                  tone={resolutionBreaches > 0 ? 'crimson' : 'green'}
-                  icon={<ShieldIcon size={18} />}
-                />
-              </div>
-            </div>
-
-            {/* Says which question this report answers and which it does not.
-                Three surfaces now report response times — this one, Agent KPI,
-                and Agent performance — and the numbers will never match,
-                because they measure different things over different objects.
-                An unlabelled discrepancy reads as a bug in whichever one the
-                reader trusts least. */}
-            <p className="rounded-xl bg-secondary/50 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-              {t('slaReports.scopeNote', {
-                defaultValue:
-                  'One row per TICKET, judged against the deadline its SLA policy promised. Use it to find the breaches and who held them. For a per-agent rollup with CSAT see Agent KPI; for chat response times see Agent performance — those measure conversations, not tickets, so their numbers are not these ones.',
-              })}
-            </p>
             {/* ONE table. This page used to toggle between a per-agent view and a
                 per-ticket view, and the per-agent one duplicated the Agent KPI
                 report. SLA performance is about which TICKETS met their promise,
