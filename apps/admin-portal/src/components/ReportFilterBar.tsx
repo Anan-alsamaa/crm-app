@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, DateField, Input, SelectMenu } from '@yiji/ui';
-import { todayBusinessDay } from '../lib/date-range.js';
+import { defaultReportRange } from '../lib/date-range.js';
 import {
   clearReportVendor,
   ReportVendorFilter,
@@ -82,7 +82,7 @@ export interface ReportFilterBarProps {
    * The range's own defaults, so the bar can tell "changed" from "untouched".
    *
    * OPTIONAL, and normally omitted: every report in this portal opens on
-   * `lastMonth()`, so the bar computes that itself. Pass these only for a report
+   * `defaultReportRange()` (yesterday to today), so the bar computes that itself. Pass these only for a report
    * whose range starts elsewhere, or Clear would offer to reset a range already
    * at its default.
    */
@@ -161,7 +161,7 @@ export function ReportFilterBar({
    * mount: re-deriving it every render would make Clear appear and vanish as
    * the business day rolled over at 08:00.
    */
-  const [fallbackRange] = useState(() => todayBusinessDay());
+  const [fallbackRange] = useState(() => defaultReportRange());
 
   useEffect(() => setDraftSearch(search), [search]);
   useEffect(() => setDraftFrom(from), [from]);

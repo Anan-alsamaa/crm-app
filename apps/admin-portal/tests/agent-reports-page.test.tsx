@@ -527,14 +527,15 @@ describe('AgentReportsPage — shell', () => {
     expect(range.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(range.to).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const days = (Date.parse(range.to) - Date.parse(range.from)) / 86_400_000;
-    expect(days).toBeCloseTo(30, 0);
+    // Yesterday to today since 2026-10-15 (business days).
+    expect(days).toBeLessThanOrEqual(1);
   });
 
   it('remembers the range you last looked at', () => {
     // Somebody working a month-end across four reports typed the same two dates
     // four times, then typed them again after a refresh.
     window.localStorage.setItem(
-      'sara.reports.range',
+      'sara.reports.range:v2',
       JSON.stringify({ from: '2026-01-05', to: '2026-02-05' }),
     );
     api.useAgentReportData.mockReturnValue(ok);
@@ -571,10 +572,10 @@ describe('AgentReportsPage — shell', () => {
      */
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('agents');
-    // The fallback range IS the last 30 days, so the control says so rather
+    // The fallback range IS yesterday-to-today (2026-10-15), so the control says so rather
     // than describing a period nobody chose as "Quick range".
     const combo = screen.getByRole('combobox', { name: 'Date range' });
-    expect(combo).toHaveTextContent('Last 30 days');
+    expect(combo).toHaveTextContent('Yesterday and today');
 
     await userEvent.click(combo);
     await userEvent.click(screen.getByText('Last 90 days'));
@@ -658,7 +659,9 @@ describe('AgentReportsPage — tickets report', () => {
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     expect(dl.blobs[0]!.size).toBeGreaterThan(0);
-    expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last 30 days\) - \d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(dl.names[0]).toMatch(
+      /^Sara CRM - Tickets \(last \d+ days?\) - \d{4}-\d{2}-\d{2}\.xlsx$/,
+    );
     dl.restore();
   });
 
@@ -676,7 +679,7 @@ describe('AgentReportsPage — tickets report', () => {
     // tickets ALONGSIDE the customer's order, so hiding that behind a toggle
     // made the report's whole purpose opt-in.
     expect(screen.queryByRole('checkbox', { name: /Include order data/ })).not.toBeInTheDocument();
-    expect(api.useTicketOrders).toHaveBeenLastCalledWith(['c1', 'c2'], true, 30);
+    expect(api.useTicketOrders).toHaveBeenLastCalledWith(['c1', 'c2'], true, expect.any(Number));
     expect(await screen.findByText('Restaurant')).toBeInTheDocument();
     expect(screen.getByText('La Casa — Riyadh')).toBeInTheDocument();
   });
@@ -752,7 +755,9 @@ describe('AgentReportsPage — agent KPI report', () => {
     expect(firstAgent()).toBe('Unassigned');
 
     await userEvent.click(screen.getByText('Export CSV (2)'));
-    expect(dl.names[0]).toMatch(/^Sara CRM - Agent KPI \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/);
+    expect(dl.names[0]).toMatch(
+      /^Sara CRM - Agent KPI \(last \d+ days?\) - \d{4}-\d{2}-\d{2}\.csv$/,
+    );
     // The file IS the table: same columns, same headings, same order — and the
     // sort the reader just applied is the order the rows come out in.
     const lines = await csvText(dl.blobs[0]!);
@@ -865,7 +870,7 @@ describe('AgentReportsPage — conversation status report', () => {
     await userEvent.click(screen.getByText('Export CSV (1)'));
     expect(dl.blobs).toHaveLength(1);
     expect(dl.names[0]).toMatch(
-      /^Sara CRM - Conversations \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/,
+      /^Sara CRM - Conversations \(last \d+ days?\) - \d{4}-\d{2}-\d{2}\.csv$/,
     );
     const lines = await csvText(dl.blobs[0]!);
     expect(lines[0]).toBe('Customer,Phone,Status,Priority,Agent,Started by,Order,Last message');
@@ -922,7 +927,7 @@ describe('AgentReportsPage — ticket breakdown: typed dates fetch', () => {
    */
   it('widens the fetched range when the typed dates go beyond it', async () => {
     window.localStorage.setItem(
-      'sara.reports.range',
+      'sara.reports.range:v2',
       JSON.stringify({ from: '2026-09-05', to: '2026-10-05' }),
     );
     api.useAgentReportData.mockReturnValue(ok);
@@ -942,7 +947,7 @@ describe('AgentReportsPage — ticket breakdown: typed dates fetch', () => {
 
   it('does not refetch for dates inside the loaded window', async () => {
     window.localStorage.setItem(
-      'sara.reports.range',
+      'sara.reports.range:v2',
       JSON.stringify({ from: '2026-09-05', to: '2026-10-05' }),
     );
     api.useAgentReportData.mockReturnValue(ok);
@@ -1102,7 +1107,7 @@ describe('AgentReportsPage — ticket breakdown', () => {
     // it is clicked rather than checked by hand afterwards.
     await userEvent.click(screen.getByText('Export CSV (3)'));
     expect(dl.blobs).toHaveLength(1);
-    expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last 30 days\) - \d{4}-\d{2}-\d{2}\.csv$/);
+    expect(dl.names[0]).toMatch(/^Sara CRM - Tickets \(last \d+ days?\) - \d{4}-\d{2}-\d{2}\.csv$/);
 
     const lines = await csvText(dl.blobs[0]!);
     // The header is the visible table's header, in the order the reader

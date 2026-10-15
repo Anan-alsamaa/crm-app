@@ -40,7 +40,8 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 function stored(from: string, to: string) {
-  localStorage.setItem(KEY, JSON.stringify({ from, to }));
+  // The hook reads the v2 key since the 2026-10-15 default change.
+  localStorage.setItem(`${KEY}:v2`, JSON.stringify({ from, to }));
   return renderHook(() => useRememberedRange(KEY)).result.current;
 }
 

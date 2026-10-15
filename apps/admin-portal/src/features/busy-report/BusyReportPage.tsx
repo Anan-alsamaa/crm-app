@@ -22,7 +22,7 @@ import { formatDuration } from '@yiji/reports';
 import { exportFileName } from '@yiji/shared-config';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
-import { lastMonth, useRememberedRange } from '../../lib/date-range.js';
+import { defaultReportRange, useRememberedRange } from '../../lib/date-range.js';
 import { busyReport } from '../../lib/job-producer.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useUsers } from '../users/api.js';
@@ -44,7 +44,10 @@ type View = 'agents' | 'periods';
 
 export function BusyReportPage() {
   const { t } = useTranslation();
-  const { from, to, setFrom, setTo, reset } = useRememberedRange('busy-report-range', lastMonth);
+  const { from, to, setFrom, setTo, reset } = useRememberedRange(
+    'busy-report-range',
+    defaultReportRange,
+  );
   const [agent, setAgent] = useState('');
   /* By ROLE too (owner, 2026-10-13): the Administrator, WeCare Supervisor,
      WeCare Admin... - each agent's CURRENT role. */

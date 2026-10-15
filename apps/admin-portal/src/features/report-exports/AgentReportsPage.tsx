@@ -65,7 +65,7 @@ import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { ColumnScroller } from '../../components/ColumnScroller.js';
 import { ColumnArranger } from '../../components/ColumnArranger.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-import { lastMonth, useRememberedRange, isoDay } from '../../lib/date-range.js';
+import { defaultReportRange, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
@@ -115,7 +115,7 @@ export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
 /* These reports open on the LAST 30 DAYS, not today's business day: one day of
    KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
    bar's Clear button and the range hook agree about what "untouched" means. */
-const MANAGER_DEFAULT = lastMonth();
+const MANAGER_DEFAULT = defaultReportRange();
 
 const RANGE_DAYS = [7, 30, 90, 365] as const;
 
@@ -159,6 +159,9 @@ function RangePreset({ range }: RangeProps): JSX.Element {
    */
   const active = useMemo(() => {
     if (!range.from || !range.to) return '';
+    // The application default (owner, 2026-10-15) has its own name.
+    const def = defaultReportRange();
+    if (range.from === def.from && range.to === def.to) return 'default';
     if (range.to !== isoDay(new Date())) return '';
     const days = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
     return RANGE_DAYS.includes(days as (typeof RANGE_DAYS)[number]) ? String(days) : '';
@@ -172,6 +175,10 @@ function RangePreset({ range }: RangeProps): JSX.Element {
         // The placeholder is not a period: re-picking it should leave the
         // dates alone rather than silently resetting them to today..today.
         if (!v) return;
+        if (v === 'default') {
+          range.setRange(defaultReportRange());
+          return;
+        }
         const n = Number(v);
         const now = new Date();
         range.setRange({
@@ -182,6 +189,10 @@ function RangePreset({ range }: RangeProps): JSX.Element {
       aria-label={t('agentReports.range', { defaultValue: 'Date range' })}
       options={[
         { value: '', label: t('agentReports.presets', { defaultValue: 'Quick range' }) },
+        {
+          value: 'default',
+          label: t('agentReports.yesterdayToday', { defaultValue: 'Yesterday and today' }),
+        },
         ...RANGE_DAYS.map((d) => ({
           value: String(d),
           label: t('agentReports.lastDays', {
@@ -3009,7 +3020,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
     setTo,
     setRange,
     reset: resetRange,
-  } = useRememberedRange('sara.reports.range', lastMonth);
+  } = useRememberedRange('sara.reports.range', defaultReportRange);
   const report = useAgentReportData(
     0,
     {

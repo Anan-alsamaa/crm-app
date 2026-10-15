@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { businessDay } from '@yiji/shared-types';
+import { defaultPerformanceRange } from '@yiji/reports';
+
+/**
+ * THE APPLICATION'S DEFAULT REPORT RANGE (owner, 2026-10-15): from YESTERDAY
+ * to TODAY, for every report and every role - business days, as Agent
+ * performance already did (a business day turns at 08:00 Riyadh).
+ */
+export function defaultReportRange(): DateRange {
+  return defaultPerformanceRange();
+}
 
 /**
  * A from/to range that remembers what you last looked at.
@@ -130,6 +140,10 @@ function read(key: string): DateRange | null {
   }
 }
 
+/* v2 (2026-10-15): the default became yesterday -> today; ranges stored under
+   the old keys belonged to the old default, so they are left behind once. */
+const versioned = (key: string): string => `${key}:v2`;
+
 export function useRememberedRange(
   key: string,
   /**
@@ -141,7 +155,7 @@ export function useRememberedRange(
    * day of KPIs is not a measure of anything. Both interpret their From/To as
    * business days; only the opening window differs.
    */
-  fallback: () => DateRange = todayBusinessDay,
+  fallback: () => DateRange = defaultReportRange,
 ): {
   from: string;
   to: string;
@@ -152,7 +166,7 @@ export function useRememberedRange(
   reset: () => void;
 } {
   const [range, setRangeState] = useState<DateRange>(() => {
-    const stored = read(key);
+    const stored = read(versioned(key));
     /* The caller's default. A stored range still wins — a reader who chose a
        window keeps it. */
     return stored ? rollForward(stored) : fallback();
@@ -160,7 +174,7 @@ export function useRememberedRange(
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(key, JSON.stringify(range));
+      window.localStorage.setItem(versioned(key), JSON.stringify(range));
     } catch {
       // A browser refusing to store it is not a reason to refuse to show it.
     }
@@ -176,7 +190,7 @@ export function useRememberedRange(
        started on. */
     setRangeState(fallback());
     try {
-      window.localStorage.removeItem(key);
+      window.localStorage.removeItem(versioned(key));
     } catch {
       /* nothing to undo */
     }

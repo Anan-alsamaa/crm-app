@@ -452,7 +452,8 @@ export function countUnmappedComplaints(rows: ComplaintReportRow[]): number {
 export function reportFilename(base: string, days: number, ext = 'xlsx'): string {
   const today = new Date().toISOString().slice(0, 10);
   const subject = base.replace(/[/:*?"<>|\\]/g, ' ').trim();
-  return `Sara CRM - ${subject} (last ${days} days) - ${today}.${ext}`;
+  // "last 1 day", not "last 1 days" (the default became yesterday-today, 2026-10-15).
+  return `Sara CRM - ${subject} (last ${days} ${days === 1 ? 'day' : 'days'}) - ${today}.${ext}`;
 }
 
 /** Local `YYYY-MM-DD` + `HH:mm` for a ticket's creation timestamp. */

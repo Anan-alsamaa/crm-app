@@ -39,7 +39,7 @@ import {
   StatCard,
   TrendPill,
 } from '../../components/dash/Dash.js';
-import { lastMonth } from '../../lib/date-range.js';
+import { defaultReportRange } from '../../lib/date-range.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 
 /**
@@ -731,13 +731,13 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
    *
    * Empty filters meant "every ticket ever", fetched in full on every open.
    * That was tolerable at 75 tickets and is not at 7,987 after the history
-   * import. The reports already open on the last month (`lastMonth`, see
+   * import. The reports already open on the last month (`defaultReportRange`, see
    * lib/date-range.ts); the dashboard now does the same, and "All" is still one
    * click away on the year pills for anyone who wants the whole history.
    */
   const [opening] = useState<ComplaintFilters>(() => ({
     ...emptyComplaintFilters,
-    ...lastMonth(),
+    ...defaultReportRange(),
   }));
   const [draft, setDraft] = useState<ComplaintFilters>(opening);
   const [applied, setApplied] = useState<ComplaintFilters>(opening);

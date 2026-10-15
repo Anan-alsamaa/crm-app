@@ -238,7 +238,7 @@ export function CouponReportPage() {
                   n={total.requested}
                 />
                 <Count
-                  label={t('couponReport.asAsked', { defaultValue: 'As asked' })}
+                  label={t('couponReport.asAsked', { defaultValue: 'Not edited' })}
                   n={total.approvedAsAsked}
                 />
                 <Count
@@ -264,7 +264,7 @@ export function CouponReportPage() {
                         {t('couponReport.requested', { defaultValue: 'Requested' })}
                       </Th>
                       <Th className="text-end">
-                        {t('couponReport.asAsked', { defaultValue: 'As asked' })}
+                        {t('couponReport.asAsked', { defaultValue: 'Not edited' })}
                       </Th>
                       <Th className="text-end">
                         {t('couponReport.withChanges', { defaultValue: 'With changes' })}
