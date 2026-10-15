@@ -26,6 +26,11 @@ export interface NavItem {
    */
   group?: string;
   /**
+   * The path that counts as "here" when `to` points deeper (a section that
+   * links to its first tab is still current on every other tab).
+   */
+  activeOn?: string;
+  /**
    * The privilege this destination needs, if any.
    *
    * Items whose privilege the signed-in role lacks are removed before the nav

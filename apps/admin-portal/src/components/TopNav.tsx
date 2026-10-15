@@ -95,7 +95,12 @@ function MenuGroup({ section }: { section: NavSection }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Array<HTMLAnchorElement | null>>([]);
 
-  const active = section.items.some((it) => matches(pathname, it.to));
+  /* A section that links to its FIRST tab (Agent KPI -> Agent summary) is
+     still current on every other tab of it (owner, 2026-10-15: the highlight
+     vanished on Compensation). */
+  const sectionHere = (it: NavSection['items'][number]) =>
+    !!it.activeOn && matches(pathname, it.activeOn);
+  const active = section.items.some((it) => matches(pathname, it.to) || sectionHere(it));
   const tile = tileFor(section);
 
   const close = useCallback((restoreFocus: boolean) => {
@@ -245,7 +250,7 @@ function MenuGroup({ section }: { section: NavSection }) {
                     'flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm',
                     'transition-colors duration-fast ease-out',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                    isActive
+                    isActive || sectionHere(it)
                       ? 'bg-primary-subtle font-semibold text-foreground'
                       : 'font-medium text-foreground hover:bg-secondary',
                   )
@@ -256,7 +261,7 @@ function MenuGroup({ section }: { section: NavSection }) {
                     <span
                       className={cn(
                         'grid h-6 w-6 shrink-0 place-items-center rounded-md',
-                        isActive ? 'bg-primary text-primary-foreground' : tile,
+                        isActive || sectionHere(it) ? 'bg-primary text-primary-foreground' : tile,
                       )}
                     >
                       <it.icon size={14} />

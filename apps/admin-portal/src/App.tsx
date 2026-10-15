@@ -526,11 +526,15 @@ function Shell({ children }: { children: React.ReactNode }) {
            first the role may open. */
         if (it.to === '/reports/agent-kpi') {
           const first = visibleTabs(tabs.agentKpi)[0];
-          return first ? [{ ...it, to: `/reports/agent-kpi/${first.to}` }] : [];
+          return first
+            ? [{ ...it, to: `/reports/agent-kpi/${first.to}`, activeOn: '/reports/agent-kpi' }]
+            : [];
         }
         if (it.to === '/reports/operational-kpi' && opsKpiCollapsedToTickets) {
           // Path only — the label stays "Operational KPI". See above.
-          return [{ ...it, to: '/reports/operational-kpi/tickets' }];
+          return [
+            { ...it, to: '/reports/operational-kpi/tickets', activeOn: '/reports/operational-kpi' },
+          ];
         }
         return [it];
       }),

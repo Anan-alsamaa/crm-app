@@ -101,6 +101,41 @@ describe('TopNav (admin, grouped)', () => {
     expect(screen.getByRole('button', { name: /Reports/ }).className).toContain('bg-primary');
   });
 
+  it('a section linking to its first tab stays active on its other tabs', async () => {
+    // Owner, 2026-10-15: Reports lost its highlight on Agent KPI -> Compensation.
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/reports/agent-kpi/compensation']}>
+        <TopNav
+          sections={[
+            {
+              heading: 'Overview',
+              items: [{ to: '/dashboard', label: 'Dashboard', icon: ChartIcon }],
+            },
+            {
+              heading: 'Reports',
+              items: [
+                {
+                  to: '/reports/agent-kpi/tickets',
+                  activeOn: '/reports/agent-kpi',
+                  label: 'Agent KPI',
+                  icon: UsersIcon,
+                },
+                { to: '/report-tickets', label: 'Tickets', icon: ClockIcon },
+              ],
+            },
+          ]}
+        />
+      </MemoryRouter>,
+    );
+    const trigger = screen.getByRole('button', { name: /Reports/ });
+    expect(trigger.className).toContain('bg-primary');
+    await user.click(trigger);
+    const [kpi, tickets] = screen.getAllByRole('menuitem');
+    expect(kpi!.className).toContain('bg-primary-subtle');
+    expect(tickets!.className).not.toContain('bg-primary-subtle');
+  });
+
   it('selecting a menu item closes the menu', async () => {
     const user = userEvent.setup();
     renderNav();
