@@ -420,7 +420,7 @@ export function Gauge({
             fill="none"
             stroke="url(#gauge-hatch)"
             strokeWidth="22"
-            strokeLinecap="butt"
+            strokeLinecap="round"
           />
           {total > 0 &&
             segments.map((s) => {
