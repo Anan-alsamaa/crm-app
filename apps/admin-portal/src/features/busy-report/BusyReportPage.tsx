@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  IdentityCell,
   EmptyState,
   ErrorState,
   Pill,
@@ -238,13 +237,7 @@ export function BusyReportPage() {
                 <tbody>
                   {perAgent.map((a) => (
                     <Tr key={a.agent ?? 'unknown'}>
-                      <Td>
-                        <IdentityCell
-                          name={nameOf(a.agent)}
-                          sub={roleOf(a.agent)}
-                          colorKey={a.agent ?? ''}
-                        />
-                      </Td>
+                      <Td className="font-medium">{nameOf(a.agent)}</Td>
                       <Td className="text-end tabular-nums">{a.times}</Td>
                       <Td className="text-end tabular-nums">
                         {formatDuration(a.totalSec) ?? '0s'}
@@ -276,13 +269,7 @@ export function BusyReportPage() {
                 <tbody>
                   {rows.map((r) => (
                     <Tr key={r.id}>
-                      <Td>
-                        <IdentityCell
-                          name={nameOf(r.agent)}
-                          sub={roleOf(r.agent)}
-                          colorKey={r.agent ?? ''}
-                        />
-                      </Td>
+                      <Td className="font-medium">{nameOf(r.agent)}</Td>
                       <Td className="tabular-nums">{formatDateTime(r.started_at)}</Td>
                       <Td className="tabular-nums">
                         {r.ended_at ? (

@@ -8,7 +8,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   Button,
-  IdentityCell,
   cn,
   ConfirmDialog,
   DateField,
@@ -2365,9 +2364,7 @@ function AgentKpiReport({
           <tbody>
             {pageRows.map((a) => (
               <Tr key={a.agentId ?? '__unassigned__'}>
-                <Td>
-                  <IdentityCell name={a.agentName} colorKey={a.agentId ?? a.agentName} />
-                </Td>
+                <Td className="font-medium">{a.agentName}</Td>
                 {shownCols.map((k) => (
                   <Fragment key={k}>{agentCols[k].td(a)}</Fragment>
                 ))}
