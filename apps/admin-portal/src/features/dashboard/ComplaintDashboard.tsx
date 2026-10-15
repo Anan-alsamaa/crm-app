@@ -2,11 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  ChartIcon,
-  CheckCircleIcon,
   cn,
   DateField,
-  DeltaBadge,
   Drawer,
   ErrorState,
   InboxIcon,
@@ -15,10 +12,7 @@ import {
   SectionCard,
   SelectMenu,
   Skeleton,
-  SparkleIcon,
   StoreIcon,
-  TicketIcon,
-  UsersIcon,
   ZapIcon,
 } from '@yiji/ui';
 import {
@@ -36,6 +30,15 @@ import {
 import { CouponSpend, useCouponSpend } from './CouponSpend.js';
 import { couponWorth } from '@yiji/reports';
 import { CustomerReach } from './CustomerReach.js';
+import { useNavigate } from 'react-router-dom';
+import {
+  BentoCard,
+  Gauge,
+  HATCH,
+  PillColumns,
+  StatCard,
+  TrendPill,
+} from '../../components/dash/Dash.js';
 import { lastMonth } from '../../lib/date-range.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 
@@ -458,11 +461,17 @@ function Heatmap({ rows, locale }: { rows: ComplaintRow[]; locale: string }) {
               <span
                 key={c.iso}
                 title={`${c.iso} · ${c.count}`}
-                className="h-6 flex-1 rounded-md ring-1 ring-inset ring-foreground/[0.04] transition-transform duration-fast ease-out hover:scale-[1.06] motion-safe:animate-fade-in"
+                className={cn(
+                  'h-7 flex-1 rounded-full transition-transform duration-fast ease-out hover:scale-[1.06] motion-safe:animate-fade-in',
+                  // An empty day is the hatched track, as in the pill charts.
+                  c.count === 0 && HATCH,
+                )}
                 style={{
-                  backgroundColor: `oklch(var(--primary) / ${
-                    c.count === 0 ? 0.05 : 0.15 + 0.75 * (c.count / max)
-                  })`,
+                  ...(c.count === 0
+                    ? {}
+                    : {
+                        backgroundColor: `oklch(var(--primary) / ${0.2 + 0.75 * (c.count / max)})`,
+                      }),
                   animationDelay: `${(wi * 7 + di) * 12}ms`,
                 }}
               />
@@ -474,78 +483,8 @@ function Heatmap({ rows, locale }: { rows: ComplaintRow[]; locale: string }) {
   );
 }
 
-/**
- * Vertical column chart — the reference dashboard's signature panel (its
- * "by department" bars): one rounded, gradient column per category, its hue
- * rotating through the palette so the row reads as a set rather than as one
- * colour repeated.
- *
- * Columns are buttons when a drill is available: the same records the ranked
- * list opens, reached from the shape instead of the row.
- */
-const COLUMN_TONES = [
-  'from-sky/50 to-sky',
-  'from-violet/50 to-violet',
-  'from-primary/50 to-primary',
-  'from-success/50 to-success',
-  'from-magenta/50 to-magenta',
-  'from-destructive/50 to-destructive',
-] as const;
-
-function Columns({
-  rows,
-  onSelect,
-  emptyLabel,
-}: {
-  rows: Breakdown[];
-  onSelect?: (row: Breakdown) => void;
-  emptyLabel: string;
-}) {
-  const top = rows.slice(0, 8);
-  const max = Math.max(1, ...top.map((r) => r.count));
-  if (top.length === 0) return <CardEmpty label={emptyLabel} />;
-  return (
-    <div className="flex h-56 items-end gap-3 sm:gap-4">
-      {top.map((r, i) => {
-        const pct = Math.max(4, (r.count / max) * 100);
-        const body = (
-          <>
-            <span className="mb-2 text-sm font-bold tabular-nums text-foreground">{r.count}</span>
-            <span
-              className={cn(
-                'mx-auto w-full max-w-[72px] origin-bottom rounded-t-xl bg-gradient-to-t motion-safe:animate-grow-y',
-                COLUMN_TONES[i % COLUMN_TONES.length],
-              )}
-              style={{ height: `${pct}%`, animationDelay: `${i * 70}ms` }}
-            />
-          </>
-        );
-        return (
-          <div key={r.key} className="flex h-full min-w-0 flex-1 flex-col">
-            {onSelect ? (
-              <button
-                type="button"
-                onClick={() => onSelect(r)}
-                aria-label={`${r.label} — ${r.count}`}
-                className="flex h-full w-full flex-col justify-end rounded-lg transition-opacity duration-fast hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              >
-                {body}
-              </button>
-            ) : (
-              <span className="flex h-full w-full flex-col justify-end">{body}</span>
-            )}
-            <span
-              title={r.label}
-              className="mt-2 block truncate text-center text-2xs text-muted-foreground"
-            >
-              {r.label}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+/* The old gradient Columns chart is replaced by PillColumns (components/dash),
+ * the reference board's pill bars on a hatched track (owner, 2026-10-15). */
 
 // `Funnel` went with the card it drew: logged -> closed -> rated -> satisfied
 // is the KPI strip again, in four bars.
@@ -783,6 +722,7 @@ function DrillDown({
  * have nothing else in common.
  */
 export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'operations' } = {}) {
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   // Draft vs applied: his bar only re-runs the dashboard on Apply, which matters
   // when a filter change means refetching every ticket.
@@ -1278,28 +1218,33 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
               to scroll past. */}
           {view === 'agent' && (
             <>
-              {/* ── KPIs ─────────────────────────────────────────────────────
-              The share-of-a-whole cards carry the boards' data accents: a ring
-              beside the two percentages, a thin meter under the two counts
-              that are really fractions of a known total. Tones match the icon
-              chip so the accent reads as the same signal, louder. */}
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                {/* SEQUENCED, not just listed.
-                    The seven tiles ran total, open, ratings, compensation,
-                    open chats, total chats, coupons — three across, so the
-                    last sat alone on a row of its own and the two chat numbers
-                    were split by a row break with a money figure wedged
-                    between them.
-                    Eight now, four across: two clean rows, each one subject.
-                    The TICKET's life on top — raised, still open, solved, and
-                    what the customer made of it — and below it the CHATS and
-                    what the desk paid out to settle things. */}
-                <Kpi
-                  tone="neutral"
-                  icon={<TicketIcon size={17} />}
-                  order={0}
-                  value={d.total.toLocaleString()}
-                  label={t('complaintDash.kpiTotal', { defaultValue: 'Tickets' })}
+              {/* ── KPIs (owner, 2026-10-15: the reference board's tiles) ──
+                  One deep-indigo HERO tile, the rest white; a round arrow on
+                  each opens the report behind the number; numbers count up.
+                  Row one is the TICKET's life, row two the CHATS and what the
+                  desk paid out - the same eight readings as before. */}
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <StatCard
+                  hero
+                  index={0}
+                  title={t('complaintDash.kpiTotal', { defaultValue: 'Tickets' })}
+                  value={d.total}
+                  onOpen={() => navigate('/reports/operational-kpi/tickets')}
+                  delta={(() => {
+                    // Month-over-month, only when two full-ish months exist.
+                    // For a ticket count, DOWN is the good direction.
+                    const cur = d.months[d.months.length - 1]?.count;
+                    const prev = d.months[d.months.length - 2]?.count;
+                    if (cur == null || prev == null || prev === 0) return undefined;
+                    const pct = Math.round(((cur - prev) / prev) * 100);
+                    if (pct === 0 || Math.abs(pct) > 200) return undefined;
+                    return (
+                      <TrendPill good={pct < 0} onHero>
+                        {pct > 0 ? `▲ ${pct}%` : `▼ ${Math.abs(pct)}%`}{' '}
+                        {t('complaintDash.vsLastMonth', { defaultValue: 'vs last month' })}
+                      </TrendPill>
+                    );
+                  })()}
                   sub={
                     d.monthsCovered
                       ? t('complaintDash.months', {
@@ -1309,29 +1254,15 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                         })
                       : ''
                   }
-                  delta={(() => {
-                    // Month-over-month, only when two full-ish months exist. For a
-                    // ticket count, DOWN is the good direction.
-                    const cur = d.months[d.months.length - 1]?.count;
-                    const prev = d.months[d.months.length - 2]?.count;
-                    if (cur == null || prev == null || prev === 0) return undefined;
-                    const pct = Math.round(((cur - prev) / prev) * 100);
-                    // A partial month against a full one produces four-digit
-                    // swings that read as noise, not signal — show nothing.
-                    if (pct === 0 || Math.abs(pct) > 200) return undefined;
-                    return (
-                      <DeltaBadge direction={pct > 0 ? 'up' : 'down'} positiveIsGood={false}>
-                        {pct > 0 ? `+${pct}%` : `${pct}%`}
-                      </DeltaBadge>
-                    );
-                  })()}
                 />
-                <Kpi
-                  tone="sky"
-                  icon={<InboxIcon size={17} />}
-                  order={1}
-                  value={String(d.open)}
-                  label={t('complaintDash.kpiOpen', { defaultValue: 'Open tickets' })}
+                <StatCard
+                  index={1}
+                  title={t('complaintDash.kpiOpen', { defaultValue: 'Open tickets' })}
+                  value={d.open}
+                  onOpen={() => navigate('/reports/operational-kpi/tickets')}
+                  visual={
+                    <ProgressRing value={d.total ? (d.open / d.total) * 100 : 0} tone="sky" />
+                  }
                   sub={
                     d.total
                       ? t('complaintDash.ofTotal', {
@@ -1340,22 +1271,15 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                         })
                       : ''
                   }
-                  visual={
-                    <ProgressRing value={d.total ? (d.open / d.total) * 100 : 0} tone="sky" />
-                  }
                 />
-                {/* No "Overdue" tile: an overdue ticket is an OPEN ticket, so it
-                    was the same work counted twice, one card apart.
-                    SOLVED is the other half of Open, and it was the number
-                    missing from the row — "121 raised, 6 open" leaves the
-                    reader to do the subtraction and hope nothing else happened
-                    to the other 115. */}
-                <Kpi
-                  tone="success"
-                  icon={<CheckCircleIcon size={17} />}
-                  order={2}
-                  value={String(d.closed)}
-                  label={t('complaintDash.kpiSolved', { defaultValue: 'Solved tickets' })}
+                <StatCard
+                  index={2}
+                  title={t('complaintDash.kpiSolved', { defaultValue: 'Solved tickets' })}
+                  value={d.closed}
+                  onOpen={() => navigate('/reports/operational-kpi/tickets')}
+                  visual={
+                    <ProgressRing value={d.total ? (d.closed / d.total) * 100 : 0} tone="success" />
+                  }
                   sub={
                     d.total
                       ? t('complaintDash.ofTotal', {
@@ -1364,42 +1288,23 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                         })
                       : ''
                   }
-                  visual={
-                    <ProgressRing value={d.total ? (d.closed / d.total) * 100 : 0} tone="success" />
-                  }
                 />
-                <Kpi
-                  /* violet, not a second green: "Solved tickets" sits directly
-                     beside this one, and two success-toned cards in a row read
-                     as one wide card rather than two readings. */
-                  tone="violet"
-                  icon={<SparkleIcon size={17} />}
-                  order={3}
-                  /*
-                   * THE AVERAGE, NOT THE SHARE.
-                   *
-                   * This read "67%" — the proportion of ratings that were 4 or
-                   * 5. Accurate and nearly unreadable: a percentage with no
-                   * visible denominator invites the reader to guess what it is
-                   * a percentage OF, and it flattens a 5 and a 4 into one thing
-                   * while a 3 and a 1 are equally "not satisfied". Production's
-                   * three ratings — 4, 4 and 2 — are the case in point: 67%
-                   * says nothing a person can act on, 3.3 out of 5 does.
-                   *
-                   * The share is still worth having, so it moves to the
-                   * sub-line where it is qualified by the count.
-                   */
-                  value={
-                    d.avgScore === null
-                      ? t('complaintDash.notRatedYet', { defaultValue: 'No ratings yet' })
-                      : d.avgScore.toFixed(1)
-                  }
-                  unit={
-                    d.avgScore === null
-                      ? undefined
-                      : t('complaintDash.outOfFive', { defaultValue: '/ 5' })
-                  }
-                  label={t('complaintDash.kpiSatisfied', { defaultValue: 'Customer ratings' })}
+                <StatCard
+                  index={3}
+                  title={t('complaintDash.kpiSatisfied', { defaultValue: 'Customer ratings' })}
+                  /* The average, not the share: "3.3 / 5" is actionable, "67%"
+                     of an invisible denominator is not. */
+                  {...(d.avgScore === null
+                    ? {
+                        display: t('complaintDash.notRatedYet', { defaultValue: 'No ratings yet' }),
+                      }
+                    : {
+                        value: d.avgScore,
+                        decimals: 1,
+                        unit: t('complaintDash.outOfFive', { defaultValue: '/ 5' }),
+                      })}
+                  onOpen={() => navigate('/agent-performance')}
+                  visual={d.avgScore === null ? undefined : <StarScore score={d.avgScore} />}
                   sub={
                     d.rated
                       ? t('complaintDash.avgBasis', {
@@ -1411,59 +1316,43 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                           defaultValue: 'Customers have not rated these yet',
                         })
                   }
-                  visual={d.avgScore === null ? undefined : <StarScore score={d.avgScore} />}
                 />
-                {/* Row two: the CHATS, and what the desk paid out. The two chat
-                    numbers sit side by side — one is the denominator of the
-                    other, and a row break between them made that invisible. */}
-                <Kpi
-                  tone="primary"
-                  icon={<InboxIcon size={17} />}
-                  order={4}
-                  value={String(d.chatsTotal)}
-                  label={t('complaintDash.kpiChatsTotal', { defaultValue: 'Total chats' })}
+                <StatCard
+                  index={4}
+                  title={t('complaintDash.kpiChatsTotal', { defaultValue: 'Total chats' })}
+                  value={d.chatsTotal}
+                  onOpen={() => navigate('/reports/agent-kpi/conversations')}
                 />
-                <Kpi
-                  tone="destructive"
-                  icon={<UsersIcon size={17} />}
-                  order={5}
-                  value={String(d.chatsWaiting)}
-                  label={t('complaintDash.kpiChats', { defaultValue: 'Open chats' })}
-                  sub={t('complaintDash.ofChats', {
-                    defaultValue: '{{n}} total',
-                    n: d.chatsTotal,
-                  })}
-                  meter={
-                    <MeterBar
-                      value={d.chatsTotal ? (d.chatsWaiting / d.chatsTotal) * 100 : 0}
-                      tone="destructive"
-                    />
+                <StatCard
+                  index={5}
+                  title={t('complaintDash.kpiChats', { defaultValue: 'Open chats' })}
+                  value={d.chatsWaiting}
+                  onOpen={() => navigate('/reports/agent-kpi/conversations')}
+                  sub={
+                    <>
+                      <MeterBar
+                        value={d.chatsTotal ? (d.chatsWaiting / d.chatsTotal) * 100 : 0}
+                        tone="destructive"
+                      />
+                      <span className="mt-1.5 block">
+                        {t('complaintDash.ofChats', {
+                          defaultValue: '{{n}} total',
+                          n: d.chatsTotal,
+                        })}
+                      </span>
+                    </>
                   }
                 />
-                {/* THE MONEY IS WHAT WAS APPROVED.
-                    This used to total `tickets.coupon_value` — every riyal ever
-                    typed into that column, including amounts on coupons that
-                    were refused, amounts still awaiting a decision, and amounts
-                    nobody ever raised an approval for. It read 779 against the
-                    254 actually approved, which is not a number anybody can use
-                    and was two figures on one dashboard that looked like they
-                    should agree.
-                    What the business gave away is what it APPROVED, so this is
-                    the approval queue's own total. It shares CouponSpend's
-                    query key with the card below, so the tile and the card are
-                    one request and cannot disagree. */}
-                <Kpi
-                  /* amber, not a second primary. The eight cards had
-                     only five hues between them, so two pairs matched and the
-                     row read as a gradient of blue rather than a palette. */
-                  tone="amber"
-                  icon={<ChartIcon size={17} />}
-                  order={6}
-                  value={coupons.sar.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                  unit={t('common.sar', { defaultValue: 'SAR' })}
-                  label={t('complaintDash.kpiCompensationShort', {
+                {/* What the business gave away is what it APPROVED - the
+                    approval queue's own total, shared with CouponSpend. */}
+                <StatCard
+                  index={6}
+                  title={t('complaintDash.kpiCompensationShort', {
                     defaultValue: 'Compensation approved',
                   })}
+                  value={Math.round(coupons.sar)}
+                  unit={t('common.sar', { defaultValue: 'SAR' })}
+                  onOpen={() => navigate('/reports/agent-kpi/compensation')}
                   sub={
                     coupons.count > 0
                       ? t('complaintDash.compensationApproved', {
@@ -1473,22 +1362,22 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                       : ''
                   }
                 />
-                <Kpi
-                  /* sky, not violet: `primary` (hue 277) sits beside it and
-                     violet is 285 — eight degrees apart and indistinguishable
-                     at tint strength. */
-                  tone="sky"
-                  icon={<SparkleIcon size={17} />}
-                  order={7}
-                  value={String(coupons.count)}
-                  label={t('complaintDash.kpiCoupons', { defaultValue: 'Coupons issued' })}
+                <StatCard
+                  index={7}
+                  title={t('complaintDash.kpiCoupons', { defaultValue: 'Coupons issued' })}
+                  value={coupons.count}
+                  onOpen={() => navigate('/coupon-approvals')}
                   sub={
-                    coupons.pendingCount > 0
-                      ? t('complaintDash.couponsPending', {
+                    coupons.pendingCount > 0 ? (
+                      <TrendPill good={false}>
+                        {t('complaintDash.couponsPending', {
                           defaultValue: '{{n}} awaiting a decision',
                           n: coupons.pendingCount,
-                        })
-                      : ''
+                        })}
+                      </TrendPill>
+                    ) : (
+                      ''
+                    )
                   }
                 />
               </div>
@@ -1521,67 +1410,82 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           {/* The Ops snapshot band is gone — every chip on it repeated a number
               from the KPI strip directly above it. */}
 
-          {/* ── Complaints by type ───────────────────────────────────────
-              The reference board's column panel. It replaces the ranked
-              "By complaint type" list further down — same records, same
-              drill, read as a shape instead of a table. */}
+          {/* ── Bento (owner, 2026-10-15) ─────────────────────────────────
+              What customers complain about, as pill columns, beside how much
+              of the range is solved - then WHEN the desk is busy. Same
+              records and the same drill as before. */}
           {view === 'agent' && (
-            <SectionCard
-              title={t('complaintDash.byType', { defaultValue: 'By ticket type' })}
-              hint={t('complaintDash.byTypeHint', {
-                defaultValue: 'What customers are actually complaining about, biggest first.',
-              })}
-              aside={
-                d.byType.distinct > 8
-                  ? t('complaintDash.topOf', {
-                      defaultValue: 'top {{n}} of {{m}}',
-                      n: 8,
-                      m: d.byType.distinct,
-                    })
-                  : undefined
-              }
-            >
-              <Columns
-                rows={d.byType.rows}
-                emptyLabel={t('complaintDash.nothingInRange', {
-                  defaultValue: 'Nothing in this range.',
+            <div className="grid gap-4 lg:grid-cols-3">
+              <BentoCard
+                index={8}
+                className="lg:col-span-2"
+                title={t('complaintDash.byType', { defaultValue: 'By ticket type' })}
+                hint={t('complaintDash.byTypeHint', {
+                  defaultValue: 'What customers are actually complaining about, biggest first.',
                 })}
-                onSelect={drillInto(
-                  t('complaintDash.byType', { defaultValue: 'By ticket type' }),
-                  (r) => r.complaintType,
-                )}
-              />
-            </SectionCard>
-          )}
-
-          {/* ── The two rings ────────────────────────────────────────────
-              Same numbers as the By-status and By-brand bars further down, read
-              a different way: the bars rank, these show the split. He keeps
-              both, and on a page people scan rather than study, that is the
-              point rather than a duplication. */}
-          {/* "Where tickets come from" is gone. It was a doughnut of the brand
-              split, and the "By brand" panel directly below it ranks the same
-              numbers with the counts written on. A ring you have to compare
-              arc lengths in, sitting above a table of the same figures, is the
-              same answer twice — and the slower of the two. */}
-
-          {/* ── Trend ────────────────────────────────────────────────────── */}
-          {/* "Complaints per month" is gone: two readings on one chart, each
-              with its own scale, is a picture you have to be told how to read. */}
-
-          {/* The funnel is gone: logged -> closed -> rated -> satisfied is the
-              KPI strip again, drawn as four bars. Weekly activity stays on the
-              AGENT view — WHEN the desk is busy is a staffing question, and the
-              team around the branches has no use for it. */}
-          {view === 'agent' && (
-            <SectionCard
-              title={t('complaintDash.heatmap', { defaultValue: 'Weekly activity' })}
-              hint={t('complaintDash.heatmapHint', {
-                defaultValue: 'Last six weeks — a darker cell is a busier day.',
-              })}
-            >
-              <Heatmap rows={d.rows ?? []} locale={i18n?.language ?? 'en'} />
-            </SectionCard>
+                action={
+                  d.byType.distinct > 8 ? (
+                    <span className="rounded-full bg-secondary px-2.5 py-1 text-2xs font-medium text-muted-foreground">
+                      {t('complaintDash.topOf', {
+                        defaultValue: 'top {{n}} of {{m}}',
+                        n: 8,
+                        m: d.byType.distinct,
+                      })}
+                    </span>
+                  ) : undefined
+                }
+              >
+                <PillColumns
+                  rows={d.byType.rows}
+                  emptyLabel={
+                    <CardEmpty
+                      label={t('complaintDash.nothingInRange', {
+                        defaultValue: 'Nothing in this range.',
+                      })}
+                    />
+                  }
+                  onSelect={(row) =>
+                    drillInto(
+                      t('complaintDash.byType', { defaultValue: 'By ticket type' }),
+                      (r) => r.complaintType,
+                    )?.(row as Breakdown)
+                  }
+                />
+              </BentoCard>
+              <BentoCard
+                index={9}
+                title={t('complaintDash.progress', { defaultValue: 'Ticket progress' })}
+                hint={t('complaintDash.progressHint', {
+                  defaultValue: 'Solved and still open, in the selected range.',
+                })}
+              >
+                <Gauge
+                  centerLabel={t('complaintDash.progressSolved', { defaultValue: 'solved' })}
+                  segments={[
+                    {
+                      label: t('complaintDash.legendSolved', { defaultValue: 'Solved' }),
+                      value: d.closed,
+                      tone: 'hero',
+                    },
+                    {
+                      label: t('complaintDash.legendOpen', { defaultValue: 'Open' }),
+                      value: d.open,
+                      tone: 'primary',
+                    },
+                  ]}
+                />
+              </BentoCard>
+              <BentoCard
+                index={10}
+                className="lg:col-span-3"
+                title={t('complaintDash.heatmap', { defaultValue: 'Weekly activity' })}
+                hint={t('complaintDash.heatmapHint', {
+                  defaultValue: 'Last six weeks. A darker cell is a busier day.',
+                })}
+              >
+                <Heatmap rows={d.rows ?? []} locale={i18n?.language ?? 'en'} />
+              </BentoCard>
+            </div>
           )}
 
           {/* "Agent performance", "Agent performance — chat" and "Chat

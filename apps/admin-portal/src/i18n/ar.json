@@ -468,7 +468,7 @@
     "chipSolved": "محلولة",
     "chipWaiting": "محادثات منتظرة",
     "heatmap": "النشاط الأسبوعي",
-    "heatmapHint": "آخر ستة أسابيع — الخلية الأغمق يوم أكثر ازدحامًا.",
+    "heatmapHint": "آخر ستة أسابيع. الخلية الأغمق تعني يوماً أكثر ازدحاماً.",
     "funnel": "مسار التذاكر",
     "funnelHint": "كل مرحلة مقارنةً بكل ما سُجّل في النطاق.",
     "funnelLogged": "مسجّلة",
@@ -533,7 +533,13 @@
     "chain": "سلسلة",
     "allChains": "كل مديري السلاسل",
     "outOfFive": "‏/ ٥",
-    "avgBasis": "{{rated}} تقييمات · {{pct}}٪ أعطوا ٤ أو ٥"
+    "avgBasis": "{{rated}} تقييمات · {{pct}}٪ أعطوا ٤ أو ٥",
+    "vsLastMonth": "مقارنة بالشهر الماضي",
+    "progress": "تقدّم التذاكر",
+    "progressHint": "المحلولة والمفتوحة في الفترة المحددة.",
+    "progressSolved": "محلولة",
+    "legendSolved": "محلولة",
+    "legendOpen": "مفتوحة"
   },
   "complaintReport": {
     "outsideWindow": "{{count}} تذكرة أخرى سُجّلت في هذه الفترة لكنها حدثت بين {{earliest}} و {{latest}}، لذا فهي مُدرجة تحت تلك التواريخ.",

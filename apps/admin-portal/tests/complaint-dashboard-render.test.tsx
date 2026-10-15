@@ -1,7 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+
+/** The tiles' arrows navigate, so the board needs a router around it. */
+function renderDash(view?: 'operations') {
+  return render(
+    <MemoryRouter>
+      <ComplaintDashboard {...(view ? { view } : {})} />
+    </MemoryRouter>,
+  );
+}
 import userEvent from '@testing-library/user-event';
-import React from 'react';
 
 // Interpolates {{placeholders}} the way i18next does. Without this the mock
 // renders "top {{n}} of {{m}}" literally and any assertion on a formatted
@@ -197,7 +206,7 @@ describe('ComplaintDashboard — every section his page has', () => {
   it('gives the AGENT view the support desk cuts', () => {
     // The default view is the desk: what was logged, where it stands, who is
     // holding it. Nothing about branch hierarchy.
-    render(<ComplaintDashboard />);
+    renderDash();
     for (const heading of [
       'Unsolved tickets by agent',
       'By ticket type',
@@ -219,7 +228,7 @@ describe('ComplaintDashboard — every section his page has', () => {
   it('gives the OPERATIONS view the team around the branches', () => {
     // Chain managers own brands, area managers own territories, branch managers
     // own restaurants — so this view cuts the same rows by those.
-    render(<ComplaintDashboard view="operations" />);
+    renderDash('operations');
     /*
      * "By area manager" and "By chain manager", not "By area" and "By chain".
      * Those columns have always held a PERSON — the hint under the panel said
@@ -262,7 +271,7 @@ describe('ComplaintDashboard — every section his page has', () => {
      * What is left names a problem: WHAT customers complain about, and WHERE
      * in the operation it happens.
      */
-    render(<ComplaintDashboard view="operations" />);
+    renderDash('operations');
     expect(screen.getByText('Most common problem')).toBeInTheDocument();
     expect(screen.getByText('Most affected service type')).toBeInTheDocument();
 
@@ -294,7 +303,7 @@ describe('ComplaintDashboard — every section his page has', () => {
     // were AGENT numbers on a BRANCH dashboard, and the fourth place to read
     // them: the Agent dashboard, the Agent performance page and the Agent
     // summary report all answer the same question with the same arithmetic.
-    render(<ComplaintDashboard />);
+    renderDash();
     for (const gone of [
       'Chat responsiveness',
       'Agent performance',
@@ -313,7 +322,7 @@ describe('ComplaintDashboard — every section his page has', () => {
   });
 
   it('offers his whole filter bar', () => {
-    render(<ComplaintDashboard />);
+    renderDash();
     for (const label of ['From', 'To', 'Brand', 'Area', 'City', 'Restaurant']) {
       expect(screen.getByText(label), `missing filter: ${label}`).toBeInTheDocument();
     }
@@ -322,7 +331,7 @@ describe('ComplaintDashboard — every section his page has', () => {
   it('does not offer to look a customer up by mobile number', () => {
     // Removed by request. This is a where-and-what dashboard; finding one
     // caller's history belongs on the pages that work individual cases.
-    render(<ComplaintDashboard />);
+    renderDash();
     expect(screen.queryByText('Customer mobile')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/41059/)).not.toBeInTheDocument();
   });
@@ -341,7 +350,7 @@ describe('ComplaintDashboard — the ticket lifecycle reads as one row', () => {
   it('says how many were solved, not just how many are open', () => {
     // "121 raised, 6 open" leaves the reader to do the subtraction and hope
     // nothing else happened to the other 115.
-    render(<ComplaintDashboard />);
+    renderDash();
     expect(screen.getByText('Tickets')).toBeInTheDocument();
     expect(screen.getByText('Open tickets')).toBeInTheDocument();
     expect(screen.getByText('Solved tickets')).toBeInTheDocument();
@@ -353,7 +362,7 @@ describe('ComplaintDashboard — the ticket lifecycle reads as one row', () => {
 
 describe('ComplaintDashboard — a capped list admits what it hides', () => {
   it('prints "top N of M" only on the cuts that are actually truncated', () => {
-    render(<ComplaintDashboard view="operations" />);
+    renderDash('operations');
     // byCity shows 1 of 24 distinct cities.
     expect(screen.getByText('top 1 of 24')).toBeInTheDocument();
     // A cut showing everything it has must NOT claim to be capped.
@@ -361,7 +370,7 @@ describe('ComplaintDashboard — a capped list admits what it hides', () => {
   });
 
   it('states the period the data actually covers, not the filter', () => {
-    render(<ComplaintDashboard />);
+    renderDash();
     expect(
       screen.getByText(/Showing 10 tickets from 2026-06-02 to 2026-07-29/),
     ).toBeInTheDocument();
@@ -380,7 +389,7 @@ describe('ComplaintDashboard — a capped list admits what it hides', () => {
      * approval queue and the ticket-side sum is gone from the metrics
      * entirely rather than left computed for somebody to re-display.
      */
-    render(<ComplaintDashboard />);
+    renderDash();
     /* The currency moved OUT of the label and onto the numeral, where a unit
        belongs — "255 SAR" rather than a hero number with no unit and "(SAR)"
        whispered in the smallest text on the card. */
@@ -393,7 +402,7 @@ describe('ComplaintDashboard — a capped list admits what it hides', () => {
 describe('ComplaintDashboard — click-through drill-down', () => {
   it('opens the tickets behind a bar, not just its count', async () => {
     const user = userEvent.setup();
-    render(<ComplaintDashboard />);
+    renderDash();
 
     await user.click(screen.getByRole('button', { name: /Missing item/ }));
 
@@ -405,7 +414,7 @@ describe('ComplaintDashboard — click-through drill-down', () => {
 
   it('matches on the row KEY so a translated label cannot break it', async () => {
     const user = userEvent.setup();
-    render(<ComplaintDashboard />);
+    renderDash();
 
     // The status bar is labelled through t(), but keyed on the raw value.
     await user.click(screen.getAllByRole('button', { name: /closed/ })[0]!);
@@ -415,7 +424,7 @@ describe('ComplaintDashboard — click-through drill-down', () => {
 
   it('drills an agent from the unsolved chart to their OPEN tickets only', async () => {
     const user = userEvent.setup();
-    render(<ComplaintDashboard />);
+    renderDash();
 
     // "Sara" is the unsolved-chart row; the fixture keys it by label, so use
     // the agent breakdown row for Amjad which has one open and one closed.
@@ -429,7 +438,7 @@ describe('ComplaintDashboard — click-through drill-down', () => {
 
   it('totals the compensation of whatever slice was opened', async () => {
     const user = userEvent.setup();
-    render(<ComplaintDashboard />);
+    renderDash();
     await user.click(screen.getByRole('button', { name: /Missing item/ }));
     expect(screen.getByText(/1 ticket\(s\) · 10 SAR compensation/)).toBeInTheDocument();
   });
@@ -452,7 +461,7 @@ describe('ComplaintDashboard — Operations is about the estate, not the queue',
    * estate is most widely affected.
    */
   it('still carries no bare ticket counts', () => {
-    render(<ComplaintDashboard view="operations" />);
+    renderDash('operations');
     for (const gone of [
       'Tickets in range',
       'Open tickets',
@@ -477,7 +486,7 @@ describe('ComplaintDashboard — default range', () => {
   it('asks for the last 30 days on open, not for every ticket', async () => {
     const { lastMonth } = await import('../src/lib/date-range.js');
     api.useComplaintMetrics.mockClear();
-    render(<ComplaintDashboard />);
+    renderDash();
     const first = api.useComplaintMetrics.mock.calls[0]?.[0] as { from: string; to: string };
     expect(first.from).toBe(lastMonth().from);
     expect(first.to).toBe(lastMonth().to);
