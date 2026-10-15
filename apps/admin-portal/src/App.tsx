@@ -372,7 +372,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       items: [
         {
           to: '/coupon-approvals',
-          requires: 'approve_coupons' as const,
+          // Seeing it is its own switch; deciding stays approve_coupons.
+          requires: 'view_coupon_approvals' as const,
           label: t('nav.couponApprovals', { defaultValue: 'Coupon approvals' }),
           icon: ShieldIcon,
         },
@@ -909,7 +910,7 @@ export function App() {
           <Route
             path="/coupon-approvals"
             element={
-              <ProtectedRoute requires="approve_coupons">
+              <ProtectedRoute requires="view_coupon_approvals">
                 <Shell>
                   <CouponApprovalsPage />
                 </Shell>

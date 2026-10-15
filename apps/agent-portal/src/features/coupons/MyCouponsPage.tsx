@@ -73,7 +73,13 @@ export function MyCouponsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const requests = useMyCouponRequests();
-  const [view, setView] = useState<CouponApprovalStatus | 'all'>('pending');
+  const { user, can } = useAuth();
+  /* A reader who raises no coupons of their own (the CEO, owner 2026-10-15)
+     opens on every agent and every status; everyone else as before. */
+  const reader = !can('request_coupons');
+  const [view, setView] = useState<CouponApprovalStatus | 'all'>(() =>
+    reader ? 'all' : 'pending',
+  );
   const [search, setSearch] = useState('');
   /*
    * WHOSE REQUESTS — MINE BY DEFAULT (owner, 2026-09-28).
@@ -86,7 +92,6 @@ export function MyCouponsPage() {
    * than being hidden from them — seeing what colleagues have asked for is
    * useful, it just should not be the first thing on the screen.
    */
-  const { user } = useAuth();
   /*
    * WHICH AGENT'S REQUESTS (owner, 2026-09-29).
    *
@@ -98,7 +103,7 @@ export function MyCouponsPage() {
    * should not have to find it among everybody else's. `''` is All.
    */
   const agents = useAgents();
-  const [agentId, setAgentId] = useState<string>(() => user?.id ?? '');
+  const [agentId, setAgentId] = useState<string>(() => (reader ? '' : (user?.id ?? '')));
   /** The pending request being corrected, if any. */
   const [editing, setEditing] = useState<CouponRequestRow | null>(null);
   const updateRequest = useUpdatePendingCouponRequest();

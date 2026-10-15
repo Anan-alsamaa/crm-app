@@ -151,7 +151,7 @@ const STATUS_DOT: Record<TicketStatus, string> = {
 
 export function TicketsPage() {
   const { t } = useTranslation();
-  const { user, isOwner } = useAuth();
+  const { user, isOwner, can } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   /*
@@ -202,7 +202,10 @@ export function TicketsPage() {
    * `isOwner` is Directus `admin_access`, which is how Administrator is
    * identified everywhere in these portals — never a role name.
    */
-  const [scope, setScope] = useState<ComplaintScope>(isOwner ? 'all' : 'me');
+  // The same for anyone who is never assigned work (the CEO, owner 2026-10-15).
+  const [scope, setScope] = useState<ComplaintScope>(
+    isOwner || !can('can_be_assigned') ? 'all' : 'me',
+  );
   const complaints = useMyComplaints(null, agentName, scope);
   const agentOptions = useAgents();
   const { index: storeIndex } = useStoreIndex();

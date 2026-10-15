@@ -375,7 +375,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/compensation',
           label: t('nav.compensation', { defaultValue: 'Compensation' }),
           icon: ClockIcon,
-          requires: 'request_coupons',
+          // Seeing it is its own switch (owner, 2026-10-15: the CEO reads it).
+          requires: 'view_coupon_queue',
         },
       ],
     },
@@ -632,7 +633,7 @@ export function App() {
           <Route
             path="/compensation"
             element={
-              <ProtectedRoute requires="request_coupons">
+              <ProtectedRoute requires="view_coupon_queue">
                 <Shell>
                   <MyCouponsPage />
                 </Shell>

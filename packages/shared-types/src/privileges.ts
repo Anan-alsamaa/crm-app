@@ -145,6 +145,8 @@ export const OWNER_PRIVILEGES = [
   'view_own_performance',
   'view_preferences',
   'view_data_warnings',
+  'view_coupon_queue',
+  'view_coupon_approvals',
   // ── administration ──────────────────────────────────────────────────────
   'delete_users',
   'delete_restaurants',
@@ -246,6 +248,10 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   // The data-quality notices ("N rows with an unmapped store"...) - on for
   // everyone; off for the CEO (owner, 2026-10-15).
   view_data_warnings: () => true,
+  // Seeing the coupon pages without acting on them (owner, 2026-10-15: the
+  // CEO reads both). Each defaults to the privilege that used to open it.
+  view_coupon_queue: holds('request_coupons'),
+  view_coupon_approvals: holds('approve_coupons'),
   delete_users: nameIn('administrator', 'wecare admin'),
   // Deleting a store or brand was part of manage_restaurants; split out so the
   // CEO can manage restaurants without Delete (owner, 2026-10-15).
@@ -346,6 +352,8 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_own_performance: 'reporting',
   view_preferences: 'admin',
   view_data_warnings: 'reporting',
+  view_coupon_queue: 'coupons',
+  view_coupon_approvals: 'coupons',
   delete_users: 'admin',
   delete_restaurants: 'admin',
   manage_teams: 'admin',
@@ -519,6 +527,8 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   manage_roles: 'admin',
   manage_backup: 'admin',
   use_directus_app: 'admin',
+  view_coupon_queue: 'agent',
+  view_coupon_approvals: 'admin',
   delete_users: 'admin',
   delete_restaurants: 'admin',
   manage_teams: 'admin',
