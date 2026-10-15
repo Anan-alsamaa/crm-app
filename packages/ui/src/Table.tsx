@@ -249,7 +249,7 @@ export function TableSurface({
     <div
       ref={outer.ref}
       className={cn(
-        'relative isolate flex min-h-0 flex-col rounded-xl bg-card ring-1 ring-foreground/[0.06]',
+        'relative isolate flex min-h-0 flex-col rounded-[1.25rem] bg-card shadow-soft ring-1 ring-foreground/[0.06]',
         flow
           ? // Wide enough for the table, never narrower than the page. No
             // clipping: the overflow is exactly what the page's scrollport
@@ -381,12 +381,15 @@ export function Th({
         // rows sliding under it reads as a rendering fault rather than as a
         // header. Still a faint tint, still a label row — just one you cannot
         // see through.
-        'sticky top-0 z-10 h-12 whitespace-nowrap bg-secondary px-4 text-start align-middle',
+        'sticky top-0 z-10 h-11 whitespace-nowrap bg-secondary px-4 text-start align-middle',
         // The outermost columns get a wider gutter than the ones between, so
         // the data sits INSIDE the card rather than against its edge. Every
         // table on the system was hugging its own border.
         'first:ps-6 last:pe-6',
-        'text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground',
+        /* Sentence case at normal tracking (owner, 2026-10-15: the table UI was
+           "very boring"; the reference reads its headings as words, not as
+           tiny tracked capitals). */
+        'text-xs font-semibold text-foreground/60',
         'backdrop-blur-sm',
         // One hairline under the whole band, rather than a border per cell.
         'shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]',
@@ -413,10 +416,12 @@ export function Tr({
         // No divider. Height, alignment and hover separate the rows; a line
         // under every one of them is what makes a list look like a spreadsheet.
         // Zebra striping is deliberately absent too — it fights the hover.
-        'border-0',
+        /* Faint hairline dividers after all (owner, 2026-10-15): with taller,
+           airier rows a 5% line separates without reading as a spreadsheet. */
+        'border-b border-foreground/[0.05] last:border-0',
         // The hover wash also lifts the row's ink, so a scanned row reads as
         // active rather than merely tinted.
-        'group/row transition-colors duration-fast ease-out hover:bg-primary/[0.055] hover:text-foreground',
+        'group/row transition-colors duration-fast ease-out hover:bg-secondary/70 hover:text-foreground',
         '[&[aria-selected=true]]:bg-primary/10',
         // A jade rail on the selected row — the boards' selection idiom, and
         // logical so it lands on the start edge in RTL too.
@@ -442,7 +447,10 @@ export function Td({
 }: TdHTMLAttributes<HTMLTableCellElement>): JSX.Element {
   return (
     <td
-      className={cn('h-14 px-4 py-3 align-middle text-foreground first:ps-6 last:pe-6', className)}
+      className={cn(
+        'h-[3.75rem] px-4 py-3 align-middle text-foreground first:ps-6 last:pe-6',
+        className,
+      )}
       {...rest}
     >
       {children}
@@ -541,9 +549,9 @@ export function SortTh({
         type="button"
         onClick={onSort}
         className={cn(
-          'flex h-12 w-full items-center gap-1 px-4 text-2xs font-semibold uppercase tracking-[0.12em] transition-colors duration-fast ease-out',
+          'flex h-11 w-full items-center gap-1 px-4 text-xs font-semibold transition-colors duration-fast ease-out',
           align === 'end' ? 'justify-end' : align === 'center' ? 'justify-center' : 'justify-start',
-          active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+          active ? 'text-foreground' : 'text-foreground/60 hover:text-foreground',
         )}
       >
         {align === 'end' && <SortGlyph active={active} dir={dir} />}

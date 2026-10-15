@@ -741,7 +741,9 @@ describe('AgentReportsPage — agent KPI report', () => {
     api.useAgentReportData.mockReturnValue(ok);
     const dl = captureDownloads();
     const { container } = renderPage('agents');
-    const firstAgent = () => container.querySelector('tbody tr td')?.textContent?.trim() ?? '';
+    // The name, not the initials tile beside it (IdentityCell, 2026-10-15).
+    const firstAgent = () =>
+      container.querySelector('tbody tr td [title]')?.textContent?.trim() ?? '';
 
     expect(firstAgent()).toBe('Ann Lee');
     await userEvent.click(screen.getByRole('button', { name: 'Agent' }));

@@ -120,6 +120,7 @@ export type { DrawerSectionProps } from './DrawerSection.js';
 export { StatCard } from './StatCard.js';
 export type { StatCardProps } from './StatCard.js';
 export { TableSurface, Table, Th, Tr, Td, SortTh, TableFooterBar, useTableSort } from './Table.js';
+export { IdentityCell, ProgressCell, TableCardHeader } from './TableCells.js';
 export type { SortDir, TableSurfaceProps } from './Table.js';
 export { Pagination } from './Pagination.js';
 export type { PaginationProps } from './Pagination.js';

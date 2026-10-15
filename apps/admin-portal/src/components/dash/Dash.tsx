@@ -304,7 +304,7 @@ export function PillColumns({
         const body = (
           <span
             className={cn(
-              'relative flex h-full w-full items-end overflow-hidden rounded-full',
+              'relative flex w-full flex-1 items-end overflow-hidden rounded-full',
               HATCH,
             )}
           >
@@ -346,12 +346,12 @@ export function PillColumns({
                 type="button"
                 onClick={() => onSelect(r)}
                 aria-label={`${r.label}: ${r.count}`}
-                className="flex h-full w-full max-w-[3.25rem] cursor-pointer rounded-full transition-opacity duration-fast hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="flex min-h-0 w-full max-w-[3.25rem] flex-1 flex-col cursor-pointer rounded-full transition-opacity duration-fast hover:opacity-85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
               >
                 {body}
               </button>
             ) : (
-              <span className="flex h-full w-full max-w-[3.25rem]">{body}</span>
+              <span className="flex min-h-0 w-full max-w-[3.25rem] flex-1 flex-col">{body}</span>
             )}
             <span
               title={r?.label}
