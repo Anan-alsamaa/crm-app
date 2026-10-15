@@ -35,6 +35,7 @@ import {
   type Brand,
 } from './api.js';
 import { useRecordVendorNames } from '../vendors/api.js';
+import { useAuth } from '../../lib/auth/AuthContext.js';
 
 const schema = z.object({
   code: z.string().min(1),
@@ -69,6 +70,8 @@ export function BrandsPage() {
   const createBrand = useCreateBrand();
   const updateBrand = useUpdateBrand();
   const deleteBrand = useDeleteBrand();
+  // Delete is its own switch (owner, 2026-10-15): not for the CEO.
+  const canDelete = useAuth().can('delete_restaurants');
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Brand | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Brand | null>(null);
@@ -298,14 +301,16 @@ export function BrandsPage() {
                           >
                             {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
                           </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setConfirmDelete(b)}
-                          >
-                            {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
-                          </Button>
+                          {canDelete && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmDelete(b)}
+                            >
+                              {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+                            </Button>
+                          )}
                         </span>
                       </Td>
                     </Tr>

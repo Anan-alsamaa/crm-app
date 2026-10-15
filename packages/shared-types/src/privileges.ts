@@ -147,6 +147,7 @@ export const OWNER_PRIVILEGES = [
   'view_data_warnings',
   // ── administration ──────────────────────────────────────────────────────
   'delete_users',
+  'delete_restaurants',
   'manage_teams',
   'edit_yiji_branch_id',
   'manage_store_notifications',
@@ -246,6 +247,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   // everyone; off for the CEO (owner, 2026-10-15).
   view_data_warnings: () => true,
   delete_users: nameIn('administrator', 'wecare admin'),
+  // Deleting a store or brand was part of manage_restaurants; split out so the
+  // CEO can manage restaurants without Delete (owner, 2026-10-15).
+  delete_restaurants: holds('manage_restaurants'),
   manage_teams: holds('manage_users'),
   edit_yiji_branch_id: never, // was the Administrator only
   manage_store_notifications: holds('manage_restaurants'),
@@ -343,6 +347,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_preferences: 'admin',
   view_data_warnings: 'reporting',
   delete_users: 'admin',
+  delete_restaurants: 'admin',
   manage_teams: 'admin',
   edit_yiji_branch_id: 'admin',
   manage_store_notifications: 'admin',
@@ -515,6 +520,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   manage_backup: 'admin',
   use_directus_app: 'admin',
   delete_users: 'admin',
+  delete_restaurants: 'admin',
   manage_teams: 'admin',
   edit_yiji_branch_id: 'admin',
   manage_store_notifications: 'admin',

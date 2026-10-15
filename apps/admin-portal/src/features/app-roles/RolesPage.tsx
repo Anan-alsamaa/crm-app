@@ -457,6 +457,9 @@ export function RolesPage() {
     }),
     view_sla_report: t('roles.p.viewSlaReport', { defaultValue: 'View ticket deadline report' }),
     delete_users: t('roles.p.deleteUsers', { defaultValue: 'Delete users' }),
+    delete_restaurants: t('roles.p.deleteRestaurants', {
+      defaultValue: 'Delete restaurants (stores and brands)',
+    }),
     manage_teams: t('roles.p.manageTeams', { defaultValue: 'Manage teams' }),
     edit_yiji_branch_id: t('roles.p.editYijiBranchId', {
       defaultValue: "Edit a branch's Yiji restaurant ID",

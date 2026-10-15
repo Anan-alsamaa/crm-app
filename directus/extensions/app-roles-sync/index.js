@@ -207,6 +207,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_preferences: () => true,
     view_data_warnings: () => true,
     delete_users: nameIn('administrator', 'wecare admin'),
+    delete_restaurants: holds('manage_restaurants'),
     manage_teams: holds('manage_users'),
     edit_yiji_branch_id: never,
     manage_store_notifications: holds('manage_restaurants'),
@@ -517,9 +518,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
      */
     manage_lists: [...crud('option_lists'), ...crud('app_settings'), ...crud('quick_replies')],
     manage_restaurants: [
-      ...crud('brands'),
+      g('brands', 'create'),
+      g('brands', 'read'),
+      g('brands', 'update'),
       g('stores', 'read'),
-      g('stores', 'delete'),
       g('stores', 'create', {}, STORE_FIELDS_NO_YIJI_ID),
       g('stores', 'update', {}, STORE_FIELDS_NO_YIJI_ID),
     ],
@@ -607,6 +609,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_preferences: [],
     view_data_warnings: [],
     delete_users: [g('directus_users', 'delete')],
+    // Split from manage_restaurants (owner, 2026-10-15): the CEO manages
+    // restaurants without Delete.
+    delete_restaurants: [g('brands', 'delete'), g('stores', 'delete')],
     manage_teams: [...crud('teams')],
     edit_yiji_branch_id: [g('stores', 'update', {}, ['yiji_restaurant_id'])],
     manage_store_notifications: [...crud('store_notify_rules')],

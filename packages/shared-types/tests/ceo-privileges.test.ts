@@ -28,6 +28,11 @@ describe('switches added for the CEO role', () => {
       'WeCare Supervisor',
     );
     for (const k of NEW) expect(supervisor[k], k).toBe(true);
+    // Delete restaurants follows manage_restaurants, as it did inside it.
+    expect(effectivePrivileges({ manage_restaurants: true }, 'Operations').delete_restaurants).toBe(
+      true,
+    );
+    expect(supervisor.delete_restaurants).toBe(false);
     // An agent who sees only their own chats: no report tabs, still performance + preferences.
     const agent = effectivePrivileges({ use_chat: true }, 'WeCare Agent');
     expect(agent.view_chat_status_report).toBe(false);
@@ -58,6 +63,8 @@ describe('switches added for the CEO role', () => {
         delete_compensation: false,
         manage_sla: false,
         manage_store_notifications: false,
+        manage_restaurants: true,
+        delete_restaurants: false,
       },
       'CEO',
     );
@@ -67,6 +74,7 @@ describe('switches added for the CEO role', () => {
     expect(ceo.mark_busy).toBe(false); // Busy is for the three WeCare roles only
     expect(ceo.view_agent_dashboard && ceo.view_ops_dashboard).toBe(true);
     expect(ceo.view_chat_breakdown).toBe(false);
+    expect(ceo.manage_restaurants && !ceo.delete_restaurants).toBe(true);
   });
 
   it('every switch is placed in a portal on the Roles page', () => {

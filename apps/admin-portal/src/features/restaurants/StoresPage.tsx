@@ -110,6 +110,8 @@ export function StoresPage() {
   const canEditYijiId = can('edit_yiji_branch_id');
   // Export is offered only with `export_data` (owner, 2026-10-06).
   const canExport = can('export_data');
+  // Delete is its own switch (owner, 2026-10-15): not for the CEO.
+  const canDelete = can('delete_restaurants');
   const stores = useStores();
   const brands = useBrands();
   /* MV-1: read-only Vendor column, from its own query (see the hook). */
@@ -696,14 +698,16 @@ export function StoresPage() {
                       <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(s)}>
                         {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmDelete(s)}
-                      >
-                        {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
-                      </Button>
+                      {canDelete && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setConfirmDelete(s)}
+                        >
+                          {t('actions.delete', { ns: 'common', defaultValue: 'Delete' })}
+                        </Button>
+                      )}
                     </td>
                   </tr>
                 ))}
