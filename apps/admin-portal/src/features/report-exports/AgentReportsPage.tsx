@@ -919,6 +919,8 @@ function ComplaintsReport({
   // Its own privilege, no longer borrowed from editing (owner, 2026-10-06).
   const canSeeHistory = can('view_ticket_history');
   const canDelete = can('delete_tickets');
+  // Data-quality notices: not for the CEO (owner, 2026-10-15).
+  const canSeeWarnings = can('view_data_warnings');
   const canImport = can('import_data');
   // Export is offered only with `export_data` (owner, 2026-10-06).
   const canExport = can('export_data');
@@ -1508,7 +1510,7 @@ function ComplaintsReport({
           to the far columns is a toolbar you have to scroll back for. See
           usePinnedWidth. */}
       <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-3">
-        {unmapped > 0 && (
+        {canSeeWarnings && unmapped > 0 && (
           <Pill tone="warning" size="sm">
             {t('complaintReport.unmappedStores', {
               count: unmapped,
@@ -1519,7 +1521,7 @@ function ComplaintsReport({
         {/* Tickets that are HALF-FILLED — most often a missing branch. They are
             SHOWN, and this says how many need attention. It used to say how many
             were hidden, which was the problem rather than a warning about it. */}
-        {hidden > 0 && (
+        {canSeeWarnings && hidden > 0 && (
           <Pill tone="warning" size="sm">
             {t('complaintReport.hiddenIncomplete', {
               count: hidden,

@@ -1342,7 +1342,8 @@
       "viewBusyReport": "View the Busy time report",
       "viewChatBreakdown": "See the Chat by chat table on Agent performance",
       "viewOwnPerformance": "Agent portal: Agent performance page",
-      "viewPreferences": "Agent portal: Preferences page"
+      "viewPreferences": "Agent portal: Preferences page",
+      "viewDataWarnings": "See data-quality notices on reports (unmapped stores, missing details)"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",

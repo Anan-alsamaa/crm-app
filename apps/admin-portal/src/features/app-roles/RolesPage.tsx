@@ -409,6 +409,9 @@ export function RolesPage() {
     view_own_performance: t('roles.p.viewOwnPerformance', {
       defaultValue: 'Agent portal: Agent performance page',
     }),
+    view_data_warnings: t('roles.p.viewDataWarnings', {
+      defaultValue: 'See data-quality notices on reports (unmapped stores, missing details)',
+    }),
     view_preferences: t('roles.p.viewPreferences', {
       defaultValue: 'Agent portal: Preferences page',
     }),

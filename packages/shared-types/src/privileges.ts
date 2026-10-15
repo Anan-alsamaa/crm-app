@@ -144,6 +144,7 @@ export const OWNER_PRIVILEGES = [
   'view_chat_breakdown',
   'view_own_performance',
   'view_preferences',
+  'view_data_warnings',
   // ── administration ──────────────────────────────────────────────────────
   'delete_users',
   'manage_teams',
@@ -241,6 +242,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   view_chat_breakdown: holds('view_agent_reports'),
   view_own_performance: holds('use_chat'),
   view_preferences: () => true,
+  // The data-quality notices ("N rows with an unmapped store"...) - on for
+  // everyone; off for the CEO (owner, 2026-10-15).
+  view_data_warnings: () => true,
   delete_users: nameIn('administrator', 'wecare admin'),
   manage_teams: holds('manage_users'),
   edit_yiji_branch_id: never, // was the Administrator only
@@ -337,6 +341,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_chat_breakdown: 'reporting',
   view_own_performance: 'reporting',
   view_preferences: 'admin',
+  view_data_warnings: 'reporting',
   delete_users: 'admin',
   manage_teams: 'admin',
   edit_yiji_branch_id: 'admin',
@@ -501,6 +506,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   view_chat_status_report: 'admin',
   view_busy_report: 'admin',
   view_chat_breakdown: 'admin',
+  view_data_warnings: 'admin',
   manage_lists: 'admin',
   manage_restaurants: 'admin',
   manage_users: 'admin',
