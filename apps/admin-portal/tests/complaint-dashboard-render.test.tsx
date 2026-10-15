@@ -483,13 +483,12 @@ describe('ComplaintDashboard — Operations is about the estate, not the queue',
  * the same `lastMonth` the reports open on — and Clear goes back there.
  */
 describe('ComplaintDashboard — default range', () => {
-  it('asks for yesterday to today on open (2026-10-15), not for every ticket', async () => {
-    const { defaultReportRange } = await import('../src/lib/date-range.js');
+  // Owner, 2026-10-15: the dashboard alone opens with no filter, for everyone.
+  it('opens with no date filter - the whole picture', async () => {
     api.useComplaintMetrics.mockClear();
     renderDash();
     const first = api.useComplaintMetrics.mock.calls[0]?.[0] as { from: string; to: string };
-    expect(first.from).toBe(defaultReportRange().from);
-    expect(first.to).toBe(defaultReportRange().to);
-    expect(first.from).not.toBe('');
+    expect(first.from).toBe('');
+    expect(first.to).toBe('');
   });
 });

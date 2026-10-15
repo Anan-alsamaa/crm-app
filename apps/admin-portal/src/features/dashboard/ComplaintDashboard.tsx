@@ -39,7 +39,6 @@ import {
   StatCard,
   TrendPill,
 } from '../../components/dash/Dash.js';
-import { defaultReportRange } from '../../lib/date-range.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 
 /**
@@ -727,18 +726,14 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
   // Draft vs applied: his bar only re-runs the dashboard on Apply, which matters
   // when a filter change means refetching every ticket.
   /*
-   * OPENS ON THE LAST 30 DAYS, not on everything (owner, 2026-10-05).
+   * OPENS WITH NO FILTER, for every user (owner, 2026-10-15).
    *
-   * Empty filters meant "every ticket ever", fetched in full on every open.
-   * That was tolerable at 75 tickets and is not at 7,987 after the history
-   * import. The reports already open on the last month (`defaultReportRange`, see
-   * lib/date-range.ts); the dashboard now does the same, and "All" is still one
-   * click away on the year pills for anyone who wants the whole history.
+   * The reports open on yesterday -> today; the DASHBOARD is the one page that
+   * does not - it shows the whole picture, and the filters are there to narrow
+   * it. (2026-10-05 had it on the last month for load time; the owner chose
+   * the full view.)
    */
-  const [opening] = useState<ComplaintFilters>(() => ({
-    ...emptyComplaintFilters,
-    ...defaultReportRange(),
-  }));
+  const [opening] = useState<ComplaintFilters>(() => ({ ...emptyComplaintFilters }));
   const [draft, setDraft] = useState<ComplaintFilters>(opening);
   const [applied, setApplied] = useState<ComplaintFilters>(opening);
   const m = useComplaintMetrics(applied);
