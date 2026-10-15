@@ -670,7 +670,8 @@ function reportTabs(t: TFunction) {
       {
         to: 'conversations',
         label: t('nav.reportConversations', { defaultValue: 'Chat status' }),
-        requires: 'view_agent_reports' as const,
+        // Its own switch (owner, 2026-10-15: not for the CEO).
+        requires: 'view_chat_status_report' as const,
       },
       {
         /* An agent measure: what agents DID with the orders that ran late.
@@ -685,7 +686,8 @@ function reportTabs(t: TFunction) {
         /* How often agents used Busy and for how long (owner, 2026-10-11). */
         to: 'busy',
         label: t('nav.busyReport', { defaultValue: 'Busy time' }),
-        requires: 'view_agent_reports' as const,
+        // Its own switch (owner, 2026-10-15: not for the CEO).
+        requires: 'view_busy_report' as const,
       },
       {
         // Compensation is a money screen: its own report privilege (owner,
@@ -839,7 +841,7 @@ export function App() {
             <Route
               path="conversations"
               element={
-                <ProtectedRoute requires="view_agent_reports">
+                <ProtectedRoute requires="view_chat_status_report">
                   <ReportExportsPage report="conversations" />
                 </ProtectedRoute>
               }
@@ -855,7 +857,7 @@ export function App() {
             <Route
               path="busy"
               element={
-                <ProtectedRoute requires="view_agent_reports">
+                <ProtectedRoute requires="view_busy_report">
                   <BusyReportPage />
                 </ProtectedRoute>
               }

@@ -693,7 +693,8 @@
     "searchAgentHint": "Agent name",
     "searchConversationsHint": "Customer, phone, agent or order number",
     "viewChats": "Chats",
-    "viewBreakdown": "Breakdown"
+    "viewBreakdown": "Breakdown",
+    "yesterdayToday": "Yesterday and today"
   },
   "ticketOps": {
     "title": "Ticket report",
@@ -1335,7 +1336,13 @@
       "viewLateOrdersReport": "View late orders report",
       "viewAgentReports": "View agent summary reports (Agent summary, Chat status, Busy time, Agent performance)",
       "viewSlaReport": "View ticket deadline report",
-      "markBusy": "Use Busy (pause new chats); busy time is recorded"
+      "markBusy": "Show the Busy button in the agent portal (busy time is recorded)",
+      "canBeAssigned": "Can be assigned chats (by routing or by hand)",
+      "viewChatStatusReport": "View the Chat status report",
+      "viewBusyReport": "View the Busy time report",
+      "viewChatBreakdown": "See the Chat by chat table on Agent performance",
+      "viewOwnPerformance": "Agent portal: Agent performance page",
+      "viewPreferences": "Agent portal: Preferences page"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1356,7 +1363,9 @@
     "groupCustomers": "Customers",
     "groupLateOrders": "Late orders",
     "groupCoupons": "Coupons & compensation",
-    "ownerOnlyHint": "Only the Administrator sees this switch."
+    "ownerOnlyHint": "Only the Administrator sees this switch.",
+    "portalAgent": "Agent portal",
+    "portalAdmin": "Admin portal"
   },
   "backup": {
     "title": "Backup",
@@ -1512,5 +1521,8 @@
     "answerHint": "The answer the AI may give.",
     "language": "Language",
     "active": "In use"
+  },
+  "couponReport": {
+    "asAsked": "Not edited"
   }
 }

@@ -125,6 +125,7 @@ export function AgentPerformancePage() {
   // Export is offered only with `export_data` (owner, 2026-10-06).
   const { can } = useAuth();
   const canExport = can('export_data');
+  const canSeeChats = can('view_chat_breakdown');
   const agents = useAgentList();
   const agentNames = useMemo(() => {
     const m = new Map<string, string>();
@@ -906,161 +907,174 @@ export function AgentPerformancePage() {
                     </div>
                   </section>
 
-                  {/* Chat by chat — the six columns the owner asked for. A row
+                  {/* Chat by chat: its own switch (owner, 2026-10-15: not for the CEO). */}
+                  {canSeeChats && (
+                    <>
+                      {/* Chat by chat — the six columns the owner asked for. A row
                   opens the conversation in the agent portal, which is where a
                   supervisor goes to see what was actually said. */}
-                  <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-                    <header className="flex items-baseline justify-between gap-3  px-5 py-4">
-                      <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                        {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
-                      </h2>
-                      <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-                        {breakdown.length === breakdownAll.length
-                          ? breakdown.length
-                          : `${breakdown.length} / ${breakdownAll.length}`}
-                      </span>
-                    </header>
-                    <div className="max-h-[32rem] overflow-auto">
-                      <table
-                        className="w-full min-w-max text-sm"
-                        aria-label={t('performance.breakdownTitle', {
-                          defaultValue: 'Chat by chat',
-                        })}
-                      >
-                        <thead className="sticky top-0 z-10 bg-card">
-                          <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                            <th className="h-10 px-5 text-start font-semibold">
-                              {t('performance.subject', { defaultValue: 'Ticket / chat' })}
-                            </th>
-                            <th className="h-10 px-5 text-start font-semibold">
-                              {t('performance.customer', { defaultValue: 'Customer' })}
-                            </th>
-                            <th className="h-10 px-5 text-start font-semibold">
-                              {t('performance.agent', { defaultValue: 'Agent' })}
-                            </th>
-                            <th className="h-10 px-5 text-start font-semibold">
-                              {t('performance.started', { defaultValue: 'Started' })}
-                            </th>
-                            <th className="h-10 px-5 text-start font-semibold">
-                              {t('performance.startedBy', { defaultValue: 'Started by' })}
-                            </th>
-                            <th className="h-10 px-5 text-end font-semibold">
-                              {t('performance.firstResponse', { defaultValue: 'First response' })}
-                            </th>
-                            <th className="h-10 px-5 text-end font-semibold">
-                              {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
-                            </th>
-                            <th className="h-10 px-5 text-end font-semibold">
-                              {t('performance.csat', { defaultValue: 'Customer rating' })}
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y-0">
-                          {breakdown.length === 0 && <NoMatchRow colSpan={8} search={search} />}
-                          {breakdown.map(({ chat, first, solve }) => (
-                            <tr
-                              key={chat.conversationId}
-                              className="transition-colors duration-fast hover:bg-primary/[0.06]"
-                            >
-                              <td className="max-w-[20rem] px-5 py-3">
-                                <span
-                                  className="block truncate font-medium text-foreground"
-                                  title={chat.subject ?? ''}
+                      <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+                        <header className="flex items-baseline justify-between gap-3  px-5 py-4">
+                          <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                            {t('performance.breakdownTitle', { defaultValue: 'Chat by chat' })}
+                          </h2>
+                          <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                            {breakdown.length === breakdownAll.length
+                              ? breakdown.length
+                              : `${breakdown.length} / ${breakdownAll.length}`}
+                          </span>
+                        </header>
+                        <div className="max-h-[32rem] overflow-auto">
+                          <table
+                            className="w-full min-w-max text-sm"
+                            aria-label={t('performance.breakdownTitle', {
+                              defaultValue: 'Chat by chat',
+                            })}
+                          >
+                            <thead className="sticky top-0 z-10 bg-card">
+                              <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
+                                <th className="h-10 px-5 text-start font-semibold">
+                                  {t('performance.subject', { defaultValue: 'Ticket / chat' })}
+                                </th>
+                                <th className="h-10 px-5 text-start font-semibold">
+                                  {t('performance.customer', { defaultValue: 'Customer' })}
+                                </th>
+                                <th className="h-10 px-5 text-start font-semibold">
+                                  {t('performance.agent', { defaultValue: 'Agent' })}
+                                </th>
+                                <th className="h-10 px-5 text-start font-semibold">
+                                  {t('performance.started', { defaultValue: 'Started' })}
+                                </th>
+                                <th className="h-10 px-5 text-start font-semibold">
+                                  {t('performance.startedBy', { defaultValue: 'Started by' })}
+                                </th>
+                                <th className="h-10 px-5 text-end font-semibold">
+                                  {t('performance.firstResponse', {
+                                    defaultValue: 'First response',
+                                  })}
+                                </th>
+                                <th className="h-10 px-5 text-end font-semibold">
+                                  {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
+                                </th>
+                                <th className="h-10 px-5 text-end font-semibold">
+                                  {t('performance.csat', { defaultValue: 'Customer rating' })}
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y-0">
+                              {breakdown.length === 0 && <NoMatchRow colSpan={8} search={search} />}
+                              {breakdown.map(({ chat, first, solve }) => (
+                                <tr
+                                  key={chat.conversationId}
+                                  className="transition-colors duration-fast hover:bg-primary/[0.06]"
                                 >
-                                  {chat.subject ??
-                                    t('performance.noSubject', {
-                                      defaultValue: 'Chat (no ticket)',
-                                    })}
-                                </span>
-                                {/* The ids a search finds it by (owner, 2026-10-12). */}
-                                {(chat.ticketId || chat.orderId) && (
-                                  <span className="font-mono text-2xs text-muted-foreground">
-                                    {[
-                                      chat.ticketId ? `ID ${chat.ticketId}` : null,
-                                      chat.orderId ? `#${chat.orderId}` : null,
-                                    ]
-                                      .filter(Boolean)
-                                      .join(' · ')}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-5 py-3 text-muted-foreground">
-                                <span className="block max-w-[12rem] truncate">
-                                  {chat.customer ??
-                                    t('performance.unknownCustomer', { defaultValue: 'Customer' })}
-                                </span>
-                              </td>
-                              <td className="px-5 py-3">
-                                <span className="flex items-center gap-2">
-                                  <Avatar name={chat.agentName} size="sm" />
-                                  <span className="truncate text-foreground">{chat.agentName}</span>
-                                </span>
-                              </td>
-                              <td className="px-5 py-3 tabular-nums text-muted-foreground">
-                                {chat.startedAt ? formatDateTime(chat.startedAt) : dash}
-                              </td>
-                              <td className="px-5 py-3 text-muted-foreground">
-                                {chat.initiatedBy === 'agent'
-                                  ? t('performance.byAgent', { defaultValue: 'Agent' })
-                                  : t('performance.byCustomer', { defaultValue: 'Customer' })}
-                              </td>
-                              {/* "No reply" rather than a dash: the worst outcome
+                                  <td className="max-w-[20rem] px-5 py-3">
+                                    <span
+                                      className="block truncate font-medium text-foreground"
+                                      title={chat.subject ?? ''}
+                                    >
+                                      {chat.subject ??
+                                        t('performance.noSubject', {
+                                          defaultValue: 'Chat (no ticket)',
+                                        })}
+                                    </span>
+                                    {/* The ids a search finds it by (owner, 2026-10-12). */}
+                                    {(chat.ticketId || chat.orderId) && (
+                                      <span className="font-mono text-2xs text-muted-foreground">
+                                        {[
+                                          chat.ticketId ? `ID ${chat.ticketId}` : null,
+                                          chat.orderId ? `#${chat.orderId}` : null,
+                                        ]
+                                          .filter(Boolean)
+                                          .join(' · ')}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-5 py-3 text-muted-foreground">
+                                    <span className="block max-w-[12rem] truncate">
+                                      {chat.customer ??
+                                        t('performance.unknownCustomer', {
+                                          defaultValue: 'Customer',
+                                        })}
+                                    </span>
+                                  </td>
+                                  <td className="px-5 py-3">
+                                    <span className="flex items-center gap-2">
+                                      <Avatar name={chat.agentName} size="sm" />
+                                      <span className="truncate text-foreground">
+                                        {chat.agentName}
+                                      </span>
+                                    </span>
+                                  </td>
+                                  <td className="px-5 py-3 tabular-nums text-muted-foreground">
+                                    {chat.startedAt ? formatDateTime(chat.startedAt) : dash}
+                                  </td>
+                                  <td className="px-5 py-3 text-muted-foreground">
+                                    {chat.initiatedBy === 'agent'
+                                      ? t('performance.byAgent', { defaultValue: 'Agent' })
+                                      : t('performance.byCustomer', { defaultValue: 'Customer' })}
+                                  </td>
+                                  {/* "No reply" rather than a dash: the worst outcome
                               on the page must not read as missing data. */}
-                              <td
-                                className={cn(
-                                  'px-5 py-3 text-end tabular-nums',
-                                  chat.passedOn || awaitingCustomer(chat)
-                                    ? 'text-muted-foreground'
-                                    : first == null
-                                      ? 'font-semibold text-destructive'
-                                      : 'text-foreground',
-                                )}
-                              >
-                                {awaitingCustomer(chat)
-                                  ? t('performance.customerNotReplied', {
-                                      defaultValue: 'Customer hasn’t replied',
-                                    })
-                                  : first == null
-                                    ? t('performance.noReplyYet', { defaultValue: 'No reply yet' })
-                                    : formatDuration(first)}
-                                {/* Why this row is not counted against the target,
+                                  <td
+                                    className={cn(
+                                      'px-5 py-3 text-end tabular-nums',
+                                      chat.passedOn || awaitingCustomer(chat)
+                                        ? 'text-muted-foreground'
+                                        : first == null
+                                          ? 'font-semibold text-destructive'
+                                          : 'text-foreground',
+                                    )}
+                                  >
+                                    {awaitingCustomer(chat)
+                                      ? t('performance.customerNotReplied', {
+                                          defaultValue: 'Customer hasn’t replied',
+                                        })
+                                      : first == null
+                                        ? t('performance.noReplyYet', {
+                                            defaultValue: 'No reply yet',
+                                          })
+                                        : formatDuration(first)}
+                                    {/* Why this row is not counted against the target,
                                     as in the agent portal (owner, 2026-10-13). */}
-                                {chat.passedOn && (
-                                  <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                                    {t('performance.commonChat', { defaultValue: 'common' })}
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
-                                {solve != null
-                                  ? formatDuration(solve)
-                                  : chat.solvedAt
-                                    ? awaitingCustomer(chat)
-                                      ? t('performance.closedNoReply', {
-                                          defaultValue: 'Closed — no customer reply',
-                                        })
-                                      : t('performance.closed', { defaultValue: 'Closed' })
-                                    : awaitingCustomer(chat)
-                                      ? t('performance.waitingCustomer', {
-                                          defaultValue: 'Waiting for customer',
-                                        })
-                                      : dash}
-                              </td>
-                              {/* This chat's own rating, as in the agent portal;
+                                    {chat.passedOn && (
+                                      <span className="ms-1.5 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                                        {t('performance.commonChat', { defaultValue: 'common' })}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="px-5 py-3 text-end tabular-nums text-muted-foreground">
+                                    {solve != null
+                                      ? formatDuration(solve)
+                                      : chat.solvedAt
+                                        ? awaitingCustomer(chat)
+                                          ? t('performance.closedNoReply', {
+                                              defaultValue: 'Closed — no customer reply',
+                                            })
+                                          : t('performance.closed', { defaultValue: 'Closed' })
+                                        : awaitingCustomer(chat)
+                                          ? t('performance.waitingCustomer', {
+                                              defaultValue: 'Waiting for customer',
+                                            })
+                                          : dash}
+                                  </td>
+                                  {/* This chat's own rating, as in the agent portal;
                                   empty when the customer did not rate (owner,
                                   2026-10-13). */}
-                              <td className="px-5 py-3 text-end tabular-nums text-foreground">
-                                {(() => {
-                                  const score = csat.data?.get(chat.conversationId);
-                                  return typeof score === 'number' ? `${score}/5` : '';
-                                })()}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </section>
+                                  <td className="px-5 py-3 text-end tabular-nums text-foreground">
+                                    {(() => {
+                                      const score = csat.data?.get(chat.conversationId);
+                                      return typeof score === 'number' ? `${score}/5` : '';
+                                    })()}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </section>
+                    </>
+                  )}
                 </>
               )}
 

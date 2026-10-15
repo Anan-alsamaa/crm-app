@@ -14,6 +14,7 @@ import {
   conversationVendorId,
   leastLoadedAgentInTeam,
   useAgents,
+  useAssignableAgents,
   useLinkedTickets,
   useTeamOptions,
   useUpdateConversation,
@@ -69,6 +70,8 @@ export function ConversationToolbar({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const agents = useAgents();
+  // The assign picker offers only people a chat may be given to (2026-10-15).
+  const assignable = useAssignableAgents();
   const teams = useTeamOptions();
   const update = useUpdateConversation();
   const { can } = useAuth();
@@ -346,7 +349,7 @@ export function ConversationToolbar({
                   onChange={(v) => void patch({ assigned_agent: v || null })}
                   options={[
                     { value: '', label: t('conversation.unassigned') },
-                    ...(agents.data ?? []).map((a) => ({
+                    ...(assignable.data ?? agents.data ?? []).map((a) => ({
                       value: a.id,
                       label: a.first_name ?? a.email ?? '',
                     })),

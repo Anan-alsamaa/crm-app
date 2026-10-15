@@ -22,6 +22,7 @@ import {
 import { directus } from '../../lib/directus.js';
 import { BranchPicker } from './BranchPicker.js';
 import {
+  PRIVILEGE_PORTAL,
   ALL_PRIVILEGES,
   PRIVILEGES,
   PRIVILEGE_GROUP,
@@ -395,8 +396,24 @@ export function RolesPage() {
     receive_chats: t('roles.p.receiveChats', {
       defaultValue: 'Show as online and receive auto-assigned chats',
     }),
+    can_be_assigned: t('roles.p.canBeAssigned', {
+      defaultValue: 'Can be assigned chats (by routing or by hand)',
+    }),
+    view_chat_status_report: t('roles.p.viewChatStatusReport', {
+      defaultValue: 'View the Chat status report',
+    }),
+    view_busy_report: t('roles.p.viewBusyReport', { defaultValue: 'View the Busy time report' }),
+    view_chat_breakdown: t('roles.p.viewChatBreakdown', {
+      defaultValue: 'See the Chat by chat table on Agent performance',
+    }),
+    view_own_performance: t('roles.p.viewOwnPerformance', {
+      defaultValue: 'Agent portal: Agent performance page',
+    }),
+    view_preferences: t('roles.p.viewPreferences', {
+      defaultValue: 'Agent portal: Preferences page',
+    }),
     mark_busy: t('roles.p.markBusy', {
-      defaultValue: 'Use Busy (pause new chats); busy time is recorded',
+      defaultValue: 'Show the Busy button in the agent portal (busy time is recorded)',
     }),
     no_agents_alert: t('roles.p.noAgentsAlert', {
       defaultValue: 'Receive the "no agents available" alert',
@@ -678,80 +695,91 @@ export function RolesPage() {
                   title header, hairline-separated tick rows, jade ticks.
                   items-start keeps a two-item card from stretching to its
                   seven-item neighbour's height and hoarding dead space. */}
-                <div className="grid items-start gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-                  {Object.entries(GROUPS).map(([group, label]) => {
-                    const groupPrivs = PRIVS.filter((p) => p.group === group);
-                    // Customers, late orders and coupons hold only the
-                    // Administrator's switches; nobody else sees those cards.
-                    if (groupPrivs.length === 0) return null;
-                    const ticked = groupPrivs.filter((p) => !!shown[p.key]).length;
-                    return (
-                      <fieldset
-                        key={group}
-                        className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]"
-                      >
-                        <legend className="sr-only">{label}</legend>
-                        {/* Each capability area is identified by a tinted glyph
+                {/* TWO PARTS (owner, 2026-10-15): what this role may do in the
+                    AGENT portal, then in the ADMIN portal. */}
+                {(['agent', 'admin'] as const).map((portal) => (
+                  <section key={portal} className="space-y-3">
+                    <h3 className="px-1 text-sm font-semibold tracking-tight text-foreground">
+                      {portal === 'agent'
+                        ? t('roles.portalAgent', { defaultValue: 'Agent portal' })
+                        : t('roles.portalAdmin', { defaultValue: 'Admin portal' })}
+                    </h3>
+                    <div className="grid items-start gap-4 sm:grid-cols-2 2xl:grid-cols-4">
+                      {Object.entries(GROUPS).map(([group, label]) => {
+                        const groupPrivs = PRIVS.filter(
+                          (p) => p.group === group && PRIVILEGE_PORTAL[p.key] === portal,
+                        );
+                        // Customers, late orders and coupons hold only the
+                        // Administrator's switches; nobody else sees those cards.
+                        if (groupPrivs.length === 0) return null;
+                        const ticked = groupPrivs.filter((p) => !!shown[p.key]).length;
+                        return (
+                          <fieldset
+                            key={`${portal}-${group}`}
+                            className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]"
+                          >
+                            <legend className="sr-only">{label}</legend>
+                            {/* Each capability area is identified by a tinted glyph
                             and shows how much of it this role has been given —
                             four identical grey cards told an admin nothing at a
                             glance about where a role's power actually sits. */}
-                        <div className="border-b border-foreground/[0.06] pb-3">
-                          <div className="flex items-center gap-2.5">
-                            <span
-                              aria-hidden
-                              className={cn(
-                                'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
-                                GROUP_CHIPS[group] ?? 'bg-secondary text-muted-foreground',
-                              )}
-                            >
-                              {GROUP_ICONS[group]}
-                            </span>
-                            <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-foreground">
-                              {label}
-                            </h3>
-                            <span
-                              className={cn(
-                                'shrink-0 text-2xs font-semibold tabular-nums',
-                                ticked > 0 ? 'text-primary' : 'text-muted-foreground',
-                              )}
-                            >
-                              {ticked}/{groupPrivs.length}
-                            </span>
-                          </div>
-                          <div className="mt-2.5 flex items-center gap-3">
-                            <MeterBar
-                              value={(ticked / groupPrivs.length) * 100}
-                              tone="primary"
-                              className="flex-1"
-                            />
-                            {/* Granting a whole area is the common case; ticking
+                            <div className="border-b border-foreground/[0.06] pb-3">
+                              <div className="flex items-center gap-2.5">
+                                <span
+                                  aria-hidden
+                                  className={cn(
+                                    'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
+                                    GROUP_CHIPS[group] ?? 'bg-secondary text-muted-foreground',
+                                  )}
+                                >
+                                  {GROUP_ICONS[group]}
+                                </span>
+                                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-foreground">
+                                  {label}
+                                </h3>
+                                <span
+                                  className={cn(
+                                    'shrink-0 text-2xs font-semibold tabular-nums',
+                                    ticked > 0 ? 'text-primary' : 'text-muted-foreground',
+                                  )}
+                                >
+                                  {ticked}/{groupPrivs.length}
+                                </span>
+                              </div>
+                              <div className="mt-2.5 flex items-center gap-3">
+                                <MeterBar
+                                  value={(ticked / groupPrivs.length) * 100}
+                                  tone="primary"
+                                  className="flex-1"
+                                />
+                                {/* Granting a whole area is the common case; ticking
                                 seven switches one at a time was busywork. */}
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setDraft((d) => {
-                                  const all = ticked === groupPrivs.length;
-                                  const next = { ...d.privileges };
-                                  for (const gp of groupPrivs) next[gp.key] = !all;
-                                  return { ...d, privileges: next };
-                                })
-                              }
-                              className="shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10"
-                            >
-                              {ticked === groupPrivs.length
-                                ? t('roles.clearGroup', { defaultValue: 'None' })
-                                : t('roles.allGroup', { defaultValue: 'All' })}
-                            </button>
-                          </div>
-                        </div>
-                        <ul className="mt-1 divide-y divide-foreground/[0.06]">
-                          {groupPrivs.map((p) => (
-                            <li key={p.key}>
-                              {/* Toggle switch, label first — the permission
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDraft((d) => {
+                                      const all = ticked === groupPrivs.length;
+                                      const next = { ...d.privileges };
+                                      for (const gp of groupPrivs) next[gp.key] = !all;
+                                      return { ...d, privileges: next };
+                                    })
+                                  }
+                                  className="shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10"
+                                >
+                                  {ticked === groupPrivs.length
+                                    ? t('roles.clearGroup', { defaultValue: 'None' })
+                                    : t('roles.allGroup', { defaultValue: 'All' })}
+                                </button>
+                              </div>
+                            </div>
+                            <ul className="mt-1 divide-y divide-foreground/[0.06]">
+                              {groupPrivs.map((p) => (
+                                <li key={p.key}>
+                                  {/* Toggle switch, label first — the permission
                                   rows of the reference console. The thumb
                                   moves via the logical inset so RTL slides the
                                   right way. */}
-                              {/*
+                                  {/*
                                 A privilege you cannot grant is DISABLED, and a
                                 disabled switch is silent: clicking it does
                                 nothing and says nothing, which reads as a bug
@@ -766,70 +794,76 @@ export function RolesPage() {
                                 hover title, and the cursor stops promising a
                                 click.
                               */}
-                              <label
-                                className={cn(
-                                  'flex min-h-9 items-center justify-between gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast',
-                                  locked || !grantable(p.key)
-                                    ? 'cursor-not-allowed opacity-60'
-                                    : 'cursor-pointer hover:bg-foreground/[0.03]',
-                                )}
-                              >
-                                <span className="min-w-0 flex-1">
-                                  {PRIV_LABELS[p.key]}
-                                  {isOwnerPrivilege(p.key) && (
-                                    <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
-                                      {t('roles.ownerOnlyHint', {
-                                        defaultValue: 'Only the Administrator sees this switch.',
-                                      })}
-                                    </span>
-                                  )}
-                                  {!locked && !grantable(p.key) && (
-                                    <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
-                                      {t('roles.ceilingHint', {
-                                        defaultValue:
-                                          'You cannot grant a privilege your own role does not hold.',
-                                      })}
-                                    </span>
-                                  )}
-                                </span>
-                                <span className="relative inline-flex shrink-0">
-                                  <input
-                                    type="checkbox"
-                                    className="peer sr-only"
-                                    checked={!!shown[p.key]}
-                                    disabled={locked || !grantable(p.key)}
-                                    title={
-                                      !grantable(p.key)
-                                        ? t('roles.ceilingHint', {
+                                  <label
+                                    className={cn(
+                                      'flex min-h-9 items-center justify-between gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast',
+                                      locked || !grantable(p.key)
+                                        ? 'cursor-not-allowed opacity-60'
+                                        : 'cursor-pointer hover:bg-foreground/[0.03]',
+                                    )}
+                                  >
+                                    <span className="min-w-0 flex-1">
+                                      {PRIV_LABELS[p.key]}
+                                      {isOwnerPrivilege(p.key) && (
+                                        <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
+                                          {t('roles.ownerOnlyHint', {
+                                            defaultValue:
+                                              'Only the Administrator sees this switch.',
+                                          })}
+                                        </span>
+                                      )}
+                                      {!locked && !grantable(p.key) && (
+                                        <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
+                                          {t('roles.ceilingHint', {
                                             defaultValue:
                                               'You cannot grant a privilege your own role does not hold.',
-                                          })
-                                        : undefined
-                                    }
-                                    onChange={(e) =>
-                                      setDraft((d) => ({
-                                        ...d,
-                                        privileges: { ...d.privileges, [p.key]: e.target.checked },
-                                      }))
-                                    }
-                                  />
-                                  <span
-                                    aria-hidden
-                                    className="block h-6 w-11 rounded-full bg-foreground/15 transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
-                                  />
-                                  <span
-                                    aria-hidden
-                                    className="pointer-events-none absolute top-0.5 start-0.5 h-5 w-5 rounded-full bg-card shadow-md transition-all duration-fast peer-checked:start-[1.375rem]"
-                                  />
-                                </span>
-                              </label>
-                            </li>
-                          ))}
-                        </ul>
-                      </fieldset>
-                    );
-                  })}
-                </div>
+                                          })}
+                                        </span>
+                                      )}
+                                    </span>
+                                    <span className="relative inline-flex shrink-0">
+                                      <input
+                                        type="checkbox"
+                                        className="peer sr-only"
+                                        checked={!!shown[p.key]}
+                                        disabled={locked || !grantable(p.key)}
+                                        title={
+                                          !grantable(p.key)
+                                            ? t('roles.ceilingHint', {
+                                                defaultValue:
+                                                  'You cannot grant a privilege your own role does not hold.',
+                                              })
+                                            : undefined
+                                        }
+                                        onChange={(e) =>
+                                          setDraft((d) => ({
+                                            ...d,
+                                            privileges: {
+                                              ...d.privileges,
+                                              [p.key]: e.target.checked,
+                                            },
+                                          }))
+                                        }
+                                      />
+                                      <span
+                                        aria-hidden
+                                        className="block h-6 w-11 rounded-full bg-foreground/15 transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
+                                      />
+                                      <span
+                                        aria-hidden
+                                        className="pointer-events-none absolute top-0.5 start-0.5 h-5 w-5 rounded-full bg-card shadow-md transition-all duration-fast peer-checked:start-[1.375rem]"
+                                      />
+                                    </span>
+                                  </label>
+                                </li>
+                              ))}
+                            </ul>
+                          </fieldset>
+                        );
+                      })}
+                    </div>
+                  </section>
+                ))}
 
                 {/* brand restriction — the shared SectionCard surface */}
                 <SectionCard

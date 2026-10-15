@@ -180,6 +180,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     delete_chats: never,
     edit_own_messages: holds('use_chat'),
     receive_chats: nameIn('wecare agent', 'wecare supervisor'),
+    can_be_assigned: () => true,
     mark_busy: nameIn('wecare agent', 'wecare supervisor', 'wecare admin'),
     no_agents_alert: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
     view_contacts: holds('use_chat'),
@@ -199,6 +200,11 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
     view_agent_reports: holds('view_all_chats'),
     view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
+    view_chat_status_report: holds('view_agent_reports'),
+    view_busy_report: holds('view_agent_reports'),
+    view_chat_breakdown: holds('view_agent_reports'),
+    view_own_performance: holds('use_chat'),
+    view_preferences: () => true,
     delete_users: nameIn('administrator', 'wecare admin'),
     manage_teams: holds('manage_users'),
     edit_yiji_branch_id: never,
@@ -562,6 +568,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     delete_chats: [g('conversations', 'delete')],
     edit_own_messages: [], // the gateway's message edit/delete
     receive_chats: [], // the gateway's presence + the workers' routing
+    can_be_assigned: [], // the routing ladder + the portal's assign picker
     mark_busy: [], // the gateway's /jobs/busy
     no_agents_alert: [], // the workers' alert
     view_contacts: [],
@@ -592,6 +599,11 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_agent_dashboard: [], // UI gate; its reads come with REPORT_ACCESS below
     view_agent_reports: [],
     view_sla_report: [],
+    view_chat_status_report: [],
+    view_busy_report: [],
+    view_chat_breakdown: [],
+    view_own_performance: [],
+    view_preferences: [],
     delete_users: [g('directus_users', 'delete')],
     manage_teams: [...crud('teams')],
     edit_yiji_branch_id: [g('stores', 'update', {}, ['yiji_restaurant_id'])],

@@ -113,6 +113,7 @@ export const OWNER_PRIVILEGES = [
   'delete_chats',
   'edit_own_messages',
   'receive_chats',
+  'can_be_assigned',
   'mark_busy',
   'no_agents_alert',
   // ── customers ───────────────────────────────────────────────────────────
@@ -138,6 +139,11 @@ export const OWNER_PRIVILEGES = [
   'view_agent_dashboard',
   'view_agent_reports',
   'view_sla_report',
+  'view_chat_status_report',
+  'view_busy_report',
+  'view_chat_breakdown',
+  'view_own_performance',
+  'view_preferences',
   // ── administration ──────────────────────────────────────────────────────
   'delete_users',
   'manage_teams',
@@ -200,6 +206,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   edit_own_messages: holds('use_chat'),
   // The gateway's PRESENCE_ROLES / the workers' ROUTABLE_ROLES.
   receive_chats: nameIn('wecare agent', 'wecare supervisor'),
+  /* May be given a chat at all - by the routing ladder (with receive_chats)
+     or BY HAND from the assign picker. Off for the CEO (owner, 2026-10-15). */
+  can_be_assigned: () => true,
   /* The Busy button and its time records (owner, 2026-10-13): the three
      WeCare roles only, off for every other role. */
   mark_busy: nameIn('wecare agent', 'wecare supervisor', 'wecare admin'),
@@ -225,6 +234,13 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
   view_agent_reports: holds('view_all_chats'),
   view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
+  // Split off view_agent_reports for the CEO role (owner, 2026-10-15); the
+  // defaults keep everyone else exactly where they were.
+  view_chat_status_report: holds('view_agent_reports'),
+  view_busy_report: holds('view_agent_reports'),
+  view_chat_breakdown: holds('view_agent_reports'),
+  view_own_performance: holds('use_chat'),
+  view_preferences: () => true,
   delete_users: nameIn('administrator', 'wecare admin'),
   manage_teams: holds('manage_users'),
   edit_yiji_branch_id: never, // was the Administrator only
@@ -296,6 +312,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   delete_chats: 'chat',
   edit_own_messages: 'chat',
   receive_chats: 'chat',
+  can_be_assigned: 'chat',
   mark_busy: 'chat',
   no_agents_alert: 'chat',
   view_contacts: 'customers',
@@ -315,6 +332,11 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_agent_dashboard: 'reporting',
   view_agent_reports: 'reporting',
   view_sla_report: 'reporting',
+  view_chat_status_report: 'reporting',
+  view_busy_report: 'reporting',
+  view_chat_breakdown: 'reporting',
+  view_own_performance: 'reporting',
+  view_preferences: 'admin',
   delete_users: 'admin',
   manage_teams: 'admin',
   edit_yiji_branch_id: 'admin',
@@ -422,3 +444,72 @@ export function opensPortal(
   const list = portal === 'admin' ? ADMIN_PORTAL_PRIVILEGES : AGENT_PORTAL_PRIVILEGES;
   return list.some((p) => privileges?.[p] === true);
 }
+
+/**
+ * WHICH PORTAL each switch acts in (owner, 2026-10-15: the Roles page in two
+ * parts, "Agent portal" and "Admin portal"). From where each key is actually
+ * checked; a key used in both sits where its main screen is.
+ */
+export type PrivilegePortal = 'agent' | 'admin';
+export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
+  // agent portal
+  use_chat: 'agent',
+  view_all_chats: 'agent',
+  start_chats: 'agent',
+  assign_chats: 'agent',
+  close_chats: 'agent',
+  bulk_edit_chats: 'agent',
+  delete_chats: 'agent',
+  edit_own_messages: 'agent',
+  receive_chats: 'agent',
+  can_be_assigned: 'agent',
+  mark_busy: 'agent',
+  no_agents_alert: 'agent',
+  view_contacts: 'agent',
+  create_contacts: 'agent',
+  edit_contacts: 'agent',
+  export_contacts: 'agent',
+  view_tickets: 'agent',
+  create_tickets: 'agent',
+  edit_tickets: 'agent',
+  edit_all_tickets: 'agent',
+  view_ticket_history: 'agent',
+  export_ticket_excel: 'agent',
+  work_late_orders: 'agent',
+  view_order_details: 'agent',
+  request_coupons: 'agent',
+  view_own_performance: 'agent',
+  view_preferences: 'agent',
+  manage_notification_defaults: 'agent',
+  // admin portal
+  view_dashboard: 'admin',
+  view_ops_dashboard: 'admin',
+  view_agent_dashboard: 'admin',
+  export_data: 'admin',
+  import_data: 'admin',
+  schedule_reports: 'admin',
+  view_all_tickets: 'admin',
+  delete_tickets: 'admin',
+  approve_coupons: 'admin',
+  view_coupon_spend: 'admin',
+  view_compensation_reports: 'admin',
+  delete_compensation: 'admin',
+  view_agent_reports: 'admin',
+  view_sla_report: 'admin',
+  view_late_orders_report: 'admin',
+  export_late_orders: 'admin',
+  view_chat_status_report: 'admin',
+  view_busy_report: 'admin',
+  view_chat_breakdown: 'admin',
+  manage_lists: 'admin',
+  manage_restaurants: 'admin',
+  manage_users: 'admin',
+  manage_sla: 'admin',
+  manage_roles: 'admin',
+  manage_backup: 'admin',
+  use_directus_app: 'admin',
+  delete_users: 'admin',
+  manage_teams: 'admin',
+  edit_yiji_branch_id: 'admin',
+  manage_store_notifications: 'admin',
+};

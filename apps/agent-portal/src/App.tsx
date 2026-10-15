@@ -366,7 +366,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           to: '/performance',
           label: t('nav.performance', { defaultValue: 'Agent performance' }),
           icon: ClockIcon,
-          requires: 'use_chat',
+          // Its own switch (owner, 2026-10-15: not for the CEO); defaults to use_chat.
+          requires: 'view_own_performance',
         },
         {
           // Asking for a coupon is its own switch (owner, 2026-10-06); it
@@ -380,7 +381,15 @@ function Shell({ children }: { children: React.ReactNode }) {
     },
     {
       heading: t('nav.account', { defaultValue: 'Account' }),
-      items: [{ to: '/preferences', label: t('nav.preferences'), icon: SettingsIcon }],
+      items: [
+        {
+          to: '/preferences',
+          label: t('nav.preferences'),
+          icon: SettingsIcon,
+          // On for everyone by default; off for the CEO (owner, 2026-10-15).
+          requires: 'view_preferences',
+        },
+      ],
     },
   ];
   // A hidden link is not a closed one — the routes below gate too — but a
@@ -563,7 +572,7 @@ export function App() {
           <Route
             path="/performance"
             element={
-              <ProtectedRoute requires="use_chat">
+              <ProtectedRoute requires="view_own_performance">
                 <Shell>
                   <AgentPerformancePage />
                 </Shell>
@@ -593,7 +602,7 @@ export function App() {
           <Route
             path="/preferences"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requires="view_preferences">
                 <Shell>
                   <PreferencesPage />
                 </Shell>

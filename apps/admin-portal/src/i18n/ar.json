@@ -132,7 +132,8 @@
     "viewBreakdown": "التوزيع",
     "startedByAgent": "موظف",
     "startedByCustomer": "العميل",
-    "replied": "ردّوا"
+    "replied": "ردّوا",
+    "yesterdayToday": "أمس واليوم"
   },
   "aiConfig": {
     "title": "المساعدة بالذكاء الاصطناعي",
@@ -745,7 +746,7 @@
     "rejectedRate": "المرفوضة",
     "rejectedHint": "رُفضت تمامًا.",
     "requested": "المطلوبة",
-    "asAsked": "كما طُلبت",
+    "asAsked": "بدون تعديل",
     "withChanges": "مع تعديلات",
     "rejected": "مرفوضة",
     "pending": "منتظرة",
@@ -1362,7 +1363,13 @@
       "manageStoreNotifications": "تنبيهات الفروع",
       "manageNotificationDefaults": "إعدادات التنبيهات الافتراضية للمنشأة",
       "viewAgentDashboard": "عرض لوحة الوكلاء",
-      "markBusy": "استخدام وضع \"مشغول\" (إيقاف المحادثات الجديدة مؤقتاً) مع تسجيل وقت الانشغال"
+      "markBusy": "إظهار زر \"مشغول\" في بوابة الموظفين (مع تسجيل وقت الانشغال)",
+      "canBeAssigned": "يمكن إسناد المحادثات إليه (تلقائياً أو يدوياً)",
+      "viewChatStatusReport": "عرض تقرير حالة المحادثات",
+      "viewBusyReport": "عرض تقرير وقت الانشغال",
+      "viewChatBreakdown": "عرض جدول المحادثات في أداء الموظفين",
+      "viewOwnPerformance": "بوابة الموظفين: صفحة أداء الموظف",
+      "viewPreferences": "بوابة الموظفين: صفحة التفضيلات"
     },
     "pending": "قيد التطبيق…",
     "privCount": "{{n}} صلاحية",
@@ -1377,7 +1384,9 @@
     "groupCustomers": "العملاء",
     "groupLateOrders": "الطلبات المتأخرة",
     "groupCoupons": "الكوبونات والتعويضات",
-    "ownerOnlyHint": "هذا المفتاح يظهر لمدير النظام فقط."
+    "ownerOnlyHint": "هذا المفتاح يظهر لمدير النظام فقط.",
+    "portalAgent": "بوابة الموظفين",
+    "portalAdmin": "بوابة الإدارة"
   },
   "shortcuts": {
     "title": "اختصارات لوحة المفاتيح",

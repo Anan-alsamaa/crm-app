@@ -2,7 +2,11 @@ import { useCallback, useRef } from 'react';
 import { type QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { readItems, readUsers, updateItem, createItem, deleteItem } from '@directus/sdk';
 import type { ConversationStatus, Priority, YijiOrder } from '@yiji/shared-types';
-import { isAutomatedAgentMessage, normaliseTicketStatus } from '@yiji/shared-types';
+import {
+  effectivePrivileges,
+  isAutomatedAgentMessage,
+  normaliseTicketStatus,
+} from '@yiji/shared-types';
 import { readChunked } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { commerce } from '../../lib/commerce-client.js';
@@ -910,6 +914,58 @@ export function useAgents() {
         .then((rows) =>
           (rows as AgentOption[]).filter((u) => !(u.email ?? '').toLowerCase().includes('@svc.')),
         ) as Promise<AgentOption[]>,
+  });
+}
+
+/**
+ * The people a CHAT may be assigned to (owner, 2026-10-15): everyone in
+ * useAgents() except roles whose `can_be_assigned` switch is off - the CEO
+ * can see every chat but must never be given one, by routing OR by hand.
+ * A role with no app_roles row (the built-in Administrator/Admin/Agent) keeps
+ * today's behaviour. If the roles cannot be read, nobody is hidden.
+ */
+export function useAssignableAgents() {
+  return useQuery({
+    queryKey: ['agents-assignable'],
+    queryFn: async (): Promise<AgentOption[]> => {
+      const [users, roles] = await Promise.all([
+        directus.request(
+          readUsers({
+            limit: -1,
+            fields: ['id', 'email', 'first_name', 'last_name', { role: ['name'] }],
+            sort: ['email'],
+          }),
+        ) as Promise<Array<AgentOption & { role?: { name?: string | null } | null }>>,
+        (
+          directus.request(
+            readItems('app_roles' as never, { limit: -1, fields: ['name', 'privileges'] } as never),
+          ) as Promise<Array<{ name: string; privileges: unknown }>>
+        ).catch(() => [] as Array<{ name: string; privileges: unknown }>),
+      ]);
+      const stored = new Map(
+        roles.map((r) => {
+          const raw = r.privileges;
+          let p: Record<string, boolean> | null = null;
+          if (typeof raw === 'string') {
+            try {
+              p = JSON.parse(raw) as Record<string, boolean>;
+            } catch {
+              p = null;
+            }
+          } else if (raw && typeof raw === 'object') p = raw as Record<string, boolean>;
+          return [r.name.trim().toLowerCase(), p] as const;
+        }),
+      );
+      return users
+        .filter((u) => !(u.email ?? '').toLowerCase().includes('@svc.'))
+        .filter((u) => {
+          const roleName = u.role?.name ?? '';
+          const key = roleName.trim().toLowerCase();
+          if (!stored.has(key)) return true;
+          return effectivePrivileges(stored.get(key) ?? null, roleName).can_be_assigned !== false;
+        })
+        .map(({ role: _role, ...u }) => u);
+    },
   });
 }
 

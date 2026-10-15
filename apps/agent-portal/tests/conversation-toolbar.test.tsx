@@ -28,6 +28,8 @@ vi.mock('react-router-dom', async (importOriginal) => {
 
 const inbox = vi.hoisted(() => ({
   useAgents: vi.fn(),
+  // No data: the assign picker falls back to useAgents (2026-10-15).
+  useAssignableAgents: () => ({ data: undefined }),
   useTeamOptions: vi.fn(),
   useTags: vi.fn(),
   useAddTagToConversation: vi.fn(),
