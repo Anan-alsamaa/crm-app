@@ -530,7 +530,8 @@
       "colPending": "Pending",
       "colOverdue": "Overdue",
       "unassigned": "Unassigned",
-      "noBrand": "No brand"
+      "noBrand": "No brand",
+      "noteShort": "Still pending right now, from any date."
     },
     "breached": "Breached",
     "byAgent": "By agent",
@@ -567,7 +568,9 @@
     "searchHint": "Ticket subject, agent or id",
     "noneInRange": "No tickets match these filters. Widen the dates, or clear them.",
     "windowTitle": "Deadlines in the selected dates",
-    "windowNote": "Tickets raised between From and To below, judged against their deadline."
+    "windowNote": "Tickets raised between From and To below, judged against their deadline.",
+    "windowTitleShort": "Selected dates",
+    "windowNoteShort": "Tickets raised in the From - To range below, against their deadline."
   },
   "app": {
     "console": "Admin console"
