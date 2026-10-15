@@ -839,6 +839,7 @@ function Row({
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                  disabled={!canDecide}
                   checked={row.delivery_excluded === true}
                   onChange={(e) => {
                     /* The LOCAL draft follows the server value, or unchecking
@@ -1497,8 +1498,13 @@ function Row({
 
 export function CouponApprovalsPage() {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const [view, setView] = useState<CouponApprovalStatus | 'all'>('pending');
+  const { user, can } = useAuth();
+  /* A reader who cannot decide (the CEO, owner 2026-10-15) has no "pending
+     to work": they open on every status. Deciders still open on pending. */
+  const canDecide = can('approve_coupons');
+  const [view, setView] = useState<CouponApprovalStatus | 'all'>(() =>
+    canDecide ? 'pending' : 'all',
+  );
   const approvals = useCouponApprovals(view);
   const decide = useDecideCoupon();
 
@@ -1686,7 +1692,7 @@ export function CouponApprovalsPage() {
         {/* Only when there is something it would actually do. A permanently
             visible bulk action on an empty queue invites a click that grants
             nothing and teaches nothing. */}
-        {approvable.length > 0 && (
+        {canDecide && approvable.length > 0 && (
           <Button
             type="button"
             size="sm"

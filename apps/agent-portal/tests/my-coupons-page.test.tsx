@@ -40,7 +40,10 @@ vi.mock('../src/features/coupons/api.js', () => api);
  * the status tabs, the counts and the rejection note. The scoping itself is
  * covered separately in `my-coupons-scope.test.ts`.
  */
-const auth = vi.hoisted(() => ({ user: null as { id: string } | null }));
+const auth = vi.hoisted(() => ({
+  can: (_k: string) => true,
+  user: null as { id: string } | null,
+}));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => auth }));
 
 import { MyCouponsPage } from '../src/features/coupons/MyCouponsPage.js';

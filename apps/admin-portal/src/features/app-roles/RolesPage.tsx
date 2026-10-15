@@ -457,6 +457,12 @@ export function RolesPage() {
     }),
     view_sla_report: t('roles.p.viewSlaReport', { defaultValue: 'View ticket deadline report' }),
     delete_users: t('roles.p.deleteUsers', { defaultValue: 'Delete users' }),
+    view_coupon_queue: t('roles.p.viewCouponQueue', {
+      defaultValue: 'See the Compensation page (read-only without Request coupons)',
+    }),
+    view_coupon_approvals: t('roles.p.viewCouponApprovals', {
+      defaultValue: 'See Coupon approvals (read-only without Approve coupons)',
+    }),
     delete_restaurants: t('roles.p.deleteRestaurants', {
       defaultValue: 'Delete restaurants (stores and brands)',
     }),

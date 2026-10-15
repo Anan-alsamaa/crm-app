@@ -206,6 +206,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_own_performance: holds('use_chat'),
     view_preferences: () => true,
     view_data_warnings: () => true,
+    view_coupon_queue: holds('request_coupons'),
+    view_coupon_approvals: holds('approve_coupons'),
     delete_users: nameIn('administrator', 'wecare admin'),
     delete_restaurants: holds('manage_restaurants'),
     manage_teams: holds('manage_users'),
@@ -608,6 +610,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_own_performance: [],
     view_preferences: [],
     view_data_warnings: [],
+    // Read-only views of the coupon queue (owner, 2026-10-15).
+    view_coupon_queue: [g('coupon_approvals', 'read')],
+    view_coupon_approvals: [g('coupon_approvals', 'read')],
     delete_users: [g('directus_users', 'delete')],
     // Split from manage_restaurants (owner, 2026-10-15): the CEO manages
     // restaurants without Delete.

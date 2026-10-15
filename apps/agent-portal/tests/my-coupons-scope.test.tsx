@@ -44,7 +44,10 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/coupons/api.js', () => api);
 
-const auth = vi.hoisted(() => ({ user: { id: 'me' } as { id: string } | null }));
+const auth = vi.hoisted(() => ({
+  user: { id: 'me' } as { id: string } | null,
+  can: (_k: string) => true as boolean,
+}));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({ useAuth: () => auth }));
 
 /* The agent dropdown lists EVERY agent, not only the ones with rows here. */
@@ -85,6 +88,7 @@ function renderPage() {
 
 beforeEach(() => {
   auth.user = { id: 'me' };
+  auth.can = () => true;
   api.useMyCouponRequests.mockReset();
   api.useMyCouponRequests.mockReturnValue({
     data: [row('a', 'me'), row('b', 'colleague'), row('c', 'me', 'approved')],
@@ -148,5 +152,15 @@ describe('Compensation requests are scoped to me by default', () => {
     renderPage();
     expect(await screen.findByText('CODE-a')).toBeTruthy();
     expect(screen.getByText('CODE-b')).toBeTruthy();
+  });
+
+  /* The CEO (owner, 2026-10-15) raises no coupons: he opens on every agent and
+     every status. */
+  it('a reader who requests no coupons opens on all agents and all statuses', async () => {
+    auth.can = (k: string) => k !== 'request_coupons';
+    renderPage();
+    expect(await screen.findByText('CODE-a')).toBeTruthy();
+    expect(screen.getByText('CODE-b')).toBeTruthy();
+    expect(screen.getByText('CODE-c')).toBeTruthy();
   });
 });
