@@ -221,10 +221,28 @@ export function toComplaintRow(t: TicketRow, agentName: string): AgentComplaintR
 }
 
 /**
- * `days` of null means every complaint the agent has, with no date window —
- * what the Tickets page needs, since a window there would quietly hide older
- * tickets an agent still has to work.
+ * `days` of null means no rolling window. The Tickets page passes null and a
+ * BUSINESS-DAY `range` instead (owner, 2026-10-15: the page opens on
+ * yesterday -> today, for everyone).
  */
+/**
+ * The business-day window a From/To pair means, as ISO stamps — the same rule
+ * as the admin portal's `businessDayWindow` (apps/admin-portal/src/lib/date-range.ts).
+ *
+ * A business day runs 08:00 to 04:00 the next morning and is named after the
+ * day it opened, so `from=to=2026-10-14` is `2026-10-14T08:00:00` through
+ * `2026-10-15T04:00:00`: a ticket raised at 01:00 on the 15th belongs to the
+ * 14th. Local stamps without a zone, matching how the admin reports filter.
+ */
+export function ticketBusinessWindow(from: string, to: string): { fromIso: string; toIso: string } {
+  const close = new Date(`${to}T00:00:00Z`);
+  close.setUTCDate(close.getUTCDate() + 1);
+  return {
+    fromIso: `${from}T08:00:00`,
+    toIso: `${close.toISOString().slice(0, 10)}T04:00:00`,
+  };
+}
+
 /**
  * WHOSE TICKETS TO SHOW.
  *
@@ -241,9 +259,11 @@ export function useMyComplaints(
   days: number | null,
   agentName: string,
   scope: ComplaintScope = 'me',
+  /** Business days, inclusive; either end may be '' for open-ended. */
+  range?: { from: string; to: string } | null,
 ) {
   return useQuery({
-    queryKey: ['my-complaints', days, agentName, scope],
+    queryKey: ['my-complaints', days, agentName, scope, range?.from ?? '', range?.to ?? ''],
     staleTime: 60_000,
     queryFn: async (): Promise<AgentComplaintRow[]> => {
       const since = days == null ? null : new Date(Date.now() - days * DAY_MS).toISOString();
@@ -258,9 +278,16 @@ export function useMyComplaints(
        */
       const who =
         scope === 'all' ? null : scope === 'me' ? MINE : { assigned_agent: { _eq: scope } };
+      /* BUSINESS days on `date_created` (owner, 2026-10-15). An empty end is
+         open, so clearing a date widens the window rather than emptying it. */
+      const w = range
+        ? ticketBusinessWindow(range.from || '0000-01-01', range.to || '9999-12-31')
+        : null;
       const clauses = [
         ...(who ? [who] : []),
         ...(since ? [{ date_created: { _gte: since } }] : []),
+        ...(w && range?.from ? [{ date_created: { _gte: w.fromIso } }] : []),
+        ...(w && range?.to ? [{ date_created: { _lte: w.toIso } }] : []),
       ];
       const filter =
         clauses.length === 0 ? undefined : clauses.length === 1 ? clauses[0] : { _and: clauses };

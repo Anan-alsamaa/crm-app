@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import React from 'react';
+import { defaultPerformanceRange } from '@yiji/reports';
 
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -150,6 +151,7 @@ const complaintRow = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
   complaints.useMyComplaints.mockReset();
   complaints.useMyComplaints.mockReturnValue({ data: [complaintRow], isLoading: false });
   hooks.useTickets.mockReset();
@@ -479,5 +481,54 @@ describe('tickets rail: the counted status tiles', () => {
     complaints.useMyComplaints.mockReturnValue({ data: [complaintRow], isLoading: false });
     renderPage();
     expect(screen.getByRole('button', { name: '0 Overdue' })).toBeDisabled();
+  });
+});
+
+/** The range the page last asked the tickets query for. */
+function lastRange(): { from: string; to: string } | undefined {
+  const calls = complaints.useMyComplaints.mock.calls;
+  return calls[calls.length - 1]?.[3] as { from: string; to: string } | undefined;
+}
+
+describe('TicketsPage date range (owner, 2026-10-15)', () => {
+  it('opens on yesterday -> today in business days', () => {
+    renderPage();
+    expect(lastRange()).toEqual(defaultPerformanceRange());
+  });
+
+  it('names the date range in the empty state', () => {
+    complaints.useMyComplaints.mockReturnValue({ data: [], isLoading: false });
+    renderPage();
+    expect(screen.getByText(/\(business days\)/)).toBeInTheDocument();
+  });
+
+  it('keeps a custom range after leaving the page and coming back', () => {
+    const first = renderPage();
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '01/09/2026' } });
+    fireEvent.change(screen.getByLabelText('To'), { target: { value: '15/09/2026' } });
+    expect(lastRange()).toEqual({ from: '2026-09-01', to: '2026-09-15' });
+    first.unmount();
+
+    complaints.useMyComplaints.mockClear();
+    renderPage();
+    expect(lastRange()).toEqual({ from: '2026-09-01', to: '2026-09-15' });
+  });
+
+  it('stays on the (recomputed) default when the user kept it', () => {
+    const first = renderPage();
+    first.unmount();
+    // Nothing stored: a kept default is never frozen to the dates it opened on.
+    expect(sessionStorage.getItem('agent-tickets:agent-1')).toBeNull();
+    complaints.useMyComplaints.mockClear();
+    renderPage();
+    expect(lastRange()).toEqual(defaultPerformanceRange());
+  });
+
+  it('Clear puts a custom range back to the default', () => {
+    renderPage();
+    fireEvent.change(screen.getByLabelText('From'), { target: { value: '01/09/2026' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+    expect(lastRange()).toEqual(defaultPerformanceRange());
+    expect(sessionStorage.getItem('agent-tickets:agent-1')).toBeNull();
   });
 });

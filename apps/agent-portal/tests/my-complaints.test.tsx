@@ -74,6 +74,20 @@ describe('an agent reads their OWN tickets', () => {
     expect(JSON.stringify(await sentParams())).toContain('_gte');
   });
 
+  it('filters date_created by BUSINESS days: 08:00 on From to 04:00 after To', async () => {
+    request.mockResolvedValueOnce([]);
+    renderHook(
+      () => useMyComplaints(null, 'Sara', 'all', { from: '2026-10-14', to: '2026-10-15' }),
+      {
+        wrapper,
+      },
+    );
+    await waitFor(() => expect(request).toHaveBeenCalled());
+    const filter = JSON.stringify((await sentParams()).filter);
+    expect(filter).toContain('"date_created":{"_gte":"2026-10-14T08:00:00"}');
+    expect(filter).toContain('"date_created":{"_lte":"2026-10-16T04:00:00"}');
+  });
+
   it('maps a ticket into the ops report row', async () => {
     request.mockResolvedValueOnce([ticket]);
     const { result } = renderHook(() => useMyComplaints(30, 'Sara'), { wrapper });
