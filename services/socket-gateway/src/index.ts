@@ -56,7 +56,7 @@ import {
 } from './releases.js';
 import { createProducer } from './queue.js';
 import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
-import { runIdleCloseSweep, withSweepLock } from './idle-close.js';
+import { idleCloseEnabled, runIdleCloseSweep, withSweepLock } from './idle-close.js';
 import { registerLateOrdersPushRoute, LATE_ORDERS_PUSH_ROOM } from './late-orders-push.js';
 import {
   registerConnection,
@@ -354,7 +354,17 @@ async function main(): Promise<void> {
    * production and a double sweep means a double goodbye.
    */
   const IDLE_SWEEP_MS = Number(process.env.IDLE_CLOSE_SWEEP_MS ?? 60_000);
+  /*
+   * OFF (owner, 2026-10-16): "we want to revert this feature and the inbox
+   * chat closes only when the agent closes the chat." The sweep and its rules
+   * stay in the code so it can come back without a rewrite: set
+   * CHAT_IDLE_CLOSE=on on the gateway's task definition to re-enable it.
+   */
+  const idleCloseOn = idleCloseEnabled();
+  if (!idleCloseOn)
+    logger.info('idle-close sweep OFF - chats close only when an agent closes them');
   const idleSweep = setInterval(() => {
+    if (!idleCloseOn) return;
     void withSweepLock(pubClient, IDLE_SWEEP_MS + 5_000, async () => {
       await runIdleCloseSweep({
         directus,
@@ -375,7 +385,7 @@ async function main(): Promise<void> {
     }).catch((err: unknown) => logger.warn({ err }, 'idle-close sweep failed'));
   }, IDLE_SWEEP_MS);
   idleSweep.unref();
-  logger.info({ sweepMs: IDLE_SWEEP_MS }, 'idle-close sweep scheduled');
+  if (idleCloseOn) logger.info({ sweepMs: IDLE_SWEEP_MS }, 'idle-close sweep scheduled');
 
   /*
    * ONE Yiji user reader, shared by both ways into a chat.
