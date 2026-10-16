@@ -76,6 +76,8 @@ import {
   useLateOrderCauses,
   useLateOrderComplaintTypes,
   useLateOrderDecisions,
+  useLateOrderDecisionsForOrders,
+  fetchDecisionForOrder,
   useRecordLateDecision,
   useOrderEventTimes,
   useUpdateLateDecision,
@@ -659,22 +661,6 @@ export function LateOrdersPage() {
     vendorFilter || undefined,
     liveMode,
   );
-  /*
-   * THE HANDLING STATE of one order: pending, commented or handled.
-   *
-   * `lateOrderState` is the shared rule, so this screen, the register and the
-   * summary can never disagree about what "handled" means.
-   */
-  const stateOf = useCallback(
-    (orderId: string): LateOrderState => lateOrderState(decisions.data?.get(orderId) ?? null),
-    [decisions.data],
-  );
-
-  /** The decision for an order, or null while it is still pending. */
-  const decisionOf = useCallback(
-    (orderId: string) => decisions.data?.get(orderId) ?? null,
-    [decisions.data],
-  );
 
   /*
    * The order statuses actually PRESENT in the window, for the filter.
@@ -707,6 +693,37 @@ export function LateOrdersPage() {
     const decided = decidedOrdersAsQueueRows([...(decisions.data?.values() ?? [])], live);
     return [...live, ...decided];
   }, [queue.data, decisions.data]);
+
+  /* The decisions behind every order ON SCREEN, whenever they were taken
+     (owner, 2026-10-16) - the window read only covers decisions taken in the
+     window. Merged with it; the window's own rows win when both have one. */
+  const uncovered = useMemo(
+    () => allOrders.map((o) => o.orderId).filter((id) => !decisions.data?.has(id)),
+    [allOrders, decisions.data],
+  );
+  const byOrder = useLateOrderDecisionsForOrders(uncovered);
+  const decisionMap = useMemo(() => {
+    const m = new Map(byOrder.data ?? []);
+    for (const [k, v] of decisions.data ?? []) m.set(k, v);
+    return m;
+  }, [byOrder.data, decisions.data]);
+
+  /*
+   * THE HANDLING STATE of one order: pending, commented or handled.
+   *
+   * `lateOrderState` is the shared rule, so this screen, the register and the
+   * summary can never disagree about what "handled" means.
+   */
+  const stateOf = useCallback(
+    (orderId: string): LateOrderState => lateOrderState(decisionMap.get(orderId) ?? null),
+    [decisionMap],
+  );
+
+  /** The decision for an order, or null while it is still pending. */
+  const decisionOf = useCallback(
+    (orderId: string) => decisionMap.get(orderId) ?? null,
+    [decisionMap],
+  );
 
   const presentStatuses = useMemo(() => {
     const seen = new Set<string>();
@@ -905,7 +922,7 @@ export function LateOrdersPage() {
   const kindOf = (row: LateOrderRow): string => {
     const picked = kinds[row.orderId];
     if (picked) return picked;
-    const decided = decisions.data?.get(row.orderId)?.kind;
+    const decided = decisionMap.get(row.orderId)?.kind;
     if (decided) return decided;
     return causeOptions[0]?.value ?? 'late_delivery';
   };
@@ -929,7 +946,7 @@ export function LateOrdersPage() {
       writeStoredKinds(next);
       return next;
     });
-    const existing = decisions.data?.get(orderId);
+    const existing = decisionMap.get(orderId);
     if (existing?.id && existing.kind !== value) {
       updateDecision.mutate({ id: existing.id, kind: value });
     }
@@ -947,7 +964,7 @@ export function LateOrdersPage() {
      * decided, so it must show what was written rather than a blank form an
      * agent would have to retype.
      */
-    const existing = decisions.data?.get(row.orderId);
+    const existing = decisionMap.get(row.orderId);
     setDraft({ row, action, viewing });
     setReason(existing?.reason ?? '');
     setActionTaken(existing?.action_taken ?? '');
@@ -1050,7 +1067,7 @@ export function LateOrdersPage() {
       };
 
       const raiseTicketIfNeeded = async (): Promise<string | null> => {
-        const priorTicketId = decisions.data?.get(draft.row.orderId)?.ticket ?? null;
+        const priorTicketId = decisionMap.get(draft.row.orderId)?.ticket ?? null;
         /* The GROUP of the chosen cause, from the editable list. Falls back to
            the seeded default so a list that cannot be read still behaves as the
            code always did rather than filing nothing. */
@@ -1142,6 +1159,20 @@ export function LateOrdersPage() {
            ONE ROW PER ORDER — this branch is reached only when no decision
            exists (`editingDecisionId` is null), which is what keeps a second
            comment from filing a duplicate late-order record. */
+        /* THE GUARD (owner, 2026-10-16): ask the SERVER whether this order
+           already has a decision - the screen may not have loaded it (one
+           taken on another day). If it has, this is an EDIT of that row's
+           wording, never a second row, and never touches its coupon. */
+        const prior = await fetchDecisionForOrder(draft.row.orderId);
+        if (prior) {
+          await updateDecision.mutateAsync({ id: prior.id, reason: text, actionTaken });
+          toast.success(t('lateOrders.commentSaved', { defaultValue: 'Comment saved.' }));
+          setDraft(null);
+          setReason('');
+          setActionTaken('');
+          setEditingDecisionId(null);
+          return;
+        }
         const commentTicketId = await raiseTicketIfNeeded();
         /* The order as it stood, captured for a comment too — a comment is a
            recorded state now, and the register shows the order beside it. */
@@ -1531,7 +1562,7 @@ export function LateOrdersPage() {
               nobody has decided anything yet.
             */}
           <Td className="whitespace-nowrap">
-            {decisions.data?.get(row.orderId)?.decided_by?.first_name || '-'}
+            {decisionMap.get(row.orderId)?.decided_by?.first_name || '-'}
           </Td>
         </>
       ),

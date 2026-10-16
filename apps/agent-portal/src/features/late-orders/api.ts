@@ -169,6 +169,34 @@ function dayAfter(day: string): string {
   return new Date(at + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
 }
 
+/** Every field a late-order decision is read with - one list for both reads. */
+const DECISION_FIELDS = [
+  'id',
+  'order_id',
+  'action',
+  'kind',
+  'reason',
+  'action_taken',
+  'ticket',
+  'date_created',
+  /*
+   * WHAT A DECIDED ORDER IS REBUILT FROM once Yiji's live queue has
+   * dropped it (ops, 2026-10-03: no data for yesterday).
+   *
+   * The queue answers only with orders currently past the
+   * threshold, so this screen used to lose its own history. These
+   * four are everything `decidedOrdersAsQueueRows` needs to put
+   * such an order back on the list — the snapshot carries when it
+   * was placed, its status and the customer, and the decision
+   * itself carries how late it was and where it came from.
+   */
+  'minutes_elapsed',
+  'brand_name',
+  'restaurant_name',
+  'order_snapshot',
+  { decided_by: ['id', 'first_name'] },
+];
+
 export function useLateOrderDecisions(
   range?: { from: string; to: string },
   /** The chosen vendor's CRM id (MV-7); unset = every vendor, the filter unchanged. */
@@ -230,44 +258,13 @@ export function useLateOrderDecisions(
             /* `date_created` and `decided_by` so the queue can show WHEN a
                decision was taken and by WHOM — the register in the admin
                portal reports both, and the two screens must agree. */
-            fields: [
-              'id',
-              'order_id',
-              'action',
-              'kind',
-              'reason',
-              'action_taken',
-              'ticket',
-              'date_created',
-              /*
-               * WHAT A DECIDED ORDER IS REBUILT FROM once Yiji's live queue has
-               * dropped it (ops, 2026-10-03: no data for yesterday).
-               *
-               * The queue answers only with orders currently past the
-               * threshold, so this screen used to lose its own history. These
-               * four are everything `decidedOrdersAsQueueRows` needs to put
-               * such an order back on the list — the snapshot carries when it
-               * was placed, its status and the customer, and the decision
-               * itself carries how late it was and where it came from.
-               */
-              'minutes_elapsed',
-              'brand_name',
-              'restaurant_name',
-              'order_snapshot',
-              { decided_by: ['id', 'first_name'] },
-            ],
+            fields: DECISION_FIELDS as never,
             sort: ['-date_created'],
             limit: -1,
           } as never,
         ),
       )) as unknown as LateOrderDecisionRow[];
-      const byOrder = new Map<string, LateOrderDecisionRow>();
-      // Newest first, so the first one seen for an order wins.
-      for (const r of rows) {
-        const key = r.order_id?.trim();
-        if (key && !byOrder.has(key)) byOrder.set(key, r);
-      }
-      return byOrder;
+      return decisionsByOrder(rows);
     },
   });
 }
@@ -750,4 +747,88 @@ export function useLateOrderDecisionForOrder(orderId: string | null | undefined)
       }
     },
   });
+}
+
+/**
+ * THE DECISIONS BEHIND THE ORDERS ON SCREEN, whenever they were taken (owner,
+ * 2026-10-16).
+ *
+ * `useLateOrderDecisions` reads decisions TAKEN in the date window. An order
+ * decided on another day therefore looked untouched: the button said Comment,
+ * not Edit; the box opened empty, not with the earlier text; and saving filed a
+ * SECOND decision (order 1323407: a comment beside a coupon from 29 Sep). This
+ * reads by ORDER instead, for the orders the window does not already cover.
+ * Chunked: a long id list in one filter is a CloudFront 414.
+ */
+export function useLateOrderDecisionsForOrders(orderIds: readonly string[]) {
+  const ids = [...new Set(orderIds.map((id) => id.trim()).filter(Boolean))].sort();
+  return useQuery({
+    queryKey: ['late-orders', 'decisions-by-order', ids],
+    enabled: ids.length > 0,
+    staleTime: 15_000,
+    queryFn: async (): Promise<Map<string, LateOrderDecisionRow>> => {
+      const rows: LateOrderDecisionRow[] = [];
+      for (let i = 0; i < ids.length; i += 60) {
+        const chunk = ids.slice(i, i + 60);
+        const got = (await directus.request(
+          readItems(
+            'late_order_decisions' as never,
+            {
+              filter: { order_id: { _in: chunk } },
+              fields: DECISION_FIELDS as never,
+              sort: ['-date_created'],
+              limit: -1,
+            } as never,
+          ),
+        )) as unknown as LateOrderDecisionRow[];
+        rows.push(...got);
+      }
+      return decisionsByOrder(rows);
+    },
+  });
+}
+
+/**
+ * One decision per order. The COMPENSATION wins over a comment (a coupon is the
+ * outcome that matters, and must never be hidden behind a later note); within
+ * the same action the newest wins.
+ */
+export function decisionsByOrder(
+  rows: readonly LateOrderDecisionRow[],
+): Map<string, LateOrderDecisionRow> {
+  const byOrder = new Map<string, LateOrderDecisionRow>();
+  for (const r of rows) {
+    const key = r.order_id?.trim();
+    if (!key) continue;
+    const have = byOrder.get(key);
+    if (!have) {
+      byOrder.set(key, r);
+      continue;
+    }
+    const better =
+      (r.action === 'compensated' && have.action !== 'compensated') ||
+      (r.action === have.action && (r.date_created ?? '') > (have.date_created ?? ''));
+    if (better) byOrder.set(key, r);
+  }
+  return byOrder;
+}
+
+/**
+ * THE GUARD: the decision already recorded for ONE order, read fresh from the
+ * server just before a comment is saved, so a second row can never be filed
+ * for an order whatever the screen happened to have loaded.
+ */
+export async function fetchDecisionForOrder(orderId: string): Promise<LateOrderDecisionRow | null> {
+  const rows = (await directus.request(
+    readItems(
+      'late_order_decisions' as never,
+      {
+        filter: { order_id: { _eq: orderId.trim() } },
+        fields: DECISION_FIELDS as never,
+        sort: ['-date_created'],
+        limit: -1,
+      } as never,
+    ),
+  )) as unknown as LateOrderDecisionRow[];
+  return decisionsByOrder(rows).get(orderId.trim()) ?? null;
 }
