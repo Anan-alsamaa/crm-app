@@ -198,3 +198,12 @@ describe('withSweepLock', () => {
     );
   });
 });
+
+describe('idle-close is OFF by default (owner, 2026-10-16)', () => {
+  it('does not run unless CHAT_IDLE_CLOSE=on', async () => {
+    const { idleCloseEnabled } = await import('../src/idle-close.js');
+    expect(idleCloseEnabled({})).toBe(false);
+    expect(idleCloseEnabled({ CHAT_IDLE_CLOSE: 'true' })).toBe(false);
+    expect(idleCloseEnabled({ CHAT_IDLE_CLOSE: 'on' })).toBe(true);
+  });
+});

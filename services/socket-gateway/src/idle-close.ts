@@ -191,3 +191,12 @@ export async function withSweepLock(
   }
   await run();
 }
+
+/**
+ * WHETHER THE SWEEP RUNS AT ALL (owner, 2026-10-16: "revert this feature - the
+ * inbox chat closes only when the agent closes the chat"). Off unless the
+ * gateway is started with CHAT_IDLE_CLOSE=on.
+ */
+export function idleCloseEnabled(env: Record<string, string | undefined> = process.env): boolean {
+  return env.CHAT_IDLE_CLOSE === 'on';
+}

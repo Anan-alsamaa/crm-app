@@ -171,7 +171,7 @@ POST https://notificationsystems.yiji-app.com/api/NotificationData/SendCrmNotifi
 ### A7. Closing and CSAT
 
 - **Manual**: agent PATCHes the conversation `{status:'solved', solved_at}` in Directus, then emits `conversation:updated` → gateway sends `conversation:closed` → the widget shows the **CSAT** survey.
-- **Idle close**: a sweep (Redis-locked) closes quiet chats after the configured minutes with a farewell system message (skips agent-started chats where the customer never replied).
+- **Idle close: OFF** (owner, 2026-10-16). A chat closes only when an agent closes it. The sweep is still in the gateway and runs only with `CHAT_IDLE_CLOSE=on` on its task definition.
 - **CSAT**: `csat:submit {conversationId, score 1-5, comment?}` → `csat_responses` row (one per conversation).
 - The customer writing again **reopens the same conversation** as a new session (A3 step 2).
 
@@ -188,7 +188,7 @@ POST https://notificationsystems.yiji-app.com/api/NotificationData/SendCrmNotifi
 1. **`POST /chat/agent-initiate`** (Bearer agent token, needs `start_chats`) `{phone, vendorId}` → `{ok, conversationId, contactId, created, contactIsNew, name, phone}`. Creates the contact/conversation with `initiated_by:'agent'`; writes no message.
 2. The portal subscribes and sends the first message via `message:send`.
 
-- Agent-started chats get **no greeting**, are **excluded from the first-response SLA**, and are not idle-closed until the customer answers. Reports show them under **"Started by: Agent"**.
+- Agent-started chats get **no greeting**, are **excluded from the first-response SLA**. Reports show them under **"Started by: Agent"**.
 
 ---
 
