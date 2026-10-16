@@ -1,9 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems, readUsers } from '@directus/sdk';
-import { businessSecondsBetween, normaliseTicketStatus } from '@yiji/shared-types';
+import {
+  businessSecondsBetween,
+  normaliseTicketStatus,
+  parseBusinessHours,
+  slaHoursByGoverns,
+  type SlaHoursByObject,
+  type VendorRef,
+} from '@yiji/shared-types';
+import { ticketSolveSec, ticketSolveSpan } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
-import { loadSlaHours } from '../../lib/sla-hours.js';
+import { NO_SLA_HOURS } from '../../lib/sla-hours.js';
 import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
+import { loadTicketSolveContext } from '../../lib/ticket-solve.js';
+import { governingPolicy, type ReportSlaPolicy } from './ticket-timing.js';
 
 /**
  * SLA reports — interactive, drill-down analytics over ticket SLA performance,
@@ -33,6 +43,21 @@ export interface SlaCell {
   state: SlaState;
   dueAt: string | null;
   doneAt: string | null;
+  /**
+   * Where a resolution verdict came from: the deadline the SLA sweep stamped
+   * (`deadline`), or — for a ticket solved before the once-a-minute sweep ever
+   * saw it, so no deadline was stamped — the policy that governs it, judged on
+   * the time it actually took (`policy`). Absent on the first-response cell.
+   */
+  source?: 'deadline' | 'policy';
+  /** The governing policy's name, when the verdict was judged against it. */
+  policyName?: string | null;
+  /**
+   * Why an `na` cell has no verdict: no active policy covers the ticket (or it
+   * was raised before the policy existed), or it is solved with no solve time
+   * anywhere (the imported history).
+   */
+  naReason?: 'noPolicy' | 'noSolveTime';
 }
 
 export interface TicketSla {
@@ -51,6 +76,26 @@ export interface TicketSla {
    * them (owner, 2026-10-08). Wall clock when the policy has none.
    */
   responseMinutes: number | null;
+  /**
+   * Where the 1st reply came from: the CHAT session the ticket was raised from
+   * (customer's first message -> first human agent reply, the same rule as the
+   * Agent summary), or the ticket's own first-action stamp when it has no chat.
+   * Null when there is no reply to measure.
+   */
+  replySource: 'chat' | 'ticket' | null;
+  /**
+   * WORKING minutes from raising the ticket to solving it — shown whether or
+   * not a deadline was stamped. Null when it is not solved, or solved with no
+   * solve time recorded.
+   */
+  solveMinutes: number | null;
+  /**
+   * How `solveMinutes` was measured (`ticketSolveSpan`): from the customer's
+   * first chat message (`chat`) or the ticket's creation (`ticket`); `server`
+   * when the end is the server's solve record; `instant` when it was solved
+   * the moment it was raised.
+   */
+  solveBasis: 'chat' | 'ticket' | 'server' | 'instant' | null;
 }
 
 export interface AgentSla {
@@ -101,6 +146,73 @@ interface RawTicket {
   first_responded_at: string | null;
   resolution_due_at: string | null;
   resolved_at: string | null;
+  complaint_date?: string | null;
+  conversation?: string | null;
+  complaint_type?: string | null;
+  complaint_source?: string | null;
+  store_snapshot?: { brandName?: string | null } | null;
+  vendor?: VendorRef;
+}
+
+const BASE_TICKET_FIELDS = [
+  'id',
+  'subject',
+  'status',
+  'priority',
+  'assigned_agent',
+  'date_created',
+  'first_response_due_at',
+  'first_responded_at',
+  'resolution_due_at',
+  'resolved_at',
+];
+
+/* What the fallbacks need: the complaint time (the solve stamp's own clock), the
+   chat the ticket came from, and the facts a policy narrows by. */
+const FULL_TICKET_FIELDS = [
+  ...BASE_TICKET_FIELDS,
+  'complaint_date',
+  'conversation',
+  'complaint_type',
+  'complaint_source',
+  'store_snapshot',
+  'vendor',
+];
+
+type PolicyRow = ReportSlaPolicy & { business_hours?: unknown };
+
+/**
+ * Every SLA policy, once: the working hours the durations are counted in AND
+ * the coverage a ticket with no stamped deadline is judged against. Never
+ * throws — a failed read is the wall clock and no fallback verdicts, i.e. the
+ * old report.
+ */
+async function loadPolicies(): Promise<{ policies: PolicyRow[]; hours: SlaHoursByObject }> {
+  const base = [
+    'id',
+    'name',
+    'governs',
+    'active',
+    'business_hours',
+    'applies_to_priority',
+    'applies_to_type',
+    'applies_to_source',
+    'applies_to_brand',
+    'resolution_minutes',
+    'date_created',
+  ];
+  const read = (fields: string[]) =>
+    directus.request(
+      readItems('sla_policies' as never, { fields, limit: -1 } as never),
+    ) as unknown as Promise<PolicyRow[]>;
+  try {
+    // The vendor column is an MV-1 field that may not exist yet; ask, else not.
+    const policies = await read([...base, 'vendor']).catch(() => read(base));
+    return { policies: policies ?? [], hours: slaHoursByGoverns(policies ?? []) };
+  } catch (err) {
+    console.warn('[sla-reports] could not read sla_policies; wall clock, no policy fallback:', err);
+    return { policies: [], hours: NO_SLA_HOURS };
+  }
 }
 
 /** Classify one SLA dimension: done-in-time / done-late / overdue / on-track / no-target. */
@@ -137,28 +249,17 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
       const dateFilter: Record<string, unknown> = { _gte: since };
       if (to) dateFilter._lte = `${to}T23:59:59`;
 
-      const readTickets = (filter: unknown) =>
+      const readTickets = (filter: unknown, fields: string[]) =>
         directus.request(
           readItems('tickets', {
             filter: filter as never,
-            fields: [
-              'id',
-              'subject',
-              'status',
-              'priority',
-              'assigned_agent',
-              'date_created',
-              'first_response_due_at',
-              'first_responded_at',
-              'resolution_due_at',
-              'resolved_at',
-            ],
+            fields: fields as never,
             limit: -1,
             sort: ['-date_created'],
           }),
         ) as Promise<RawTicket[]>;
 
-      const [tickets, chats, users, slaHours] = await Promise.all([
+      const [tickets, chats, users, { policies, hours: slaHours }] = await Promise.all([
         /*
          * WHEN THE COMPLAINT HAPPENED, falling back to creation — the same
          * window the ticket breakdown uses (owner, 2026-10-05).
@@ -184,7 +285,10 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
             },
             vendor,
           ),
-        ).catch(() => readTickets(withVendor({ date_created: dateFilter }, vendor))),
+          FULL_TICKET_FIELDS,
+        ).catch(() =>
+          readTickets(withVendor({ date_created: dateFilter }, vendor), BASE_TICKET_FIELDS),
+        ),
         /*
          * The chats whose first-response promise falls in this window.
          *
@@ -221,8 +325,26 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
           }>
         >,
         // Never throws: null hours = the wall clock, the old numbers.
-        loadSlaHours(),
+        loadPolicies(),
       ]);
+
+      /*
+       * The chat session each ticket was raised from (first customer message,
+       * first HUMAN reply) and, for the few whose browser `resolved_at` is
+       * missing or behind, the server's own solve time — read once, the same
+       * inputs the Agent summary feeds the shared rule (`ticketSolveSec`).
+       * Best-effort: a failed read is the ticket's own stamps.
+       */
+      const solveCtx = await loadTicketSolveContext(
+        tickets.map((t) => ({
+          id: t.id,
+          status: t.status,
+          date_created: t.date_created,
+          resolved_at: t.resolved_at,
+          conversation: t.conversation ?? null,
+        })),
+      );
+      const nowIso = new Date(now).toISOString();
 
       const userName = new Map(
         users.map((u) => [
@@ -231,25 +353,116 @@ export function useSlaReports(days: number, range?: { from?: string; to?: string
         ]),
       );
 
-      const ticketSla: TicketSla[] = tickets.map((t) => ({
-        id: t.id,
-        subject: t.subject || '(no subject)',
-        priority: t.priority,
+      const ticketSla: TicketSla[] = tickets.map((t) => {
         /* Normalised (owner, 2026-10-07): two states only. ~7,900 imported rows
            store `closed`, and the status filter and pill read this field. */
-        status: normaliseTicketStatus(t.status),
-        agentId: t.assigned_agent,
-        agentName: t.assigned_agent ? (userName.get(t.assigned_agent) ?? '—') : 'Unassigned',
-        created: t.date_created,
-        // Always `na` now — the columns behind it are never written. Kept on
-        // the row so the per-agent aggregate below still compiles and reports
-        // zero rather than silently dropping a field other code may read.
-        firstResponse: classify(t.first_response_due_at, t.first_responded_at, now),
-        resolution: classify(t.resolution_due_at, t.resolved_at, now),
-        responseMinutes: ((sec) => (sec == null ? null : sec / 60))(
-          businessSecondsBetween(t.date_created, t.first_responded_at, slaHours.ticket),
-        ),
-      }));
+        const status = normaliseTicketStatus(t.status);
+        const solved = status === 'solved';
+        const solveInput = {
+          createdAt: t.date_created,
+          resolvedAt: t.resolved_at,
+          chatStartAt: solveCtx.session.get(t.id)?.customerAt ?? null,
+          solvedServerAt: solveCtx.solvedServerAt.get(t.id) ?? null,
+        };
+        /* The ticket's actual solve time — the shared rule, so this row and
+           the Agent summary's median agree (2026-10-15). */
+        const span = solved ? ticketSolveSpan(solveInput) : null;
+        const solveSec = solved ? ticketSolveSec(solveInput, slaHours.ticket) : null;
+
+        /*
+         * RESOLUTION. The stamped deadline when there is one. Without one, the
+         * policy that governs the ticket, judged on the time it really took —
+         * the sweep only stamps tickets it sees UNSOLVED, and most are closed
+         * seconds after they are raised (12 of 16 on 14-15 Oct 2026).
+         */
+        let resolution: SlaCell;
+        if (t.resolution_due_at) {
+          resolution = { ...classify(t.resolution_due_at, t.resolved_at, now), source: 'deadline' };
+        } else {
+          const policy = governingPolicy(policies, {
+            priority: t.priority,
+            complaintType: t.complaint_type ?? null,
+            complaintSource: t.complaint_source ?? null,
+            brandName: t.store_snapshot?.brandName ?? null,
+            vendor: t.vendor,
+            createdAt: t.date_created,
+          });
+          const targetSec = policy?.resolution_minutes ? policy.resolution_minutes * 60 : null;
+          if (solved && solveSec == null) {
+            resolution = { state: 'na', dueAt: null, doneAt: null, naReason: 'noSolveTime' };
+          } else if (!policy || targetSec == null) {
+            resolution = { state: 'na', dueAt: null, doneAt: t.resolved_at, naReason: 'noPolicy' };
+          } else {
+            // Judged in the policy's own hours, as the sweep would have.
+            const hours = parseBusinessHours(policy.business_hours);
+            /* The engine's interval (raised -> solved), with the shared rule's
+               correction for a solve stamp that runs behind the server. */
+            const taken = solved
+              ? ticketSolveSec({ ...solveInput, chatStartAt: null }, hours)
+              : businessSecondsBetween(t.date_created, nowIso, hours);
+            let state: SlaState = 'pending';
+            if (taken != null && taken > targetSec) state = 'breached';
+            else if (solved) state = 'met';
+            resolution = {
+              state,
+              dueAt: null,
+              doneAt: t.resolved_at,
+              source: 'policy',
+              policyName: policy.name ?? null,
+            };
+          }
+        }
+
+        /*
+         * 1st REPLY. From the chat session the ticket was raised from when it
+         * has one — the ticket's own `first_responded_at` is only the moment
+         * an agent first ACTED on it (usually the solve), stamped by the
+         * agent's PC clock, which runs behind the server's and made the
+         * interval negative, i.e. blank, on 14 of 16 tickets.
+         */
+        let responseSec: number | null = null;
+        let replySource: TicketSla['replySource'] = null;
+        const session = solveCtx.session.get(t.id);
+        if (session?.agentAt) {
+          responseSec = businessSecondsBetween(session.customerAt, session.agentAt, slaHours.chat);
+          if (responseSec != null) replySource = 'chat';
+        }
+        if (responseSec == null && t.first_responded_at) {
+          responseSec =
+            businessSecondsBetween(t.date_created, t.first_responded_at, slaHours.ticket) ??
+            // Same clock as the stamp: the complaint time the same browser wrote.
+            businessSecondsBetween(t.complaint_date, t.first_responded_at, slaHours.ticket) ??
+            // Still backwards: acted on the moment it was raised.
+            0;
+          replySource = 'ticket';
+        }
+
+        return {
+          id: t.id,
+          subject: t.subject || '(no subject)',
+          priority: t.priority,
+          status,
+          agentId: t.assigned_agent,
+          agentName: t.assigned_agent ? (userName.get(t.assigned_agent) ?? '—') : 'Unassigned',
+          created: t.date_created,
+          // Always `na` now — the columns behind it are never written. Kept on
+          // the row so the per-agent aggregate below still compiles and reports
+          // zero rather than silently dropping a field other code may read.
+          firstResponse: classify(t.first_response_due_at, t.first_responded_at, now),
+          resolution,
+          responseMinutes: responseSec == null ? null : responseSec / 60,
+          replySource,
+          solveMinutes: solveSec == null ? null : solveSec / 60,
+          solveBasis:
+            solveSec == null || !span
+              ? null
+              : span.endBasis === 'instant'
+                ? 'instant'
+                : span.endBasis === 'server'
+                  ? 'server'
+                  : span.startBasis,
+        };
+      });
 
       // Group per agent (unassigned tickets bucket under a single "Unassigned" row).
       const map = new Map<string, AgentSla>();

@@ -15,10 +15,10 @@ import {
   matchesSearch,
   mean,
   median,
+  ticketSolveSec,
   type CouponStage,
 } from '@yiji/reports';
 import {
-  businessMsBetween,
   couponOrderId,
   displayContactName,
   normaliseTicketStatus,
@@ -237,11 +237,19 @@ export function TicketsTab({
     () =>
       (query.data ?? []).map((tk) => {
         const status = normaliseTicketStatus(tk.status);
-        const start = tk.createdAt ? Date.parse(tk.createdAt) : NaN;
-        const end = tk.resolvedAt ? Date.parse(tk.resolvedAt) : NaN;
+        /* The shared rule (`ticketSolveSec`), so this tab, the Agent summary
+           and Ticket deadlines agree on the same ticket (2026-10-15). */
         const solveSec =
-          status === 'solved' && Number.isFinite(start) && Number.isFinite(end)
-            ? Math.round(businessMsBetween(new Date(start), new Date(end), ticketHours) / 1000)
+          status === 'solved'
+            ? ticketSolveSec(
+                {
+                  createdAt: tk.createdAt,
+                  resolvedAt: tk.resolvedAt,
+                  chatStartAt: tk.chatStartAt,
+                  solvedServerAt: tk.solvedServerAt,
+                },
+                ticketHours,
+              )
             : null;
         return {
           ...tk,

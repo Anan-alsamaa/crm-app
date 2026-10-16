@@ -299,7 +299,9 @@ describe('SlaReportsPage', () => {
       .replace(/^\uFEFF/, '')
       .trim()
       .split('\r\n');
-    expect(lines[0]).toBe('Ticket,Priority,Status,Agent,Resolution,1st reply,Ticket id');
+    expect(lines[0]).toBe(
+      'Ticket,Priority,Status,Agent,Resolution,Time to solve,1st reply,Ticket id',
+    );
     // A subject containing a comma and quotes survives the round trip instead
     // of shifting every later column one place left.
     expect(lines.join('\n')).toContain('"Invoice question, comma ""quoted"""');

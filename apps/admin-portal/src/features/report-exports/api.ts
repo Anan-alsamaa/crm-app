@@ -11,6 +11,7 @@ import {
   type StoreSnapshot,
 } from '@yiji/shared-types';
 import { loadSlaHours } from '../../lib/sla-hours.js';
+import { loadTicketSolveContext, type TicketSolveRow } from '../../lib/ticket-solve.js';
 // The complaints row shape is shared with the agent portal — see @yiji/reports.
 // The chat arithmetic (timestamps, handoffs, per-agent rollup) is the SAME
 // shared code the two Agent-performance pages use, so this report can never
@@ -24,6 +25,7 @@ import {
   median,
   readChunked,
   splitLocalDateTime,
+  ticketSolveSec,
   type ComplaintReportRow,
 } from '@yiji/reports';
 import {
@@ -702,27 +704,39 @@ async function loadAgentReport(
         return out;
       };
 
-      /* Opened -> resolved for each RESOLVED ticket, for the Agent summary's
-         median solve time (owner, 2026-10-13). Three small fields, not the
-         rows; same window and fallback as the count. */
-      const readTicketSolvePairs = async (): Promise<
-        Array<{ assigned_agent: string | null; date_created: string; resolved_at: string }>
-      > => {
+      /* Opened -> solved for each SOLVED ticket, for the Agent summary's
+         median solve time (owner, 2026-10-13). A few small fields, not the
+         rows; same window and fallback as the count. `status` + `conversation`
+         feed the shared rule (`ticketSolveSec`): the chat the ticket came
+         from, and a server solve time when `resolved_at` is missing/behind. */
+      type SolvePair = TicketSolveRow & { assigned_agent: string | null };
+      const readTicketSolvePairs = async (): Promise<SolvePair[]> => {
         if (!needs.ticketCounts) return [];
-        const query = (filter: unknown) =>
+        const query = (filter: unknown, fields: string[]) =>
           directus.request(
             readItems('tickets', {
-              filter: { _and: [filter, { resolved_at: { _nnull: true } }] } as never,
-              fields: ['assigned_agent', 'date_created', 'resolved_at'] as never,
+              filter: {
+                _and: [
+                  filter,
+                  { _or: [{ resolved_at: { _nnull: true } }, { status: { _eq: 'solved' } }] },
+                ],
+              } as never,
+              fields: fields as never,
               limit: -1,
             }),
-          ) as unknown as Promise<
-            Array<{ assigned_agent: string | null; date_created: string; resolved_at: string }>
-          >;
+          ) as unknown as Promise<SolvePair[]>;
+        const full = [
+          'id',
+          'status',
+          'assigned_agent',
+          'date_created',
+          'resolved_at',
+          'conversation',
+        ];
         try {
-          return await query(ticketWindow);
+          return await query(ticketWindow, full);
         } catch {
-          return await query(byVendor(inRange('date_created')));
+          return await query(byVendor(inRange('date_created')), full);
         }
       };
 
@@ -1313,18 +1327,40 @@ async function loadAgentReport(
       /* Median ticket solve time per agent, from the light pairs (Agent
          summary) or from the full rows when they were fetched anyway. */
       const solveSecsBy = new Map<string, number[]>();
-      const solvePairs = needs.ticketCounts
-        ? ticketSolvePairs
-        : tickets
-            .filter((t) => !!t.resolved_at)
-            .map((t) => ({
-              assigned_agent: t.assigned_agent,
-              date_created: t.date_created,
-              resolved_at: t.resolved_at as string,
+      const solvePairs: Array<TicketSolveRow & { assigned_agent: string | null }> =
+        needs.ticketCounts
+          ? ticketSolvePairs
+          : tickets.map((t) => ({
+              id: String(t.id),
+              status: t.status ?? null,
+              assigned_agent: t.assigned_agent ?? null,
+              date_created: t.date_created ?? null,
+              resolved_at: t.resolved_at ?? null,
+              conversation: (t as { conversation?: string | null }).conversation ?? null,
             }));
+      /* ONE RULE WITH TICKET DEADLINES (`ticketSolveSec`, 2026-10-15): the clock
+         starts at the customer's first message of the chat the ticket came
+         from, and a browser `resolved_at` that runs behind the server is
+         replaced by the server's own solve record. A bare
+         `resolved_at - date_created` read those tickets as backwards (blank)
+         or as 0s. Best-effort context: a failed read is the bare interval. */
+      const solveCtx = await loadTicketSolveContext(
+        solvePairs.filter(
+          (t) => normaliseTicketStatus(t.status ?? '') === 'solved' || !!t.resolved_at,
+        ),
+      );
       for (const t of solvePairs) {
-        const sec = businessSecondsBetween(t.date_created, t.resolved_at, slaHours.ticket);
-        if (sec == null || sec < 0) continue;
+        if (normaliseTicketStatus(t.status ?? '') !== 'solved' && !t.resolved_at) continue;
+        const sec = ticketSolveSec(
+          {
+            createdAt: t.date_created,
+            resolvedAt: t.resolved_at,
+            chatStartAt: solveCtx.session.get(t.id)?.customerAt ?? null,
+            solvedServerAt: solveCtx.solvedServerAt.get(t.id) ?? null,
+          },
+          slaHours.ticket,
+        );
+        if (sec == null) continue;
         const key = realAgentId(t.assigned_agent) ?? '';
         const list = solveSecsBy.get(key) ?? [];
         list.push(sec);

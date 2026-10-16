@@ -139,3 +139,49 @@ describe('Agent summary — the automatic welcome is not a reply (owner, 2026-10
     expect(ann.inTimePct).toBe(0);
   });
 });
+
+describe('Agent summary — ticket solve time (prod, 2026-10-15)', () => {
+  /* A ticket logged ALREADY solved: `resolved_at` is stamped in the browser as
+     the form is filled, `date_created` by the server on save, so the solve
+     stamp lands BEFORE the ticket exists. Read as a backwards clock, every such
+     ticket was dropped and Shatha/Amjad showed "—" with solved tickets in range. */
+  it('counts a ticket resolved before it was recorded as solved in 0, not as no data', async () => {
+    request.mockImplementation(async (q: unknown) => {
+      const c = q as { collection?: string; aggregate?: boolean };
+      if (c.collection === 'tickets') {
+        if (c.aggregate) return [{ assigned_agent: 'u1', count: 3 }];
+        return [
+          // Shatha's shape: resolved 2m27s "before" creation.
+          {
+            assigned_agent: 'u1',
+            date_created: '2026-10-15T11:28:42.551Z',
+            resolved_at: '2026-10-15T11:26:15.396Z',
+          },
+          {
+            assigned_agent: 'u1',
+            date_created: '2026-10-15T11:34:02.662Z',
+            resolved_at: '2026-10-15T11:31:37.204Z',
+          },
+          // An ordinary one, an hour after it was opened.
+          {
+            assigned_agent: 'u1',
+            date_created: '2026-10-15T09:00:00.000Z',
+            resolved_at: '2026-10-15T10:00:00.000Z',
+          },
+        ];
+      }
+      if (c.collection === 'directus_users')
+        return [{ id: 'u1', first_name: 'Ann', last_name: null, email: 'ann@x.com' }];
+      return [];
+    });
+    const { result } = renderHook(
+      () => useAgentReportData(0, labels, { from: '2026-10-14', to: '2026-10-15' }, 'agents'),
+      { wrapper: wrapper() },
+    );
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const ann = result.current.data!.agents.find((a) => a.agentId === 'u1')!;
+    expect(ann.tickets).toBe(3);
+    // 0, 0, 3600 -> median 0. Before the fix: only the 3600 survived.
+    expect(ann.medianTicketSolveSec).toBe(0);
+  });
+});

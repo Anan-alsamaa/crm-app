@@ -4,6 +4,7 @@ import { normaliseConversationStatus, displayContactName } from '@yiji/shared-ty
 import { chatHandoffs, conversationTimestamps, readChunked, type ChatTiming } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { businessDayWindow } from '../../lib/date-range.js';
+import { loadTicketSolveContext } from '../../lib/ticket-solve.js';
 
 /**
  * The admin console's agent-performance reads.
@@ -293,6 +294,14 @@ export interface PerformanceTicketRow {
   createdBy: string | null;
   createdAt: string | null;
   resolvedAt: string | null;
+  /**
+   * The facts the shared ticket solve rule (`ticketSolveSec`) needs — the same
+   * the Agent summary and Ticket deadlines feed it: the first customer message
+   * of the chat the ticket came from, and the server's own solve time when
+   * `resolvedAt` is missing or runs behind the creation stamp.
+   */
+  chatStartAt: string | null;
+  solvedServerAt: string | null;
   contactName: string | null;
   contactPhone: string | null;
   customerPhone: string | null;
@@ -311,6 +320,7 @@ interface TicketReadRow {
   date_created: string | null;
   resolved_at: string | null;
   closed_at: string | null;
+  conversation?: string | null;
   customer_phone?: string | null;
   contact: { id: string; name: string | null; phone: string | null } | null;
 }
@@ -349,6 +359,7 @@ export function useTicketPerformance(filters: PerformanceFilters, enabled = true
           'date_created',
           'resolved_at',
           'closed_at',
+          'conversation',
           'customer_phone',
           { contact: ['id', 'name', 'phone'] },
         ],
@@ -386,6 +397,17 @@ export function useTicketPerformance(filters: PerformanceFilters, enabled = true
         /* no coupon read access — the column stays empty */
       }
 
+      /* Best-effort: a failed read is the bare created -> resolved interval. */
+      const solveCtx = await loadTicketSolveContext(
+        tickets.map((tk) => ({
+          id: String(tk.id),
+          status: tk.status,
+          date_created: tk.date_created,
+          resolved_at: tk.resolved_at ?? tk.closed_at ?? null,
+          conversation: tk.conversation ?? null,
+        })),
+      );
+
       return tickets.map((tk) => ({
         id: String(tk.id),
         subject: tk.subject,
@@ -396,6 +418,8 @@ export function useTicketPerformance(filters: PerformanceFilters, enabled = true
         createdBy: tk.user_created,
         createdAt: tk.date_created,
         resolvedAt: tk.resolved_at ?? tk.closed_at ?? null,
+        chatStartAt: solveCtx.session.get(String(tk.id))?.customerAt ?? null,
+        solvedServerAt: solveCtx.solvedServerAt.get(String(tk.id)) ?? null,
         contactName: tk.contact?.name ?? null,
         contactPhone: tk.contact?.phone ?? null,
         customerPhone: tk.customer_phone ?? null,

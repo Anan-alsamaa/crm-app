@@ -273,7 +273,7 @@ describe('admin agent performance — search and the three tabs', () => {
     await waitFor(() =>
       expect(screen.getByRole('table', { name: 'Ticket by ticket' })).toBeInTheDocument(),
     );
-    const read = calls('tickets').find((r) => !JSON.stringify(r.query).includes('"conversation"'))!;
+    const read = calls('tickets').find((r) => JSON.stringify(r.query).includes('"user_created"'))!;
     expect(JSON.stringify(read.query)).toContain(
       '{"_or":[{"assigned_agent":{"_eq":"a1"}},{"user_created":{"_eq":"a1"}}]}',
     );
