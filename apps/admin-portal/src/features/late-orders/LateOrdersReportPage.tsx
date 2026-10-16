@@ -64,6 +64,7 @@ import {
   useLateOrderQueue,
   useLateOrderThreshold,
   useLateOrderCoupons,
+  rowCarriesCoupon,
   type LateOrderRegisterRow,
 } from './api.js';
 import { useVendorDirectory } from '../vendors/api.js';
@@ -856,8 +857,11 @@ export function LateOrdersReportPage() {
       key: 'couponCode',
       label: t('lateOrdersReport.col.couponCode', { defaultValue: 'Coupon code' }),
       tdClass: 'whitespace-nowrap font-mono text-2xs',
-      render: (r) => couponOf(r.order_id)?.coupon_code || '-',
-      get: (r) => couponOf(r.order_id)?.coupon_code ?? '',
+      // Only a COMPENSATED row carries the order's coupon (owner, 2026-10-16:
+      // a comment row on an order compensated earlier showed that coupon, so
+      // the comment read as "assigned a coupon").
+      render: (r) => (rowCarriesCoupon(r) ? couponOf(r.order_id)?.coupon_code : null) || '-',
+      get: (r) => (rowCarriesCoupon(r) ? (couponOf(r.order_id)?.coupon_code ?? '') : ''),
     },
     {
       key: 'compensationValue',
@@ -870,8 +874,8 @@ export function LateOrdersReportPage() {
        * compensation report uses: the percentage wins when there is one,
        * because a percentage coupon's `coupon_value` means nothing.
        */
-      render: (r) => compensationText(r.order_id) || '-',
-      get: (r) => compensationText(r.order_id),
+      render: (r) => (rowCarriesCoupon(r) ? compensationText(r.order_id) : '') || '-',
+      get: (r) => (rowCarriesCoupon(r) ? compensationText(r.order_id) : ''),
     },
   ];
 
