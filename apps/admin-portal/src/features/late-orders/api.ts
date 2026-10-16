@@ -463,3 +463,15 @@ export function useLateOrderCoupons(orderIds: readonly string[]) {
     staleTime: 60_000,
   });
 }
+
+/**
+ * WHETHER A REGISTER ROW SHOWS THE ORDER'S COUPON (owner, 2026-10-16).
+ *
+ * Coupons are joined to the register by `order_id`, so EVERY row for an order
+ * could see that order's coupon. A comment added to an order that had been
+ * compensated earlier then showed the old coupon and read as "the comment
+ * assigned a coupon". Only the compensated row carries it.
+ */
+export function rowCarriesCoupon(r: { action?: string | null }): boolean {
+  return r.action === 'compensated';
+}
