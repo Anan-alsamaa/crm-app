@@ -1001,3 +1001,35 @@ jobs:
             E="$EMAIL" P="$PASSWORD" node scripts/release-check/staff-permissions.mjs || fail=1
           fi
           exit $fail
+
+      # STABILITY AFTER THE RELEASE (owner, 2026-10-16: "the things built
+      # before must not break"). On 2026-10-16 every check above passed while
+      # ECS was replacing Directus every 2-4 minutes - its health check ran an
+      # SMTP verify - and ops saw "can't save". A release is not done until the
+      # services have STAYED up: no task replaced as unhealthy since the
+      # deploy, every load-balancer target healthy, and no Directus health
+      # check pointed back at /server/health (which depends on the mail server).
+      - name: Stability after the release
+        run: |
+          SINCE=$(date -u -d '-25 minutes' +%s)
+          echo "Watching for 4 minutes..."; sleep 240
+          fail=0
+          for svc in directus socket-gateway workers ai-gateway; do
+            bad=$(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services "$svc" --output json \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const v=JSON.parse(s).services[0]||{};const since=+process.argv[1]*1000;const ev=(v.events||[]).filter(e=>Date.parse(e.createdAt)>=since&&/unhealthy/i.test(e.message));console.log(ev.length+(ev[0]?" | "+ev[0].message.slice(0,160):""))})' "$SINCE")
+            echo "$svc: unhealthy replacements since deploy: $bad"
+            case "$bad" in 0) ;; *) echo "FAIL $svc was replaced as unhealthy after the deploy"; fail=1 ;; esac
+            TD=$(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services "$svc" --query 'services[0].taskDefinition' --output text)
+            HC=$(aws ecs describe-task-definition --task-definition "$TD" --query 'taskDefinition.containerDefinitions[0].healthCheck.command' --output text)
+            case "$HC" in *server/health*) echo "FAIL $svc container health check uses /server/health: $HC"; fail=1 ;; esac
+          done
+          PREFIX=$([ "$ENVIRONMENT" = prod ] && echo crm-prd || echo crm-stg)
+          for arn in $(aws elbv2 describe-target-groups --query "TargetGroups[?starts_with(TargetGroupName,'${PREFIX}-')].TargetGroupArn" --output text); do
+            name=${arn##*/targetgroup/}; name=${name%%/*}
+            path=$(aws elbv2 describe-target-groups --target-group-arns "$arn" --query 'TargetGroups[0].HealthCheckPath' --output text)
+            states=$(aws elbv2 describe-target-health --target-group-arn "$arn" --query 'TargetHealthDescriptions[].TargetHealth.State' --output text)
+            echo "$name ($path): $states"
+            case "$path" in /server/health) echo "FAIL $name health check is /server/health"; fail=1 ;; esac
+            for st in $states; do [ "$st" = healthy ] || [ "$st" = draining ] || { echo "FAIL $name has a $st target"; fail=1; }; done
+          done
+          exit $fail
