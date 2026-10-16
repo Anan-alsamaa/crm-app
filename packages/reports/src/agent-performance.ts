@@ -335,8 +335,14 @@ export function agentPerformance(
       unanswered: group.filter((c) => firstResponseSec(c) === null && !awaitingCustomer(c)).length,
       ownChats: own.length,
       // Credited from the routing history, not from who currently holds the
-      // chat: the ladder may hand it on again afterwards.
-      commonChats: agentId ? chats.filter((c) => c.takenBy === agentId).length : 0,
+      // chat: the ladder may hand it on again afterwards. And to whoever SENT
+      // the reply when that is known (2026-10-15): the ladder writes `answered`
+      // against the agent it had offered the chat to, even when a colleague
+      // answered it from the shared queue — on 14-15 Oct that credited Faisal,
+      // Nada and "Agent" with chats Shatha answered and they never wrote in.
+      commonChats: agentId
+        ? chats.filter((c) => !!c.takenBy && (c.firstAgentBy ?? c.takenBy) === agentId).length
+        : 0,
       solved: group.filter((c) => !!c.solvedAt).length,
       avgFirstResponseSec: mean(responses),
       medianFirstResponseSec: median(responses),

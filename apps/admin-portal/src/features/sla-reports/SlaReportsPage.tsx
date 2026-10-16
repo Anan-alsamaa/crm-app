@@ -23,7 +23,7 @@ import {
   Tr,
 } from '@yiji/ui';
 import { useSlaReports, type SlaCell, type TicketSla } from './api.js';
-import { exportCsv, reportFilename, type CsvColumn } from '@yiji/reports';
+import { exportCsv, formatDuration, reportFilename, type CsvColumn } from '@yiji/reports';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { defaultReportRange, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
@@ -55,8 +55,16 @@ const STATUS_TONE: Record<TicketStatus, 'success' | 'blue'> = {
 };
 
 const fmtPct = (n: number | null) => (n == null ? '—' : `${Math.round(n)}%`);
-const fmtMins = (n: number | null) =>
-  n == null ? '—' : n < 60 ? `${Math.round(n)}m` : `${(n / 60).toFixed(1)}h`;
+/* Under a minute reads in seconds: most chat replies and same-minute solves
+   are seconds, and "0m" reads as "nothing happened". */
+const fmtMins = (n: number | null | undefined) =>
+  n == null
+    ? '—'
+    : n < 1
+      ? `${Math.round(n * 60)}s`
+      : n < 60
+        ? `${Math.round(n)}m`
+        : `${(n / 60).toFixed(1)}h`;
 /** Tone for a compliance %: green ≥90, amber ≥75, red below. */
 
 interface OutcomeName {
@@ -98,9 +106,36 @@ function useOutcomeNames(): Record<SlaCell['state'], OutcomeName> {
 }
 
 function SlaPill({ cell }: { cell: SlaCell }) {
+  const { t } = useTranslation();
   const map = useOutcomeNames();
-  const { tone, label } = map[cell.state];
+  const { tone } = map[cell.state];
+  let { label } = map[cell.state];
+  /* A row with no verdict says WHY, not a bare dash (owner, 2026-10-15). */
+  if (cell.state === 'na') {
+    label =
+      cell.naReason === 'noSolveTime'
+        ? String(t('slaReports.naNoSolveTime', { defaultValue: 'Not recorded' }))
+        : map.na.filterLabel;
+  }
+  const why =
+    cell.state === 'na'
+      ? cell.naReason === 'noSolveTime'
+        ? t('slaReports.tipNoSolveTime', {
+            defaultValue: 'Solved, but no solve time was recorded (imported history).',
+          })
+        : t('slaReports.tipNoPolicy', {
+            defaultValue:
+              'No SLA policy covers this ticket, or it was raised before the policy existed.',
+          })
+      : cell.source === 'policy'
+        ? t('slaReports.tipJudgedByPolicy', {
+            defaultValue:
+              'No deadline was stamped (solved before the SLA check ran); judged against "{{policy}}" on the time it took.',
+            policy: cell.policyName ?? '',
+          })
+        : null;
   const title = [
+    why,
     cell.dueAt && `due ${formatDateTime(cell.dueAt)}`,
     cell.doneAt && `done ${formatDateTime(cell.doneAt)}`,
   ]
@@ -211,6 +246,11 @@ export function SlaReportsPage() {
       header: t('slaReports.colResolution', { defaultValue: 'Resolution' }),
       value: (tk) =>
         String(t(`slaReports.${tk.resolution.state}`, { defaultValue: tk.resolution.state })),
+    },
+    {
+      header: t('slaReports.colSolveTime', { defaultValue: 'Time to solve' }),
+      // Minutes, like the reply column; empty only when there is no solve time.
+      value: (tk) => (tk.solveMinutes == null ? null : Math.round(tk.solveMinutes)),
     },
     {
       header: t('slaReports.colReplyTime', { defaultValue: '1st reply' }),
@@ -496,6 +536,67 @@ function OutcomeChip({
   );
 }
 
+type TFn = ReturnType<typeof useTranslation>['t'];
+
+/** Why the time-to-solve cell reads what it does — the hover says. */
+function solveTip(t: TFn, tk: TicketSla): string | undefined {
+  if (tk.solveMinutes == null) {
+    return tk.status === 'solved'
+      ? String(
+          t('slaReports.tipNoSolveTime', {
+            defaultValue: 'Solved, but no solve time was recorded (imported history).',
+          }),
+        )
+      : String(t('slaReports.tipNotSolved', { defaultValue: 'Not solved yet.' }));
+  }
+  switch (tk.solveBasis) {
+    case 'chat':
+      return String(
+        t('slaReports.tipSolveChat', {
+          defaultValue:
+            "From the customer's first message in the chat the ticket was raised from to the solve, in working hours.",
+        }),
+      );
+    case 'server':
+      return String(
+        t('slaReports.tipSolveServer', {
+          defaultValue:
+            "Ended at the server's record of the solve: the solve stamp from the agent's PC clock was missing or ran behind the server's.",
+        }),
+      );
+    case 'instant':
+      return String(
+        t('slaReports.tipSolveInstant', { defaultValue: 'Solved the moment it was raised.' }),
+      );
+    default:
+      return undefined;
+  }
+}
+
+/** Where the 1st reply came from — the chat, or the ticket's own stamp. */
+function replyTip(t: TFn, tk: TicketSla): string {
+  if (tk.replySource === 'chat') {
+    return String(
+      t('slaReports.tipReplyChat', {
+        defaultValue:
+          "From the chat: the customer's first message to the agent's first reply, in working hours.",
+      }),
+    );
+  }
+  if (tk.replySource === 'ticket') {
+    return String(
+      t('slaReports.tipReplyTicket', {
+        defaultValue: 'No chat linked: from raising the ticket to an agent first acting on it.',
+      }),
+    );
+  }
+  return String(
+    t('slaReports.tipNoReply', {
+      defaultValue: 'No chat linked and no agent action recorded.',
+    }),
+  );
+}
+
 function TicketTable({
   tickets,
   agentFilter,
@@ -721,10 +822,19 @@ function TicketTable({
                     </span>
                   </Td>
                 )}
+                {/* The ACTUAL solve time beside the verdict, shown with or
+                    without a target: "2h 10m · No target" (2026-10-15). */}
                 <Td>
-                  <SlaPill cell={tk.resolution} />
+                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                    {tk.solveMinutes != null && (
+                      <span className="tabular-nums text-muted-foreground" title={solveTip(t, tk)}>
+                        {formatDuration(tk.solveMinutes * 60)} ·
+                      </span>
+                    )}
+                    <SlaPill cell={tk.resolution} />
+                  </span>
                 </Td>
-                <Td className="text-end tabular-nums text-muted-foreground">
+                <Td className="text-end tabular-nums text-muted-foreground" title={replyTip(t, tk)}>
                   {fmtMins(tk.responseMinutes)}
                 </Td>
               </Tr>

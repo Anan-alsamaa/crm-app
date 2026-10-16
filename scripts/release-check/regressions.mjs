@@ -1401,6 +1401,58 @@ await check('MV-7', 'Yiji vendor record holds the production Yiji URLs and tenan
   };
 });
 
+await check(
+  'COUPON-GENERAL-LEAK',
+  'none of our coupons on Yiji is General and active (code-shareable)',
+  async () => {
+    /*
+     * OWNER, 2026-10-15: a customer kept seeing coupons he could not use, and
+     * two TEST coupons (ZZ-PROBE-EEE555/FFF666, created as General while
+     * probing) had been added by code to 1,504 real accounts - 2,279 grants.
+     * Both coupons and every grant were removed that day. A General coupon is
+     * one ANYONE can add by typing its code, so none of ours may ever be
+     * General and active: our compensation coupons are Private (v1.38.8,
+     * see COUPON-TYPE), and a test coupon on production must not exist.
+     * Owner token from the git-ignored `.env.yiji-admin`; SKIP without it.
+     */
+    const fs = await import('node:fs');
+    const envFile = new URL('../../.env.yiji-admin', import.meta.url);
+    if (!fs.existsSync(envFile)) return 'skip';
+    const line = fs
+      .readFileSync(envFile, 'utf8')
+      .split(/\r?\n/)
+      .find((l) => l.startsWith('YIJI_UPDATE_TOKEN='));
+    const token = (line ?? '')
+      .slice('YIJI_UPDATE_TOKEN='.length)
+      .trim()
+      .replace(/^["']|["']$/g, '')
+      .replace(/^Bearer\s+/i, '');
+    if (!token) return 'skip';
+    const yh = { authorization: `Bearer ${token}`, tenantid: '1', accept: 'application/json' };
+    const bad = [];
+    // Our code prefixes, plus anything that reads like a test coupon.
+    for (const code of ['OPS-', 'CC-', 'ZZ-', 'PROBE', 'TEST']) {
+      for (let page = 1; page <= 50; page++) {
+        const r = await fetch(
+          `https://admin.yiji-app.com/api/Coupon/GetFilteredData?Code=${encodeURIComponent(code)}&Type=0&PageSize=100&PageNumber=${page}`,
+          { headers: yh, signal: AbortSignal.timeout(15000) },
+        );
+        if (r.status === 401 || r.status === 403) return 'skip';
+        if (!r.ok) return { status: 'FAIL', detail: `Yiji coupon list answered ${r.status}` };
+        const rows = await r.json();
+        if (!Array.isArray(rows) || rows.length === 0) break;
+        // Type 0 = General, status 0 = active (status 1 = removed).
+        for (const c of rows) if (c.type === 0 && c.status === 0) bad.push(`${c.code} #${c.id}`);
+        if (rows.length < 100) break;
+      }
+    }
+    const unique = [...new Set(bad)];
+    return unique.length === 0
+      ? { status: 'PASS', detail: 'no active General coupon with our codes or a test name' }
+      : { status: 'FAIL', detail: `active General: ${unique.slice(0, 10).join(', ')}` };
+  },
+);
+
 const failed = results.filter((r) => r.status === 'FAIL').length;
 const skipped = results.filter((r) => r.status === 'SKIP').length;
 console.log(`\n${results.length - failed - skipped} passed, ${failed} failed, ${skipped} skipped`);

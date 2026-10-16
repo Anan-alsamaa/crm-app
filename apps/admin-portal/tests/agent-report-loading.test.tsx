@@ -84,10 +84,18 @@ describe('Agent summary', () => {
     const data = await load('agents');
 
     /* The rows are NOT downloaded. The one ticket read allowed is the median
-       solve time's (owner, 2026-10-13): three small fields of RESOLVED tickets. */
+       solve time's (owner, 2026-10-13): a few small fields of SOLVED tickets —
+       `status` + `conversation` feed the shared solve rule (2026-10-15). */
     const ticketReads = reads('tickets');
     expect(ticketReads, 'the ticket rows were downloaded').toHaveLength(1);
-    expect(ticketReads[0]?.opts.fields).toEqual(['assigned_agent', 'date_created', 'resolved_at']);
+    expect(ticketReads[0]?.opts.fields).toEqual([
+      'id',
+      'status',
+      'assigned_agent',
+      'date_created',
+      'resolved_at',
+      'conversation',
+    ]);
     expect(JSON.stringify(ticketReads[0]?.opts.filter)).toContain('"resolved_at":{"_nnull":true}');
     const [count] = aggregates('tickets');
     expect(count?.opts.groupBy).toEqual(['assigned_agent']);

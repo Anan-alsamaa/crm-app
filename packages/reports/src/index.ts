@@ -89,6 +89,14 @@ export {
 } from './ticket-filter.js';
 
 export {
+  ticketSolveSpan,
+  ticketSolveSec,
+  ticketChatSession,
+  type TicketSolveInput,
+  type TicketSolveSpan,
+} from './ticket-solve.js';
+
+export {
   conversationTimestamps,
   type ConversationTimestamps,
   type TimingMessage,
