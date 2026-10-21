@@ -499,7 +499,8 @@
     "addCustomerWithNumber": "Add {{phone}} as a new customer",
     "addCustomerFailed": "Could not add the customer. Please try again.",
     "vendorLabel": "Vendor",
-    "anyVendor": "All vendors"
+    "anyVendor": "All vendors",
+    "couponNotCreated": "Create the coupon, or untick \"Assign a coupon\""
   },
   "notifications": {
     "title": "Notifications",

@@ -626,7 +626,8 @@
     "closeTicket": "إغلاق هذه التذكرة",
     "reopenTicket": "إعادة فتح التذكرة",
     "vendorLabel": "البائع",
-    "anyVendor": "كل البائعين"
+    "anyVendor": "كل البائعين",
+    "couponNotCreated": "أنشئ الكوبون، أو ألغِ تحديد \"تعيين كوبون\""
   },
   "notifications": {
     "title": "التنبيهات",

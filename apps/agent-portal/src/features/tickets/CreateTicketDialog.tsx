@@ -22,6 +22,7 @@ import {
   useConversationAttachmentIds,
   useCreateTicketFromConversation,
   useStoreNotifyTypes,
+  useUpdateTicket,
 } from './api.js';
 import { orderToSnapshot, type TicketOrderSnapshot } from './OrderSnapshotCard.js';
 import {
@@ -230,6 +231,7 @@ function CreateTicketForm({
 }: Props & { draftKey: string | null }) {
   const { t, i18n } = useTranslation();
   const createFromChat = useCreateTicketFromConversation();
+  const updateTicket = useUpdateTicket();
   const { user, can } = useAuth();
   const canRequestCoupon = can('request_coupons');
   /* Read ONCE, on mount: the draft seeds the form, and from then on the form
@@ -501,6 +503,7 @@ function CreateTicketForm({
   const onSubmit = handleSubmit(async (values) => {
     if (!contactId || !vendorId) return;
     if (complaintHasErrors(complaint) || !subject) return;
+    if (assignCoupon && !collectedCoupon) return; // see couponPromisedNotCreated
     try {
       // The description stays the agent's OWN words. The order rides along as
       // structured JSON so the ticket can render it as a real order card
@@ -511,6 +514,13 @@ function CreateTicketForm({
       // Writing it now and asking after would make the supervisor's decision a
       // formality applied to money the customer has already been promised.
       const coupon = splitCouponForApproval(complaint);
+      /* The coupon request that will go out with this ticket, if any - worked
+         out BEFORE the ticket is written, because the ticket's Compensation
+         field must say whether one exists (owner, 2026-10-21: "only when a
+         coupon is issued the compensated should be there"). The SAME mapping
+         the coupon dialog uses, so `delivery_excluded` is never dropped. */
+      const fullCoupon = collectedCoupon ? couponTermsFromDraft(collectedCoupon) : null;
+      const request = fullCoupon ?? coupon.request;
 
       const created = await createFromChat.mutateAsync({
         ticket: {
@@ -554,6 +564,8 @@ function CreateTicketForm({
           // Overrides the coupon fields complaintPatch just wrote — they are
           // the supervisor's to release, not this form's.
           ...coupon.ticket,
+          // Compensated ONLY when a coupon request goes out with the ticket.
+          compensation: compensationFlag(!!request),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
         storeNotifyTypes: notifyTypes.data ?? [],
@@ -567,11 +579,6 @@ function CreateTicketForm({
       // fails the ticket still stands and the agent is told the coupon did not
       // go anywhere — the alternative is a promise nobody is holding.
       let couponAsked = false;
-      /* The SAME mapping the coupon dialog uses. This used to be its own
-         field-by-field copy that never learned `delivery_excluded`, so an
-         agent's "do not send to Yiji" was silently dropped (owner, 2026-10-06). */
-      const fullCoupon = collectedCoupon ? couponTermsFromDraft(collectedCoupon) : null;
-      const request = fullCoupon ?? coupon.request;
       if (request && created?.id) {
         try {
           await requestCoupon.mutateAsync({
@@ -586,6 +593,13 @@ function CreateTicketForm({
           });
           couponAsked = true;
         } catch {
+          /* No coupon went out, so the ticket must not claim one. */
+          await updateTicket
+            .mutateAsync({
+              id: created.id,
+              patch: { compensation: compensationFlag(false) } as never,
+            })
+            .catch(() => undefined);
           toast.error(
             t('coupons.requestFailed', {
               defaultValue: 'The coupon was NOT sent for approval — raise it from the ticket.',
@@ -660,8 +674,18 @@ function CreateTicketForm({
    * from — unlike the customer check, which once blocked exactly that.
    */
   const hasStore = !!chosenMatch?.store?.id;
+  /* "Assign a coupon" ticked but no coupon created (owner, 2026-10-21): the
+     ticket used to save as Compensated with NO coupon behind it, silently -
+     Nada's two tickets for 0571664749. The box is a promise; it must be kept
+     (create the coupon) or withdrawn (untick it) before saving. */
+  const couponPromisedNotCreated = assignCoupon && !collectedCoupon;
   const canSubmit =
-    hasCustomer && !!vendorId && !complaintHasErrors(complaint) && !!subject && hasStore;
+    hasCustomer &&
+    !!vendorId &&
+    !complaintHasErrors(complaint) &&
+    !!subject &&
+    hasStore &&
+    !couponPromisedNotCreated;
 
   // Identify the ticket by who and what it is about, not by restating the
   // page's purpose. Empty on a blank standalone form, where the generic hint
@@ -696,7 +720,11 @@ function CreateTicketForm({
           })
         : complaintHasErrors(complaint)
           ? t('tickets.fixFieldsFirst', { defaultValue: 'Check the highlighted fields' })
-          : '';
+          : couponPromisedNotCreated
+            ? t('tickets.couponNotCreated', {
+                defaultValue: 'Create the coupon, or untick "Assign a coupon"',
+              })
+            : '';
 
   return (
     <form
