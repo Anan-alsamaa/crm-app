@@ -15,9 +15,12 @@ on:
         description: 'Extra image tag to apply (in addition to sha + branch)'
         required: false
         default: ''
-  push:
-    tags:
-      - 'v*'
+  # NOT on release tags any more (owner, 2026-10-21: "the proper appropriate
+  # fix" for duplicate red runs). Every tag already builds and deploys through
+  # deploy-ecs.yml into AWS ECR, which is what staging and prod run; these GHCR
+  # images are consumed by nothing live, so building them twice per release
+  # only doubled the chances of a failed run (e.g. a Docker Hub 500 on v1.1.62).
+  # Still runnable by hand via workflow_dispatch.
 
 permissions:
   contents: read
