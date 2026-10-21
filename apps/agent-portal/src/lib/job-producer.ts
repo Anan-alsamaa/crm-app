@@ -95,6 +95,15 @@ export const jobProducer = {
    * measured everyone as zero and picked the lowest uuid, piling a whole
    * night's backlog onto one person.
    */
+  /**
+   * EMA-80: take a ticket's coupon back ("Not Compensated"). The gateway
+   * checks `manage_ticket_compensation` and stamps who asked; the workers do
+   * the removal (and keep a coupon the customer already used).
+   */
+  removeCoupon(couponApprovalId: string, reason: string): Promise<EnqueueResult> {
+    return post<EnqueueResult>('/jobs/coupon-remove', { couponApprovalId, reason });
+  },
+
   async leastLoadedAgentInTeam(teamId: string): Promise<string | null> {
     const r = await call<{ ok: boolean; agentId: string | null }>(
       `/teams/${encodeURIComponent(teamId)}/least-loaded`,

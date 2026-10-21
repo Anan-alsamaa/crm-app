@@ -12,6 +12,8 @@ import {
   type RoutingJob,
   type CustomerPushJob,
   CouponPushJob,
+  type CouponRemoveJob,
+  COUPON_REMOVE_JOB_NAME,
   ROUTING_RECLAIM_WAIT_MS,
 } from '@yiji/shared-types';
 
@@ -45,6 +47,11 @@ export interface SideEffectProducer {
    * retrying, cannot queue the same coupon twice.
    */
   enqueueCouponPush(job: CouponPushJob): Promise<string | null>;
+  /**
+   * EMA-80: take a ticket's coupon back (workers: the `remove` job on the
+   * coupons queue). Optional so test stubs need not provide it.
+   */
+  enqueueCouponRemove?(job: CouponRemoveJob): Promise<string | null>;
   /**
    * Tell a customer's phone an agent replied while they were away. Enqueued
    * only when no customer socket is in the conversation — somebody watching
@@ -89,6 +96,10 @@ class NoopProducer implements SideEffectProducer {
   }
   async enqueueCouponPush(): Promise<string | null> {
     this.logger.warn('coupon push skipped (Redis disabled)');
+    return null;
+  }
+  async enqueueCouponRemove(): Promise<string | null> {
+    this.logger.warn('coupon removal skipped (Redis disabled)');
     return null;
   }
   async enqueueCustomerPush(): Promise<string | null> {
@@ -200,6 +211,17 @@ class BullProducer implements SideEffectProducer {
        */
       removeOnFail: true,
       jobId: `coupon-push-${job.couponApprovalId}`,
+    });
+    return added.id ?? null;
+  }
+  async enqueueCouponRemove(job: CouponRemoveJob): Promise<string | null> {
+    /* NO custom jobId: BullMQ ignores an add whose id still exists, which has
+       swallowed retries three times in this codebase. The worker is
+       idempotent instead - it re-reads the row and stops if it is removed. */
+    const added = await this.coupons.add(COUPON_REMOVE_JOB_NAME, job, {
+      ...DEFAULT_JOB_OPTIONS,
+      removeOnComplete: true,
+      removeOnFail: true,
     });
     return added.id ?? null;
   }

@@ -195,3 +195,57 @@ export function couponRequestProblem(v: CouponInput): 'none-requested' | 'bad-nu
   const badPercent = percent !== '' && (pct === null || pct < 0 || pct > 100);
   return badValue || badPercent ? 'bad-numbers' : null;
 }
+
+/* ── Removing a ticket's coupon (owner, 2026-10-21, EMA-80) ──────────────── */
+
+/**
+ * Where the REMOVAL of a coupon has got to. Its own column (`removal_status`)
+ * rather than a sixth `status`: every report and both portals read `status`
+ * as the supervisor's DECISION, and a removal is not one - the row is kept as
+ * the record of what was granted and when it was taken back.
+ *
+ *   pending      asked for; the worker has not finished yet.
+ *   not_on_yiji  never reached the customer's app (pending / approved but not
+ *                delivered / withheld) - removed in the CRM only.
+ *   removed      taken off the customer's Yiji app and VERIFIED gone from both
+ *                of their coupon lists.
+ *   used         NOT removed: the customer already spent it on an order. The
+ *                coupon stays, and so does "Compensated".
+ *   failed       NOT removed: Yiji refused, or it is still in their app. The
+ *                reason is in `removal_detail`; still "Compensated".
+ */
+export const COUPON_REMOVAL_STATUSES = [
+  'pending',
+  'not_on_yiji',
+  'removed',
+  'used',
+  'failed',
+] as const;
+export type CouponRemovalStatus = (typeof COUPON_REMOVAL_STATUSES)[number];
+
+/** Gone for good: off the ticket, and never in (or no longer in) the app. */
+export function couponIsRemoved(row: { removal_status?: string | null }): boolean {
+  return row.removal_status === 'removed' || row.removal_status === 'not_on_yiji';
+}
+
+/**
+ * Does this coupon make its ticket "Compensated"?
+ *
+ * A request counts from the moment it EXISTS (owner, EMA-80: "Compensated only
+ * once the request exists") - pending included - until it is rejected or
+ * removed. A coupon whose removal failed or that was already used still
+ * counts: the customer has, or had, it.
+ */
+export function couponCountsAsCompensation(row: {
+  status?: string | null;
+  removal_status?: string | null;
+}): boolean {
+  return (row.status ?? '').trim().toLowerCase() !== 'rejected' && !couponIsRemoved(row);
+}
+
+/** The ticket's Compensation value that matches its coupons. */
+export function ticketCompensationFor(
+  rows: ReadonlyArray<{ status?: string | null; removal_status?: string | null }>,
+): 'Compensated' | 'Not Compensated' {
+  return rows.some(couponCountsAsCompensation) ? 'Compensated' : 'Not Compensated';
+}

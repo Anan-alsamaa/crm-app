@@ -134,6 +134,13 @@ export const OWNER_PRIVILEGES = [
   'view_coupon_spend',
   'view_compensation_reports',
   'delete_compensation',
+  /**
+   * A ticket's compensation, from the ticket itself (owner, 2026-10-21,
+   * EMA-80): "Assign a coupon" for THIS ticket, and setting Compensation to
+   * "Not Compensated" removes the linked coupon - from the customer's Yiji app
+   * too. WeCare Admin / WeCare Supervisor by default.
+   */
+  'manage_ticket_compensation',
   // ── reporting ───────────────────────────────────────────────────────────
   /** The Agent tab of the Dashboard (owner, 2026-10-12: its own line). */
   'view_agent_dashboard',
@@ -233,6 +240,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
   view_compensation_reports: holds('approve_coupons'),
   delete_compensation: never, // no role could (the grant never existed)
+  // New in EMA-80: the roles that already decide coupons (WeCare Admin and
+  // WeCare Supervisor); nobody else until the owner ticks it.
+  manage_ticket_compensation: holds('approve_coupons'),
   // The Dashboard page showed its Agent tab to whoever could open the page
   // AND see all chats.
   view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
@@ -343,6 +353,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_compensation_reports: 'coupons',
   view_coupon_spend: 'coupons',
   delete_compensation: 'coupons',
+  manage_ticket_compensation: 'coupons',
   view_agent_dashboard: 'reporting',
   view_agent_reports: 'reporting',
   view_sla_report: 'reporting',
@@ -496,6 +507,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   work_late_orders: 'agent',
   view_order_details: 'agent',
   request_coupons: 'agent',
+  manage_ticket_compensation: 'agent',
   view_own_performance: 'agent',
   view_preferences: 'agent',
   manage_notification_defaults: 'agent',

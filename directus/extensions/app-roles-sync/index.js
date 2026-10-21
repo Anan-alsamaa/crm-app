@@ -197,6 +197,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
     view_compensation_reports: holds('approve_coupons'),
     delete_compensation: never,
+    manage_ticket_compensation: holds('approve_coupons'),
     view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
     view_agent_reports: holds('view_all_chats'),
     view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
@@ -601,6 +602,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_coupon_spend: [],
     view_compensation_reports: [g('coupon_approvals', 'read')],
     delete_compensation: [g('coupon_approvals', 'delete')],
+    /* EMA-80: "Assign a coupon" raises a request like request_coupons does.
+       REMOVING one goes through the gateway's /jobs/coupon-remove and the
+       workers (service token) - no direct update grant on the approval. */
+    manage_ticket_compensation: [g('coupon_approvals', 'create'), g('coupon_approvals', 'read')],
     view_agent_dashboard: [], // UI gate; its reads come with REPORT_ACCESS below
     view_agent_reports: [],
     view_sla_report: [],

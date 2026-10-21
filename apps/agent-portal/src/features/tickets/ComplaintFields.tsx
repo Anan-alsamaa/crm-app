@@ -789,9 +789,16 @@ export function ComplaintResolution({
   values,
   onChange,
   hideCoupon = false,
+  compensationSlot,
 }: {
   values: ComplaintValues;
   onChange: (patch: Partial<ComplaintValues>) => void;
+  /**
+   * Replaces the compensation + coupon inputs (EMA-80): for a manager the
+   * Compensation follows the ticket's coupon, and coupons are assigned through
+   * the coupon dialog rather than typed here.
+   */
+  compensationSlot?: React.ReactNode;
   /**
    * Drop the compensation and coupon inputs.
    *
@@ -824,7 +831,9 @@ export function ComplaintResolution({
           })}
         />
       </FormField>
-      {hideCoupon ? null : (
+      {compensationSlot ? (
+        compensationSlot
+      ) : hideCoupon ? null : (
         <div className="grid gap-3.5 sm:grid-cols-2">
           <FormField label={t('complaint.compensation', { defaultValue: 'Compensation' })}>
             <Combobox

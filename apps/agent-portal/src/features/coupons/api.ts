@@ -3,6 +3,7 @@ import { createItem, readItems, updateItems } from '@directus/sdk';
 import type { CouponApprovalStatus, CouponFields } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { vendorField } from '../../lib/record-vendor.js';
+import { jobProducer } from '../../lib/job-producer.js';
 
 /**
  * Every compensation/coupon request, from every agent.
@@ -50,6 +51,13 @@ export interface CouponRequestRow {
   contact: { id: string; name: string | null; phone: string | null } | null;
   requested_by: { id: string; first_name: string | null; email: string | null } | null;
   decided_by: { id: string; first_name: string | null; email: string | null } | null;
+  /* EMA-80: taken back from its ticket. Read only by the ticket's own coupon
+     list (useTicketCoupons), and absent where those fields are not applied. */
+  removal_status?: string | null;
+  removed_at?: string | null;
+  removed_reason?: string | null;
+  removal_detail?: string | null;
+  removed_by?: { id: string; first_name: string | null; email: string | null } | null;
 }
 
 export const COUPON_REQUEST_FIELDS = [
@@ -281,23 +289,77 @@ export function useUpdatePendingCouponRequest() {
  * request, so the ticket reads them from here rather than growing a dozen more
  * columns that would then have to be kept in step.
  */
-export function useTicketCoupons(ticketId: string | null | undefined) {
+export function useTicketCoupons(
+  ticketId: string | null | undefined,
+  opts: { pollWhileRemoving?: boolean } = {},
+) {
   return useQuery({
     queryKey: ['ticket-coupons', ticketId],
     enabled: !!ticketId,
     staleTime: 30_000,
-    queryFn: async (): Promise<CouponRequestRow[]> =>
-      (await directus.request(
-        readItems(
-          'coupon_approvals' as never,
-          {
-            filter: { ticket: { _eq: ticketId } },
-            fields: COUPON_REQUEST_FIELDS as never,
-            sort: ['-date_created'],
-            limit: -1,
-          } as never,
-        ),
-      )) as unknown as CouponRequestRow[],
+    /* While a removal is being worked (EMA-80), look again every few seconds
+       so the result - removed, used, or failed - appears without a reload. */
+    refetchInterval: opts.pollWhileRemoving ? 3_000 : false,
+    queryFn: async (): Promise<CouponRequestRow[]> => {
+      const read = (fields: readonly unknown[]) =>
+        directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              filter: { ticket: { _eq: ticketId } },
+              fields: fields as never,
+              sort: ['-date_created'],
+              limit: -1,
+            } as never,
+          ),
+        ) as unknown as Promise<CouponRequestRow[]>;
+      try {
+        return await read(TICKET_COUPON_FIELDS);
+      } catch {
+        /* The removal fields need a manual apply:fields. Until then Directus
+           refuses the WHOLE read - so fall back to the fields every
+           environment has, rather than the panel going silently empty. */
+        return read(COUPON_REQUEST_FIELDS);
+      }
+    },
+  });
+}
+
+/** The ticket's coupon list also reads how (and whether) each was removed. */
+export const TICKET_COUPON_FIELDS = [
+  ...COUPON_REQUEST_FIELDS,
+  'removal_status',
+  'removed_at',
+  'removed_reason',
+  'removal_detail',
+  { removed_by: ['id', 'first_name', 'email'] },
+] as const;
+
+/**
+ * TAKE A TICKET'S COUPONS BACK (owner, 2026-10-21, EMA-80).
+ *
+ * Asks the gateway once per coupon; the workers do the removal - in the CRM,
+ * and from the customer's Yiji app when it got there - and then set the
+ * ticket's Compensation to match. Resolves when every request was ACCEPTED,
+ * not when the coupons are gone: the ticket's coupon list shows the outcome.
+ */
+export function useRemoveTicketCoupons() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      couponIds,
+      reason,
+    }: {
+      ticketId: string;
+      couponIds: string[];
+      reason: string;
+    }) => {
+      for (const id of couponIds) await jobProducer.removeCoupon(id, reason);
+    },
+    onSuccess: (_d, vars) => {
+      void qc.invalidateQueries({ queryKey: ['ticket-coupons', vars.ticketId] });
+      void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
+    },
   });
 }
 

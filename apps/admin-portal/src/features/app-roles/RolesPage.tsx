@@ -451,6 +451,10 @@ export function RolesPage() {
     delete_compensation: t('roles.p.deleteCompensation', {
       defaultValue: 'Delete a compensation record',
     }),
+    manage_ticket_compensation: t('roles.p.manageTicketCompensation', {
+      defaultValue:
+        "Manage a ticket's compensation (assign a coupon; Not Compensated removes it, also from the customer's Yiji app)",
+    }),
     view_agent_reports: t('roles.p.viewAgentReports', {
       defaultValue:
         'View agent summary reports (Agent summary, Chat status, Busy time, Agent performance)',

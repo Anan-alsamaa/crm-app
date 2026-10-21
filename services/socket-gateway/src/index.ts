@@ -22,6 +22,7 @@ import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
 import {
   CouponPushJob,
+  CouponRemoveJob,
   ImportJob,
   normalizePhone,
   phoneCustomerId,
@@ -853,6 +854,30 @@ async function main(): Promise<void> {
     if (jobId === null)
       return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
     logger.info({ jobId, couponApprovalId: parsed.data.couponApprovalId }, 'coupon push enqueued');
+    return reply.send({ ok: true, jobId });
+  });
+  /**
+   * EMA-80: "Not Compensated" on a ticket takes its coupon back. Gated on the
+   * `manage_ticket_compensation` permission (WeCare Admin / Supervisor by
+   * default). The body names a coupon and a reason only: WHO removed it comes
+   * from the verified token, and the worker re-reads the row with its own
+   * service token - a coupon already used is kept, never removed on paper.
+   */
+  app.post('/jobs/coupon-remove', async (req, reply) => {
+    const identity = await requirePrivilege(req, reply, 'manage_ticket_compensation');
+    if (!identity) return reply;
+    const parsed = CouponRemoveJob.omit({ removedBy: true }).safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ ok: false, error: 'invalid coupon removal payload' });
+    const jobId = producer.enqueueCouponRemove
+      ? await producer.enqueueCouponRemove({ ...parsed.data, removedBy: identity.id })
+      : null;
+    if (jobId === null)
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    logger.info(
+      { jobId, couponApprovalId: parsed.data.couponApprovalId, by: identity.id },
+      'coupon removal enqueued',
+    );
     return reply.send({ ok: true, jobId });
   });
   // Agent-triggered: "I just assigned this conversation/ticket — tell the
