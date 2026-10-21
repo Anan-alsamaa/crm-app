@@ -953,9 +953,6 @@
     "open": "Open chat",
     "later": "Later",
     "more": "+{{n}} more waiting",
-    "turnOn": "Turn on new-chat alerts",
-    "turnOff": "Turn off new-chat alerts",
-    "blocked": "New-chat alerts are on, but Windows pop-ups are blocked for this site. Allow notifications in the browser’s site settings (the icon left of the address).",
     "close": "Close"
   },
   "aiDraft": {
