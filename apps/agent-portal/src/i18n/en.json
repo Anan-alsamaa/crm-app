@@ -294,6 +294,8 @@
     "download": "Download",
     "previewImage": "Preview {{name}}",
     "you": "You",
+    "youNamed": "{{name}} (You)",
+    "agentFallback": "Agent",
     "autoWelcome": "Automatic welcome",
     "today": "Today",
     "yesterday": "Yesterday",

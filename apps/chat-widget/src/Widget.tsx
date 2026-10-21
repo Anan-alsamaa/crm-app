@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { Fragment } from 'preact';
 import type { Socket } from 'socket.io-client';
 import {
   applyWidgetDelete,
@@ -9,6 +10,7 @@ import {
 } from './socket.js';
 import { forgetConversation, recallConversation, rememberConversation } from './resume.js';
 import { t, isRtl, type WidgetLocale, type WidgetStrings } from './i18n.js';
+import { dayLabel, daySeparatorIds } from './message-dates.js';
 
 export interface WidgetConfig {
   gatewayUrl: string;
@@ -485,6 +487,8 @@ export function Widget({ config }: { config: WidgetConfig }) {
     'connecting',
   );
   const [messages, setMessages] = useState<WidgetMessage[]>([]);
+  /** Which messages open a new day in the thread (EMA-78). */
+  const daySeparators = useMemo(() => daySeparatorIds(messages), [messages]);
   /** Per-message send timeouts, so an echo can cancel its own. */
   const sendTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   /**
@@ -1640,170 +1644,195 @@ export function Widget({ config }: { config: WidgetConfig }) {
             ) : (
               <>
                 {messages.map((m) => (
-                  <div
-                    key={m.id}
-                    className={`yiji-msg ${
-                      m.senderType === 'customer'
-                        ? 'mine'
-                        : /*
-                           * THE CUSTOMER AND THE AGENT SEE THE SAME MESSAGE
-                           * DIFFERENTLY, AND BOTH ARE RIGHT.
-                           *
-                           * `system` carries two unrelated kinds of bubble:
-                           *
-                           *   OUR OWN local notices — "message not sent",
-                           *   "nobody is online", "that file was too big".
-                           *   Machinery talking about the chat, correctly a
-                           *   centred grey aside, and always marked
-                           *   `localNotice` because they never came from the
-                           *   server.
-                           *
-                           *   The IDLE-CLOSE FAREWELL, written by the sweep and
-                           *   delivered over the socket. To the customer this
-                           *   is simply the support team saying goodbye, and
-                           *   showing it as a system notice made the business's
-                           *   own closing words look like a machine's
-                           *   (owner, 2026-10-02).
-                           *
-                           * So the SOURCE decides, not the type: a system
-                           * message that ARRIVED is the business speaking, and
-                           * reads as `theirs`. The agent portal keeps labelling
-                           * it "System", which is right for the agent — they
-                           * need to know the sweep wrote it, not a colleague.
-                           *
-                           * Keyed on `localNotice`, never on the text: the
-                           * farewell is translated and editable, so matching
-                           * its wording would break the first time it changed.
-                           */
-                          m.senderType === 'system' && m.localNotice
-                          ? 'system'
-                          : 'theirs'
-                    }${
-                      !m.content?.trim() && m.attachments && m.attachments.length > 0 ? ' bare' : ''
-                    }${m.id === GREETING_ID ? ' yiji-msg-greeting' : ''}${
-                      openStatusFor === m.id ? ' yiji-msg-revealed' : ''
-                    }${m.status === 'failed' ? ' yiji-msg-failed' : ''}`}
-                    {...(m.senderType === 'customer' && m.id !== GREETING_ID
-                      ? { ...bubbleGesture(m.id), tabIndex: 0 }
-                      : {})}
-                    data-editing={editing?.id === m.id ? 'true' : undefined}
-                  >
-                    {/* A withdrawn agent reply (EMA-33): placeholder only —
+                  <Fragment key={m.id}>
+                    {/* EMA-78: the day, wherever it changes. */}
+                    {daySeparators.has(m.id) && (
+                      <div className="yiji-day-sep" role="separator">
+                        <span>{dayLabel(m.createdAt, locale, tr)}</span>
+                      </div>
+                    )}
+                    <div
+                      className={`yiji-msg ${
+                        m.senderType === 'customer'
+                          ? 'mine'
+                          : /*
+                             * THE CUSTOMER AND THE AGENT SEE THE SAME MESSAGE
+                             * DIFFERENTLY, AND BOTH ARE RIGHT.
+                             *
+                             * `system` carries two unrelated kinds of bubble:
+                             *
+                             *   OUR OWN local notices — "message not sent",
+                             *   "nobody is online", "that file was too big".
+                             *   Machinery talking about the chat, correctly a
+                             *   centred grey aside, and always marked
+                             *   `localNotice` because they never came from the
+                             *   server.
+                             *
+                             *   The IDLE-CLOSE FAREWELL, written by the sweep and
+                             *   delivered over the socket. To the customer this
+                             *   is simply the support team saying goodbye, and
+                             *   showing it as a system notice made the business's
+                             *   own closing words look like a machine's
+                             *   (owner, 2026-10-02).
+                             *
+                             * So the SOURCE decides, not the type: a system
+                             * message that ARRIVED is the business speaking, and
+                             * reads as `theirs`. The agent portal keeps labelling
+                             * it "System", which is right for the agent — they
+                             * need to know the sweep wrote it, not a colleague.
+                             *
+                             * Keyed on `localNotice`, never on the text: the
+                             * farewell is translated and editable, so matching
+                             * its wording would break the first time it changed.
+                             */
+                            m.senderType === 'system' && m.localNotice
+                            ? 'system'
+                            : 'theirs'
+                      }${
+                        !m.content?.trim() && m.attachments && m.attachments.length > 0
+                          ? ' bare'
+                          : ''
+                      }${m.id === GREETING_ID ? ' yiji-msg-greeting' : ''}${
+                        openStatusFor === m.id ? ' yiji-msg-revealed' : ''
+                      }${m.status === 'failed' ? ' yiji-msg-failed' : ''}`}
+                      {...(m.senderType === 'customer' && m.id !== GREETING_ID
+                        ? { ...bubbleGesture(m.id), tabIndex: 0 }
+                        : {})}
+                      data-editing={editing?.id === m.id ? 'true' : undefined}
+                    >
+                      {/* A withdrawn agent reply (EMA-33): placeholder only —
                         its words and files were cleared when it was deleted. */}
-                    {m.deletedAt ? (
-                      <span className="yiji-msg-deleted">{tr.msgDeleted}</span>
-                    ) : (
-                      m.content
-                    )}
-                    {!m.deletedAt && m.editedAt && (
-                      <span className="yiji-msg-edited">{tr.msgEdited}</span>
-                    )}
-                    {!m.deletedAt && m.attachments && m.attachments.length > 0 && (
-                      <div className="yiji-msg-files">
-                        {m.attachments.map((id) => {
-                          const meta = attachMetaRef.current[id];
-                          const r = resolved[id];
-                          const url = meta?.preview ?? r?.url;
-                          const type = meta?.type ?? r?.type ?? null;
-                          const name = meta?.name ?? r?.name ?? null;
-                          const showImage = !!url && maybeImage(type, name) && !imgError[id];
-                          // Image (own preview or fetched): thumbnail, click opens
-                          // the same-page lightbox (no new tab).
-                          if (showImage) {
+                      {m.deletedAt ? (
+                        <span className="yiji-msg-deleted">{tr.msgDeleted}</span>
+                      ) : (
+                        m.content
+                      )}
+                      {!m.deletedAt && m.editedAt && (
+                        <span className="yiji-msg-edited">{tr.msgEdited}</span>
+                      )}
+                      {!m.deletedAt && m.attachments && m.attachments.length > 0 && (
+                        <div className="yiji-msg-files">
+                          {m.attachments.map((id) => {
+                            const meta = attachMetaRef.current[id];
+                            const r = resolved[id];
+                            const url = meta?.preview ?? r?.url;
+                            const type = meta?.type ?? r?.type ?? null;
+                            const name = meta?.name ?? r?.name ?? null;
+                            const showImage = !!url && maybeImage(type, name) && !imgError[id];
+                            // Image (own preview or fetched): thumbnail, click opens
+                            // the same-page lightbox (no new tab).
+                            if (showImage) {
+                              return (
+                                <button
+                                  type="button"
+                                  className="yiji-msg-image"
+                                  key={id}
+                                  onClick={() => setLightbox({ url: url!, name })}
+                                  aria-label={name ?? tr.attachment}
+                                >
+                                  <img
+                                    src={url}
+                                    alt={name ?? ''}
+                                    onError={() => setImgError((e) => ({ ...e, [id]: true }))}
+                                  />
+                                </button>
+                              );
+                            }
+                            // Non-image (or undecodable) file with bytes available:
+                            // download in place. No target=_blank — the `download`
+                            // attribute saves the file without opening a new tab.
+                            if (url) {
+                              return (
+                                <a
+                                  className="yiji-msg-file yiji-msg-file-link"
+                                  key={id}
+                                  href={url}
+                                  download={name ?? 'attachment'}
+                                >
+                                  <AttachIcon />
+                                  <span>{name ?? tr.attachment}</span>
+                                </a>
+                              );
+                            }
+                            // Still fetching, or failed: a plain chip (with name when known).
                             return (
-                              <button
-                                type="button"
-                                className="yiji-msg-image"
+                              <span
+                                className={`yiji-msg-file${r?.error ? '' : ' yiji-msg-file-loading'}`}
                                 key={id}
-                                onClick={() => setLightbox({ url: url!, name })}
-                                aria-label={name ?? tr.attachment}
-                              >
-                                <img
-                                  src={url}
-                                  alt={name ?? ''}
-                                  onError={() => setImgError((e) => ({ ...e, [id]: true }))}
-                                />
-                              </button>
-                            );
-                          }
-                          // Non-image (or undecodable) file with bytes available:
-                          // download in place. No target=_blank — the `download`
-                          // attribute saves the file without opening a new tab.
-                          if (url) {
-                            return (
-                              <a
-                                className="yiji-msg-file yiji-msg-file-link"
-                                key={id}
-                                href={url}
-                                download={name ?? 'attachment'}
                               >
                                 <AttachIcon />
                                 <span>{name ?? tr.attachment}</span>
-                              </a>
+                              </span>
                             );
-                          }
-                          // Still fetching, or failed: a plain chip (with name when known).
-                          return (
-                            <span
-                              className={`yiji-msg-file${r?.error ? '' : ' yiji-msg-file-loading'}`}
-                              key={id}
-                            >
-                              <AttachIcon />
-                              <span>{name ?? tr.attachment}</span>
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                    {/*
-                     * The revealed status row: when it was sent, whether it
-                     * arrived, and — if it did not — what to do about it.
-                     * Hidden until the customer asks for it (hold, or drag
-                     * left) so the thread stays clean.
-                     */}
-                    {m.senderType === 'customer' &&
-                      m.id !== GREETING_ID &&
-                      (openStatusFor === m.id || m.status === 'failed') && (
-                        <div className="yiji-msg-status">
-                          <span className="yiji-msg-time">{formatTime(m.createdAt, locale)}</span>
-                          <span className="yiji-msg-state">
-                            {m.status === 'failed'
-                              ? tr.msgFailed
-                              : m.status === 'sending'
-                                ? tr.msgSending
-                                : tr.msgSent}
-                          </span>
-                          {m.status === 'failed' && (
-                            <span className="yiji-msg-actions">
-                              <button type="button" onClick={() => retryMessage(m)}>
-                                {tr.msgRetry}
-                              </button>
-                              <button type="button" onClick={() => discardMessage(m)}>
-                                {tr.msgDelete}
-                              </button>
-                            </span>
-                          )}
+                          })}
                         </div>
                       )}
-                    {/*
-                     * EDIT / DELETE ICONS ON THE SELECTED OWN MESSAGE (owner,
-                     * 2026-10-07): "like WhatsApp, select a message and delete
-                     * or modify it". Only while it is still changeable (sent,
-                     * not deleted, inside 15 minutes); a photo offers delete
-                     * only. Clicks stop here so they do not toggle the bubble.
-                     */}
-                    {openStatusFor === m.id && m.id !== GREETING_ID && (
-                      <OwnMessageTools
-                        can={customerMessageActions(m, nowMs)}
-                        confirming={confirmDeleteFor === m.id}
-                        tr={tr}
-                        onEdit={() => startEdit(m)}
-                        onAskDelete={() => setConfirmDeleteFor(m.id)}
-                        onDelete={() => deleteOwnMessage(m.id)}
-                        onCancelDelete={() => setConfirmDeleteFor(null)}
-                      />
-                    )}
-                  </div>
+                      {/*
+                       * EMA-78: the time on every real message. Not on the
+                       * widget's own local bubbles (the greeting, its notices) —
+                       * nobody sent those at a time worth reading — and not while
+                       * the customer's status row is showing, which already
+                       * carries the time.
+                       */}
+                      {m.id !== GREETING_ID &&
+                        !m.localNotice &&
+                        !(
+                          m.senderType === 'customer' &&
+                          (openStatusFor === m.id || m.status === 'failed')
+                        ) &&
+                        !!formatTime(m.createdAt, locale) && (
+                          <span className="yiji-msg-meta">{formatTime(m.createdAt, locale)}</span>
+                        )}
+                      {/*
+                       * The revealed status row: when it was sent, whether it
+                       * arrived, and — if it did not — what to do about it.
+                       * Hidden until the customer asks for it (hold, or drag
+                       * left) so the thread stays clean.
+                       */}
+                      {m.senderType === 'customer' &&
+                        m.id !== GREETING_ID &&
+                        (openStatusFor === m.id || m.status === 'failed') && (
+                          <div className="yiji-msg-status">
+                            <span className="yiji-msg-time">{formatTime(m.createdAt, locale)}</span>
+                            <span className="yiji-msg-state">
+                              {m.status === 'failed'
+                                ? tr.msgFailed
+                                : m.status === 'sending'
+                                  ? tr.msgSending
+                                  : tr.msgSent}
+                            </span>
+                            {m.status === 'failed' && (
+                              <span className="yiji-msg-actions">
+                                <button type="button" onClick={() => retryMessage(m)}>
+                                  {tr.msgRetry}
+                                </button>
+                                <button type="button" onClick={() => discardMessage(m)}>
+                                  {tr.msgDelete}
+                                </button>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      {/*
+                       * EDIT / DELETE ICONS ON THE SELECTED OWN MESSAGE (owner,
+                       * 2026-10-07): "like WhatsApp, select a message and delete
+                       * or modify it". Only while it is still changeable (sent,
+                       * not deleted, inside 15 minutes); a photo offers delete
+                       * only. Clicks stop here so they do not toggle the bubble.
+                       */}
+                      {openStatusFor === m.id && m.id !== GREETING_ID && (
+                        <OwnMessageTools
+                          can={customerMessageActions(m, nowMs)}
+                          confirming={confirmDeleteFor === m.id}
+                          tr={tr}
+                          onEdit={() => startEdit(m)}
+                          onAskDelete={() => setConfirmDeleteFor(m.id)}
+                          onDelete={() => deleteOwnMessage(m.id)}
+                          onCancelDelete={() => setConfirmDeleteFor(null)}
+                        />
+                      )}
+                    </div>
+                  </Fragment>
                 ))}
                 {agentTyping && (
                   <div className="yiji-typing" aria-label={tr.typing}>
