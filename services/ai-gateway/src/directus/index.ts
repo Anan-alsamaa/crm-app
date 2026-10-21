@@ -1,4 +1,4 @@
-import { readItems, readItem, createItem } from '@directus/sdk';
+import { readItems, readItem, createItem, createItems } from '@directus/sdk';
 import type { AiCallRow } from '../usage-log.js';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import {
@@ -8,6 +8,7 @@ import {
   VENDOR_INTEGRATION_READ_FIELDS,
   type VendorIntegrationRow,
   type VendorRow,
+  type YijiUsageRow,
 } from '@yiji/shared-types';
 
 /**
@@ -275,6 +276,15 @@ export class GatewayDirectus {
         { fields: [...VENDOR_INTEGRATION_READ_FIELDS], limit: -1 } as never,
       ),
     )) as unknown as VendorIntegrationRow[];
+  }
+
+  /**
+   * A batch of `yiji_api_usage` rows (owner, 2026-10-21). THROWS - the usage
+   * recorder catches, logs and drops; nothing in a request path awaits it.
+   */
+  async logYijiUsage(rows: YijiUsageRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    await this.client.request(createItems('yiji_api_usage' as never, rows as never));
   }
 
   /** One row per AI call (owner, 2026-10-07). Never throws. */

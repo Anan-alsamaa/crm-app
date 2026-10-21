@@ -13,7 +13,7 @@ import { Queue, Worker } from 'bullmq';
 import { createRedis, bullPrefix } from '@yiji/shared-config/redis';
 import pino from 'pino';
 import { createServiceClient } from '@yiji/shared-config';
-import { QUEUES, type QueueName } from '@yiji/shared-types';
+import { QUEUES, createYijiUsageRecorder, errorText, type QueueName } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { createMailTransport } from './mail/index.js';
 import {
@@ -24,6 +24,10 @@ import {
   syncScheduledReports,
   scheduleLateOrdersPoll,
   DEFAULT_LATE_ORDERS_POLL_MS,
+  scheduleYijiUsageRetention,
+  setYijiUsageSink,
+  yijiUsageWriter,
+  DEFAULT_YIJI_USAGE_RETENTION_MS,
   type ProcessorDeps,
 } from './processors/index.js';
 import { Registry } from './metrics.js';
@@ -47,6 +51,19 @@ async function main(): Promise<void> {
     token: config.SVC_WORKERS_TOKEN,
   });
   const mail = createMailTransport(config, logger);
+
+  /*
+   * EVERY YIJI CALL, RECORDED (`yiji_api_usage`, owner 2026-10-21): buffered
+   * and written in batches, best-effort - a Directus hiccup loses rows, never
+   * a coupon or a push. Retention keeps 90 days (a daily job, `0` = off).
+   */
+  const yijiUsage = createYijiUsageRecorder({
+    service: 'workers',
+    write: yijiUsageWriter(directus),
+    onError: (err, droppedRows) =>
+      logger.warn({ err: errorText(err), droppedRows }, 'yiji usage rows not recorded'),
+  });
+  setYijiUsageSink(yijiUsage.record);
 
   // One Queue per queue name (used by SLA processor to schedule warning/breach
   // and to enqueue notifications cross-queue).
@@ -208,6 +225,17 @@ async function main(): Promise<void> {
    * per minute. `LATE_ORDERS_POLL_MS` (default 60000) tunes it; `0` removes
    * the scheduler, and the gateway then asks Yiji itself, as before.
    */
+  const yijiUsageRetentionMs = Number(
+    process.env.YIJI_USAGE_RETENTION_MS ?? DEFAULT_YIJI_USAGE_RETENTION_MS,
+  );
+  try {
+    await scheduleYijiUsageRetention(queues[QUEUES.automation], yijiUsageRetentionMs);
+    logger.info({ everyMs: yijiUsageRetentionMs }, 'yiji usage retention scheduled (0 = off)');
+  } catch (err) {
+    /* Not fatal: the log only grows until the next start schedules it. */
+    logger.warn({ err: (err as Error).message }, 'yiji usage retention could not be scheduled');
+  }
+
   const lateOrdersPollMs = Number(process.env.LATE_ORDERS_POLL_MS ?? DEFAULT_LATE_ORDERS_POLL_MS);
   try {
     await scheduleLateOrdersPoll(queues[QUEUES.lateOrders], lateOrdersPollMs);
@@ -418,6 +446,8 @@ async function main(): Promise<void> {
     clearInterval(reportSyncTimer);
     clearInterval(couponSweepTimer);
     await Promise.all(workers.map((w) => w.close()));
+    /* The last buffered Yiji usage rows, after the jobs that made them. */
+    await yijiUsage.stop();
     await Promise.all(Object.values(queues).map((q) => q.close()));
     await app.close();
     await connection.quit();

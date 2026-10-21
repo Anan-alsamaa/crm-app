@@ -254,6 +254,8 @@ services:
       YIJI_ADMIN_API_URL: ${YIJI_ADMIN_API_URL:-}
       YIJI_ADMIN_EMAIL: ${YIJI_ADMIN_EMAIL:-}
       YIJI_ADMIN_PASSWORD: ${YIJI_ADMIN_PASSWORD:-}
+      # Owner's token, BACKUP ONLY: used when the CRM account above is refused.
+      YIJI_BACKUP_TOKEN: ${YIJI_BACKUP_TOKEN:-}
       # Their API is multi-tenant and routes on this header.
       YIJI_TENANT_ID: ${YIJI_TENANT_ID:-1}
       # OFF unless exactly `on`. Coupon delivery hands real money to real
@@ -319,6 +321,8 @@ services:
       YIJI_ADMIN_API_URL: ${YIJI_ADMIN_API_URL:-}
       YIJI_ADMIN_EMAIL: ${YIJI_ADMIN_EMAIL:-}
       YIJI_ADMIN_PASSWORD: ${YIJI_ADMIN_PASSWORD:-}
+      # Owner's token, BACKUP ONLY: used when the CRM account above is refused.
+      YIJI_BACKUP_TOKEN: ${YIJI_BACKUP_TOKEN:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       CORS_ORIGIN: ${CORS_ORIGIN:?set CORS_ORIGIN to the portal hostnames}
       OTEL_SERVICE_NAME: ai-gateway

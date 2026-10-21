@@ -25,6 +25,9 @@ import {
   COUPON_REMOVE_JOB_NAME,
   type CustomerPushJob,
   errorText,
+  fetchWithYijiUsage,
+  yijiBackupTokenFromEnv,
+  type YijiUsageSink,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -43,6 +46,7 @@ import { processCouponPushJob } from './coupon-push.js';
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
+import { purgeYijiUsage, YIJI_USAGE_RETENTION_JOB } from './yiji-usage.js';
 export { runCouponDeliverySweep } from './coupon-push.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
@@ -150,11 +154,32 @@ function stagingOnlyPhone(varName: string): string | undefined {
 const redirectCouponsTo = stagingOnlyPhone('COUPON_REDIRECT_PHONE');
 
 /**
+ * EVERY YIJI CALL THIS PROCESS MAKES IS RECORDED (`yiji_api_usage`, owner
+ * 2026-10-21). The clients below are built at module load, before a Directus
+ * client exists, so they report to this indirection; `index.ts` points it at
+ * the buffered recorder once Directus is up. Until then (and in tests) a call
+ * is simply not recorded - recording never gates a call.
+ */
+let yijiUsageSink: YijiUsageSink | null = null;
+export function setYijiUsageSink(sink: YijiUsageSink | null): void {
+  yijiUsageSink = sink;
+}
+const onYijiUsage: YijiUsageSink = (e) => yijiUsageSink?.(e);
+
+/**
+ * The owner's admin token: a BACKUP for a call the CRM's own Yiji account was
+ * refused (owner, 2026-10-21) - never the first credential tried.
+ * `YIJI_BACKUP_TOKEN`, or its old name `YIJI_COUPON_REMOVE_TOKEN`.
+ */
+const yijiBackupToken = yijiBackupTokenFromEnv(process.env);
+
+/**
  * TAKING A COUPON BACK (EMA-80): built once (it caches its login), and only
  * where coupon DELIVERY is on - a worker that may not grant coupons must not
- * remove them either. Prefers `YIJI_COUPON_REMOVE_TOKEN` (the owner's admin
- * token: the CRM's own Yiji account is 403 on RemoveUserCoupon); without it
- * the service login is tried and a refusal is recorded on the coupon.
+ * remove them either. The CRM's own Yiji account is tried FIRST; the backup
+ * token is used for a call only when that account is refused (its role is 403
+ * on RemoveUserCoupon) or cannot sign in. Without a backup, a refusal is
+ * recorded on the coupon.
  */
 const couponRemover = couponDeliveryEnabled
   ? createYijiCouponRemover({
@@ -162,8 +187,9 @@ const couponRemover = couponDeliveryEnabled
       apiUrl: process.env.YIJI_API_URL,
       adminEmail: process.env.YIJI_ADMIN_EMAIL,
       adminPassword: process.env.YIJI_ADMIN_PASSWORD,
-      removeToken: process.env.YIJI_COUPON_REMOVE_TOKEN,
+      ...(yijiBackupToken ? { backupToken: yijiBackupToken } : {}),
       tenantId: process.env.YIJI_TENANT_ID || '1',
+      onUsage: onYijiUsage,
     })
   : null;
 
@@ -262,6 +288,9 @@ const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
         adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
         adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
         adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+        /* Backup only, for a call the CRM account was refused; usage recorded. */
+        ...(yijiBackupToken ? { backupToken: yijiBackupToken } : {}),
+        onUsage: onYijiUsage,
       },
       tenantId: process.env.YIJI_TENANT_ID,
       brandId: process.env.YIJI_BRAND_ID,
@@ -320,6 +349,11 @@ export const processors: Record<QueueName, Processor> = {
   [QUEUES.automation]: async (job, deps) => {
     // The recurring inactivity sweep shares the automation queue but isn't a
     // per-entity trigger — it fans out one inactivity job per stale conversation.
+    /* `yiji_api_usage` retention (90 days), a daily job on this queue. */
+    if (job.name === YIJI_USAGE_RETENTION_JOB) {
+      await purgeYijiUsage({ directus: deps.directus, logger: deps.logger });
+      return;
+    }
     if (job.name === INACTIVITY_SWEEP_NAME) {
       await runInactivitySweep({
         directus: deps.directus,
@@ -538,6 +572,8 @@ export const processors: Record<QueueName, Processor> = {
          Falls back to the production chat host so a missing setting does not
          send a notification nobody can act on. */
       crmChatUrl: process.env.CRM_CHAT_URL || 'https://crm.anan.sa',
+      /* The direct path (a non-CRM notify URL) is a Yiji call too: recorded. */
+      fetchImpl: fetchWithYijiUsage(onYijiUsage),
       /* Signed in as the service, the same way the coupon push is — no pasted
          bearer token to rotate, and nothing goes silent when one lapses. */
       postNotification: yiji.adminPost ?? undefined,
@@ -578,4 +614,9 @@ export const processors: Record<QueueName, Processor> = {
 export { scheduleReconcile } from './sla.js';
 export { scheduleLateOrdersPoll, DEFAULT_LATE_ORDERS_POLL_MS } from './late-orders-poll.js';
 export { scheduleInactivitySweep } from './automation.js';
+export {
+  scheduleYijiUsageRetention,
+  yijiUsageWriter,
+  DEFAULT_YIJI_USAGE_RETENTION_MS,
+} from './yiji-usage.js';
 export { syncScheduledReports } from './reports.js';

@@ -66,7 +66,8 @@
     "ticketsGroup": "Tickets",
     "aiConfigGroup": "AI",
     "aiConfigShort": "AI settings",
-    "busyReport": "Busy time"
+    "busyReport": "Busy time",
+    "adminKpiGroup": "Admin KPI"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1543,5 +1544,105 @@
   },
   "couponReport": {
     "asAsked": "Not edited"
+  },
+  "adminKpi": {
+    "blockError": "This block could not be loaded.",
+    "retry": "Retry",
+    "search": "Yiji calls",
+    "searchPlaceholder": "Operation, service or error",
+    "export": "Export CSV",
+    "chats": {
+      "title": "Chats",
+      "note": "Chats opened in this window.",
+      "total": "Chats",
+      "closed": "Closed",
+      "open": "Still open",
+      "avgFirst": "Avg first response"
+    },
+    "tickets": {
+      "title": "Tickets",
+      "note": "Tickets created in this window, by compensation.",
+      "created": "Created",
+      "compensated": "Compensated",
+      "notCompensated": "Not compensated",
+      "solved": "Solved"
+    },
+    "coupons": {
+      "title": "Coupons",
+      "note": "Requests raised in this window and what became of them.",
+      "requested": "Requested",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "pending": "Waiting",
+      "pushed": "Pushed to Yiji",
+      "pushFailures": "Push failures",
+      "withheld": "Withheld",
+      "removed": "Removed",
+      "removalUsed": "Already used",
+      "removalNotOnYiji": "Not on Yiji",
+      "removalPending": "Removal waiting",
+      "removalFailed": "Removal failed"
+    },
+    "late": {
+      "title": "Late orders",
+      "note": "Decisions in this window; each order counted by its newest one.",
+      "orders": "Orders decided",
+      "commented": "Commented",
+      "compensated": "Compensated",
+      "decisions": "Decisions"
+    },
+    "people": {
+      "title": "Users & roles",
+      "note": "Right now, not the window. Service accounts are left out.",
+      "active": "Active users",
+      "suspended": "Not active",
+      "roles": "Roles in use",
+      "busyNow": "Busy right now"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "note": "In-app notifications sent in this window.",
+      "total": "Sent",
+      "unread": "Still unread"
+    },
+    "ai": {
+      "title": "AI calls",
+      "note": "Every model call; cost at the paid list price.",
+      "calls": "Calls",
+      "errors": "Errors",
+      "cost": "Est. cost",
+      "latency": "Avg latency"
+    },
+    "yiji": {
+      "title": "Yiji API usage",
+      "note": "Every call the CRM made to Yiji. The backup token is used only when the CRM account is refused.",
+      "account": "Account",
+      "crm": "CRM account",
+      "backup": "Backup token",
+      "ok": "OK",
+      "refused": "Refused",
+      "error": "Error",
+      "total": "Calls",
+      "failed": "Refused / errors",
+      "failedShort": "Failed",
+      "lastBackup": "Backup last used {{when}}",
+      "lastBackupWhy": "Last backup use: {{operation}} ({{service}}) - {{reason}}",
+      "neverBackup": "Backup never used",
+      "trend": "Calls per day (UTC)",
+      "trendUnavailable": "The daily trend could not be loaded.",
+      "byOperation": "By operation",
+      "opFailed": "{{count}} failed",
+      "noCalls": "No Yiji calls in this window.",
+      "recent": "Recent failures and backup uses (newest {{limit}})",
+      "recentEmpty": "No failures and no backup use in this window.",
+      "recentTable": "Yiji failures and backup uses",
+      "col": {
+        "when": "When",
+        "service": "Service",
+        "operation": "Operation",
+        "outcome": "Outcome",
+        "detail": "Why / error"
+      }
+    }
   }
 }

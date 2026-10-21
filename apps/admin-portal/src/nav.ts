@@ -59,3 +59,19 @@ export interface NavSection {
    */
   items: [NavItem, ...NavItem[]];
 }
+
+/**
+ * May this role see this nav item? The privilege and owner checks the Shell
+ * applies before anything renders - one function, so the rule that hides an
+ * owner-only entry is the one the tests exercise.
+ */
+export function navItemAllowed(
+  it: Pick<NavItem, 'requires' | 'requiresAny' | 'ownerOnly'>,
+  who: { can: (p: Privilege) => boolean; isOwner: boolean },
+): boolean {
+  if (it.requires && !who.can(it.requires)) return false;
+  if (it.requiresAny && !it.requiresAny.some((p) => who.can(p))) return false;
+  // Owner-only entries are not privileges; nobody but the owner sees them.
+  if (it.ownerOnly && !who.isOwner) return false;
+  return true;
+}

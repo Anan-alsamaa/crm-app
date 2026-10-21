@@ -113,12 +113,16 @@ const RolesPage = lazy(() =>
 const BackupPage = lazy(() =>
   import('./features/backup/BackupPage.js').then((m) => ({ default: m.BackupPage })),
 );
+const AdminKpiPage = lazy(() =>
+  import('./features/admin-kpi/AdminKpiPage.js').then((m) => ({ default: m.AdminKpiPage })),
+);
 const AiConfigPage = lazy(() =>
   import('./features/ai-config/AiConfigPage.js').then((m) => ({ default: m.AiConfigPage })),
 );
 
 import type { TFunction } from 'i18next';
-import type { NavSection } from './nav.js';
+import { navItemAllowed, type NavSection } from './nav.js';
+import { ADMIN_KPI_PATH, AdminKpiGate, adminKpiNavItem } from './features/admin-kpi/route.js';
 import { DASHBOARD_PRIVILEGES, type Privilege } from './lib/privileges.js';
 import { ReportGroupTabs } from './components/ReportGroupTabs.js';
 
@@ -343,6 +347,8 @@ function Shell({ children }: { children: React.ReactNode }) {
           label: t('nav.opsKpiGroup', { defaultValue: 'Operational KPI' }),
           icon: DownloadIcon,
         },
+        // The whole system's figures, the CRM's Yiji usage among them - owner only.
+        adminKpiNavItem(t),
         {
           // NOT `/reports`: that is now the parent of the two KPI pages, so a
           // link to it would light up alongside whichever one is open.
@@ -502,10 +508,8 @@ function Shell({ children }: { children: React.ReactNode }) {
     .map((section) => ({
       ...section,
       items: section.items.flatMap((it) => {
-        if (it.requires && !can(it.requires)) return [];
-        if (it.requiresAny && !it.requiresAny.some((p) => can(p))) return [];
-        // Owner-only entries are not privileges; nobody but the owner sees them.
-        if ((it as { ownerOnly?: boolean }).ownerOnly && !isOwner) return [];
+        // Privileges, and owner-only entries (not privileges; nobody but the owner sees them).
+        if (!navItemAllowed(it, { can, isOwner })) return [];
         /*
          * A group that collapses to ONE tab links straight to that tab.
          *
@@ -876,6 +880,16 @@ export function App() {
               }
             />
           </Route>
+          <Route
+            path={ADMIN_KPI_PATH}
+            element={
+              <AdminKpiGate>
+                <Shell>
+                  <AdminKpiPage />
+                </Shell>
+              </AdminKpiGate>
+            }
+          />
           <Route
             path="/reports/operational-kpi"
             element={
