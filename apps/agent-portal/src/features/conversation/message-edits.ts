@@ -52,7 +52,9 @@ export function canOfferMessageActions(
   m: ConversationMessage,
   agentId: string | null | undefined,
   nowMs: number,
+  /** The Administrator: any agent's reply, inside the same 15 minutes. */
+  superuser = false,
 ): boolean {
   if (m.pending) return false;
-  return canEditMessage(m, agentId, nowMs);
+  return canEditMessage(m, { kind: 'agent', agentId, superuser }, nowMs);
 }

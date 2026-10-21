@@ -7,6 +7,7 @@ import { SOCKET_EVENTS } from '@yiji/shared-types';
 
 vi.mock('../src/auth/agent-jwt.js', () => ({
   validateAgentToken: vi.fn(async () => ({ id: 'agent-1', role: 'WeCare Agent' })),
+  tokenHasAdminAccess: vi.fn(async () => null),
 }));
 
 import { registerConnection } from '../src/connection.js';

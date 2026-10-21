@@ -29,7 +29,7 @@ import type { GatewayDirectus } from './directus.js';
 import type { CustomerVerifier } from './auth/customer-jwt.js';
 import { CustomerClaims, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
 import { CustomerTokenError } from './auth/customer-jwt.js';
-import { validateAgentToken } from './auth/agent-jwt.js';
+import { tokenHasAdminAccess, validateAgentToken } from './auth/agent-jwt.js';
 import type { SideEffectProducer } from './queue.js';
 import { createAgentPresence } from './agent-presence.js';
 import {
@@ -123,6 +123,8 @@ interface SocketData {
   agentRole?: string | null;
   /** What the agent's role may do (see `isRoutable`, message edits). */
   agentPrivileges?: Record<string, boolean>;
+  /** Directus admin access - the Administrator (owner, 2026-10-22). */
+  agentSuperuser?: boolean;
   /**
    * Serialises conversation creation for THIS socket.
    *
@@ -458,6 +460,8 @@ export function registerConnection(deps: ConnectionDeps): void {
         data.agentId = agent.id;
         data.agentRole = agent.role;
         data.agentPrivileges = agent.privileges;
+        /* Read from admin access, never the role name; fails closed. */
+        data.agentSuperuser = !!(await tokenHasAdminAccess(directusUrl, auth.token));
         return next();
       }
       // Default: customer (widget)
@@ -1621,7 +1625,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         refuseEdit('forbidden', 'your role does not include editing your messages');
         return null;
       }
-      return { kind: 'agent', agentId: data.agentId };
+      return { kind: 'agent', agentId: data.agentId, superuser: data.agentSuperuser === true };
     }
     if (!data.conversationId || !data.contactId || conversationId !== data.conversationId) {
       refuseEdit('forbidden', 'conversation not accessible');
