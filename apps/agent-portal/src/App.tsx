@@ -35,7 +35,7 @@ import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 import { NewMessageSound } from './components/NewMessageSound.js';
 import { ChatAlerts } from './components/ChatAlerts.js';
-import { ChatAlertsToggle } from './components/ChatAlertsToggle.js';
+import { receivesChatAlerts } from './lib/chat-alerts.js';
 
 // Route pages are code-split so the initial bundle stays lean; each loads on
 // first navigation behind the shared Suspense fallback below.
@@ -329,6 +329,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const { user, logout, can } = useAuth();
   const displayName = staffDisplayName(user, 'Agent');
+  const chatAlertsFor = receivesChatAlerts(user?.role?.name);
   // Command-palette open state is lifted here so the top-bar search trigger and
   // the Cmd/Ctrl+K shortcut both drive the one palette instance below.
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -416,7 +417,6 @@ function Shell({ children }: { children: React.ReactNode }) {
             <PageRefresh />
             <NotificationBell />
             <HelpAssistant />
-            <ChatAlertsToggle />
             <SoundToggle />
             <LanguageToggle />
           </div>
@@ -435,7 +435,6 @@ function Shell({ children }: { children: React.ReactNode }) {
               <PageRefresh />
               <NotificationBell />
               <HelpAssistant />
-              <ChatAlertsToggle />
               <SoundToggle />
               <LanguageToggle />
             </div>
@@ -489,7 +488,8 @@ function Shell({ children }: { children: React.ReactNode }) {
       <NewVersionBanner />
       <AppKeyboardShortcuts />
       <NewMessageSound />
-      <ChatAlerts />
+      {/* New-chat alerts: WeCare roles only, always on (owner, 2026-10-22). */}
+      {chatAlertsFor && <ChatAlerts />}
       <Toaster position="bottom" />
     </>
   );

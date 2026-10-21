@@ -8,7 +8,7 @@ import { SOCKET_EVENTS, displayContactName } from '@yiji/shared-types';
 import { getSocket } from '../lib/socket.js';
 import { directus } from '../lib/directus.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
-import { chatAlertsEnabled, desktopPermission } from '../lib/chat-alerts.js';
+import { askDesktopPermissionOnce, desktopPermission } from '../lib/chat-alerts.js';
 import type { BusyState } from '../lib/job-producer.js';
 
 /** Re-raise a still-unanswered chat's Windows notification once, after this. */
@@ -59,6 +59,8 @@ export function ChatAlerts() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const tracked = useRef(new Map<string, Tracked>());
   const onInbox = location.pathname === '/';
+  /* Windows' pop-up permission, asked on the first click (WeCare only). */
+  useEffect(() => askDesktopPermissionOnce(), []);
   /* Is the portal the window in front? Banners only start their countdown
      once the agent can actually see them. */
   const [inFrontNow, setInFrontNow] = useState(
@@ -168,7 +170,6 @@ export function ChatAlerts() {
     };
 
     const raise = async (conversationId: string) => {
-      if (!chatAlertsEnabled()) return;
       const me = userId.current;
       if (!me) return;
       // Already looking at this very chat — nothing to tell them.

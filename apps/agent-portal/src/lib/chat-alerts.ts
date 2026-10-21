@@ -8,9 +8,10 @@
  *    another program or tab. A web page cannot draw outside its own window;
  *    the system notification is the only surface that reaches past it.
  *
- * The on/off switch is per browser, like the sound mute.
+ * WeCare roles only, and ALWAYS ON (owner, 2026-10-22): the alerts exist so a
+ * customer is never missed, so there is no switch to turn them off - and no
+ * other role gets them (or the Windows permission prompt) at all.
  */
-const KEY = 'yiji.agent.chatAlerts';
 const ASKED_KEY = 'yiji.agent.chatAlertsAsked';
 
 function read(key: string): string | null {
@@ -29,15 +30,12 @@ function write(key: string, value: string): void {
   }
 }
 
-let enabled = typeof window !== 'undefined' && read(KEY) !== 'off';
-
-export function chatAlertsEnabled(): boolean {
-  return enabled;
-}
-
-export function setChatAlertsEnabled(value: boolean): void {
-  enabled = value;
-  write(KEY, value ? 'on' : 'off');
+/** The roles new-chat alerts are for: WeCare Agent, Supervisor and Admin. */
+export function receivesChatAlerts(roleName: string | null | undefined): boolean {
+  return String(roleName ?? '')
+    .trim()
+    .toLowerCase()
+    .startsWith('wecare');
 }
 
 export type DesktopPermission = NotificationPermission | 'unsupported';
@@ -59,16 +57,22 @@ export async function requestDesktopPermission(): Promise<DesktopPermission> {
 
 /*
  * Ask ONCE, on the agent's first click or key press. Browsers quietly block a
- * permission request that no gesture started, and an agent who never finds
- * the bell button would otherwise never be asked at all.
+ * permission request that no gesture started. Armed by ChatAlerts, which only
+ * WeCare roles mount, so nobody else is ever asked.
  */
-if (typeof window !== 'undefined') {
+export function askDesktopPermissionOnce(): () => void {
+  if (typeof window === 'undefined') return () => undefined;
   const askOnce = () => {
-    if (enabled && desktopPermission() === 'default' && read(ASKED_KEY) !== '1') {
+    if (desktopPermission() === 'default' && read(ASKED_KEY) !== '1') {
       void requestDesktopPermission();
     }
   };
   for (const ev of ['pointerdown', 'keydown'] as const) {
     window.addEventListener(ev, askOnce, { once: true, passive: true });
   }
+  return () => {
+    for (const ev of ['pointerdown', 'keydown'] as const) {
+      window.removeEventListener(ev, askOnce);
+    }
+  };
 }
