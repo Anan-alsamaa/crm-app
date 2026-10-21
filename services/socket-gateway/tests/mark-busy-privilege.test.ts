@@ -22,10 +22,21 @@ describe('mark_busy', () => {
     expect(effectivePrivileges({ mark_busy: true }, 'Viewer').mark_busy).toBe(true);
   });
 
-  it('the row-less Administrator holds everything EXCEPT Busy', () => {
+  /* Owner, 2026-10-22: the superuser holds everything except the WeCare
+     floor's chat work - Busy, being routed chats, being a chat's assignee. */
+  it('the row-less Administrator holds everything EXCEPT the WeCare chat work', () => {
     const p = rolePrivileges('Administrator', null);
     expect(p.mark_busy).toBe(false);
-    expect(p.receive_chats).toBe(true);
+    expect(p.receive_chats).toBe(false);
+    expect(p.can_be_assigned).toBe(false);
     expect(p.delete_chats).toBe(true);
+    expect(p.manage_ticket_compensation).toBe(true);
+    expect(p.assign_chats).toBe(true);
+  });
+
+  it('WeCare roles still receive chats and can be assigned', () => {
+    expect(rolePrivileges('WeCare Agent', null).receive_chats).toBe(true);
+    expect(rolePrivileges('WeCare Agent', null).can_be_assigned).toBe(true);
+    expect(rolePrivileges('WeCare Supervisor', null).can_be_assigned).toBe(true);
   });
 });

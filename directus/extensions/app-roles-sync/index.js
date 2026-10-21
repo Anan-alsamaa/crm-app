@@ -180,7 +180,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     delete_chats: never,
     edit_own_messages: holds('use_chat'),
     receive_chats: nameIn('wecare agent', 'wecare supervisor'),
-    can_be_assigned: () => true,
+    can_be_assigned: (_p, role) => role !== 'administrator',
     mark_busy: nameIn('wecare agent', 'wecare supervisor', 'wecare admin'),
     no_agents_alert: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
     view_contacts: holds('use_chat'),
