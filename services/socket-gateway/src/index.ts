@@ -57,6 +57,7 @@ import {
 import { createProducer } from './queue.js';
 import { createPresenceStore, PRESENCE_TTL_MS } from './presence-store.js';
 import { idleCloseEnabled, runIdleCloseSweep, withSweepLock } from './idle-close.js';
+import { installRejectionGuard } from './process-guards.js';
 import { registerLateOrdersPushRoute, LATE_ORDERS_PUSH_ROOM } from './late-orders-push.js';
 import {
   registerConnection,
@@ -119,6 +120,8 @@ function applySecurityHeaders(app: FastifyInstance): void {
 async function main(): Promise<void> {
   const config = loadConfig();
   const logger = pino({ level: config.LOG_LEVEL, name: 'socket-gateway' });
+  // A forgotten .catch() must not kill chat (owner, 2026-10-20) - see process-guards.
+  installRejectionGuard(logger);
 
   const httpServer = createServer();
   // A CORS value may be '*' or a comma-separated allow-list. Socket.IO + our
