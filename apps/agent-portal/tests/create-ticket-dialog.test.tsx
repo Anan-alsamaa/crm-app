@@ -22,6 +22,7 @@ const hooks = vi.hoisted(() => ({
   useCreateTicketFromConversation: vi.fn(),
   useConversationAttachmentIds: vi.fn(),
   useStoreNotifyTypes: vi.fn(),
+  useUpdateTicket: vi.fn(() => ({ mutateAsync: vi.fn().mockResolvedValue({}) })),
 }));
 vi.mock('../src/features/tickets/api.js', () => hooks);
 
@@ -247,6 +248,35 @@ describe('CreateTicketForm', () => {
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
     expect(requestCoupon).not.toHaveBeenCalled();
+  });
+
+  // Owner, 2026-10-21: Nada's two tickets for 0571664749 were saved as
+  // Compensated with no coupon - the box was ticked, the coupon never created.
+  it('will not save with "Assign a coupon" ticked until the coupon is created', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1' });
+    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+    renderDialog();
+    await chooseComplaintType('Missing item');
+    const save = () => document.querySelector('button[type="submit"]');
+    expect(save()?.hasAttribute('disabled')).toBe(false);
+    await userEvent.click(screen.getByRole('checkbox', { name: /assign a coupon/i }));
+    expect(save()?.hasAttribute('disabled')).toBe(true);
+    expect(screen.getByText(/Create the coupon, or untick/i)).toBeInTheDocument();
+    // Unticking withdraws the promise: saving is allowed again.
+    await userEvent.click(screen.getByRole('checkbox', { name: /assign a coupon/i }));
+    expect(save()?.hasAttribute('disabled')).toBe(false);
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  // Owner, 2026-10-21: Compensated only when a coupon is issued.
+  it('saves a ticket with no coupon as Not Compensated', async () => {
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1' });
+    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+    renderDialog();
+    await chooseComplaintType('Missing item');
+    await userEvent.click(screen.getByText('tickets.create'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0]![0].ticket.compensation).toBe('Not Compensated');
   });
 
   it('shows the name the ticket is about to get', async () => {
