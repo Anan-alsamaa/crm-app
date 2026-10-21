@@ -62,7 +62,12 @@ export interface EditableMessageRow {
  */
 export type MessageEditor =
   | string
-  | { kind: 'agent'; agentId: string | null | undefined }
+  | {
+      kind: 'agent';
+      agentId: string | null | undefined;
+      /** The Administrator (Directus admin access): ANY agent's reply (owner, 2026-10-22). */
+      superuser?: boolean;
+    }
   | {
       kind: 'customer';
       contactId: string | null | undefined;
@@ -110,12 +115,17 @@ export function messageEditRefusal(
     return windowRefusal(row, nowMs);
   }
   const agentId = typeof editor === 'string' ? editor : (editor?.agentId ?? null);
+  const superuser =
+    typeof editor === 'object' && !!editor && editor.kind === 'agent' && editor.superuser === true;
   if (row.sender_type !== 'agent' || row.is_internal_note) return 'not_own_message';
   /* The automatic welcome (owner, 2026-10-06) belongs to no agent, so it is
      nobody's to rewrite. Already implied by the ownership check below; said
      explicitly so a future "admins may edit anything" change cannot reach it. */
   if (isAutomatedAgentMessage(row)) return 'not_own_message';
-  if (!agentId || relId(row.sender_user) !== agentId) return 'not_own_message';
+  /* The Administrator may change ANY agent's reply (owner, 2026-10-22) - still
+     only an agent reply, never the welcome, and still inside the 15 minutes. */
+  if (!agentId) return 'not_own_message';
+  if (!superuser && relId(row.sender_user) !== agentId) return 'not_own_message';
   return windowRefusal(row, nowMs);
 }
 

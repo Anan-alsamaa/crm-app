@@ -4,7 +4,10 @@ import type { AddressInfo } from 'node:net';
 import { Server as SocketServer } from 'socket.io';
 import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 
-vi.mock('../src/auth/agent-jwt.js', () => ({ validateAgentToken: vi.fn() }));
+vi.mock('../src/auth/agent-jwt.js', () => ({
+  validateAgentToken: vi.fn(),
+  tokenHasAdminAccess: vi.fn(async () => null),
+}));
 
 import { registerConnection, resetWelcomeCache } from '../src/connection.js';
 import type { GatewayDirectus } from '../src/directus.js';

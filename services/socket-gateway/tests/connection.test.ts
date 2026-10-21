@@ -10,9 +10,10 @@ import { SOCKET_EVENTS, rooms } from '@yiji/shared-types';
 // injected and can be stubbed per-test.
 vi.mock('../src/auth/agent-jwt.js', () => ({
   validateAgentToken: vi.fn(),
+  tokenHasAdminAccess: vi.fn(async () => null),
 }));
 
-import { validateAgentToken } from '../src/auth/agent-jwt.js';
+import { tokenHasAdminAccess, validateAgentToken } from '../src/auth/agent-jwt.js';
 import { registerConnection, getAgentPresenceSnapshot } from '../src/connection.js';
 import type { GatewayDirectus } from '../src/directus.js';
 import type { CustomerVerifier } from '../src/auth/customer-jwt.js';
@@ -1003,6 +1004,49 @@ describe('socket-gateway connection handler (mocked Directus)', () => {
         const err2 = waitFor<{ code: string }>(agent, SOCKET_EVENTS.error);
         agent.emit(SOCKET_EVENTS.messageDelete, { conversationId: 'conv-1', messageId: 'msg-9' });
         expect((await err2).code).toBe(code);
+        expect(updateAgentMessage).not.toHaveBeenCalled();
+      });
+
+      /* Owner, 2026-10-22: the Administrator (admin access) may change ANY
+         agent's reply - inside the 15 minutes, never a customer's words. */
+      it('the Administrator may delete another agent’s reply', async () => {
+        vi.mocked(tokenHasAdminAccess).mockResolvedValueOnce({ id: 'agent-1' });
+        const updateAgentMessage = vi.fn(async () => undefined);
+        harness = await startGateway(
+          makeStubs({
+            getMessageForEdit: vi.fn(async () => ownRow({ sender_user: 'agent-2' })),
+            updateAgentMessage,
+          }),
+        );
+        const agent = await connectedAgent();
+        const got = waitFor(agent, SOCKET_EVENTS.messageDeleted);
+        agent.emit(SOCKET_EVENTS.messageDelete, { conversationId: 'conv-1', messageId: 'msg-9' });
+        await got;
+        expect(updateAgentMessage).toHaveBeenCalledWith(
+          'msg-9',
+          expect.objectContaining({ content: '' }),
+        );
+      });
+
+      it.each([
+        ['not_own_message', { sender_type: 'customer', sender_user: null }],
+        [
+          'edit_window_closed',
+          {
+            sender_user: 'agent-2',
+            date_created: new Date(Date.now() - 16 * 60_000).toISOString(),
+          },
+        ],
+      ])('the Administrator is still refused with %s', async (code, over) => {
+        vi.mocked(tokenHasAdminAccess).mockResolvedValueOnce({ id: 'agent-1' });
+        const updateAgentMessage = vi.fn(async () => undefined);
+        harness = await startGateway(
+          makeStubs({ getMessageForEdit: vi.fn(async () => ownRow(over)), updateAgentMessage }),
+        );
+        const agent = await connectedAgent();
+        const err = waitFor<{ code: string }>(agent, SOCKET_EVENTS.error);
+        agent.emit(SOCKET_EVENTS.messageDelete, { conversationId: 'conv-1', messageId: 'msg-9' });
+        expect((await err).code).toBe(code);
         expect(updateAgentMessage).not.toHaveBeenCalled();
       });
 
