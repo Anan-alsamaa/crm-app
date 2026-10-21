@@ -12,7 +12,7 @@
 #   base       — node:20-alpine + corepack (pnpm) + tini (clean signals)
 #   prod-deps  — production-only dependency tree (tsx stays as the TS runtime)
 #   runner     — minimal final image: prod node_modules + source, non-root
-FROM public.ecr.aws/docker/library/node:20-alpine AS base
+FROM node:20-alpine AS base
 RUN corepack enable && apk add --no-cache tini
 WORKDIR /app
 

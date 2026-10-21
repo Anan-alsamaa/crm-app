@@ -7,7 +7,7 @@
 # shipped to the browser. Only put non-secret, client-safe values here. (The
 # default prod hosting for the portals is a CDN/static host — see
 # docs/PRODUCTION.md; this image is the container alternative.)
-FROM public.ecr.aws/docker/library/node:20-alpine AS builder
+FROM node:20-alpine AS builder
 RUN corepack enable
 WORKDIR /app
 
@@ -38,7 +38,7 @@ ENV VITE_DIRECTUS_URL=$VITE_DIRECTUS_URL \
 RUN pnpm --filter @yiji/admin-portal build
 
 # ---- runner: nginx serving the static build with SPA history fallback ----
-FROM public.ecr.aws/docker/library/nginx:1.27-alpine AS runner
+FROM nginx:1.27-alpine AS runner
 COPY --from=builder /app/apps/admin-portal/dist /usr/share/nginx/html
 # SPA fallback (client-side routing) + a cheap /health for container probes.
 # Baseline security headers baked in so the image is safe even if served without
