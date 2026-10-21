@@ -1,0 +1,29 @@
+# What is pushed must be what was checked (owner, 2026-10-22).
+#
+# A commit once carried a staged file deletion while the change that went
+# with it stayed uncommitted: every local check passed (they read the WORKING
+# files, which had both halves) and main was broken on push. So:
+#   1. no uncommitted, staged or untracked source files - the working tree
+#      must BE the commit, or the checks below prove nothing;
+#   2. the whole repo typechecks (broken imports, missing files).
+case "$(uname -s)" in
+MINGW* | MSYS* | CYGWIN*)
+  [ -d "/c/Program Files/nodejs" ] && PATH="/c/Program Files/nodejs:$PATH" && export PATH
+  ;;
+esac
+
+dirty=$(git status --porcelain --untracked-files=all -- apps services packages directus scripts)
+if [ -n "$dirty" ]; then
+  echo "pre-push: refusing - source files differ from the commit being pushed:"
+  echo "$dirty"
+  echo "Commit or stash them, so what is checked is exactly what is pushed."
+  exit 1
+fi
+
+echo "pre-push: typechecking the commit..."
+pnpm typecheck >/tmp/pre-push-typecheck.log 2>&1 || {
+  tail -40 /tmp/pre-push-typecheck.log
+  echo "pre-push: refusing - typecheck failed."
+  exit 1
+}
+echo "pre-push: ok"
