@@ -230,10 +230,26 @@ export function canCommit(
   editingDecisionId: string | null,
   reason: string,
   actionTaken: string,
+  /** The action of the decision being edited ('compensated' / 'commented'). */
+  editingAction: string | null = null,
 ): boolean {
   if (!reason.trim()) return false;
-  const actionRequired = draft.action === 'compensated' || !!editingDecisionId;
-  return actionRequired ? !!actionTaken.trim() : true;
+  return actionRequiredFor(draft, editingDecisionId, editingAction) ? !!actionTaken.trim() : true;
+}
+
+/**
+ * WHEN "ACTION TAKEN" IS REQUIRED (owner, 2026-10-21): "If assigned a coupon
+ * then reason and action both. If commented then only reason." - including
+ * when EDITING: editing a comment needs only the reason; editing a decision
+ * that gave a coupon needs both.
+ */
+export function actionRequiredFor(
+  draft: { action: 'commented' | 'compensated' },
+  editingDecisionId: string | null,
+  editingAction: string | null,
+): boolean {
+  if (draft.action === 'compensated') return true;
+  return !!editingDecisionId && editingAction === 'compensated';
 }
 
 /**
@@ -496,11 +512,6 @@ export function LateOrdersPage() {
   /** The decision being EDITED via Comments, when the row already has one. */
   const [editingDecisionId, setEditingDecisionId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  /* Whether the open decision dialog has everything it needs. `draft` is null
-     when the dialog is closed, in which case there is nothing to validate. */
-  const canCommitDecision = draft
-    ? canCommit(draft, editingDecisionId, reason, actionTaken)
-    : false;
 
   /*
    * "/" IN THE REASON BOX, exactly as in the chat composer.
@@ -724,6 +735,18 @@ export function LateOrdersPage() {
     (orderId: string) => decisionMap.get(orderId) ?? null,
     [decisionMap],
   );
+
+  /* Whether the open decision dialog has everything it needs. `draft` is null
+     when the dialog is closed, in which case there is nothing to validate. */
+  const canCommitDecision = draft
+    ? canCommit(
+        draft,
+        editingDecisionId,
+        reason,
+        actionTaken,
+        editingDecisionId ? (decisionOf(draft.row.orderId)?.action ?? null) : null,
+      )
+    : false;
 
   const presentStatuses = useMemo(() => {
     const seen = new Set<string>();
@@ -2305,9 +2328,17 @@ export function LateOrdersPage() {
                         {/* MANDATORY WHEN A COUPON IS BEING ASSIGNED (ops,
                             2026-10-04). A compensation whose action nobody wrote
                             is a row the register cannot explain. */}
-                        <span aria-hidden className="ms-1 text-destructive">
-                          *
-                        </span>
+                        {actionRequiredFor(
+                          draft,
+                          editingDecisionId,
+                          editingDecisionId
+                            ? (decisionOf(draft.row.orderId)?.action ?? null)
+                            : null,
+                        ) && (
+                          <span aria-hidden className="ms-1 text-destructive">
+                            *
+                          </span>
+                        )}
                       </span>
                       <Textarea
                         rows={2}

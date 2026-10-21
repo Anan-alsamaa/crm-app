@@ -177,9 +177,18 @@ describe('whether a decision can be saved', () => {
    * then — a decision that already carries one must not be saveable with it
    * emptied.
    */
-  it('needs both when editing a decision that already exists', () => {
-    expect(canCommit(C, 'dec-1', 'corrected reason', '')).toBe(false);
-    expect(canCommit(C, 'dec-1', 'corrected reason', 'called the branch')).toBe(true);
+  // Owner, 2026-10-21: coupon -> reason AND action; comment -> reason only,
+  // when editing too.
+  it('editing a COUPON decision needs both reason and action', () => {
+    expect(canCommit(C, 'dec-1', 'corrected reason', '', 'compensated')).toBe(false);
+    expect(canCommit(C, 'dec-1', 'corrected reason', 'called the branch', 'compensated')).toBe(
+      true,
+    );
+  });
+
+  it('editing a COMMENT needs only the reason', () => {
+    expect(canCommit(C, 'dec-1', 'corrected reason', '', 'commented')).toBe(true);
+    expect(canCommit(C, 'dec-1', '', 'something', 'commented')).toBe(false);
   });
 
   /* Whitespace is not an answer, in either field. */
