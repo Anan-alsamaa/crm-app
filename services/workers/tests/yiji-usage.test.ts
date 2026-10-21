@@ -47,30 +47,26 @@ function remover(
 }
 
 describe('coupon removal: CRM account first, backup on a refusal only', () => {
+  /* The general rule, on a READ (usedOnOrder). RemoveUserCoupon itself is the
+     one exception - it goes straight to the admin token (below). */
   it('uses the CRM account FIRST even with a backup configured', async () => {
     const usage: YijiUsageEvent[] = [];
-    const { f, calls } = fakeFetch((url) =>
-      isLogin(url) ? json({ token: 'CRM' }) : json({ result: 1 }),
-    );
-    await remover(f, { backupToken: 'OWNER' }, usage).removeGrant('27507');
+    const { f, calls } = fakeFetch((url) => (isLogin(url) ? json({ token: 'CRM' }) : json([])));
+    await remover(f, { backupToken: 'OWNER' }, usage).usedOnOrder('u1', '27507');
     expect(calls.map((c) => c.auth)).toEqual([undefined, 'Bearer CRM']);
-    expect(usage.map((u) => `${u.operation}:${u.account}:${u.outcome}`)).toEqual([
-      'login:crm:ok',
-      'coupon.remove:crm:ok',
-    ]);
+    expect(usage.map((u) => `${u.account}:${u.outcome}`)).toEqual(['crm:ok', 'crm:ok']);
   });
 
-  it('a 403 from the CRM account (its role) retries ONCE with the backup', async () => {
+  it('a 403 from the CRM account retries ONCE with the backup', async () => {
     const usage: YijiUsageEvent[] = [];
     const { f, calls } = fakeFetch((url, auth) => {
       if (isLogin(url)) return json({ token: 'CRM' });
-      return auth === 'Bearer OWNER' ? json({ result: 1 }) : new Response('', { status: 403 });
+      return auth === 'Bearer OWNER' ? json([]) : new Response('', { status: 403 });
     });
-    await remover(f, { backupToken: 'OWNER' }, usage).removeGrant('27507');
+    await remover(f, { backupToken: 'OWNER' }, usage).usedOnOrder('u1', '1');
     expect(calls.map((c) => c.auth)).toEqual([undefined, 'Bearer CRM', 'Bearer OWNER']);
     expect(usage.at(-2)).toMatchObject({ account: 'crm', outcome: 'refused', httpStatus: 403 });
     expect(usage.at(-1)).toMatchObject({
-      operation: 'coupon.remove',
       account: 'backup',
       outcome: 'ok',
       fallbackReason: 'crm account refused (403)',
@@ -80,16 +76,16 @@ describe('coupon removal: CRM account first, backup on a refusal only', () => {
   it('the old YIJI_COUPON_REMOVE_TOKEN option still works - as the backup', async () => {
     const { f, calls } = fakeFetch((url, auth) => {
       if (isLogin(url)) return json({ token: 'CRM' });
-      return auth === 'Bearer OLD' ? json({ result: 1 }) : new Response('', { status: 403 });
+      return auth === 'Bearer OLD' ? json([]) : new Response('', { status: 403 });
     });
-    await remover(f, { removeToken: 'Bearer OLD' }).removeGrant('1');
+    await remover(f, { removeToken: 'Bearer OLD' }).usedOnOrder('u1', '1');
     expect(calls.map((c) => c.auth)).toEqual([undefined, 'Bearer CRM', 'Bearer OLD']);
   });
 
   it('a refused CRM login goes to the backup', async () => {
     const usage: YijiUsageEvent[] = [];
-    const { f, calls } = fakeFetch((url) => (isLogin(url) ? json({}, 400) : json({ result: 1 })));
-    await remover(f, { backupToken: 'OWNER' }, usage).removeGrant('1');
+    const { f, calls } = fakeFetch((url) => (isLogin(url) ? json({}, 400) : json([])));
+    await remover(f, { backupToken: 'OWNER' }, usage).usedOnOrder('u1', '1');
     expect(calls.map((c) => c.auth)).toEqual([undefined, 'Bearer OWNER']);
     expect(usage.at(-1)?.fallbackReason).toMatch(/crm login refused/);
   });
@@ -103,12 +99,37 @@ describe('coupon removal: CRM account first, backup on a refusal only', () => {
       throw new TypeError('fetch failed');
     }) as unknown as typeof fetch;
     await expect(
-      remover(f, { backupToken: 'OWNER' }, usage).removeGrant('1'),
-    ).rejects.toMatchObject({
-      name: 'YijiUnavailableError',
-    });
+      remover(f, { backupToken: 'OWNER' }, usage).usedOnOrder('u1', '1'),
+    ).rejects.toMatchObject({ name: 'YijiUnavailableError' });
     expect(calls).toEqual(['login', 'Bearer CRM']);
     expect(usage.at(-1)).toMatchObject({ account: 'crm', outcome: 'error', httpStatus: null });
+  });
+
+  /* Owner, 2026-10-22: the CRM account has no RemoveUserCoupon permission, so
+     the removal itself uses the admin token directly - no certain 403 first. */
+  it('RemoveUserCoupon goes STRAIGHT to the admin token when it is set', async () => {
+    const usage: YijiUsageEvent[] = [];
+    const { f, calls } = fakeFetch((url) =>
+      isLogin(url) ? json({ token: 'CRM' }) : json({ result: 1 }),
+    );
+    await remover(f, { backupToken: 'OWNER' }, usage).removeGrant('27507');
+    expect(calls.map((c) => c.auth)).toEqual(['Bearer OWNER']);
+    expect(usage).toHaveLength(1);
+    expect(usage[0]).toMatchObject({
+      operation: 'coupon.remove',
+      account: 'backup',
+      outcome: 'ok',
+      fallbackReason: expect.stringMatching(/no permission/),
+    });
+  });
+
+  it('an admin-token refusal of RemoveUserCoupon is a settled refusal', async () => {
+    const { f, calls } = fakeFetch(() => new Response('', { status: 403 }));
+    await expect(remover(f, { backupToken: 'OWNER' }).removeGrant('1')).rejects.toMatchObject({
+      name: 'YijiRefusedError',
+      status: 403,
+    });
+    expect(calls).toHaveLength(1);
   });
 
   it('without a backup a 403 stays a refusal (unchanged)', async () => {
