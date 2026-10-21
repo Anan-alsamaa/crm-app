@@ -371,3 +371,20 @@ export const CustomerPushJob = z.object({
   vendorId: z.string().min(1).optional(),
 });
 export type CustomerPushJob = z.infer<typeof CustomerPushJob>;
+
+/**
+ * "Take this coupon back" (owner, 2026-10-21, EMA-80) - on the `coupons`
+ * queue under the job NAME `remove`, so the coupon worker's credentials and
+ * vendor lookup are reused rather than duplicated.
+ *
+ * `removedBy` is set by the GATEWAY from the caller's verified token, never
+ * taken from the request body. The worker re-reads the row: a coupon already
+ * used on an order is kept, never "removed" on paper.
+ */
+export const COUPON_REMOVE_JOB_NAME = 'remove';
+export const CouponRemoveJob = z.object({
+  couponApprovalId: z.string().min(1),
+  removedBy: z.string().min(1),
+  reason: z.string().trim().min(1).max(1000),
+});
+export type CouponRemoveJob = z.infer<typeof CouponRemoveJob>;

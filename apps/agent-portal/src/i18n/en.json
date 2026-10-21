@@ -722,7 +722,19 @@
     "orderIdHint": "For reference only. A coupon is always sent to the customer's phone number, never to an order.",
     "orderNotFound": "No order with that number for this vendor.",
     "orderIdWalkInHint": "Takeout and Dine-in: type the number on the restaurant receipt. It is recorded as given — there is nothing to look up.",
-    "restaurantOrderId": "Restaurant order no. (optional)"
+    "restaurantOrderId": "Restaurant order no. (optional)",
+    "compensated": "Compensated",
+    "notCompensated": "Not Compensated",
+    "assignCoupon": "Assign a coupon",
+    "compensatedNeedsCoupon": "A ticket is Compensated only when a coupon is linked to it. Use “Assign a coupon” to raise one for this ticket.",
+    "couponAlreadyUsed": "The customer already used this coupon on an order, so it cannot be removed. The ticket stays Compensated.",
+    "removeCouponWarning": "Saving removes {{coupons}} from this ticket. If it is already in the customer’s Yiji app it is taken out of it, so the customer no longer sees it. A coupon the customer already used cannot be removed.",
+    "removeCouponReason": "Why is the coupon being removed?",
+    "removeUsed": "Not removed: the customer already used {{code}}. The ticket stays Compensated.",
+    "removeFailed": "The coupon {{code}} was NOT removed. The ticket stays Compensated.",
+    "removeDone": "The coupon was removed. The ticket is now Not Compensated.",
+    "removeRequested": "Saved. Removing the coupon now — the ticket shows Not Compensated once it is gone.",
+    "removeRequestFailed": "Saved, but the coupon could NOT be removed. It is still on the ticket and in the customer’s app — try again."
   },
   "complaints": {
     "title": "My tickets",
@@ -886,6 +898,15 @@
       "approved": "Approved",
       "rejected": "Rejected",
       "all": "All"
+    },
+    "removal": {
+      "removed": "Removed from the Yiji app",
+      "notOnYiji": "Removed",
+      "used": "Not removed · already used",
+      "failed": "Not removed",
+      "pending": "Removing…",
+      "by": "Removed by",
+      "at": "Removed on"
     }
   },
   "busy": {

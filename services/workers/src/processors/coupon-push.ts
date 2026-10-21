@@ -980,6 +980,8 @@ async function recordFailure(
 /** What a push attempt concluded, for the log and the tests. */
 export type PushOutcome =
   | 'delivered'
+  /** Removed from its ticket before it reached Yiji (EMA-80) - never sent. */
+  | 'removed'
   /**
    * The customer has no Yiji account YET (owner, 2026-10-07, EMA-49). The
    * coupon is held in the CRM — `awaiting_signup_at` — and the delivery sweep
@@ -1271,6 +1273,36 @@ async function readYijiCouponId(directus: YijiDirectusClient, id: string): Promi
 }
 
 /**
+ * Was this coupon taken back from its ticket (EMA-80)?
+ *
+ * A SEPARATE read, like `readYijiCouponId`: `removal_status` needs a manual
+ * `apply:fields`, and a missing field 403s the whole Directus read. Until the
+ * field exists nothing can have been removed, so a FORBIDDEN answer means "no";
+ * any other failure throws so BullMQ retries rather than risk sending a coupon
+ * that was taken back.
+ */
+export async function removalBlocksPush(
+  directus: YijiDirectusClient,
+  id: string,
+  logger: Logger,
+): Promise<boolean> {
+  try {
+    const r = (await directus.request(
+      readItem('coupon_approvals' as never, id, { fields: ['removal_status'] } as never),
+    )) as unknown as { removal_status?: string | null } | null;
+    const v = (r?.removal_status ?? '').trim();
+    return v === 'pending' || v === 'not_on_yiji' || v === 'removed';
+  } catch (err) {
+    const text = describeError(err);
+    if (/FORBIDDEN|permission/i.test(text)) {
+      logger.warn({ id, err: text }, 'removal_status not readable — field not applied yet?');
+      return false;
+    }
+    throw new Error(`could not read removal_status: ${text}`);
+  }
+}
+
+/**
  * Create a WITHHELD coupon on Yiji: Private, `assignee: []`, held by nobody.
  *
  * THE CASE (owner, 2026-10-06): the agent or supervisor ticked "do not send
@@ -1502,6 +1534,14 @@ export async function processCouponPushJob(
       'withheld coupon already created on Yiji — nothing to do, and never assigned',
     );
     return 'already-withheld';
+  }
+  /*
+   * TAKEN BACK FROM ITS TICKET (owner, 2026-10-21, EMA-80): never sent, however
+   * the job was queued - a Retry click or the sweep included.
+   */
+  if (await removalBlocksPush(directus, id, logger)) {
+    logger.info({ id, code: row.coupon_code }, 'coupon was removed from its ticket — not pushed');
+    return 'removed';
   }
   if (row.status !== 'approved' && row.status !== 'edited') {
     logger.warn({ id, status: row.status }, 'coupon is not approved — refusing to push');

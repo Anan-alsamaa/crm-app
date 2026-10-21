@@ -7,6 +7,7 @@
 
 import {
   COUPON_APPROVAL_STATUSES,
+  COUPON_REMOVAL_STATUSES,
   CommunicationMethod,
   Compensation,
   ComplaintSource,
@@ -939,6 +940,40 @@ export const collections: CollectionSpec[] = [
         type: 'text',
         note: 'Why the last delivery attempt failed. Null once the coupon has been delivered.',
       },
+      /*
+       * TAKEN BACK FROM THE TICKET (owner, 2026-10-21, EMA-80).
+       *
+       * Setting a ticket's Compensation to "Not Compensated" removes its
+       * coupon: the row is KEPT as the record, marked here, and the workers
+       * take the grant off the customer's Yiji app and verify it is gone. Its
+       * own column, not a sixth `status`: status is the supervisor's decision
+       * and every report reads it that way.
+       *
+       * Needs a manual `apply:fields` on staging and prod BEFORE the deploy
+       * that reads them - a missing field 403s the whole Directus query.
+       */
+      {
+        field: 'removal_status',
+        type: 'string',
+        choices: [...COUPON_REMOVAL_STATUSES],
+        index: true,
+        note: 'Removal from the ticket: pending, not_on_yiji (removed in the CRM only), removed (gone from the Yiji app, verified), used (NOT removed - already spent on an order), failed (NOT removed - see removal_detail). Empty = never removed.',
+      },
+      {
+        field: 'removed_at',
+        type: 'dateTime',
+        note: 'When the coupon was actually removed. Empty while pending, and for used/failed (not removed).',
+      },
+      {
+        field: 'removed_reason',
+        type: 'text',
+        note: 'Why it was removed, as typed by the person who removed it.',
+      },
+      {
+        field: 'removal_detail',
+        type: 'text',
+        note: 'What happened on Yiji: the order it was used on, or why removal failed.',
+      },
     ],
   },
   {
@@ -1447,6 +1482,13 @@ export const relations: RelationSpec[] = [
   {
     collection: 'coupon_approvals',
     field: 'decided_by',
+    related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
+  // Who took a coupon back off its ticket (EMA-80). Same SET NULL reasoning.
+  {
+    collection: 'coupon_approvals',
+    field: 'removed_by',
     related: 'directus_users',
     onDelete: 'SET NULL',
   },

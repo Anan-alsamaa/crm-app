@@ -93,7 +93,20 @@ import { LateOrderDecisionCard } from '../late-orders/LateOrderDecisionCard.js';
 import { useContact, useContactConversations } from '../contacts/api.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
-import { useRequestCouponApproval, useTicketCoupons } from '../coupons/api.js';
+import {
+  useRemoveTicketCoupons,
+  useRequestCouponApproval,
+  useTicketCoupons,
+  type CouponRequestRow,
+} from '../coupons/api.js';
+import {
+  AssignTicketCouponDialog,
+  COMPENSATED,
+  removalTone,
+  TicketCompensationField,
+  ticketCompensationState,
+  wantsCouponRemoval,
+} from './TicketCompensation.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
 import { formatBytes, isImage, isUnknownType } from '../../lib/files.js';
@@ -1803,8 +1816,28 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
   const requestCoupon = useRequestCouponApproval();
   const { user, can } = useAuth();
   const stores = useStores();
+  const qc = useQueryClient();
   const [editing, setEditing] = useState(false);
   const [storeId, setStoreId] = useState(ticket.store ?? '');
+  /* EMA-80: for a manager, Compensation follows the ticket's coupon. */
+  const manage = can('manage_ticket_compensation');
+  const removeCoupons = useRemoveTicketCoupons();
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [removeReason, setRemoveReason] = useState('');
+  const [blockedCompensated, setBlockedCompensated] = useState(false);
+  /* The coupons whose removal was just asked for, and what each said before,
+     so the outcome can be told once the worker has answered. */
+  const [watching, setWatching] = useState<Record<
+    string,
+    { before: string | null; seenPending: boolean }
+  > | null>(null);
+  const ticketCoupons = useTicketCoupons(manage ? ticket.id : null, {
+    pollWhileRemoving: watching !== null,
+  });
+  const compState = useMemo(
+    () => ticketCompensationState(ticketCoupons.data ?? [], ticket.compensation),
+    [ticketCoupons.data, ticket.compensation],
+  );
 
   // Directus hands back numbers for the coupon columns and nulls for anything
   // unset; the form works in strings, so normalise on the way in.
@@ -1820,7 +1853,8 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
       complaint_source: ticket.complaint_source ?? '',
       communication_method: ticket.communication_method ?? '',
       response_desc: ticket.response_desc ?? '',
-      compensation: ticket.compensation ?? '',
+      /* A manager sees what the coupons say, not what was last typed. */
+      compensation: manage ? compState.value : (ticket.compensation ?? ''),
       coupon_code: ticket.coupon_code ?? '',
       coupon_value:
         ticket.coupon_value === null || ticket.coupon_value === undefined
@@ -1831,7 +1865,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           ? ''
           : String(ticket.coupon_percent),
     }),
-    [ticket],
+    [ticket, manage, compState.value],
   );
   const [draft, setDraft] = useState<ComplaintValues>(stored);
 
@@ -1896,8 +1930,76 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
     [draft, ticket],
   );
 
+  /* The removal outcome, told once the worker has answered every coupon. */
+  useEffect(() => {
+    if (!watching) return;
+    const rows = ticketCoupons.data ?? [];
+    const next = { ...watching };
+    let done = true;
+    const outcome: CouponRequestRow[] = [];
+    for (const [id, w] of Object.entries(watching)) {
+      const row = rows.find((r) => r.id === id);
+      const status = row?.removal_status ?? null;
+      const seenPending = w.seenPending || status === 'pending';
+      next[id] = { ...w, seenPending };
+      if (row && status && status !== 'pending' && (status !== w.before || seenPending)) {
+        outcome.push(row);
+      } else {
+        done = false;
+      }
+    }
+    if (!done) {
+      if (Object.keys(next).some((id) => next[id]!.seenPending !== watching[id]!.seenPending)) {
+        setWatching(next);
+      }
+      return;
+    }
+    setWatching(null);
+    const codes = (rows: CouponRequestRow[]) => rows.map((r) => r.coupon_code ?? '—').join(', ');
+    const used = outcome.filter((r) => r.removal_status === 'used');
+    const failed = outcome.filter((r) => r.removal_status === 'failed');
+    if (used.length > 0) {
+      toast.warning(
+        t('complaint.removeUsed', {
+          defaultValue:
+            'Not removed: the customer already used {{code}}. The ticket stays Compensated.',
+          code: codes(used),
+        }),
+        { description: used[0]!.removal_detail ?? undefined, durationMs: 0 },
+      );
+    }
+    if (failed.length > 0) {
+      toast.error(
+        t('complaint.removeFailed', {
+          defaultValue: 'The coupon {{code}} was NOT removed. The ticket stays Compensated.',
+          code: codes(failed),
+        }),
+        { description: failed[0]!.removal_detail ?? undefined, durationMs: 0 },
+      );
+    }
+    if (used.length === 0 && failed.length === 0) {
+      toast.success(
+        t('complaint.removeDone', {
+          defaultValue: 'The coupon was removed. The ticket is now Not Compensated.',
+        }),
+      );
+    }
+    void qc.invalidateQueries({ queryKey: ['ticket'] });
+    void qc.invalidateQueries({ queryKey: ['tickets'] });
+  }, [watching, ticketCoupons.data, t, qc]);
+
+  /* Stops waiting after a minute: the coupon list still shows the state. */
+  useEffect(() => {
+    if (!watching) return;
+    const timer = setTimeout(() => setWatching(null), 60_000);
+    return () => clearTimeout(timer);
+  }, [watching]);
+
+  const removing = manage && wantsCouponRemoval(compState, draft.compensation);
+
   const save = async () => {
     if (complaintHasErrors(draft)) return;
+    if (removing && !removeReason.trim()) return;
     try {
       /**
        * The coupon goes to a supervisor, exactly as it does on the create
@@ -1936,7 +2038,17 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           // Read from the draft, not from `fields`: complaintPatch is typed as
           // `string | number | null` across every column, and compensation is
           // text. Withheld only while a NEW coupon is pending.
-          compensation: request ? null : draft.compensation.trim() || null,
+          compensation: manage
+            ? /* A removal is the workers' to finish: they set the value once
+                 the coupon is really gone (or keep Compensated when it was
+                 already used). Otherwise only what the coupons allow. */
+              removing ||
+              (draft.compensation.trim() === COMPENSATED && !compState.compensatedAllowed)
+              ? (ticket.compensation ?? null)
+              : draft.compensation.trim() || null
+            : request
+              ? null
+              : draft.compensation.trim() || null,
           store: storeId || null,
           /* The ticket's NAME follows its type — and for "Other" it follows the
              typed name instead. Without this, renaming an Other ticket changed
@@ -1966,6 +2078,40 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
             }),
           );
         }
+      }
+
+      if (removing) {
+        try {
+          await removeCoupons.mutateAsync({
+            ticketId: ticket.id,
+            couponIds: compState.removable.map((c) => c.id),
+            reason: removeReason.trim(),
+          });
+          setWatching(
+            Object.fromEntries(
+              compState.removable.map((c) => [
+                c.id,
+                { before: c.removal_status ?? null, seenPending: false },
+              ]),
+            ),
+          );
+          setRemoveReason('');
+          setEditing(false);
+          toast(
+            t('complaint.removeRequested', {
+              defaultValue:
+                'Saved. Removing the coupon now — the ticket shows Not Compensated once it is gone.',
+            }),
+          );
+        } catch {
+          toast.error(
+            t('complaint.removeRequestFailed', {
+              defaultValue:
+                'Saved, but the coupon could NOT be removed. It is still on the ticket and in the customer’s app — try again.',
+            }),
+          );
+        }
+        return;
       }
 
       setEditing(false);
@@ -2014,6 +2160,20 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
             // Editing the coupon here RAISES a request (owner, 2026-10-06).
             hideCoupon={!can('request_coupons')}
+            compensationSlot={
+              manage ? (
+                <TicketCompensationField
+                  state={compState}
+                  value={draft.compensation}
+                  onChange={(v) => setDraft((d) => ({ ...d, compensation: v }))}
+                  reason={removeReason}
+                  onReasonChange={setRemoveReason}
+                  onAssign={() => setAssignOpen(true)}
+                  blocked={blockedCompensated}
+                  onBlocked={setBlockedCompensated}
+                />
+              ) : undefined
+            }
           />
           {/* Said while the agent is still typing the coupon, not after they
               have told the customer about it — the same warning the create
@@ -2042,6 +2202,8 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               onClick={() => {
                 setDraft(stored);
                 setStoreId(ticket.store ?? '');
+                setRemoveReason('');
+                setBlockedCompensated(false);
                 setEditing(false);
               }}
             >
@@ -2051,7 +2213,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               type="button"
               size="sm"
               loading={update.isPending}
-              disabled={complaintHasErrors(draft)}
+              disabled={complaintHasErrors(draft) || (removing && !removeReason.trim())}
               onClick={() => void save()}
             >
               {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
@@ -2095,6 +2257,31 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           )}
           <TicketCoupons ticketId={ticket.id} />
         </div>
+      )}
+      {manage && !editing && (
+        <div className="mt-3 flex justify-end">
+          <Button type="button" size="sm" variant="ghost" onClick={() => setAssignOpen(true)}>
+            {t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })}
+          </Button>
+        </div>
+      )}
+      {manage && (
+        <AssignTicketCouponDialog
+          open={assignOpen}
+          onClose={() => setAssignOpen(false)}
+          ticket={ticket}
+          branch={branch}
+          requestedBy={user?.id ?? null}
+          onCreated={() => {
+            /* The request EXISTS now, so the ticket is Compensated (EMA-80). */
+            setBlockedCompensated(false);
+            setDraft((d) => ({ ...d, compensation: COMPENSATED }));
+            void update
+              .mutateAsync({ id: ticket.id, patch: { compensation: COMPENSATED } })
+              .catch(() => undefined);
+            void qc.invalidateQueries({ queryKey: ['ticket-coupons', ticket.id] });
+          }}
+        />
       )}
     </SectionCard>
   );
@@ -2167,6 +2354,22 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
                   {t('coupons.amended', { defaultValue: 'Amended' })}
                 </Pill>
               )}
+              {/* EMA-80: taken back from the ticket - or not, and why. */}
+              {removalTone(c.removal_status) && (
+                <Pill tone={removalTone(c.removal_status)!} size="sm">
+                  {c.removal_status === 'removed'
+                    ? t('coupons.removal.removed', { defaultValue: 'Removed from the Yiji app' })
+                    : c.removal_status === 'not_on_yiji'
+                      ? t('coupons.removal.notOnYiji', { defaultValue: 'Removed' })
+                      : c.removal_status === 'used'
+                        ? t('coupons.removal.used', {
+                            defaultValue: 'Not removed · already used',
+                          })
+                        : c.removal_status === 'failed'
+                          ? t('coupons.removal.failed', { defaultValue: 'Not removed' })
+                          : t('coupons.removal.pending', { defaultValue: 'Removing…' })}
+                </Pill>
+              )}
             </div>
             <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
               {[
@@ -2191,6 +2394,16 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
                   t('couponApprovals.requestedAt', { defaultValue: 'Requested' }),
                   formatDate(c.date_created) || null,
                 ],
+                [
+                  t('coupons.removal.by', { defaultValue: 'Removed by' }),
+                  c.removal_status
+                    ? c.removed_by?.first_name?.trim() || c.removed_by?.email || null
+                    : null,
+                ],
+                [
+                  t('coupons.removal.at', { defaultValue: 'Removed on' }),
+                  c.removed_at ? formatDateTime(c.removed_at) : null,
+                ],
               ]
                 .filter((r): r is [string, string] => !!r[1])
                 .map(([label, value]) => (
@@ -2205,6 +2418,11 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
             {c.decision_note && (
               <p dir="auto" className="mt-2 text-xs italic text-muted-foreground">
                 {c.decision_note}
+              </p>
+            )}
+            {c.removal_status && (c.removed_reason || c.removal_detail) && (
+              <p dir="auto" className="mt-2 text-xs text-muted-foreground">
+                {[c.removed_reason, c.removal_detail].filter(Boolean).join(' — ')}
               </p>
             )}
           </li>

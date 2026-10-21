@@ -21,6 +21,8 @@ import {
   type ReportJob,
   type RoutingJob,
   type CouponPushJob,
+  type CouponRemoveJob,
+  COUPON_REMOVE_JOB_NAME,
   type CustomerPushJob,
   errorText,
 } from '@yiji/shared-types';
@@ -39,6 +41,8 @@ import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
 import { processCouponPushJob } from './coupon-push.js';
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
+import { processCouponRemoveJob } from './coupon-remove.js';
+import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
 export { runCouponDeliverySweep } from './coupon-push.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
@@ -144,6 +148,24 @@ function stagingOnlyPhone(varName: string): string | undefined {
 }
 
 const redirectCouponsTo = stagingOnlyPhone('COUPON_REDIRECT_PHONE');
+
+/**
+ * TAKING A COUPON BACK (EMA-80): built once (it caches its login), and only
+ * where coupon DELIVERY is on - a worker that may not grant coupons must not
+ * remove them either. Prefers `YIJI_COUPON_REMOVE_TOKEN` (the owner's admin
+ * token: the CRM's own Yiji account is 403 on RemoveUserCoupon); without it
+ * the service login is tried and a refusal is recorded on the coupon.
+ */
+const couponRemover = couponDeliveryEnabled
+  ? createYijiCouponRemover({
+      adminApiUrl: process.env.YIJI_ADMIN_API_URL,
+      apiUrl: process.env.YIJI_API_URL,
+      adminEmail: process.env.YIJI_ADMIN_EMAIL,
+      adminPassword: process.env.YIJI_ADMIN_PASSWORD,
+      removeToken: process.env.YIJI_COUPON_REMOVE_TOKEN,
+      tenantId: process.env.YIJI_TENANT_ID || '1',
+    })
+  : null;
 
 /**
  * STAGING ONLY: every customer PUSH to one handset.
@@ -396,6 +418,16 @@ export const processors: Record<QueueName, Processor> = {
     });
   },
   [QUEUES.coupons]: async (job, deps) => {
+    /* EMA-80: the same queue carries removals, by job NAME. */
+    if (job.name === COUPON_REMOVE_JOB_NAME) {
+      await processCouponRemoveJob(job as Job<CouponRemoveJob>, {
+        directus: deps.directus,
+        logger: deps.logger,
+        remover: couponRemover,
+        ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
+      });
+      return;
+    }
     /*
      * The ROW's vendor picks the connector (MV-1) - for the coupon and the
      * signup watch that rides on this job. A row with no vendor is a pre-MV-1

@@ -1357,7 +1357,9 @@
       "viewDataWarnings": "See data-quality notices on reports (unmapped stores, missing details)",
       "deleteRestaurants": "Delete restaurants (stores and brands)",
       "viewCouponQueue": "See the Compensation page (read-only without Request coupons)",
-      "viewCouponApprovals": "See Coupon approvals (read-only without Approve coupons)"
+      "viewCouponApprovals": "See Coupon approvals (read-only without Approve coupons)",
+      "manageTicketCompensation": "Manage a ticket's compensation (assign a coupon; Not Compensated removes it, also from the customer's Yiji app)",
+      "deleteCompensation": "Delete a compensation record"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
