@@ -175,8 +175,16 @@ export const ALL_PRIVILEGES: readonly Privilege[] = [...PRIVILEGES, ...OWNER_PRI
  * The owner, 2026-10-13: Busy is for the three WeCare roles only - "for the
  * rest it must be off", the Administrator included. They resolve from the
  * role's stored tick or its default, like any role.
+ *
+ * The owner, 2026-10-22: the Administrator is the superuser - everything
+ * applies to them - EXCEPT the WeCare floor's chat work: being routed chats
+ * and being picked as a chat's assignee.
  */
-export const ROLE_SPECIFIC_PRIVILEGES: readonly Privilege[] = ['mark_busy'];
+export const ROLE_SPECIFIC_PRIVILEGES: readonly Privilege[] = [
+  'mark_busy',
+  'receive_chats',
+  'can_be_assigned',
+];
 
 export function isOwnerPrivilege(key: string): key is OwnerPrivilege {
   return (OWNER_PRIVILEGES as readonly string[]).includes(key);
@@ -218,8 +226,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   // The gateway's PRESENCE_ROLES / the workers' ROUTABLE_ROLES.
   receive_chats: nameIn('wecare agent', 'wecare supervisor'),
   /* May be given a chat at all - by the routing ladder (with receive_chats)
-     or BY HAND from the assign picker. Off for the CEO (owner, 2026-10-15). */
-  can_be_assigned: () => true,
+     or BY HAND from the assign picker. Off for the CEO (owner, 2026-10-15)
+     and the Administrator (owner, 2026-10-22: chat work is WeCare's). */
+  can_be_assigned: (_p, role) => role !== 'administrator',
   /* The Busy button and its time records (owner, 2026-10-13): the three
      WeCare roles only, off for every other role. */
   mark_busy: nameIn('wecare agent', 'wecare supervisor', 'wecare admin'),
