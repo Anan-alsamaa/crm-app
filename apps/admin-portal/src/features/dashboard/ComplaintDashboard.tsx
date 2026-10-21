@@ -6,13 +6,18 @@ import {
   DateField,
   Drawer,
   ErrorState,
+  CheckCircleIcon,
+  ChartIcon,
+  ClockIcon,
   InboxIcon,
   MeterBar,
   ProgressRing,
-  SectionCard,
   SelectMenu,
   Skeleton,
+  SparkleIcon,
   StoreIcon,
+  TeamIcon,
+  UsersIcon,
   ZapIcon,
 } from '@yiji/ui';
 import {
@@ -36,8 +41,10 @@ import {
   Gauge,
   HATCH,
   PillColumns,
+  RankBars,
   StatCard,
   TrendPill,
+  type Tone,
 } from '../../components/dash/Dash.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 
@@ -333,84 +340,6 @@ function CardEmpty({ label }: { label: string }) {
 }
 
 /**
- * His bar breakdown: label, proportional track, then "count · share". The share
- * is what makes the list readable — 40 complaints means nothing until you know
- * it is a third of everything.
- */
-function Bars({
-  rows,
-  total,
-  color,
-  onSelect,
-}: {
-  rows: Breakdown[];
-  total: number;
-  color: string;
-  /** Given, each row becomes a button that opens the complaints behind it. */
-  onSelect?: (row: Breakdown) => void;
-}) {
-  const { t } = useTranslation();
-  const max = Math.max(1, ...rows.map((r) => r.count));
-  if (rows.length === 0)
-    return (
-      <CardEmpty
-        label={t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })}
-      />
-    );
-  return (
-    <ul className="space-y-2">
-      {rows.map((r, idx) => {
-        const body = (
-          <>
-            <span
-              className="w-28 shrink-0 truncate text-start text-xs text-foreground"
-              title={r.label}
-            >
-              {r.label}
-            </span>
-            {/* Hairline track, same as the shared MeterBar — the tone fill is
-                what reads, not the rail. */}
-            <span className="h-2 flex-1 overflow-hidden rounded-full bg-foreground/[0.08]">
-              <span
-                className={cn(
-                  'block h-full origin-left rounded-full rtl:origin-right',
-                  'transition-[width] duration-slow ease-out motion-safe:animate-grow-x',
-                  color,
-                )}
-                style={{
-                  width: `${Math.max(2, (r.count / max) * 100)}%`,
-                  animationDelay: `${Math.min(idx, 10) * 45}ms`,
-                }}
-              />
-            </span>
-            <span className="w-20 shrink-0 text-end text-2xs tabular-nums text-muted-foreground">
-              <strong className="font-semibold text-foreground">{r.count}</strong>
-              {total > 0 && ` · ${Math.round((r.count / total) * 100)}%`}
-            </span>
-          </>
-        );
-        return (
-          <li key={r.key}>
-            {onSelect ? (
-              <button
-                type="button"
-                onClick={() => onSelect(r)}
-                title={t('complaintDash.drillHint', { defaultValue: 'Show these tickets' })}
-                className="flex w-full items-center gap-3 rounded-lg px-1 py-0.5 -mx-1 transition-colors duration-fast hover:bg-secondary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              >
-                {body}
-              </button>
-            ) : (
-              <span className="flex items-center gap-3">{body}</span>
-            )}
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-/**
  * Weekly activity heatmap — the reference dashboard's grid: the last six ISO
  * weeks as rows, weekdays as columns, cell intensity = complaints that day.
  * Reads load patterns (weekend spikes, a bad Tuesday) that totals hide.
@@ -498,37 +427,65 @@ function CutCard({
   hint,
   cut,
   total,
-  color,
+  tone,
+  icon,
+  initials,
   className,
+  index,
   onSelect,
+  emptyLabel,
 }: {
   title: string;
   hint?: string;
   cut: Cut;
   total: number;
-  color: string;
+  tone: Tone;
+  icon: React.ReactNode;
+  /** People lists show an initials disc instead of a rank number. */
+  initials?: boolean;
   className?: string;
+  index?: number;
   onSelect?: (row: Breakdown) => void;
+  emptyLabel?: string;
 }) {
   const { t } = useTranslation();
   const hidden = cut.distinct > cut.rows.length;
   return (
-    <SectionCard
+    <BentoCard
       title={title}
       hint={hint}
+      tone={tone}
+      icon={icon}
+      index={index}
       className={className}
-      aside={
-        hidden
-          ? t('complaintDash.topNofM', {
+      action={
+        hidden ? (
+          <span className="rounded-full bg-card/80 px-2.5 py-1 text-2xs font-medium text-muted-foreground ring-1 ring-foreground/[0.06]">
+            {t('complaintDash.topNofM', {
               defaultValue: 'top {{n}} of {{m}}',
               n: cut.rows.length,
               m: cut.distinct,
-            })
-          : undefined
+            })}
+          </span>
+        ) : undefined
       }
     >
-      <Bars rows={cut.rows} total={total} color={color} onSelect={onSelect} />
-    </SectionCard>
+      <RankBars
+        rows={cut.rows}
+        total={total}
+        tone={tone}
+        initials={initials}
+        onSelect={onSelect ? (row) => onSelect(row as Breakdown) : undefined}
+        emptyLabel={
+          <CardEmpty
+            label={
+              emptyLabel ??
+              t('complaintDash.nothingInRange', { defaultValue: 'Nothing in this range.' })
+            }
+          />
+        }
+      />
+    </BentoCard>
   );
 }
 
@@ -1395,12 +1352,15 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           {/* What compensation is costing, for the roles allowed to see it.
               Sits above the ops snapshot because it is the one number on this
               page with money attached. */}
-          {view === 'agent' && <CouponSpend from={applied.from} to={applied.to} />}
-
-          {/* How much of the customer base the app actually reaches —
-              the difference between a lookup that resolves itself and one
-              an agent has to do by hand. */}
-          {view === 'agent' && <CustomerReach />}
+          {/* Money and reach side by side, each in its own soft hue (owner,
+              2026-10-15). Either card renders nothing for a role without it,
+              and the other then takes the row. */}
+          {view === 'agent' && (
+            <div className="grid gap-4 lg:grid-cols-3 lg:[&>*:only-child]:col-span-3">
+              <CouponSpend from={applied.from} to={applied.to} className="lg:col-span-2" />
+              <CustomerReach />
+            </div>
+          )}
 
           {/* The Ops snapshot band is gone — every chip on it repeated a number
               from the KPI strip directly above it. */}
@@ -1500,7 +1460,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 holding unfinished work — a heavy logger with nothing
                 outstanding is the opposite of a problem. */}
             {view === 'agent' && (
-              <SectionCard
+              <CutCard
                 title={t('complaintDash.unsolvedByAgent', {
                   defaultValue: 'Unsolved tickets by agent',
                 })}
@@ -1513,32 +1473,27 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                     : undefined
                 }
                 className="md:col-span-2"
-              >
-                {d.byOpenAgent.rows.length === 0 ? (
-                  <CardEmpty
-                    label={t('complaintDash.nothingOutstanding', {
-                      defaultValue: 'Nothing outstanding — every ticket in this range is closed.',
-                    })}
-                  />
-                ) : (
-                  // Shares are OF THE OPEN PILE, not of every complaint: "40% of
-                  // what is still open" is the question being asked here.
-                  <Bars
-                    rows={d.byOpenAgent.rows}
-                    total={d.open}
-                    color="bg-destructive"
-                    onSelect={drillInto(
-                      t('complaintDash.unsolvedByAgent', {
-                        defaultValue: 'Unsolved tickets by agent',
-                      }),
-                      (r) => r.agentId,
-                      // His click lands on the UNSOLVED ones only, not everything
-                      // that agent has ever logged.
-                      (r) => r.isOpen,
-                    )}
-                  />
+                index={11}
+                tone="rose"
+                icon={<ClockIcon size={17} />}
+                initials
+                cut={d.byOpenAgent}
+                // Shares are OF THE OPEN PILE, not of every complaint: "40% of
+                // what is still open" is the question being asked here.
+                total={d.open}
+                emptyLabel={t('complaintDash.nothingOutstanding', {
+                  defaultValue: 'Nothing outstanding — every ticket in this range is closed.',
+                })}
+                onSelect={drillInto(
+                  t('complaintDash.unsolvedByAgent', {
+                    defaultValue: 'Unsolved tickets by agent',
+                  }),
+                  (r) => r.agentId,
+                  // His click lands on the UNSOLVED ones only, not everything
+                  // that agent has ever logged.
+                  (r) => r.isOpen,
                 )}
-              </SectionCard>
+              />
             )}
             {view === 'operations' && (
               <CutCard
@@ -1554,7 +1509,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 }
                 cut={d.byRestaurant}
                 total={d.total}
-                color="bg-foreground"
+                tone="indigo"
+                icon={<StoreIcon size={17} />}
+                index={12}
                 onSelect={drillInto(
                   t('complaintDash.topRestaurants', { defaultValue: 'Top restaurants' }),
                   (r) => r.restaurantName,
@@ -1568,7 +1525,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 total={d.total}
                 // Magenta, not warning: `--warning` is a light token whose bars
                 // wash out on the light theme.
-                color="bg-magenta"
+                tone="rose"
+                icon={<SparkleIcon size={17} />}
+                index={13}
                 onSelect={drillInto(
                   t('complaintDash.byBrand', { defaultValue: 'By brand' }),
                   (r) => r.brandName,
@@ -1588,7 +1547,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 })}
                 cut={d.byArea}
                 total={d.total}
-                color="bg-primary"
+                tone="violet"
+                icon={<UsersIcon size={17} />}
+                index={14}
                 onSelect={drillInto(
                   t('complaintDash.byArea', { defaultValue: 'By area manager' }),
                   (r) => r.area,
@@ -1610,7 +1571,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                    bars were blank). The preset replaces the `violet` family with
                    one token, so `bg-violet-500` generated no CSS at all. Green,
                    not violet: violet is the hue of the area-manager bars beside it. */
-                color="bg-success"
+                tone="mint"
+                icon={<TeamIcon size={17} />}
+                index={15}
                 onSelect={drillInto(
                   t('complaintDash.byChain', { defaultValue: 'By chain manager' }),
                   (r) => r.chain,
@@ -1622,7 +1585,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 title={t('complaintDash.byCity', { defaultValue: 'By city' })}
                 cut={d.byCity}
                 total={d.total}
-                color="bg-sky"
+                tone="sky"
+                icon={<ChartIcon size={17} />}
+                index={16}
                 onSelect={drillInto(
                   t('complaintDash.byCity', { defaultValue: 'By city' }),
                   (r) => r.city,
@@ -1634,7 +1599,10 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 title={t('complaintDash.byAgent', { defaultValue: 'By agent' })}
                 cut={d.byAgent}
                 total={d.total}
-                color="bg-violet"
+                tone="violet"
+                icon={<UsersIcon size={17} />}
+                initials
+                index={12}
                 onSelect={drillInto(
                   t('complaintDash.byAgent', { defaultValue: 'By agent' }),
                   (r) => r.agentId,
@@ -1652,7 +1620,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                   })),
                 }}
                 total={d.total}
-                color="bg-success"
+                tone="mint"
+                icon={<CheckCircleIcon size={17} />}
+                index={13}
                 onSelect={drillInto(
                   t('complaintDash.byStatus', { defaultValue: 'By status' }),
                   (r) => r.status,
@@ -1664,7 +1634,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                 title={t('complaintDash.byServiceType', { defaultValue: 'By service type' })}
                 cut={d.byServiceType}
                 total={d.total}
-                color="bg-primary"
+                tone="amber"
+                icon={<ZapIcon size={17} />}
+                index={14}
                 onSelect={drillInto(
                   t('complaintDash.byServiceType', { defaultValue: 'By service type' }),
                   (r) => r.serviceType,
@@ -1684,7 +1656,9 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
                    the whole page and leave the card above it half empty. */
                 cut={d.bySource}
                 total={d.total}
-                color="bg-destructive"
+                tone="teal"
+                icon={<InboxIcon size={17} />}
+                index={15}
                 onSelect={drillInto(
                   t('complaintDash.bySource', { defaultValue: 'How tickets reach us' }),
                   (r) => r.source,

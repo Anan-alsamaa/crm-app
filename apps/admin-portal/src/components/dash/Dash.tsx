@@ -467,6 +467,175 @@ export function Gauge({
   );
 }
 
+/*
+ * CARD TONES (owner, 2026-10-15: "light shades of other colours too, not only
+ * the brand colour"). Each breakdown card gets its own soft hue: a faint wash
+ * across the top of the card, an icon chip, and bars in that hue. Literal
+ * class strings so Tailwind generates every one of them.
+ */
+export type Tone = 'indigo' | 'violet' | 'sky' | 'mint' | 'rose' | 'amber' | 'teal';
+
+export const TONES: Record<
+  Tone,
+  { wash: string; chip: string; bar: string; track: string; ink: string; dot: string }
+> = {
+  indigo: {
+    wash: 'bg-[linear-gradient(180deg,oklch(0.95_0.035_277),transparent_5.5rem)]',
+    chip: 'bg-[oklch(0.93_0.045_277)] text-[oklch(0.42_0.19_277)]',
+    bar: 'bg-[linear-gradient(90deg,oklch(0.62_0.17_277),oklch(0.48_0.2_277))]',
+    track: 'bg-[oklch(0.95_0.02_277)]',
+    ink: 'text-[oklch(0.42_0.19_277)]',
+    dot: 'oklch(0.52 0.2 277)',
+  },
+  violet: {
+    wash: 'bg-[linear-gradient(180deg,oklch(0.95_0.035_305),transparent_5.5rem)]',
+    chip: 'bg-[oklch(0.93_0.05_305)] text-[oklch(0.45_0.17_305)]',
+    bar: 'bg-[linear-gradient(90deg,oklch(0.7_0.14_305),oklch(0.55_0.18_305))]',
+    track: 'bg-[oklch(0.955_0.02_305)]',
+    ink: 'text-[oklch(0.45_0.17_305)]',
+    dot: 'oklch(0.58 0.18 305)',
+  },
+  sky: {
+    wash: 'bg-[linear-gradient(180deg,oklch(0.955_0.03_235),transparent_5.5rem)]',
+    chip: 'bg-[oklch(0.93_0.045_235)] text-[oklch(0.45_0.13_240)]',
+    bar: 'bg-[linear-gradient(90deg,oklch(0.76_0.11_230),oklch(0.6_0.14_240))]',
+    track: 'bg-[oklch(0.96_0.018_235)]',
+    ink: 'text-[oklch(0.45_0.13_240)]',
+    dot: 'oklch(0.62 0.14 238)',
+  },
+  mint: {
+    wash: 'bg-[linear-gradient(180deg,oklch(0.96_0.035_160),transparent_5.5rem)]',
+    chip: 'bg-[oklch(0.93_0.055_160)] text-[oklch(0.45_0.12_160)]',
+    bar: 'bg-[linear-gradient(90deg,oklch(0.8_0.12_160),oklch(0.62_0.14_160))]',
+    track: 'bg-[oklch(0.96_0.02_160)]',
+    ink: 'text-[oklch(0.45_0.12_160)]',
+    dot: 'oklch(0.64 0.14 160)',
+  },
+  rose: {
+    wash: 'bg-[linear-gradient(180deg,oklch(0.96_0.03_15),transparent_5.5rem)]',
+    chip: 'bg-[oklch(0.94_0.04_15)] text-[oklch(0.5_0.17_20)]',
+    bar: 'bg-[linear-gradient(90deg,oklch(0.75_0.13_15),oklch(0.6_0.18_20))]',
+    track: 'bg-[oklch(0.965_0.016_15)]',
+    ink: 'text-[oklch(0.5_0.17_20)]',
+    dot: 'oklch(0.62 0.18 20)',
+  },
+  amber: {
+    wash: 'bg-[linear-gradient(180deg,oklch(0.965_0.04_80),transparent_5.5rem)]',
+    chip: 'bg-[oklch(0.94_0.06_80)] text-[oklch(0.5_0.11_65)]',
+    bar: 'bg-[linear-gradient(90deg,oklch(0.85_0.12_85),oklch(0.72_0.15_65))]',
+    track: 'bg-[oklch(0.965_0.022_80)]',
+    ink: 'text-[oklch(0.5_0.11_65)]',
+    dot: 'oklch(0.74 0.15 70)',
+  },
+  teal: {
+    wash: 'bg-[linear-gradient(180deg,oklch(0.96_0.03_195),transparent_5.5rem)]',
+    chip: 'bg-[oklch(0.93_0.045_195)] text-[oklch(0.45_0.09_200)]',
+    bar: 'bg-[linear-gradient(90deg,oklch(0.8_0.09_195),oklch(0.6_0.1_205))]',
+    track: 'bg-[oklch(0.96_0.016_195)]',
+    ink: 'text-[oklch(0.45_0.09_200)]',
+    dot: 'oklch(0.6 0.1 203)',
+  },
+};
+
+/**
+ * A ranked list on capsule bars (the bento breakdowns). The top three carry a
+ * filled rank badge in the card's tone; the rest are quiet numerals. Each row
+ * is a button when `onSelect` is given, so the drill-down still works.
+ */
+export function RankBars({
+  rows,
+  total,
+  tone,
+  onSelect,
+  emptyLabel,
+  initials,
+}: {
+  rows: PillRow[];
+  /** Shares are of this; omit to hide the share. */
+  total?: number;
+  tone: Tone;
+  onSelect?: (row: PillRow) => void;
+  emptyLabel: ReactNode;
+  /** Show an initials disc instead of the rank number (people lists). */
+  initials?: boolean;
+}) {
+  const reduce = useReducedMotion();
+  if (rows.length === 0) return <>{emptyLabel}</>;
+  const t = TONES[tone];
+  const max = Math.max(1, ...rows.map((r) => r.count));
+  return (
+    <ul className="space-y-1">
+      {rows.map((r, i) => {
+        const pct = Math.max(3, (r.count / max) * 100);
+        const share = total && total > 0 ? Math.round((r.count / total) * 100) : null;
+        const badge = initials
+          ? r.label
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((w) => w[0]!.toUpperCase())
+              .join('') || '?'
+          : String(i + 1);
+        const body = (
+          <>
+            <span
+              aria-hidden
+              className={cn(
+                'grid h-7 w-7 shrink-0 place-items-center text-2xs font-bold tabular-nums',
+                initials ? 'rounded-full' : 'rounded-[0.6rem]',
+                i < 3 || initials ? t.chip : 'bg-secondary text-muted-foreground',
+              )}
+            >
+              {badge}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="flex items-baseline justify-between gap-3">
+                <span
+                  className="truncate text-start text-xs font-medium text-foreground"
+                  title={r.label}
+                >
+                  {r.label}
+                </span>
+                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+                  <strong className="text-xs font-semibold text-foreground">{r.count}</strong>
+                  {share !== null && <span className="ms-1.5">{share}%</span>}
+                </span>
+              </span>
+              <span className={cn('mt-1.5 block h-2 overflow-hidden rounded-full', t.track)}>
+                <motion.span
+                  className={cn('block h-full rounded-full', t.bar)}
+                  initial={reduce ? false : { width: '0%' }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{
+                    duration: 0.7,
+                    ease: [0.23, 1, 0.32, 1],
+                    delay: Math.min(i, 10) * 0.04,
+                  }}
+                />
+              </span>
+            </span>
+          </>
+        );
+        return (
+          <li key={r.key}>
+            {onSelect ? (
+              <button
+                type="button"
+                onClick={() => onSelect(r)}
+                className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-2 py-1.5 transition-colors duration-fast hover:bg-secondary/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+              >
+                {body}
+              </button>
+            ) : (
+              <span className="flex items-center gap-3 px-2 py-1.5">{body}</span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
 /** A white bento card with a title row and an optional action on the right. */
 export function BentoCard({
   title,
@@ -474,6 +643,8 @@ export function BentoCard({
   action,
   className,
   index = 0,
+  tone,
+  icon,
   children,
 }: {
   title: string;
@@ -481,15 +652,39 @@ export function BentoCard({
   action?: ReactNode;
   className?: string;
   index?: number;
+  /** A soft hue for the card: a wash across the top and the icon chip. */
+  tone?: Tone;
+  icon?: ReactNode;
   children: ReactNode;
 }) {
+  const t = tone ? TONES[tone] : undefined;
   return (
     <Rise index={index} className={className}>
-      <section className="flex h-full flex-col rounded-[1.4rem] bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
+      <section
+        className={cn(
+          'flex h-full flex-col rounded-[1.4rem] bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]',
+          t?.wash,
+        )}
+      >
         <header className="mb-4 flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
-            {hint && <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>}
+          <div className="flex min-w-0 items-start gap-3">
+            {icon && (
+              <span
+                aria-hidden
+                className={cn(
+                  'grid h-9 w-9 shrink-0 place-items-center rounded-xl',
+                  t?.chip ?? 'bg-secondary text-muted-foreground',
+                )}
+              >
+                {icon}
+              </span>
+            )}
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+              {hint && (
+                <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>
+              )}
+            </div>
           </div>
           {action && <div className="shrink-0">{action}</div>}
         </header>

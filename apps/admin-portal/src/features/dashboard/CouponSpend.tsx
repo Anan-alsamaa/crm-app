@@ -3,8 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
 import { couponWorth, type CouponValueFact } from '@yiji/reports';
-import { cn, formatDate, HBarChart, ProgressRing, SplitBar, TrendChart } from '@yiji/ui';
+import { formatDate, HBarChart, ProgressRing, SplitBar, TrendChart, SparkleIcon } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { BentoCard, CountUp } from '../../components/dash/Dash.js';
 import { useReportVendorFilter } from '../../lib/report-vendor.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -140,23 +141,15 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
   const approvedPct = w && w.askedSar > 0 ? (w.sar / w.askedSar) * 100 : 0;
 
   return (
-    <div
-      className={cn(
-        'rounded-2xl bg-card px-5 py-4 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in',
-        className,
-      )}
+    <BentoCard
+      tone="amber"
+      icon={<SparkleIcon size={17} />}
+      className={className}
+      title={t('couponSpend.title', { defaultValue: 'Coupons approved here' })}
+      hint={t('couponSpend.rangeNote', {
+        defaultValue: 'Raised and approved in this CRM, in the selected range',
+      })}
     >
-      <div className="mb-2.5 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('couponSpend.title', { defaultValue: 'Coupons approved here' })}
-        </h3>
-        <span className="text-2xs text-muted-foreground">
-          {t('couponSpend.rangeNote', {
-            defaultValue: 'Raised and approved in this CRM, in the selected range',
-          })}
-        </span>
-      </div>
-
       {!w ? (
         <div className="h-28 animate-pulse rounded-xl bg-secondary/60" />
       ) : (
@@ -181,8 +174,8 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
             />
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-primary">
-                  {SAR.format(w.sar)}
+                <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-foreground">
+                  <CountUp value={Math.round(w.sar)} />
                 </span>
                 <span className="text-xs font-semibold text-muted-foreground">
                   {t('couponSpend.sar', { defaultValue: 'SAR' })}
@@ -298,6 +291,6 @@ export function CouponSpend({ from, to, className }: Props): JSX.Element | null 
           </div>
         </div>
       )}
-    </div>
+    </BentoCard>
   );
 }

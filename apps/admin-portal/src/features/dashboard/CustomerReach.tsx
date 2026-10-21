@@ -2,8 +2,9 @@ import type { JSX } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { aggregate } from '@directus/sdk';
-import { cn, ProgressRing, SplitBar } from '@yiji/ui';
+import { ProgressRing, SplitBar, UsersIcon } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { BentoCard, CountUp } from '../../components/dash/Dash.js';
 
 /**
  * How many of our customers are actually in the Yiji app.
@@ -81,25 +82,19 @@ export function CustomerReach({ className }: Props): JSX.Element | null {
   const pct = d && d.total > 0 ? (d.withYiji / d.total) * 100 : 0;
 
   return (
-    <div
-      className={cn(
-        'rounded-2xl bg-card px-5 py-4 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in',
-        className,
-      )}
+    <BentoCard
+      tone="teal"
+      icon={<UsersIcon size={17} />}
+      className={className}
+      title={t('customerReach.title', { defaultValue: 'Yiji vs non-Yiji customers' })}
+      hint={t('customerReach.note', {
+        defaultValue: 'All customers — not the selected range',
+      })}
     >
-      <div className="mb-2.5 flex items-baseline justify-between gap-3">
-        <h3 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('customerReach.title', { defaultValue: 'Yiji vs non-Yiji customers' })}
-        </h3>
-        <span className="text-2xs text-muted-foreground">
-          {t('customerReach.note', { defaultValue: 'All customers — not the selected range' })}
-        </span>
-      </div>
-
       {!d ? (
         <div className="h-20 animate-pulse rounded-xl bg-secondary/60" />
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[auto_1fr]">
+        <div className="grid gap-5">
           <div className="flex items-center gap-4">
             <ProgressRing
               value={pct}
@@ -110,8 +105,8 @@ export function CustomerReach({ className }: Props): JSX.Element | null {
             />
             <div>
               <div className="flex items-baseline gap-1.5">
-                <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-primary">
-                  {NUM.format(d.withYiji)}
+                <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] tabular-nums text-foreground">
+                  <CountUp value={d.withYiji} />
                 </span>
                 <span className="text-xs font-semibold text-muted-foreground">
                   {t('customerReach.of', {
@@ -150,6 +145,6 @@ export function CustomerReach({ className }: Props): JSX.Element | null {
           </div>
         </div>
       )}
-    </div>
+    </BentoCard>
   );
 }
