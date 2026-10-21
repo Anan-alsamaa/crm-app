@@ -71,6 +71,8 @@ export interface YijiCouponRemoverEnv {
 }
 
 const REMOVE_PATH = '/api/CouponUser/RemoveUserCoupon/';
+/** Why RemoveUserCoupon uses the admin token directly - shown on Admin KPI. */
+const REMOVE_ADMIN_ONLY = 'RemoveUserCoupon: the CRM account has no permission (admin token)';
 
 /** Null when nothing is configured to talk to Yiji's admin API with. */
 export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRemover | null {
@@ -157,7 +159,11 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
    * a 403 - the same call ONCE with the backup. Without a backup the CRM
    * account's answer is returned as it came, so a 403 stays a refusal.
    */
-  async function call(url: string, method: 'GET' | 'DELETE'): Promise<Response> {
+  async function call(
+    url: string,
+    method: 'GET' | 'DELETE',
+    adminOnly: string | null = null,
+  ): Promise<Response> {
     const init = (token: string): RequestInit => ({
       method,
       headers: {
@@ -166,6 +172,11 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
         ...(env.tenantId ? { tenantid: env.tenantId } : {}),
       },
     });
+    /* A call the CRM account is NOT permitted to make goes straight to the
+       admin token (owner, 2026-10-22) - asking the CRM account first only
+       adds a certain 403. Without the token it falls through to the CRM
+       account, whose refusal is recorded as before. */
+    if (adminOnly && backup) return timed(url, init(backup), 'backup', adminOnly);
     const refusedAuth = (res: Response) => !!backup && (res.status === 401 || res.status === 403);
 
     let fallback = 'crm account not configured';
@@ -254,7 +265,11 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
       return String(hit.orderNumber ?? hit.id ?? '?');
     },
     async removeGrant(grantId) {
-      const res = await call(`${admin}${REMOVE_PATH}${encodeURIComponent(grantId)}`, 'DELETE');
+      const res = await call(
+        `${admin}${REMOVE_PATH}${encodeURIComponent(grantId)}`,
+        'DELETE',
+        REMOVE_ADMIN_ONLY,
+      );
       const raw = await res.text().catch(() => '');
       let body: unknown = null;
       try {
