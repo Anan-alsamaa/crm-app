@@ -126,6 +126,11 @@ jobs:
       - uses: aws-actions/amazon-ecr-login@v2
 
       - name: Build and push
+        id: build
+        # ONE retry for a transient registry/network error (owner, 2026-10-21:
+        # a Docker Hub 500 on the base image failed a release). Not a way to
+        # hide failures: if the retry below also fails, the job fails.
+        continue-on-error: true
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -133,6 +138,24 @@ jobs:
           push: true
           # Tagged with both the branch tag and the commit SHA. The SHA tag is
           # what makes a rollback precise — `main` moves, a SHA does not.
+          tags: |
+            ${{ env.ECR_REGISTRY }}/crm/${{ matrix.name }}:${{ needs.plan.outputs.image_tag }}
+            ${{ env.ECR_REGISTRY }}/crm/${{ matrix.name }}:sha-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.name }}
+          provenance: false
+
+      - name: Wait before retrying the build
+        if: steps.build.outcome == 'failure'
+        run: sleep 60
+
+      - name: Build and push (retry)
+        if: steps.build.outcome == 'failure'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
           tags: |
             ${{ env.ECR_REGISTRY }}/crm/${{ matrix.name }}:${{ needs.plan.outputs.image_tag }}
             ${{ env.ECR_REGISTRY }}/crm/${{ matrix.name }}:sha-${{ github.sha }}
@@ -817,9 +840,27 @@ jobs:
           # Fails if the new tasks never reach steady state, which is what turns
           # a broken deploy into a failed workflow rather than a silent one.
           # ECS keeps the old tasks serving until the new ones are healthy.
-          aws ecs wait services-stable \
-            --cluster "crm-${ENVIRONMENT}" --services "${{ matrix.service }}"
-          echo "::notice::${{ matrix.service }} stable"
+          #
+          # NOT `aws ecs wait services-stable` (owner, 2026-10-21): its fixed
+          # 10 minutes timed out on a slow-but-healthy Directus rollout, and it
+          # failed with only "Max attempts exceeded" - the real reason (e.g.
+          # "your account is currently blocked") sat unread in the ECS events.
+          # This waits up to 20 minutes, ends early if the rollout FAILS, and
+          # always prints ECS's own last events when it gives up.
+          SVC="${{ matrix.service }}"; CL="crm-${ENVIRONMENT}"
+          for i in $(seq 1 80); do
+            read -r STATE RUN WANT <<<"$(aws ecs describe-services --cluster "$CL" --services "$SVC" \
+              --query 'services[0].[deployments[?status==`PRIMARY`]|[0].rolloutState, runningCount, desiredCount]' --output text)"
+            if [ "$STATE" = "COMPLETED" ] && [ "$RUN" = "$WANT" ]; then
+              echo "::notice::$SVC stable ($RUN/$WANT)"; exit 0
+            fi
+            [ "$STATE" = "FAILED" ] && break
+            sleep 15
+          done
+          echo "::error::$SVC did not stabilise (rollout: $STATE, running $RUN/$WANT). ECS says:"
+          aws ecs describe-services --cluster "$CL" --services "$SVC" \
+            --query 'services[0].events[:6].[createdAt,message]' --output text
+          exit 1
 
   # ── 6. Smoke ──────────────────────────────────────────────────────────────
   smoke:

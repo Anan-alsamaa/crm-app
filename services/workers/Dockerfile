@@ -7,7 +7,7 @@
 #                tsx stays because it is the runtime (transpiles TS on the fly;
 #                deliberately NOT bundled so OTel auto-instrumentation keeps working).
 #   runner     — minimal final image: prod node_modules + source, non-root.
-FROM node:20-alpine AS base
+FROM public.ecr.aws/docker/library/node:20-alpine AS base
 RUN corepack enable && apk add --no-cache tini
 WORKDIR /app
 
