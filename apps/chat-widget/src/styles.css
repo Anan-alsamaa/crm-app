@@ -1429,3 +1429,37 @@
   color: #dc2626;
   text-align: center;
 }
+
+/* --- When each message was sent (EMA-78) ---
+   A day separator wherever the calendar day changes, and the clock time
+   tucked into the corner of every real bubble. Logical properties only, so
+   Arabic (RTL) mirrors on its own. */
+.yiji-day-sep {
+  align-self: center;
+  margin: 6px 0 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--yiji-muted);
+}
+.yiji-day-sep span {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--yiji-surface-2);
+  font-variant-numeric: tabular-nums;
+}
+.yiji-msg-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 10.5px;
+  line-height: 1.2;
+  text-align: end;
+  opacity: 0.65;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* An attachment-only message has no bubble, so its time sits on the surface. */
+.yiji-msg.bare .yiji-msg-meta {
+  color: var(--yiji-muted);
+  opacity: 1;
+}

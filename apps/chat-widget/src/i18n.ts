@@ -54,6 +54,9 @@ export interface WidgetStrings {
   msgEdited: string;
   /** Placeholder for a withdrawn message (EMA-33) — agent's or the customer's own. */
   msgDeleted: string;
+  /** Day separators in the thread (EMA-78). */
+  today: string;
+  yesterday: string;
   /*
    * The customer changing their OWN message (owner, 2026-10-07): select it,
    * then the pencil / trash icons, WhatsApp-style. Icons carry these as
@@ -133,6 +136,8 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     msgDelete: 'Delete',
     msgEdited: 'edited',
     msgDeleted: 'This message was deleted',
+    today: 'Today',
+    yesterday: 'Yesterday',
     messageActions: 'Message options',
     editMessage: 'Edit message',
     deleteMessage: 'Delete message',
@@ -189,6 +194,8 @@ const strings: Record<WidgetLocale, WidgetStrings> = {
     msgDelete: 'حذف',
     msgEdited: 'معدّلة',
     msgDeleted: 'تم حذف هذه الرسالة',
+    today: 'اليوم',
+    yesterday: 'أمس',
     messageActions: 'خيارات الرسالة',
     editMessage: 'تعديل الرسالة',
     deleteMessage: 'حذف الرسالة',

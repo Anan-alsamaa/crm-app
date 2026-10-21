@@ -385,6 +385,8 @@
     "download": "تنزيل",
     "previewImage": "معاينة {{name}}",
     "you": "أنت",
+    "youNamed": "{{name}} (أنت)",
+    "agentFallback": "الموظف",
     "autoWelcome": "ترحيب تلقائي",
     "today": "اليوم",
     "yesterday": "أمس",

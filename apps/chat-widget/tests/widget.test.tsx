@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, within, act } from '@testing-library/preact';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SocketCallbacks, WidgetMessage } from '../src/socket.js';
-import { Widget, type WidgetConfig } from '../src/Widget.js';
+import { Widget, formatTime, type WidgetConfig } from '../src/Widget.js';
 
 // jsdom implements neither `scrollTo` nor a real rAF layout pass; the widget
 // pins the message list via `el.scrollTo` inside a double requestAnimationFrame.
@@ -903,5 +903,86 @@ describe('the agents-offline notice', () => {
     fireEvent.input(textarea, { target: { value: 'second' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     expect(screen.getByText(NOTICE)).toBeInTheDocument();
+  });
+});
+
+/*
+ * EMA-78 (ops 2026-10-18): the date and time of every message — a day
+ * separator wherever the day changes, and the clock time on each real bubble.
+ */
+describe('Widget — message dates and times', () => {
+  const yesterday = (h: number, m: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  };
+  const today = (h: number, m: number) => {
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    return d.toISOString();
+  };
+
+  it('shows the time on every received and sent message', () => {
+    const { container } = renderWidget({ autoOpen: true });
+    driveReady({ isNew: false, contact: { name: 'Sara', phone: null } });
+    drive(() =>
+      lastCallbacks!.onHistory!([
+        agentMessage({ id: 'a1', content: 'Agent says hi', createdAt: today(0, 5) }),
+        agentMessage({
+          id: 'c1',
+          senderType: 'customer',
+          content: 'Customer replies',
+          createdAt: today(0, 7),
+        }),
+      ]),
+    );
+    const bubble = (text: string) =>
+      [...container.querySelectorAll('.yiji-msg')].find((el) => el.textContent?.includes(text))!;
+    expect(bubble('Agent says hi').querySelector('.yiji-msg-meta')).toHaveTextContent(
+      formatTime(today(0, 5), 'en'),
+    );
+    expect(bubble('Customer replies').querySelector('.yiji-msg-meta')).toHaveTextContent(
+      formatTime(today(0, 7), 'en'),
+    );
+  });
+
+  it('puts no time on the widget’s own greeting', () => {
+    const { container } = renderWidget({ autoOpen: true });
+    driveReady({ isNew: true });
+    const greeting = container.querySelector('.yiji-msg-greeting')!;
+    expect(greeting.querySelector('.yiji-msg-meta')).toBeNull();
+  });
+
+  it('separates the days: Yesterday, then Today', () => {
+    const { container } = renderWidget({ autoOpen: true });
+    driveReady({ isNew: false, contact: { name: 'Sara', phone: null } });
+    drive(() =>
+      lastCallbacks!.onHistory!([
+        agentMessage({ id: 'y1', content: 'From yesterday', createdAt: yesterday(10, 0) }),
+        agentMessage({ id: 'y2', content: 'Also yesterday', createdAt: yesterday(11, 0) }),
+        agentMessage({ id: 't1', content: 'From today', createdAt: today(0, 1) }),
+      ]),
+    );
+    const seps = [...container.querySelectorAll('.yiji-day-sep')].map((el) => el.textContent);
+    expect(seps).toEqual(['Yesterday', 'Today']);
+    // The separator sits directly above the first message of its day.
+    const today1 = [...container.querySelectorAll('.yiji-msg')].find((el) =>
+      el.textContent?.includes('From today'),
+    )!;
+    expect(today1.previousElementSibling).toHaveClass('yiji-day-sep');
+  });
+
+  it('labels the days in Arabic', () => {
+    const { container } = renderWidget({ autoOpen: true, locale: 'ar' });
+    driveReady({ isNew: false, contact: { name: 'سارة', phone: null } });
+    drive(() =>
+      lastCallbacks!.onHistory!([
+        agentMessage({ id: 'y1', content: 'أمس', createdAt: yesterday(10, 0) }),
+        agentMessage({ id: 't1', content: 'اليوم', createdAt: today(0, 1) }),
+      ]),
+    );
+    const seps = [...container.querySelectorAll('.yiji-day-sep')].map((el) => el.textContent);
+    expect(seps).toEqual(['أمس', 'اليوم']);
   });
 });

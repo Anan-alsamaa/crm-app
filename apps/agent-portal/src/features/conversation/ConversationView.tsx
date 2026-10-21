@@ -11,7 +11,7 @@ import {
   CloseIcon,
   ConfirmDialog,
   cn,
-  formatRelative,
+  formatDateTime,
   Skeleton,
   SparkleIcon,
   Spinner,
@@ -61,6 +61,7 @@ import {
   applyMessageEdited,
   canOfferMessageActions,
 } from './message-edits.js';
+import { agentSenderLabel, clockTime, sameAgentSender } from './message-meta.js';
 
 let seq = 0;
 const clientId = () => `a${Date.now()}_${seq++}`;
@@ -91,7 +92,10 @@ function groupRuns(msgs: ConversationMessage[]): ConversationMessage[][] {
       /* The automatic welcome is its own run (owner, 2026-10-06), or a real
          reply right after it would be labelled "Automatic welcome" — or the
          welcome labelled as the agent's own words. */
-      isAutomatedAgentMessage(last[0]!) === isAutomatedAgentMessage(m)
+      isAutomatedAgentMessage(last[0]!) === isAutomatedAgentMessage(m) &&
+      /* EMA-77: two colleagues answering back to back are two runs, each
+         under its own name — never one run under the first sender's. */
+      (m.sender_type !== 'agent' || sameAgentSender(last[0]!, m))
     ) {
       last.push(m);
     } else {
@@ -109,7 +113,7 @@ export function ConversationView({
   /** Mobile single-column: return to the inbox list. */
   onBack?: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const qc = useQueryClient();
   const navigate = useNavigate();
   const isDesktop = useIsDesktop();
@@ -649,6 +653,8 @@ export function ConversationView({
           is_internal_note: false,
           date_created: new Date().toISOString(),
           conversation_id: conversationId,
+          // EMA-77: labelled with the sender's name from the first frame.
+          ...(myId ? { sender_user: myId } : {}),
           attachments: pending.map((p) => ({
             id: p.id,
             filename: p.name,
@@ -1072,7 +1078,13 @@ export function ConversationView({
     const diff = Math.round((startOf(new Date()) - startOf(d)) / 86_400_000);
     if (diff <= 0) return t('conversation.today', { defaultValue: 'Today' });
     if (diff === 1) return t('conversation.yesterday', { defaultValue: 'Yesterday' });
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    /* EMA-78: the year too, so an old thread is never ambiguous; in Arabic
+       the month is Arabic but the digits stay Latin, as everywhere else. */
+    return d.toLocaleDateString(i18n.language?.startsWith('ar') ? 'ar-u-nu-latn' : undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
   };
 
   // An order id in the sidebar's Orders panel opens the New ticket PAGE for that
@@ -1264,7 +1276,16 @@ export function ConversationView({
                * customer nobody has spoken to yet.
                */
               const isAutoWelcome = isAutomatedAgentMessage(head);
-              const last = run[run.length - 1]!;
+              /*
+               * EMA-77 (ops, 2026-10-15): the SENDER'S NAME on every agent
+               * run, not "You" — several agents can answer one chat and each
+               * must see who said what. The viewer's own replies read
+               * "Name (You)".
+               */
+              const agentLabel =
+                isAgent && !isSystem ? agentSenderLabel(head, user, agents.data) : null;
+              const agentName =
+                agentLabel && agentLabel.kind !== 'automated' ? agentLabel.name : null;
               const senderLabel = isSystem
                 ? t('conversation.system', { defaultValue: 'System' })
                 : isAgent
@@ -1272,11 +1293,15 @@ export function ConversationView({
                     ? t('conversation.internalNote')
                     : isAutoWelcome
                       ? t('conversation.autoWelcome', { defaultValue: 'Automatic welcome' })
-                      : t('conversation.you', { defaultValue: 'You' })
+                      : agentLabel?.kind === 'self'
+                        ? agentName
+                          ? t('conversation.youNamed', {
+                              defaultValue: '{{name}} (You)',
+                              name: agentName,
+                            })
+                          : t('conversation.you', { defaultValue: 'You' })
+                        : (agentName ?? t('conversation.agentFallback', { defaultValue: 'Agent' }))
                   : contactName;
-              const time = last.pending
-                ? t('conversation.sending', { defaultValue: 'Sending…' })
-                : formatRelative(last.date_created);
               // Day separator when the calendar day changes from the previous run.
               const prevRun = grouped[runIdx - 1];
               const showDay =
@@ -1307,7 +1332,14 @@ export function ConversationView({
                         farewell look like something they had written. */}
                     {!isSystem && (
                       <Avatar
-                        name={isAgent ? (isAutoWelcome ? senderLabel : 'You') : c?.contact?.name}
+                        name={
+                          isAgent
+                            ? isAutoWelcome
+                              ? senderLabel
+                              : (agentName ??
+                                t('conversation.agentFallback', { defaultValue: 'Agent' }))
+                            : c?.contact?.name
+                        }
                         email={isAgent ? undefined : c?.contact?.email}
                         phone={isAgent ? undefined : c?.contact?.phone}
                         size="sm"
@@ -1323,7 +1355,6 @@ export function ConversationView({
                     >
                       <div className="flex items-baseline gap-2 text-2xs">
                         <span className="font-medium text-foreground">{senderLabel}</span>
-                        <span className="text-muted-foreground tabular-nums">{time}</span>
                       </div>
                       <div
                         className={cn(
@@ -1478,6 +1509,20 @@ export function ConversationView({
                                     />
                                   )}
                                 </div>
+                              )}
+                              {/* EMA-78 (ops, 2026-10-18): the time of EVERY
+                                  message, in the viewer's local time; the day
+                                  is the separator above the run. */}
+                              {(m.pending || !!clockTime(m.date_created)) && (
+                                <time
+                                  dateTime={m.date_created ?? undefined}
+                                  title={formatDateTime(m.date_created)}
+                                  className="px-1 text-2xs text-muted-foreground tabular-nums"
+                                >
+                                  {m.pending
+                                    ? t('conversation.sending', { defaultValue: 'Sending…' })
+                                    : clockTime(m.date_created)}
+                                </time>
                               )}
                             </div>
                           );
