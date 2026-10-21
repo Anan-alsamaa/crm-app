@@ -10,6 +10,7 @@ export * from './entities/common.js';
 export * from './entities/index.js';
 export * from './yiji.js';
 export * from './yiji-impl.js';
+export * from './yiji-usage.js';
 export * from './connector.js';
 export * from './mock-connector.js';
 export * from './vendor-records.js';

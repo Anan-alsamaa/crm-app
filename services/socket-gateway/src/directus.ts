@@ -2,13 +2,14 @@ import {
   readItems,
   readFiles,
   createItem,
+  createItems,
   updateItem,
   deleteItem,
   uploadFiles,
   readUsers,
 } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
-import type { ComposerOrigin, SenderType } from '@yiji/shared-types';
+import type { ComposerOrigin, SenderType, YijiUsageRow } from '@yiji/shared-types';
 import {
   cleanContactName,
   isAutomatedAgentMessage,
@@ -84,6 +85,15 @@ export class GatewayDirectus {
     // "read file bytes" helper — we GET /assets/:id with the service token).
     this.url = url;
     this.token = token;
+  }
+
+  /**
+   * A batch of `yiji_api_usage` rows (owner, 2026-10-21). THROWS - the usage
+   * recorder catches, logs and drops; nothing in a request path awaits it.
+   */
+  async logYijiUsage(rows: YijiUsageRow[]): Promise<void> {
+    if (rows.length === 0) return;
+    await this.client.request(createItems('yiji_api_usage' as never, rows as never));
   }
 
   /** Resolve the CRM vendor UUID from the Yiji external vendor id (must be active). */

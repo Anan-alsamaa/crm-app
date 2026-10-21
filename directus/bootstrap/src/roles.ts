@@ -760,6 +760,8 @@ export const roles: RoleSpec[] = [
       { collection: 'agent_busy_periods', action: 'create' },
       { collection: 'agent_busy_periods', action: 'read' },
       { collection: 'agent_busy_periods', action: 'update' },
+      /* Its own Yiji calls (owner, 2026-10-21) - append-only. */
+      ...appendOnly('yiji_api_usage'),
       ...readOnly('directus_users'),
       /* Display fields (resolveVendor: id, name, colors) + `webhook_path_key`:
          MV-3 picks a vendor's webhook / chat-login secret by that key
@@ -871,6 +873,14 @@ export const roles: RoleSpec[] = [
        * missing grant only degrades the settings to env (logged).
        */
       ...vendorsRead(VENDOR_CONNECTOR_SETTINGS_FIELDS),
+      /*
+       * ITS OWN YIJI CALLS (owner, 2026-10-21): written like the other two
+       * services, and - the workers alone - DELETED after 90 days by the
+       * retention job. Delete on a usage log, not on anything a person wrote;
+       * the owner reads it through admin_access (no other role holds it).
+       */
+      ...appendOnly('yiji_api_usage'),
+      { collection: 'yiji_api_usage', action: 'delete' },
     ],
   },
   {
@@ -884,6 +894,8 @@ export const roles: RoleSpec[] = [
       ...readOnly('messages'),
       // Its own call log (owner, 2026-10-07) — append-only, it writes nothing else.
       ...appendOnly('ai_calls'),
+      /* Its own Yiji calls (owner, 2026-10-21) - append-only, like ai_calls. */
+      ...appendOnly('yiji_api_usage'),
       // C-1: the gateway resolves which role ids are admin roles (to gate the AI
       // admin endpoints from the caller's VERIFIED Directus role). Needs read on
       // directus_roles via the service token.

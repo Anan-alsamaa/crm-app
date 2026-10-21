@@ -15,6 +15,9 @@ import {
   ConversationStatus,
   ServiceType,
   TicketStatus,
+  YIJI_USAGE_ACCOUNTS,
+  YIJI_USAGE_OUTCOMES,
+  YIJI_USAGE_SERVICES,
 } from '@yiji/shared-types';
 
 export type FieldType =
@@ -1070,6 +1073,58 @@ export const collections: CollectionSpec[] = [
         type: 'string',
         index: true,
         note: 'Plain id, not a relation: deleting a chat must not erase its cost history.',
+      },
+    ],
+  },
+  {
+    collection: 'yiji_api_usage',
+    note: 'One row per call the CRM services made to Yiji (owner, 2026-10-21): which service, which operation, which ACCOUNT (the CRM’s own, or the owner’s backup token and why), how it went. Written best-effort in batches by the three services; kept 90 days (the workers delete older rows). Read by the owner’s Admin KPI page only.',
+    fields: [
+      {
+        field: 'service',
+        type: 'string',
+        choices: [...YIJI_USAGE_SERVICES],
+        required: true,
+        index: true,
+      },
+      {
+        field: 'operation',
+        type: 'string',
+        required: true,
+        index: true,
+        note: 'Short stable name: login, coupon.push, coupon.remove, customer.lookup, order.lookup, ...',
+      },
+      {
+        field: 'account',
+        type: 'string',
+        choices: [...YIJI_USAGE_ACCOUNTS],
+        required: true,
+        index: true,
+        note: 'crm = the CRM’s own Yiji account; backup = the owner’s token.',
+      },
+      {
+        field: 'outcome',
+        type: 'string',
+        choices: [...YIJI_USAGE_OUTCOMES],
+        required: true,
+        index: true,
+      },
+      { field: 'http_status', type: 'integer', note: 'Null when no answer arrived.' },
+      { field: 'duration_ms', type: 'integer' },
+      {
+        field: 'fallback_reason',
+        type: 'string',
+        note: 'Why the backup token was used. Null for every CRM-account call.',
+      },
+      {
+        field: 'error',
+        type: 'text',
+        note: 'Short and redacted: no tokens, passwords or phone numbers.',
+      },
+      {
+        field: 'vendor',
+        type: 'string',
+        note: 'The vendor’s platform id. Plain text, not a relation: the log must outlive a vendor.',
       },
     ],
   },

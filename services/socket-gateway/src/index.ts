@@ -39,6 +39,9 @@ import {
   WalkInSessionRequest,
   createEnvConnectorRegistry,
   createEnvVendorSecrets,
+  createYijiUsageRecorder,
+  errorText,
+  yijiBackupTokenFromEnv,
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
@@ -410,6 +413,19 @@ async function main(): Promise<void> {
    * before (no order-API token, exactly as the readers were built). Any other
    * vendor id resolves to `UnknownVendorError`, never to Yiji.
    */
+  /*
+   * EVERY YIJI CALL, RECORDED (`yiji_api_usage`, owner 2026-10-21): buffered
+   * and written in batches, best-effort - a Directus hiccup loses rows, never
+   * a customer's session. The backup token is the owner's: used only for a
+   * call the CRM's own Yiji account was refused.
+   */
+  const yijiUsage = createYijiUsageRecorder({
+    service: 'socket-gateway',
+    write: (rows) => directus.logYijiUsage(rows),
+    onError: (err, droppedRows) =>
+      logger.warn({ err: errorText(err), droppedRows }, 'yiji usage rows not recorded'),
+  });
+  const yijiBackupToken = yijiBackupTokenFromEnv(process.env);
   const connectors = createEnvConnectorRegistry({
     vendorId: DEFAULT_VENDOR_ID,
     yiji: {
@@ -418,6 +434,8 @@ async function main(): Promise<void> {
         adminApiUrl: config.YIJI_ADMIN_API_URL,
         adminEmail: config.YIJI_ADMIN_EMAIL,
         adminPassword: config.YIJI_ADMIN_PASSWORD,
+        ...(yijiBackupToken ? { backupToken: yijiBackupToken } : {}),
+        onUsage: yijiUsage.record,
       },
     },
   });
@@ -1796,6 +1814,7 @@ async function main(): Promise<void> {
     io.close();
     await app.close();
     httpServer.close();
+    await yijiUsage.stop();
     await producer.close();
     if (pubClient) await pubClient.quit();
     if (subClient) await subClient.quit();

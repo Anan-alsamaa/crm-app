@@ -16,6 +16,13 @@ import {
  * `966...` number straight from the order payload (owner, 2026-09-29).
  */
 import { normalizePhone } from './phone.js';
+import {
+  reportYijiUsage,
+  yijiOperationFor,
+  yijiUsageOutcome,
+  type YijiUsageAccount,
+  type YijiUsageSink,
+} from './yiji-usage.js';
 import type {
   YijiCartLine,
   YijiModifierGroup,
@@ -330,6 +337,16 @@ export interface HttpYijiClientOptions {
   adminUrl?: string;
   adminEmail?: string;
   adminPassword?: string;
+  /**
+   * The owner's admin token - a BACKUP ONLY (owner, 2026-10-21). An admin call
+   * is made with the CRM's own account first; this is used for that one call
+   * only when the CRM account's login was refused or it was refused itself
+   * (401 after a re-login, or 403). Never on a timeout or a network error.
+   * Unset = exactly the behaviour before it existed.
+   */
+  backupToken?: string;
+  /** Told about every HTTP exchange with Yiji (see yiji-usage.ts). */
+  onUsage?: YijiUsageSink;
 }
 
 /**
@@ -710,6 +727,30 @@ export class YijiUnavailableError extends Error {
   }
 }
 
+/**
+ * Yiji ANSWERED the CRM account's login and said no (or gave no token).
+ *
+ * Still a `YijiUnavailableError` to every existing caller - nothing that
+ * catches the old error changes - but distinguishable from a login that never
+ * got an answer, because only THIS one may send a call to the backup token: a
+ * timeout would time out the same way with any credential.
+ */
+export class YijiLoginRefusedError extends YijiUnavailableError {
+  readonly isYijiLoginRefused = true;
+  constructor(message: string) {
+    super(message);
+    this.name = 'YijiLoginRefusedError';
+  }
+}
+
+/** True for a refused login, from any realm (see `isYijiRefused` for why by shape). */
+export function isYijiLoginRefused(err: unknown): boolean {
+  return (
+    err instanceof YijiLoginRefusedError ||
+    (typeof err === 'object' && err !== null && 'isYijiLoginRefused' in err)
+  );
+}
+
 /** True for an error meaning "we could not ask", from any realm. */
 export function isYijiUnavailable(err: unknown): boolean {
   return (
@@ -728,6 +769,8 @@ export class HttpYijiClient implements YijiClient {
   private readonly adminUrl?: string;
   private readonly adminEmail?: string;
   private readonly adminPassword?: string;
+  private readonly backupToken?: string;
+  private readonly onUsage?: YijiUsageSink;
   /** Cached admin-API bearer token; refreshed on 401 via re-login. */
   private adminToken: string | null = null;
 
@@ -739,6 +782,53 @@ export class HttpYijiClient implements YijiClient {
     this.adminUrl = opts.adminUrl?.replace(/\/+$/, '') || undefined;
     this.adminEmail = opts.adminEmail || undefined;
     this.adminPassword = opts.adminPassword || undefined;
+    this.backupToken = opts.backupToken?.trim().replace(/^Bearer\s+/i, '') || undefined;
+    this.onUsage = opts.onUsage;
+  }
+
+  /**
+   * ONE HTTP exchange with Yiji, timed and reported to `onUsage`.
+   *
+   * Every request this client makes goes through here, so the usage record
+   * cannot miss a call site. The report is made after the answer (or the
+   * failure) and can never change either: `reportYijiUsage` swallows a sink
+   * that throws.
+   */
+  private async exchange(
+    url: string,
+    init: RequestInit,
+    account: YijiUsageAccount,
+    fallbackReason: string | null = null,
+  ): Promise<Response> {
+    const started = Date.now();
+    const operation = yijiOperationFor(url);
+    try {
+      const res = await fetch(url, init);
+      reportYijiUsage(this.onUsage, {
+        operation,
+        account,
+        outcome: yijiUsageOutcome(res.status),
+        httpStatus: res.status,
+        durationMs: Date.now() - started,
+        fallbackReason,
+        error: res.ok || res.status === 404 ? null : `HTTP ${res.status}`,
+      });
+      return res;
+    } catch (err) {
+      reportYijiUsage(this.onUsage, {
+        operation,
+        account,
+        outcome: 'error',
+        httpStatus: null,
+        durationMs: Date.now() - started,
+        fallbackReason,
+        error:
+          err instanceof Error && err.name === 'AbortError'
+            ? `timed out after ${this.timeoutMs}ms`
+            : `network error: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      throw err;
+    }
   }
 
   private get adminConfigured(): boolean {
@@ -755,15 +845,19 @@ export class HttpYijiClient implements YijiClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const res = await fetch(`${this.adminUrl}/api/Account/login`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json', accept: 'application/json' },
-        body: JSON.stringify({ email: this.adminEmail, password: this.adminPassword }),
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new YijiUnavailableError(`admin login failed (${res.status})`);
+      const res = await this.exchange(
+        `${this.adminUrl}/api/Account/login`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', accept: 'application/json' },
+          body: JSON.stringify({ email: this.adminEmail, password: this.adminPassword }),
+          signal: controller.signal,
+        },
+        'crm',
+      );
+      if (!res.ok) throw new YijiLoginRefusedError(`admin login failed (${res.status})`);
       const body = (await res.json()) as { token?: string };
-      if (!body.token) throw new YijiUnavailableError('admin login returned no token');
+      if (!body.token) throw new YijiLoginRefusedError('admin login returned no token');
       this.adminToken = body.token;
       return body.token;
     } catch (err) {
@@ -782,34 +876,81 @@ export class HttpYijiClient implements YijiClient {
    * expired token costs a round trip, never an outage. 404 = "nothing there".
    */
   private async adminFetch<T>(path: string): Promise<T | null> {
-    let token = this.adminToken ?? (await this.adminLogin());
-    for (let attempt = 0; attempt < 2; attempt++) {
+    return this.adminCall(path, { method: 'GET' }, async (res) => {
+      if (res.status === 404) return null;
+      if (!res.ok) throw new YijiUnavailableError(`admin upstream ${res.status} for ${path}`);
+      return (await res.json()) as T;
+    });
+  }
+
+  /**
+   * ONE ADMIN-API CALL: the CRM's own account first, the backup token only
+   * when that account could not make it (owner, 2026-10-21).
+   *
+   *   1. The cached CRM token, or a fresh login.
+   *   2. A 401 re-signs once and asks again - an expired token costs a round
+   *      trip, never an outage (as before).
+   *   3. Only with a backup token configured: a CRM login Yiji REFUSED, or a
+   *      CRM call refused with 401 (after the re-login) or 403, is asked ONCE
+   *      more with the backup token, and the reason is recorded with it.
+   *
+   * A timeout, a network error or a 5xx never reaches the backup: it would
+   * fail the same way, and the outage must stay visible. Without a backup
+   * token every step is exactly what adminFetch / adminPost did before.
+   *
+   * An ABSOLUTE url is used as given; a path hangs off the admin host. Yiji's
+   * notification service lives on its own host
+   * (`notificationsystems.yiji-app.com`) while accepting the SAME credential as
+   * the admin API. Without this, reaching it would have meant a second poster
+   * with its own login and its own cached token — two things to rotate instead
+   * of one, for no benefit.
+   *
+   * `read` interprets the FINAL response inside its request's timeout, so a
+   * body that never finishes is a timeout like any other.
+   */
+  private async adminCall<R>(
+    path: string,
+    init: { method: 'GET' | 'POST'; headers?: Record<string, string>; body?: string },
+    read: (res: Response) => Promise<R>,
+  ): Promise<R> {
+    const url = ABSOLUTE_URL.test(path) ? path : `${this.adminUrl}${path}`;
+    const backup = this.backupToken;
+
+    /* One request. Hands back the STATUS instead of reading the response when
+       it is one this call will retry; everything else is read by `read`. */
+    const once = async (
+      token: string,
+      account: YijiUsageAccount,
+      retryOn: readonly number[],
+      fallbackReason: string | null = null,
+    ): Promise<{ retry: number } | { value: R }> => {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
-        /*
-         * An ABSOLUTE url is used as given; a path hangs off the admin host.
-         *
-         * Yiji's notification service lives on its own host
-         * (`notificationsystems.yiji-app.com`) while accepting the SAME
-         * credential as the admin API. Without this, reaching it would have
-         * meant a second poster with its own login and its own cached token —
-         * two things to rotate instead of one, for no benefit.
-         */
-        const url = /^https?:\/\//i.test(path) ? path : `${this.adminUrl}${path}`;
-        const res = await fetch(url, {
-          headers: { authorization: `Bearer ${token}`, accept: 'application/json' },
-          signal: controller.signal,
-        });
-        if (res.status === 401 && attempt === 0) {
-          this.adminToken = null;
-          token = await this.adminLogin();
-          continue;
+        const res = await this.exchange(
+          url,
+          {
+            method: init.method,
+            headers: {
+              ...(init.headers ?? {}),
+              // Last, so a caller cannot accidentally override the credential.
+              authorization: `Bearer ${token}`,
+              ...(init.body !== undefined ? { 'content-type': 'application/json' } : {}),
+              accept: 'application/json',
+            },
+            ...(init.body !== undefined ? { body: init.body } : {}),
+            signal: controller.signal,
+          },
+          account,
+          fallbackReason,
+        );
+        if (retryOn.includes(res.status)) {
+          await res.body?.cancel().catch(() => undefined);
+          return { retry: res.status };
         }
-        if (res.status === 404) return null;
-        if (!res.ok) throw new YijiUnavailableError(`admin upstream ${res.status} for ${path}`);
-        return (await res.json()) as T;
+        return { value: await read(res) };
       } catch (err) {
+        if (isYijiRefused(err)) throw err;
         if (err instanceof YijiUnavailableError) throw err;
         const reason =
           err instanceof Error && err.name === 'AbortError'
@@ -819,8 +960,45 @@ export class HttpYijiClient implements YijiClient {
       } finally {
         clearTimeout(timer);
       }
+    };
+
+    /* A login Yiji REFUSED goes to the backup (when there is one); any other
+       login failure - timeout, network - is thrown, as before. */
+    const crmLogin = async (): Promise<string | { fallback: string }> => {
+      try {
+        return await this.adminLogin();
+      } catch (err) {
+        if (!backup || !isYijiLoginRefused(err)) throw err;
+        return { fallback: `crm login refused: ${(err as Error).message}` };
+      }
+    };
+
+    let fallback: string;
+    const first = this.adminToken ?? (await crmLogin());
+    if (typeof first !== 'string') {
+      fallback = first.fallback;
+    } else {
+      const step = await once(first, 'crm', backup ? [401, 403] : [401]);
+      if ('value' in step) return step.value;
+      if (step.retry === 401) {
+        this.adminToken = null;
+        const again = await crmLogin();
+        if (typeof again !== 'string') {
+          fallback = again.fallback;
+        } else {
+          const second = await once(again, 'crm', backup ? [401, 403] : []);
+          if ('value' in second) return second.value;
+          fallback = `crm account refused (${second.retry}) after a re-login`;
+        }
+      } else {
+        fallback = `crm account refused (${step.retry})`;
+      }
     }
-    return null;
+    /* Only reachable WITH a backup token: without one every branch above
+       returned or threw. Asked once; its answer is read like any other. */
+    const last = await once(backup as string, 'backup', [], fallback);
+    if ('value' in last) return last.value;
+    throw new YijiUnavailableError(`admin ${path} refused every credential`);
   }
 
   /**
@@ -995,38 +1173,10 @@ export class HttpYijiClient implements YijiClient {
     if (!this.adminConfigured) {
       throw new YijiUnavailableError('admin API is not configured');
     }
-    let token = this.adminToken ?? (await this.adminLogin());
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      try {
-        /*
-         * An ABSOLUTE url is used as given; a path hangs off the admin host.
-         *
-         * Yiji's notification service lives on its own host
-         * (`notificationsystems.yiji-app.com`) while accepting the SAME
-         * credential as the admin API. Without this, reaching it would have
-         * meant a second poster with its own login and its own cached token —
-         * two things to rotate instead of one, for no benefit.
-         */
-        const url = ABSOLUTE_URL.test(path) ? path : `${this.adminUrl}${path}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            ...extraHeaders,
-            // Last, so a caller cannot accidentally override the credential.
-            authorization: `Bearer ${token}`,
-            'content-type': 'application/json',
-            accept: 'application/json',
-          },
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
-        if (res.status === 401 && attempt === 0) {
-          this.adminToken = null;
-          token = await this.adminLogin();
-          continue;
-        }
+    return this.adminCall(
+      path,
+      { method: 'POST', headers: extraHeaders, body: JSON.stringify(body) },
+      async (res) => {
         if (!res.ok) {
           /*
            * A 4xx is Yiji's CONSIDERED ANSWER, not a sick upstream. The body
@@ -1051,20 +1201,8 @@ export class HttpYijiClient implements YijiClient {
           );
         }
         return (await res.json()) as T;
-      } catch (err) {
-        if (err instanceof YijiRefusedError) throw err;
-        if (err instanceof YijiUnavailableError) throw err;
-        const reason =
-          err instanceof Error && err.name === 'AbortError'
-            ? `timed out after ${this.timeoutMs}ms`
-            : `network error: ${err instanceof Error ? err.message : String(err)}`;
-        throw new YijiUnavailableError(`${reason} for admin ${path}`, { cause: err });
-      } finally {
-        clearTimeout(timer);
-      }
-    }
-    // Only reachable if both attempts 401'd, which is a credential problem.
-    throw new YijiUnavailableError(`admin ${path} refused the service credential twice`);
+      },
+    );
   }
 
   /**
@@ -1089,12 +1227,16 @@ export class HttpYijiClient implements YijiClient {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
-      const res = await fetch(url, {
-        headers: this.token
-          ? { authorization: `Bearer ${this.token}`, accept: 'application/json' }
-          : { accept: 'application/json' },
-        signal: controller.signal,
-      });
+      const res = await this.exchange(
+        url,
+        {
+          headers: this.token
+            ? { authorization: `Bearer ${this.token}`, accept: 'application/json' }
+            : { accept: 'application/json' },
+          signal: controller.signal,
+        },
+        'crm',
+      );
       // The one honest "nothing there": the upstream looked and found none.
       if (res.status === 404) return null;
       if (!res.ok) throw new YijiUnavailableError(`upstream ${res.status} for ${path}`);
@@ -1465,8 +1607,28 @@ export interface YijiClientEnv {
   adminApiUrl?: string;
   adminEmail?: string;
   adminPassword?: string;
+  /**
+   * The owner's admin token, a BACKUP ONLY (`YIJI_BACKUP_TOKEN`; see
+   * `HttpYijiClientOptions.backupToken`). Server-side env only.
+   */
+  backupToken?: string;
+  /** Told about every Yiji call (`yiji_api_usage`). */
+  onUsage?: YijiUsageSink;
   /** Override the mock fixtures (tests only). */
   mockFixtures?: MockFixtures;
+}
+
+/** The HTTP client options every factory below builds from the same env. */
+function httpOptions(env: YijiClientEnv, baseUrl: string): HttpYijiClientOptions {
+  return {
+    baseUrl,
+    token: env.token,
+    adminUrl: env.adminApiUrl,
+    adminEmail: env.adminEmail,
+    adminPassword: env.adminPassword,
+    ...(env.backupToken ? { backupToken: env.backupToken } : {}),
+    ...(env.onUsage ? { onUsage: env.onUsage } : {}),
+  };
 }
 
 /**
@@ -1506,13 +1668,7 @@ export type YijiOrderReader = (orderId: string) => Promise<CouponOrderContext | 
  */
 export function createYijiOrderReader(env: YijiClientEnv = {}): YijiOrderReader | null {
   if (!env.apiUrl?.trim()) return null;
-  const client = new HttpYijiClient({
-    baseUrl: env.apiUrl,
-    token: env.token,
-    adminUrl: env.adminApiUrl,
-    adminEmail: env.adminEmail,
-    adminPassword: env.adminPassword,
-  });
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl));
   return (orderId) => client.getCouponOrderContext(orderId);
 }
 
@@ -1554,13 +1710,7 @@ export function createYijiLatestBrandReader(
   env: YijiClientEnv = {},
 ): ((vendorId: string, externalCustomerId: string) => Promise<string | null>) | null {
   if (!env.apiUrl?.trim()) return null;
-  const client = new HttpYijiClient({
-    baseUrl: env.apiUrl,
-    token: env.token,
-    adminUrl: env.adminApiUrl,
-    adminEmail: env.adminEmail,
-    adminPassword: env.adminPassword,
-  });
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl));
   return async (vendorId, externalCustomerId) => {
     try {
       const orders = await client.getOrders(vendorId, externalCustomerId, { limit: 1 });
@@ -1575,15 +1725,9 @@ export function createYijiAdminPoster(env: YijiClientEnv = {}): YijiAdminPoster 
   if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
     return null;
   }
-  const client = new HttpYijiClient({
-    // The order API is irrelevant here but the constructor wants a base; the
-    // admin half is what this poster uses.
-    baseUrl: env.apiUrl || env.adminApiUrl,
-    token: env.token,
-    adminUrl: env.adminApiUrl,
-    adminEmail: env.adminEmail,
-    adminPassword: env.adminPassword,
-  });
+  // The order API is irrelevant here but the constructor wants a base; the
+  // admin half is what this poster uses.
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
   return (path, body, headers) => client.adminPost(path, body, headers);
 }
 
@@ -1623,13 +1767,7 @@ export type YijiLatestOrderReader = (externalCustomerId: string) => Promise<stri
 
 export function createYijiLatestOrderReader(env: YijiClientEnv = {}): YijiLatestOrderReader | null {
   if (!env.apiUrl?.trim()) return null;
-  const client = new HttpYijiClient({
-    baseUrl: env.apiUrl,
-    token: env.token,
-    adminUrl: env.adminApiUrl,
-    adminEmail: env.adminEmail,
-    adminPassword: env.adminPassword,
-  });
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl));
   return async (externalCustomerId) => {
     // limit 1 AFTER the newest-first sort — `getOrders` sorts by `placedAt`
     // before slicing, so this is genuinely the most recent, not the first row
@@ -1671,13 +1809,7 @@ export function createYijiCustomerFinder(env: YijiClientEnv = {}): YijiCustomerF
   if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
     return null;
   }
-  const client = new HttpYijiClient({
-    baseUrl: env.apiUrl || env.adminApiUrl,
-    token: env.token,
-    adminUrl: env.adminApiUrl,
-    adminEmail: env.adminEmail,
-    adminPassword: env.adminPassword,
-  });
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
   return (phone) => client.findCustomerIdByPhone(phone);
 }
 
@@ -1691,13 +1823,7 @@ export function createYijiUserCouponFinder(env: YijiClientEnv = {}): YijiUserCou
   if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
     return null;
   }
-  const client = new HttpYijiClient({
-    baseUrl: env.apiUrl || env.adminApiUrl,
-    token: env.token,
-    adminUrl: env.adminApiUrl,
-    adminEmail: env.adminEmail,
-    adminPassword: env.adminPassword,
-  });
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
   return (userId, code) => client.findUserCoupon(userId, code);
 }
 
@@ -1705,13 +1831,7 @@ export function createYijiUserReader(env: YijiClientEnv = {}): YijiUserReader | 
   if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
     return null;
   }
-  const client = new HttpYijiClient({
-    baseUrl: env.apiUrl || env.adminApiUrl,
-    token: env.token,
-    adminUrl: env.adminApiUrl,
-    adminEmail: env.adminEmail,
-    adminPassword: env.adminPassword,
-  });
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
   return (userId) => client.getUserProfile(userId);
 }
 
@@ -1721,13 +1841,7 @@ export function createYijiUserReader(env: YijiClientEnv = {}): YijiUserReader | 
  */
 export function createYijiClient(env: YijiClientEnv = {}): YijiClient {
   if (env.apiUrl && env.apiUrl.trim()) {
-    return new HttpYijiClient({
-      baseUrl: env.apiUrl,
-      token: env.token,
-      adminUrl: env.adminApiUrl,
-      adminEmail: env.adminEmail,
-      adminPassword: env.adminPassword,
-    });
+    return new HttpYijiClient(httpOptions(env, env.apiUrl));
   }
   return new MockYijiClient(env.mockFixtures);
 }

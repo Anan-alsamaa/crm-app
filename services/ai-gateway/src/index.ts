@@ -22,9 +22,11 @@ import { RedisLateOrdersLiveStore } from './commerce/late-orders-live.js';
 import { Registry } from './metrics.js';
 import {
   createEnvConnectorRegistry,
+  createYijiUsageRecorder,
   mockVendorsAllowed,
   vendorsFromRows,
   errorText,
+  yijiBackupTokenFromEnv,
 } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
@@ -163,6 +165,20 @@ async function main(): Promise<void> {
   // both forms resolve. A failed read falls back to the last good list, else
   // to the env vendor ('1'), with a warning: a Directus hiccup must not become
   // a commerce outage. A vendor that is in neither is a 404 `unknown_vendor`.
+  /*
+   * EVERY YIJI CALL, RECORDED (`yiji_api_usage`, owner 2026-10-21): buffered
+   * and written in batches, best-effort - a Directus hiccup loses rows, never
+   * an order lookup.
+   */
+  const yijiUsage = createYijiUsageRecorder({
+    service: 'ai-gateway',
+    write: (rows) => directus.logYijiUsage(rows),
+    onError: (err, droppedRows) =>
+      logger.warn({ err: errorText(err), droppedRows }, 'yiji usage rows not recorded'),
+  });
+  /* The owner's admin token: a BACKUP for a call the CRM's own Yiji account
+     was refused, never the first credential (owner, 2026-10-21). */
+  const yijiBackupToken = yijiBackupTokenFromEnv(process.env);
   const connectors = createEnvConnectorRegistry({
     loadVendors: async () => vendorsFromRows(await directus.listVendors()),
     /* MV-6: the test vendor's `mock` platform, only with ALLOW_MOCK_VENDORS=true
@@ -190,6 +206,8 @@ async function main(): Promise<void> {
         adminApiUrl: config.YIJI_ADMIN_API_URL,
         adminEmail: config.YIJI_ADMIN_EMAIL,
         adminPassword: config.YIJI_ADMIN_PASSWORD,
+        ...(yijiBackupToken ? { backupToken: yijiBackupToken } : {}),
+        onUsage: yijiUsage.record,
       },
     },
   });
@@ -230,6 +248,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info({ signal }, 'shutting down');
     await app.close();
+    await yijiUsage.stop();
     await redis.quit();
     process.exit(0);
   };

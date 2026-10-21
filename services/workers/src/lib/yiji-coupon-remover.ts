@@ -1,4 +1,14 @@
-import { YijiRefusedError, YijiUnavailableError } from '@yiji/shared-types';
+import {
+  YijiLoginRefusedError,
+  YijiRefusedError,
+  YijiUnavailableError,
+  isYijiLoginRefused,
+  reportYijiUsage,
+  yijiOperationFor,
+  yijiUsageOutcome,
+  type YijiUsageAccount,
+  type YijiUsageSink,
+} from '@yiji/shared-types';
 
 /**
  * Taking a coupon grant BACK off a customer's Yiji account (owner, 2026-10-21,
@@ -20,10 +30,16 @@ import { YijiRefusedError, YijiUnavailableError } from '@yiji/shared-types';
  *    CUSTOMER's view, never from the admin list.
  *  - A coupon the customer SPENT leaves their wallet. An order's `couponId` is
  *    the grant id, so a spent coupon is found on their orders, not as missing.
- *  - The CRM's own Yiji account (role "agent 1") is 403 on RemoveUserCoupon;
- *    the owner's admin token is not. So a bearer token may be configured
- *    (`YIJI_COUPON_REMOVE_TOKEN`); without it the service login is used and a
- *    403 is recorded as a refusal the screen can show - never retried.
+ *
+ * WHOSE CREDENTIAL (owner, 2026-10-21). Every call is made with the CRM's OWN
+ * Yiji account first (the service login). The owner's admin token
+ * (`YIJI_BACKUP_TOKEN`, formerly `YIJI_COUPON_REMOVE_TOKEN` - still read) is a
+ * BACKUP, used for that one call only when the CRM account could not make it:
+ * its login was refused, it was refused itself (401 after a re-login, or 403 -
+ * the CRM's role "agent 1" is 403 on RemoveUserCoupon), or it is not
+ * configured. A timeout or a network error never reaches the backup. Without
+ * a backup a 403 is recorded as a refusal the screen can show - never retried.
+ * Every call, and which account made it, goes to `onUsage`.
  */
 export interface YijiCouponRemover {
   /** The Yiji user behind a CRM phone, or null when there is none / ambiguous. */
@@ -40,13 +56,18 @@ export interface YijiCouponRemoverEnv {
   adminApiUrl?: string;
   /** The ORDER API host (GetOrderByUser lives there, not on the admin host). */
   apiUrl?: string;
+  /** The CRM's own Yiji account - always tried first. */
   adminEmail?: string;
   adminPassword?: string;
-  /** A fixed bearer (the owner's admin token) - preferred when set. */
+  /** The owner's admin token: a BACKUP only (`YIJI_BACKUP_TOKEN`). */
+  backupToken?: string;
+  /** @deprecated The old name of `backupToken` (`YIJI_COUPON_REMOVE_TOKEN`); same meaning now. */
   removeToken?: string;
   tenantId?: string;
   timeoutMs?: number;
   fetchImpl?: typeof fetch;
+  /** Told about every Yiji call (`yiji_api_usage`). */
+  onUsage?: YijiUsageSink;
 }
 
 const REMOVE_PATH = '/api/CouponUser/RemoveUserCoupon/';
@@ -54,64 +75,128 @@ const REMOVE_PATH = '/api/CouponUser/RemoveUserCoupon/';
 /** Null when nothing is configured to talk to Yiji's admin API with. */
 export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRemover | null {
   const admin = env.adminApiUrl?.trim().replace(/\/+$/, '');
-  const fixed = env.removeToken?.trim().replace(/^Bearer\s+/i, '') || '';
+  const backup =
+    (env.backupToken?.trim() || env.removeToken?.trim() || '').replace(/^Bearer\s+/i, '') || '';
   const canLogin = !!(env.adminEmail?.trim() && env.adminPassword?.trim());
-  if (!admin || (!fixed && !canLogin)) return null;
+  if (!admin || (!backup && !canLogin)) return null;
   const orderApi = env.apiUrl?.trim().replace(/\/+$/, '') || admin;
   const timeoutMs = env.timeoutMs ?? 10_000;
   const doFetch = env.fetchImpl ?? fetch;
   let loginToken: string | null = null;
 
   async function login(): Promise<string> {
-    if (!canLogin) throw new YijiUnavailableError('the Yiji remove token was refused');
-    const res = await timed(`${admin}/api/Account/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', accept: 'application/json' },
-      body: JSON.stringify({ email: env.adminEmail, password: env.adminPassword }),
-    });
-    if (!res.ok) throw new YijiUnavailableError(`admin login failed (${res.status})`);
+    const res = await timed(
+      `${admin}/api/Account/login`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', accept: 'application/json' },
+        body: JSON.stringify({ email: env.adminEmail, password: env.adminPassword }),
+      },
+      'crm',
+    );
+    if (!res.ok) throw new YijiLoginRefusedError(`admin login failed (${res.status})`);
     const body = (await res.json()) as { token?: string };
-    if (!body.token) throw new YijiUnavailableError('admin login returned no token');
+    if (!body.token) throw new YijiLoginRefusedError('admin login returned no token');
     loginToken = body.token;
     return body.token;
   }
 
-  async function timed(url: string, init: RequestInit): Promise<Response> {
+  /** One request, with its timeout, reported to `onUsage` whatever happens. */
+  async function timed(
+    url: string,
+    init: RequestInit,
+    account: YijiUsageAccount,
+    fallbackReason: string | null = null,
+  ): Promise<Response> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const started = Date.now();
+    const usage = { operation: yijiOperationFor(url), account, fallbackReason };
     try {
-      return await doFetch(url, { ...init, signal: controller.signal });
+      const res = await doFetch(url, { ...init, signal: controller.signal });
+      reportYijiUsage(env.onUsage, {
+        ...usage,
+        outcome: yijiUsageOutcome(res.status),
+        httpStatus: res.status,
+        durationMs: Date.now() - started,
+        error: res.ok || res.status === 404 ? null : `HTTP ${res.status}`,
+      });
+      return res;
     } catch (err) {
       const reason =
         err instanceof Error && err.name === 'AbortError'
           ? `timed out after ${timeoutMs}ms`
           : `network error: ${err instanceof Error ? err.message : String(err)}`;
+      reportYijiUsage(env.onUsage, {
+        ...usage,
+        outcome: 'error',
+        httpStatus: null,
+        durationMs: Date.now() - started,
+        error: reason,
+      });
       throw new YijiUnavailableError(`${reason} for ${url}`, { cause: err });
     } finally {
       clearTimeout(timer);
     }
   }
 
-  /** One call, with one re-login on a 401 when the login credential exists. */
-  async function call(url: string, method: 'GET' | 'DELETE'): Promise<Response> {
-    let token = fixed || loginToken || (await login());
-    for (let attempt = 0; attempt < 2; attempt++) {
-      const res = await timed(url, {
-        method,
-        headers: {
-          authorization: `Bearer ${token}`,
-          accept: 'application/json',
-          ...(env.tenantId ? { tenantid: env.tenantId } : {}),
-        },
-      });
-      if (res.status === 401 && attempt === 0 && canLogin) {
-        loginToken = null;
-        token = await login();
-        continue;
-      }
-      return res;
+  /* A login Yiji REFUSED may go to the backup; a login that got no answer is thrown. */
+  async function crmToken(): Promise<string | { fallback: string }> {
+    if (loginToken) return loginToken;
+    try {
+      return await login();
+    } catch (err) {
+      if (!backup || !isYijiLoginRefused(err)) throw err;
+      return { fallback: `crm login refused: ${(err as Error).message}` };
     }
-    throw new YijiUnavailableError(`${method} ${url} refused the credential twice`);
+  }
+
+  /**
+   * One call: the CRM account first (one re-login on a 401), then - only with
+   * a backup token, and only for a refused login, a 401 after the re-login or
+   * a 403 - the same call ONCE with the backup. Without a backup the CRM
+   * account's answer is returned as it came, so a 403 stays a refusal.
+   */
+  async function call(url: string, method: 'GET' | 'DELETE'): Promise<Response> {
+    const init = (token: string): RequestInit => ({
+      method,
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: 'application/json',
+        ...(env.tenantId ? { tenantid: env.tenantId } : {}),
+      },
+    });
+    const refusedAuth = (res: Response) => !!backup && (res.status === 401 || res.status === 403);
+
+    let fallback = 'crm account not configured';
+    if (canLogin) {
+      const first = await crmToken();
+      if (typeof first !== 'string') {
+        fallback = first.fallback;
+      } else {
+        let res: Response | null = await timed(url, init(first), 'crm');
+        let relogged = false;
+        if (res.status === 401) {
+          loginToken = null;
+          const again = await crmToken();
+          if (typeof again !== 'string') {
+            fallback = again.fallback;
+            res = null;
+          } else {
+            relogged = true;
+            res = await timed(url, init(again), 'crm');
+          }
+        }
+        if (res) {
+          if (!refusedAuth(res)) return res;
+          await res.body?.cancel().catch(() => undefined);
+          fallback = `crm account refused (${res.status})${relogged ? ' after a re-login' : ''}`;
+        }
+      }
+    }
+    /* Reachable only with a backup token (the factory returns null without
+       either credential, and every CRM branch above returns without one). */
+    return timed(url, init(backup), 'backup', fallback);
   }
 
   async function readJson<T>(url: string): Promise<T | null> {

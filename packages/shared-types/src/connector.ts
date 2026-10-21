@@ -253,7 +253,11 @@ export class YijiConnector implements VendorConnector {
     readonly settings: YijiPlatformSettings,
     parts?: YijiConnectorParts,
   ) {
-    const env = settings.client;
+    /* Each usage row names the vendor the call was made for. */
+    const sink = settings.client.onUsage;
+    const env: YijiClientEnv = sink
+      ? { ...settings.client, onUsage: (e) => sink({ ...e, vendor: vendor.platformVendorId }) }
+      : settings.client;
     const p: YijiConnectorParts = parts ?? {
       client: createYijiClient(env),
       latestOrderId: createYijiLatestOrderReader(env),
@@ -686,6 +690,10 @@ export class RecordVendorSettingsSource implements VendorSettingsSource {
         ...('token' in env.client && creds.apiKey ? { token: creds.apiKey } : {}),
         ...(creds.adminEmail ? { adminEmail: creds.adminEmail } : {}),
         ...(creds.adminPassword ? { adminPassword: creds.adminPassword } : {}),
+        /* Usage accounting is not a credential: every vendor's calls are
+           recorded. The backup token IS one - Yiji's owner's - so it is never
+           handed to another vendor. */
+        ...(env.client.onUsage ? { onUsage: env.client.onUsage } : {}),
       };
       apiKey = creds.apiKey;
     }
