@@ -40,12 +40,9 @@ export function DashboardPage() {
   const [tab, setTab] = useState<Tab>('agent');
   const active: Tab = canSeeAgent && canSeeOps ? tab : canSeeAgent ? 'agent' : 'operations';
 
-  // The element beside the title that the stat strip is portalled into.
-  const [statSlot, setStatSlot] = useState<HTMLDivElement | null>(null);
-
   /*
-   * THE RAPPORT HEADER (owner, 2026-10-22): the big title, the stat strip
-   * beside it, and on the far side the board switch as a segmented control
+   * THE RAPPORT HEADER (owner, 2026-10-22): the big title (the stat strip
+   * beside it was dropped the same day - not needed), and on the far side the board switch as a segmented control
    * and the two jumps a supervisor makes first. It replaces the gradient hero
    * band, which said the same things in a 100px slab.
    */
@@ -55,10 +52,6 @@ export function DashboardPage() {
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('dashboard.title', { defaultValue: 'Dashboard' })}
         </h1>
-        <div
-          ref={setStatSlot}
-          className="flex min-w-0 flex-wrap items-center gap-x-8 gap-y-3 ps-2 empty:hidden lg:ps-6"
-        />
         <ToolbarSpacer />
         {/* A strip of one is a label, not a choice — a role with a single
             dashboard is simply shown it. */}
@@ -128,7 +121,7 @@ export function DashboardPage() {
             })}
           </p>
         )}
-        <ComplaintDashboard view={active} statSlot={statSlot} />
+        <ComplaintDashboard view={active} />
       </div>
     </div>
   );

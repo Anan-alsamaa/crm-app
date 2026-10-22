@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -11,8 +10,6 @@ import {
   ChartIcon,
   ClockIcon,
   InboxIcon,
-  ShieldIcon,
-  TicketIcon,
   MeterBar,
   ProgressRing,
   SelectMenu,
@@ -48,8 +45,6 @@ import {
   StatCard,
   TrendPill,
   type Tone,
-  HeaderBadge,
-  HeaderStat,
 } from '../../components/dash/Dash.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 
@@ -682,16 +677,8 @@ function DrillDown({
  */
 export function ComplaintDashboard({
   view = 'agent',
-  statSlot,
 }: {
   view?: 'agent' | 'operations';
-  /**
-   * Where the page header's stat strip goes (Rapport skin): the dashboard
-   * page hands in an element beside its title and the strip is portalled
-   * there, so it reads the same data and filters as everything below it.
-   * Without one, the plain "Showing N tickets" line renders as before.
-   */
-  statSlot?: HTMLElement | null;
 } = {}) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
@@ -726,7 +713,7 @@ export function ComplaintDashboard({
    * quietly return nothing in Arabic.
    */
   /**
-   * Coupons, for the strip. Shares CouponSpend's query key, so the tile and the
+   * Coupons, for the tiles. Shares CouponSpend's query key, so the tile and the
    * card below it are one request and can never disagree.
    */
   const couponFacts = useCouponSpend(applied.from, applied.to, view === 'agent');
@@ -1079,98 +1066,26 @@ export function ComplaintDashboard({
         </div>
       ) : (
         <>
-          {/* THE HEADER STAT STRIP (Rapport skin), beside the page title when
-              the page gives it a place; the plain headline otherwise. */}
-          {statSlot
-            ? createPortal(
-                <>
-                  <HeaderStat
-                    icon={<TicketIcon size={17} />}
-                    value={d.total.toLocaleString()}
-                    badge={(() => {
-                      const cur = d.months[d.months.length - 1]?.count;
-                      const prev = d.months[d.months.length - 2]?.count;
-                      if (cur == null || prev == null || prev === 0) return undefined;
-                      const pct = Math.round(((cur - prev) / prev) * 100);
-                      if (pct === 0 || Math.abs(pct) > 200) return undefined;
-                      return (
-                        <HeaderBadge>
-                          {pct > 0 ? `+${pct}%` : `${pct}%`}{' '}
-                          {t('complaintDash.vsLastMonth', { defaultValue: 'vs last month' })}
-                        </HeaderBadge>
-                      );
-                    })()}
-                    caption={
-                      d.total > 0
-                        ? t('complaintDash.stripRange', {
-                            defaultValue: 'tickets, {{from}} to {{to}}',
-                            from: d.firstDate ?? '—',
-                            to: d.lastDate ?? '—',
-                          })
-                        : t('complaintDash.noMatch', {
-                            defaultValue: 'No tickets match these filters.',
-                          })
-                    }
-                  />
-                  {view === 'agent' && (
-                    <HeaderStat
-                      icon={<InboxIcon size={17} />}
-                      value={d.chatsWaiting.toLocaleString()}
-                      badge={
-                        d.chatsTotal > 0 ? (
-                          <HeaderBadge variant="plain">
-                            {Math.round((d.chatsWaiting / d.chatsTotal) * 100)}%
-                          </HeaderBadge>
-                        ) : undefined
-                      }
-                      caption={t('complaintDash.stripChats', {
-                        defaultValue: 'open chats of {{n}} in range',
-                        n: d.chatsTotal.toLocaleString(),
-                      })}
-                    />
-                  )}
-                  {view === 'agent' && (
-                    <HeaderStat
-                      icon={<ShieldIcon size={17} />}
-                      value={coupons.pendingCount.toLocaleString()}
-                      badge={
-                        coupons.pendingCount > 0 ? (
-                          <HeaderBadge variant="highlight">
-                            {t('complaintDash.stripToDecide', { defaultValue: 'to decide' })}
-                          </HeaderBadge>
-                        ) : undefined
-                      }
-                      caption={t('complaintDash.stripCoupons', {
-                        defaultValue: 'coupons awaiting a decision',
-                      })}
-                    />
-                  )}
-                </>,
-                statSlot,
-              )
-            : null}
           {/* Headline, exactly as his subtitle reads. */}
-          {!statSlot && (
-            <p className="px-1 text-xs text-muted-foreground">
-              {d.total > 0
-                ? t('complaintDash.summary', {
-                    // The span is the range the DATA covers, which is not the
-                    // range you filtered on — "last 90 days" over three
-                    // complaints logged in one week should say so.
-                    // No money here any more. It was the ticket-side sum,
-                    // which counted refused and un-approved amounts; the KPI tile
-                    // carries the approved figure, and one number in one place is
-                    // the whole point of removing the other.
-                    defaultValue: 'Showing {{n}} tickets from {{from}} to {{to}}',
-                    n: d.total.toLocaleString(),
-                    from: d.firstDate ?? '—',
-                    to: d.lastDate ?? '—',
-                  })
-                : t('complaintDash.noMatch', {
-                    defaultValue: 'No tickets match these filters.',
-                  })}
-            </p>
-          )}
+          <p className="px-1 text-xs text-muted-foreground">
+            {d.total > 0
+              ? t('complaintDash.summary', {
+                  // The span is the range the DATA covers, which is not the
+                  // range you filtered on — "last 90 days" over three
+                  // complaints logged in one week should say so.
+                  // No money here any more. It was the ticket-side sum,
+                  // which counted refused and un-approved amounts; the KPI tile
+                  // carries the approved figure, and one number in one place is
+                  // the whole point of removing the other.
+                  defaultValue: 'Showing {{n}} tickets from {{from}} to {{to}}',
+                  n: d.total.toLocaleString(),
+                  from: d.firstDate ?? '—',
+                  to: d.lastDate ?? '—',
+                })
+              : t('complaintDash.noMatch', {
+                  defaultValue: 'No tickets match these filters.',
+                })}
+          </p>
 
           {/* WHAT THE OPERATIONS STRIP IS NOT.
               Six readings have been proposed here and rejected, and they had
