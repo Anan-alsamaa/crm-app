@@ -110,7 +110,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
       (github.event_name == 'pull_request' && github.base_ref == 'main')
-    timeout-minutes: 25
+    timeout-minutes: 40 # room for 3 browser-install attempts (2026-10-22)
     services:
       postgres:
         image: postgres:16-alpine
@@ -215,13 +215,23 @@ jobs:
         #
         # BOUNDED AND RETRIED. This download has hung on the runner and eaten
         # the job's entire 25-minute budget, so the E2E suite never ran and CI
-        # reported a failure that said nothing about the code. A hang is now
-        # capped at 6 minutes and retried on a fresh connection; only a second
-        # failure fails the job, and it fails in minutes rather than at the
-        # timeout.
-        timeout-minutes: 14
+        # reported a failure that said nothing about the code.
+        #
+        # 2026-10-22: a stalled first attempt was killed by `timeout`, but the
+        # apt-get it had started kept running and held the dpkg lock, so the
+        # retry died with exit 100 ("could not get lock"). Now: apt itself
+        # retries and gives up on a dead mirror in seconds rather than
+        # stalling; between attempts any leftover apt/dpkg is killed and the
+        # lock cleared; three attempts with a pause.
+        timeout-minutes: 20
         run: |
           set -u
+          {
+            echo 'Acquire::Retries "5";'
+            echo 'Acquire::http::Timeout "30";'
+            echo 'Acquire::https::Timeout "30";'
+            echo 'DPkg::Lock::Timeout "120";'
+          } | sudo tee /etc/apt/apt.conf.d/80-ci-retries >/dev/null
           install_browsers() {
             if [ "${{ steps.pw-cache.outputs.cache-hit }}" = "true" ]; then
               timeout 6m pnpm exec playwright install-deps chromium
@@ -229,10 +239,19 @@ jobs:
               timeout 6m pnpm exec playwright install --with-deps chromium
             fi
           }
-          install_browsers || {
-            echo "::warning::Playwright browser install stalled or failed — retrying once."
-            install_browsers
+          clear_apt() {
+            sudo pkill -9 -f 'apt-get|dpkg' || true
+            sudo rm -f /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/cache/apt/archives/lock /var/lib/apt/lists/lock
+            sudo dpkg --configure -a || true
           }
+          for attempt in 1 2 3; do
+            if install_browsers; then exit 0; fi
+            echo "::warning::Playwright browser install failed (attempt $attempt) - clearing apt and retrying."
+            clear_apt
+            sleep $((attempt * 15))
+          done
+          echo "::error::Playwright browser install failed 3 times (runner package mirror)."
+          exit 1
 
       - name: Start Directus
         # The Directus container needs the bootstrap extensions (e.g.
