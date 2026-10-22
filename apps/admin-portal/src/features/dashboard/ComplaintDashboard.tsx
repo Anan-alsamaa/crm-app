@@ -813,7 +813,7 @@ export function ComplaintDashboard({
   // they summed — see the note further down.
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-[110rem] space-y-4">
+    <div className="w-full min-w-0 space-y-4">
       {/* ── Filter bar ─────────────────────────────────────────────────
           Same surface as every SectionCard on the page; the fields inside
           carry the shared Input/SelectMenu styling on their own. */}

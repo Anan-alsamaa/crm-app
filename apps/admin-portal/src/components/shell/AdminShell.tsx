@@ -97,12 +97,13 @@ export function AdminShell({
            root overflow rule in index.css. */
           className="sticky top-0 z-30 flex h-20 shrink-0 items-center gap-4 px-5 xl:px-8"
         >
-          <div className="flex shrink-0 items-center gap-2.5">
+          {/* A size up (owner, 2026-10-22). */}
+          <div className="flex shrink-0 items-center gap-3">
             {/* The artwork's corners are already cut; no rounding on the img. */}
-            <img src="/sara-crm-icon.svg" alt="Sara CRM" className="h-10 w-10 shrink-0" />
+            <img src="/sara-crm-icon.svg" alt="Sara CRM" className="h-12 w-12 shrink-0" />
             <span
               aria-hidden
-              className="hidden text-[1.0625rem] font-bold tracking-[-0.01em] text-foreground 2xl:inline"
+              className="hidden text-[1.375rem] font-bold tracking-[-0.02em] text-foreground 2xl:inline"
             >
               Sara CRM
             </span>
