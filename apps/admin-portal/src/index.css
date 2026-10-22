@@ -490,25 +490,6 @@ body::after {
   box-shadow: var(--admin-card-shadow);
 }
 
-/* ── Tables: the directory view ──────────────────────────────────────────
-     Header row on the card itself (no grey band), muted 12.5px labels; rows a
-     touch tighter than before (52px) with hairline separators. The header
-     still needs an OPAQUE fill - it is sticky over scrolling rows - so it
-     takes the card colour rather than going transparent. */
-.admin-skin main th.sticky.bg-secondary {
-  background-color: oklch(var(--card));
-  font-size: 0.78125rem;
-  font-weight: 600;
-  color: oklch(var(--muted-foreground));
-  box-shadow: inset 0 -1px 0 oklch(var(--foreground) / 0.07);
-}
-.admin-skin main td.h-\[3\.75rem\] {
-  height: 3.25rem;
-}
-.admin-skin main tr.border-b {
-  border-color: oklch(var(--foreground) / 0.06);
-}
-
 /* Every page title is an h1 - in a Toolbar or at the head of a report -
      and they all take the reference's display size. */
 .admin-skin main h1 {
@@ -640,25 +621,7 @@ body::after {
   background: oklch(var(--card));
   box-shadow: var(--admin-card-shadow);
 }
-.admin-skin [data-stat-card] {
-  align-items: center;
-  border-radius: 1.375rem;
-  padding: 1rem 1.125rem;
-}
-.admin-skin [data-report-kpi] {
-  border-radius: 1.125rem;
-}
-.admin-skin [data-stat-card] [data-stat-value],
-.admin-skin [data-report-kpi] [data-kpi-value] {
-  color: oklch(var(--foreground));
-  font-weight: 600;
-}
-.admin-skin [data-stat-card] [data-stat-value] {
-  font-size: 2rem;
-  letter-spacing: -0.03em;
-}
-.admin-skin [data-stat-card] > [aria-hidden]:first-child,
-.admin-skin [data-report-kpi] > [aria-hidden]:first-child {
+.admin-skin [data-stat-card] > [aria-hidden]:first-child {
   border-radius: 9999px;
 }
 
@@ -755,4 +718,524 @@ body::after {
 }
 :root[data-theme='dark'] .admin-skin header .text-ink\/60 {
   color: oklch(var(--foreground) / 0.6);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * TABLES, METRIC CARDS AND MOTION (owner, 2026-10-22, second pass)
+ *
+ *   "Tables should be properly designed. Spacings must be there. It should
+ *    not look suffocating."  ·  The report KPI tiles "look very badly
+ *    designed."  ·  "Modern and engaging ... animations are welcomed. All
+ *    these with efficient and optimized."
+ *
+ * Visual only, like everything above. Motion is transform/opacity only, runs
+ * once on MOUNT (CSS animations do not replay on a re-render or a poll that
+ * returns the same rows), and the reduced-motion block at the end of this
+ * section switches every piece of it off.
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+/* The desktop shell is exactly the window's height and scrolls inside <main>,
+   so the DOCUMENT has nothing to scroll. Saying so stops the stray document
+   scroll (a focus jump, a scroll-into-view) that slid the nav bar off the top
+   of the owner's window. Desktop shell only: the mobile drawer shell keeps the
+   document's behaviour. */
+:root:has(.admin-skin > header[data-app-topbar]) {
+  overflow: clip;
+}
+:root:has(.admin-skin > header[data-app-topbar]) body {
+  overflow: clip;
+}
+
+.admin-skin,
+[data-modal-panel],
+[data-drawer-panel] {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --admin-row-line: oklch(var(--foreground) / 0.065);
+}
+
+/* ── Tables: air, a light header, thin lines ───────────────────────────────
+     The Rapport directory view: 56px rows, 20px between columns and a wider
+     28px inset at each end of the row, a header that is a quiet label row
+     rather than a band. Every table in the console gets this - the shared
+     primitives and the hand-built ones alike - because it addresses the
+     table elements, not a component's classes. */
+.admin-skin main table {
+  font-size: 0.875rem;
+}
+.admin-skin main thead th {
+  height: 3rem;
+  padding-block: 0;
+  padding-inline: 1.25rem;
+  background-color: oklch(var(--card));
+  font-size: 0.78125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: oklch(var(--muted-foreground));
+  white-space: nowrap;
+  vertical-align: middle;
+  backdrop-filter: none;
+  box-shadow: inset 0 -1px 0 var(--admin-row-line);
+}
+/* A column is never narrower than a short heading needs to breathe. Empty
+   header cells (checkbox and action columns) keep their own width. */
+.admin-skin main thead th:not(:empty):not(:has(> .sr-only:only-child)):not(.w-10) {
+  min-width: 6.5rem;
+}
+.admin-skin main tbody td {
+  height: 3.5rem;
+  padding-block: 0.75rem;
+  padding-inline: 1.25rem;
+  vertical-align: middle;
+}
+.admin-skin main :is(thead th, tbody td):first-child {
+  padding-inline-start: 1.75rem;
+}
+.admin-skin main :is(thead th, tbody td):last-child {
+  padding-inline-end: 1.75rem;
+}
+/* The sortable heading is a full-cell button: the button carries the padding
+   so the whole cell stays the click target. */
+.admin-skin main thead th[aria-sort] {
+  padding: 0;
+}
+.admin-skin main thead th[aria-sort] > button {
+  height: 3rem;
+  padding-inline: 1.25rem;
+  font-size: 0.78125rem;
+  letter-spacing: 0.01em;
+}
+.admin-skin main thead th[aria-sort]:first-child > button {
+  padding-inline-start: 1.75rem;
+}
+.admin-skin main thead th[aria-sort]:last-child > button {
+  padding-inline-end: 1.75rem;
+}
+/* The separator is drawn on the CELLS: a row border only renders in the
+   collapsed border model, and the hand-built tables are not all collapsed.
+   Row borders (`border-b` from the shared Tr, `border-t` on a few hand-built
+   rows) are cleared so no line is ever doubled. */
+.admin-skin main tbody > tr {
+  border-width: 0;
+  transition: background-color 150ms ease;
+}
+.admin-skin main tbody > tr:not(:last-child) > td {
+  border-bottom: 1px solid var(--admin-row-line);
+}
+.admin-skin main tbody > tr:hover {
+  background-color: oklch(var(--primary) / 0.035);
+}
+.admin-skin main tbody > tr[aria-selected='true'] {
+  background-color: oklch(var(--primary) / 0.08);
+}
+/* Phone numbers, order ids and dates read in the table's own face with
+   tabular figures. A monospace face in a proportional table looked like a
+   different product (owner, 2026-10-22). */
+.admin-skin main :is(table, [data-table-surface]) .font-mono {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+
+/* ── The table card hugs its rows ──────────────────────────────────────────
+     The scroller carried a 14rem floor, so one row sat on top of an empty
+     block. The card is as tall as its rows and its footer; only a table that
+     has run out of room scrolls. */
+.admin-skin [data-table-scroller] {
+  min-height: 0 !important;
+}
+
+/* ── The table footer: count, pager, generated-at ──────────────────────────
+     Inside the card, under a hairline, in the row's own insets. Quiet meta
+     text, not a grey band that reads as one more row. */
+.admin-skin [data-table-footer-slot] {
+  border-top: 1px solid var(--admin-row-line);
+}
+.admin-skin [data-table-footer] {
+  position: static;
+  height: auto;
+  min-height: 3.75rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 0.625rem 1.75rem;
+  border-top-width: 0;
+  background: transparent;
+  font-size: 0.78125rem;
+  color: oklch(var(--muted-foreground));
+}
+.admin-skin [data-table-footer] > span {
+  font-weight: 500;
+}
+.admin-skin [data-table-footer] [data-table-pager] {
+  position: static;
+  width: auto;
+  flex: 0 1 auto;
+  margin-inline-start: auto;
+}
+/* A footer still inside the scroller (a table with no pager) reads the same,
+   just without the slot's hairline. */
+.admin-skin [data-table-scroller] [data-table-footer] {
+  border-top: 1px solid var(--admin-row-line);
+}
+
+/* ── List cards (Vendors, Roles, ...) ──────────────────────────────────────
+     The directory pages built as a card holding a list of row buttons take
+     the table's insets and its quiet footer: 28px at each end of a row, and
+     the grey "aggregate band" at the foot becomes meta text on the card. */
+.admin-skin main .rounded-2xl.bg-card > ul > li > :is(button, a, div).px-4 {
+  padding-inline: 1.75rem;
+}
+.admin-skin main .rounded-2xl.bg-card > .border-t.bg-secondary\/30:last-child {
+  min-height: 3.5rem;
+  padding-inline: 1.75rem;
+  background: transparent;
+  border-color: var(--admin-row-line);
+}
+.admin-skin main .rounded-2xl.bg-card > .border-t.bg-secondary\/30:last-child > span {
+  font-size: 0.78125rem;
+  font-weight: 600;
+}
+
+/* ── Empty tables ───────────────────────────────────────────────────────────
+     A table whose body has no rows says so, in the space the rows would
+     have used, rather than ending at its header. Strings come from the shell
+     (AdminShell sets --admin-empty-*), so they follow the language. */
+.admin-skin [data-table-scroller]:has(tbody:empty)::after {
+  content: var(--admin-empty-title) '\A' var(--admin-empty-hint);
+  display: block;
+  white-space: pre-line;
+  padding: 4.25rem 1.5rem 2.75rem;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: oklch(var(--muted-foreground));
+  background: no-repeat center 1.5rem / 1.75rem
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237c7f99' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 12h-6l-2 3h-4l-2-3H2'/%3E%3Cpath d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/%3E%3C/svg%3E");
+}
+
+/* ── Badges: one palette, readable everywhere ──────────────────────────────
+     Soft tint behind, the SAME hue deepened for the text, every pair >= 4.5:1
+     (measured on the tint): "Open" was pale cyan on white and could hardly be
+     read. Status, priority, team, role - every Pill in the console. The solid
+     Excel-yellow highlight keeps its own (owner's) treatment. */
+[data-pill] {
+  height: 1.625rem;
+  padding-inline: 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  box-shadow: none;
+  --tw-ring-shadow: 0 0 #0000;
+}
+[data-pill] > span[aria-hidden] {
+  background-color: currentColor;
+}
+:root:not([data-theme='dark']) [data-pill='neutral'],
+:root:not([data-theme='dark']) [data-pill='muted'] {
+  background-color: oklch(0.935 0.008 277);
+  color: oklch(0.4 0.02 277);
+}
+:root:not([data-theme='dark']) [data-pill='primary'],
+:root:not([data-theme='dark']) [data-pill='cyan'] {
+  background-color: oklch(0.94 0.035 278);
+  color: oklch(0.45 0.2 278);
+}
+:root:not([data-theme='dark']) [data-pill='blue'] {
+  background-color: oklch(0.94 0.035 245);
+  color: oklch(0.45 0.14 250);
+}
+:root:not([data-theme='dark']) [data-pill='purple'] {
+  background-color: oklch(0.94 0.04 305);
+  color: oklch(0.45 0.17 305);
+}
+:root:not([data-theme='dark']) [data-pill='success'] {
+  background-color: oklch(0.94 0.05 155);
+  color: oklch(0.42 0.11 155);
+}
+:root:not([data-theme='dark']) [data-pill='warning'],
+:root:not([data-theme='dark']) [data-pill='orange'] {
+  background-color: oklch(0.95 0.035 55);
+  color: oklch(0.47 0.15 42);
+}
+:root:not([data-theme='dark']) [data-pill='destructive'] {
+  background-color: oklch(0.945 0.035 22);
+  color: oklch(0.47 0.19 27);
+}
+:root:not([data-theme='dark']) [data-pill='pink'] {
+  background-color: oklch(0.945 0.035 350);
+  color: oklch(0.47 0.18 355);
+}
+
+/* ── Metric cards ───────────────────────────────────────────────────────────
+     ReportKpi and the SLA / Admin KPI groups are built as metric cards in
+     their components. StatCard is shared with the agent portal, so its
+     admin form - label on top, the numeral large under it, the chip at the
+     top end - is arranged here from its hooks. */
+.admin-skin [data-report-kpi] {
+  border-radius: 1.375rem;
+}
+.admin-skin [data-stat-card] {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  column-gap: 0.75rem;
+  min-height: 8.25rem;
+  padding: 1.25rem;
+  border-radius: 1.375rem;
+}
+.admin-skin [data-stat-card] > [data-stat-chip] {
+  grid-column: 2;
+  grid-row: 1;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+.admin-skin [data-stat-card] > [data-stat-body] {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+/* `.uppercase` matched as well, to outrank the console-wide "labels read as
+   words" rule above, which sizes every small tracked caption at 12.5px. */
+.admin-skin main [data-stat-card] [data-stat-label],
+.admin-skin main [data-stat-card] [data-stat-label].uppercase {
+  order: -1;
+  margin: 0 0 auto;
+  min-height: 2.5rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-transform: none;
+  letter-spacing: 0;
+  color: oklch(var(--foreground) / 0.8);
+}
+/* Some captions are written lower-case to sit after a number ("14 total");
+   as the card's heading they start with a capital. */
+.admin-skin [data-stat-card] [data-stat-label] > span:last-child {
+  display: block;
+}
+.admin-skin [data-stat-card] [data-stat-label] > span:last-child::first-letter {
+  text-transform: uppercase;
+}
+.admin-skin [data-stat-card] [data-stat-figure] {
+  margin-top: 0.75rem;
+}
+.admin-skin [data-stat-card] [data-stat-value] {
+  font-size: 2.375rem;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  color: oklch(var(--foreground));
+}
+.admin-skin [data-stat-card] [data-stat-caption] {
+  margin-top: 0.5rem;
+  font-size: 0.78125rem;
+}
+.admin-skin [data-stat-card] > [data-stat-visual] {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+}
+
+/* The SLA / Admin KPI groups lay their cards out by the GROUP's width: two
+   across in half a laptop screen, four when the group has the room, one on
+   a phone. */
+[data-stat-panel] {
+  container: stat-panel / inline-size;
+}
+[data-stat-grid] {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@container stat-panel (min-width: 38rem) {
+  [data-stat-grid] {
+    grid-template-columns: repeat(var(--cells, 4), minmax(0, 1fr));
+  }
+}
+@container stat-panel (max-width: 21rem) {
+  [data-stat-grid] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Hover: the card lifts 2px and its shadow deepens. The deeper shadow is a
+   pseudo-element faded in on opacity, so nothing but transform and opacity
+   moves. Pointer devices only - a tap must not leave a card hovering. */
+.admin-skin :is([data-report-kpi], [data-stat-card]) {
+  transition: transform 220ms var(--ease-out);
+}
+.admin-skin :is([data-report-kpi], [data-stat-card])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 22px 44px -26px oklch(var(--shadow-color) / 0.5);
+  opacity: 0;
+  transition: opacity 220ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .admin-skin :is([data-report-kpi], [data-stat-card]):hover {
+    transform: translateY(-2px);
+  }
+  .admin-skin :is([data-report-kpi], [data-stat-card]):hover::after {
+    opacity: 1;
+  }
+}
+
+/* ── Entrance ───────────────────────────────────────────────────────────────
+     The page itself already settles up into place once per route (App.tsx,
+     `animate-rise-in` keyed on the path). Inside it, the metric cards follow
+     each other 40ms apart as they mount - including when a report's data
+     arrives and its skeleton gives way to them. `backwards`, not `both`: once
+     the run is over the card is back on its own styles, so the hover lift
+     above still works. A card already on screen never replays - a poll
+     re-renders it, it does not remount it. */
+@keyframes admin-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes admin-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.admin-skin main :is([data-report-kpi], [data-stat-card]) {
+  animation: admin-rise 280ms var(--ease-out) backwards;
+}
+.admin-skin main :is([data-report-kpi], [data-stat-card]):nth-child(2) {
+  animation-delay: 40ms;
+}
+.admin-skin main :is([data-report-kpi], [data-stat-card]):nth-child(3) {
+  animation-delay: 80ms;
+}
+.admin-skin main :is([data-report-kpi], [data-stat-card]):nth-child(4) {
+  animation-delay: 120ms;
+}
+.admin-skin main :is([data-report-kpi], [data-stat-card]):nth-child(n + 5) {
+  animation-delay: 160ms;
+}
+
+/* Rows fade in when they first appear - a page of results arriving, not a
+   choreography: the first ten follow each other 18ms apart only when the
+   page is short, and rows past the fortieth do not animate at all. */
+.admin-skin main tbody > tr {
+  animation: admin-fade 260ms ease-out backwards;
+}
+.admin-skin main tbody > tr:nth-child(n + 41) {
+  animation: none;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(2) {
+  animation-delay: 18ms;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(3) {
+  animation-delay: 36ms;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(4) {
+  animation-delay: 54ms;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(5) {
+  animation-delay: 72ms;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(6) {
+  animation-delay: 90ms;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(7) {
+  animation-delay: 108ms;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(8) {
+  animation-delay: 126ms;
+}
+.admin-skin main tbody:not(:has(> tr:nth-child(31))) > tr:nth-child(n + 9) {
+  animation-delay: 144ms;
+}
+
+/* ── Press ──────────────────────────────────────────────────────────────────
+     Buttons and pill links give under the finger: scale 0.97, back in 160ms.
+     Table headings are excluded - a whole header cell shrinking reads as a
+     glitch, not a press. */
+.admin-skin :is(button, a[role='button'], header nav a, nav[aria-label='Report'] a),
+[data-modal-panel] button,
+[data-drawer-panel] button {
+  transition-property: transform, color, background-color, border-color, box-shadow, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out);
+}
+.admin-skin
+  :is(button, a[role='button'], header nav a, nav[aria-label='Report'] a):not(:disabled):not(
+    th button
+  ):active,
+[data-modal-panel] button:not(:disabled):active,
+[data-drawer-panel] button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* ── Dialogs, drawers and menus ─────────────────────────────────────────────
+     Dialogs scale and fade from the centre a touch slower than the shared
+     160ms (a modal is an occasional event, not a reflex); menus grow from
+     their trigger edge rather than from their own middle. */
+[data-modal-panel] {
+  animation-duration: 220ms;
+}
+[data-drawer-panel] {
+  animation-duration: 280ms;
+}
+.fixed.animate-scale-in {
+  transform-origin: top center;
+}
+
+/* ── Loading skeletons ──────────────────────────────────────────────────────
+     A light sweep crossing the block on transform, instead of a background
+     position animation that repaints the block every frame. */
+.admin-skin .animate-shimmer {
+  position: relative;
+  overflow: hidden;
+  animation: none;
+  background: oklch(var(--foreground) / 0.055);
+}
+.admin-skin .animate-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.6), transparent);
+  animation: admin-sweep 1.3s ease-in-out infinite;
+}
+@keyframes admin-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ── Reduced motion: none of the above moves ───────────────────────────────
+     The global guard at the top already collapses durations; this removes
+     the movement itself (lift, press, sweep, entrance) rather than playing
+     it in 0.01ms. */
+@media (prefers-reduced-motion: reduce) {
+  .admin-skin main :is(*:not(.animate-spin)),
+  [data-modal-panel],
+  [data-drawer-panel] {
+    animation: none !important;
+  }
+  .admin-skin :is([data-report-kpi], [data-stat-card]):hover,
+  .admin-skin :is(button, a):active,
+  [data-modal-panel] button:active,
+  [data-drawer-panel] button:active {
+    transform: none !important;
+  }
+  .admin-skin .animate-shimmer::after {
+    animation: none;
+  }
 }

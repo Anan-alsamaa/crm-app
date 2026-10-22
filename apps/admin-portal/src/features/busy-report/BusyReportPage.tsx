@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  ClockIcon,
   IdentityCell,
   EmptyState,
   ErrorState,
@@ -16,6 +17,8 @@ import {
   Td,
   Th,
   Tr,
+  UsersIcon,
+  ZapIcon,
   formatDateTime,
   cn,
 } from '@yiji/ui';
@@ -177,21 +180,24 @@ export function BusyReportPage() {
             }
           />
 
-          <ReportKpiStrip>
+          <ReportKpiStrip className="xl:grid-cols-3">
             <ReportKpi
               tone="blue"
               label={t('busyReport.kpiTimes', { defaultValue: 'Times Busy was used' })}
               value={String(rows.length)}
+              icon={<ZapIcon size={18} />}
             />
             <ReportKpi
               tone="amber"
               label={t('busyReport.kpiTotal', { defaultValue: 'Total busy time' })}
               value={formatDuration(totalSec) ?? '0s'}
+              icon={<ClockIcon size={18} />}
             />
             <ReportKpi
               tone="violet"
               label={t('busyReport.kpiAgents', { defaultValue: 'Agents' })}
               value={String(perAgent.length)}
+              icon={<UsersIcon size={18} />}
             />
           </ReportKpiStrip>
 

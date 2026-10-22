@@ -126,6 +126,8 @@ export { Pagination } from './Pagination.js';
 export type { PaginationProps } from './Pagination.js';
 export { TablePager, DEFAULT_PAGE_SIZES, pageCountOf } from './TablePager.js';
 export { ReportKpi, ReportKpiStrip } from './ReportKpi.js';
+export { CountUp, MetricMotionProvider, useMetricMotion, isEmptyMetric } from './CountUp.js';
+export type { MetricMotion } from './CountUp.js';
 export type { ReportKpiProps, ReportKpiTone } from './ReportKpi.js';
 export type { TablePagerProps, TablePagerLabels } from './TablePager.js';
 export { HBarChart, TrendChart, SplitBar } from './Chart.js';

@@ -230,7 +230,7 @@ export function TeamsPage() {
                       onClick={() => openEdit(tm)}
                       title={t('teams.editHint', { defaultValue: 'Edit this team' })}
                       className={cn(
-                        'group flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start',
+                        'group flex min-h-[3.75rem] w-full items-center gap-3 px-4 py-3 text-start sm:gap-5 sm:px-7',
                         'transition-colors duration-fast ease-out hover:bg-foreground/[0.03]',
                         'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
                       )}
@@ -296,13 +296,12 @@ export function TeamsPage() {
                 );
               })}
             </ul>
-            {/* Footer aggregate band — the boards' table anatomy. */}
-            <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
-              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('teams.total', { defaultValue: 'teams' })}
-              </span>
-              <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
-                {teamCount}
+            {/* The footer: the count as quiet meta, in the rows' own insets -
+                the table language every list in the console shares. */}
+            <div className="flex min-h-[3.75rem] items-center border-t border-foreground/[0.065] px-4 text-[0.78125rem] text-muted-foreground sm:px-7">
+              <span className="flex items-baseline gap-1.5">
+                <span className="font-semibold tabular-nums text-foreground">{teamCount}</span>
+                <span>{t('teams.total', { defaultValue: 'teams' })}</span>
               </span>
             </div>
           </div>

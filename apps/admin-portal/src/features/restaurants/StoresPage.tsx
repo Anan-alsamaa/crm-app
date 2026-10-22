@@ -723,9 +723,10 @@ export function StoresPage() {
                 ))}
               </tbody>
             </table>
-            {/* Footer aggregate band — the board table's closing line. Counts
-                describe the rows on screen, so a search never mixes scopes. */}
-            <div className="flex h-11 items-center gap-6 border-t border-foreground/[0.06] px-6 text-xs text-muted-foreground">
+            {/* One footer, inside the card: the counts as quiet meta (they
+                describe the rows on screen, so a search never mixes scopes)
+                and the pager at the end. */}
+            <div className="flex min-h-[3.75rem] flex-wrap items-center gap-x-6 gap-y-2 border-t border-foreground/[0.065] px-7 py-2.5 text-[0.78125rem] text-muted-foreground">
               <span>
                 <span className="font-semibold tabular-nums text-foreground">
                   {filtered.length}
@@ -740,18 +741,18 @@ export function StoresPage() {
                   {t('stores.noBrand', { defaultValue: 'without a brand' })}
                 </span>
               )}
+              {pageCount > 1 && (
+                <div className="ms-auto">
+                  <Pagination
+                    page={current}
+                    pageCount={pageCount}
+                    onPage={setPage}
+                    prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
+                    nextLabel={t('pagination.next', { defaultValue: 'Next' })}
+                  />
+                </div>
+              )}
             </div>
-            {pageCount > 1 && (
-              <div className="border-t border-foreground/[0.08] px-2 py-1.5">
-                <Pagination
-                  page={current}
-                  pageCount={pageCount}
-                  onPage={setPage}
-                  prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
-                  nextLabel={t('pagination.next', { defaultValue: 'Next' })}
-                />
-              </div>
-            )}
           </div>
         )}
       </div>

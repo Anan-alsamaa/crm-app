@@ -11,6 +11,7 @@ import {
   TablePager,
   pageCountOf,
   Table,
+  TableFooterBar,
   TableSurface,
   Td,
   Th,
@@ -1315,7 +1316,37 @@ export function LateOrdersReportPage() {
               scrollbar is deliberately faint, which is right for a page and
               wrong for the one control that reaches half a report's columns.
             */}
-                  <TableSurface {...WIDE_TABLE}>
+                  <TableSurface
+                    {...WIDE_TABLE}
+                    footer={
+                      <TableFooterBar>
+                        <TablePager
+                          page={current}
+                          onPage={setPage}
+                          pageSize={pageSize}
+                          onPageSize={setPageSize}
+                          total={rows.length}
+                          pageSizes={REGISTER_PAGE_SIZES}
+                          labels={{
+                            rowsPerPage: String(
+                              t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                            ),
+                            previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+                            next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                            showing: ({ from: f, to: to2, total }) =>
+                              String(
+                                t('complaintReport.showingRange', {
+                                  defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+                                  from: f,
+                                  to: to2,
+                                  total,
+                                }),
+                              ),
+                          }}
+                        />
+                      </TableFooterBar>
+                    }
+                  >
                     <Table>
                       <thead>
                         <Tr>
@@ -1364,30 +1395,6 @@ export function LateOrdersReportPage() {
                       </tbody>
                     </Table>
                   </TableSurface>
-                  <TablePager
-                    page={current}
-                    onPage={setPage}
-                    pageSize={pageSize}
-                    onPageSize={setPageSize}
-                    total={rows.length}
-                    pageSizes={REGISTER_PAGE_SIZES}
-                    labels={{
-                      rowsPerPage: String(
-                        t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
-                      ),
-                      previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
-                      next: String(t('agentReports.next', { defaultValue: 'Next' })),
-                      showing: ({ from: f, to: to2, total }) =>
-                        String(
-                          t('complaintReport.showingRange', {
-                            defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
-                            from: f,
-                            to: to2,
-                            total,
-                          }),
-                        ),
-                    }}
-                  />
                 </Card>
               )}
 
@@ -1436,7 +1443,37 @@ export function LateOrdersReportPage() {
               scrollbar is deliberately faint, which is right for a page and
               wrong for the one control that reaches half a report's columns.
             */}
-                  <TableSurface {...WIDE_TABLE}>
+                  <TableSurface
+                    {...WIDE_TABLE}
+                    footer={
+                      <TableFooterBar>
+                        <TablePager
+                          page={current}
+                          onPage={setPage}
+                          pageSize={pageSize}
+                          onPageSize={setPageSize}
+                          total={rows.length}
+                          pageSizes={REGISTER_PAGE_SIZES}
+                          labels={{
+                            rowsPerPage: String(
+                              t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                            ),
+                            previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+                            next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                            showing: ({ from: f, to: to2, total }) =>
+                              String(
+                                t('complaintReport.showingRange', {
+                                  defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
+                                  from: f,
+                                  to: to2,
+                                  total,
+                                }),
+                              ),
+                          }}
+                        />
+                      </TableFooterBar>
+                    }
+                  >
                     <Table>
                       <thead>
                         <Tr>
@@ -1527,30 +1564,6 @@ export function LateOrdersReportPage() {
                       </tbody>
                     </Table>
                   </TableSurface>
-                  <TablePager
-                    page={current}
-                    onPage={setPage}
-                    pageSize={pageSize}
-                    onPageSize={setPageSize}
-                    total={rows.length}
-                    pageSizes={REGISTER_PAGE_SIZES}
-                    labels={{
-                      rowsPerPage: String(
-                        t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
-                      ),
-                      previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
-                      next: String(t('agentReports.next', { defaultValue: 'Next' })),
-                      showing: ({ from: f, to: to2, total }) =>
-                        String(
-                          t('complaintReport.showingRange', {
-                            defaultValue: 'Showing {{from}}–{{to}} of {{total}}',
-                            from: f,
-                            to: to2,
-                            total,
-                          }),
-                        ),
-                    }}
-                  />
                 </Card>
               )}
             </>

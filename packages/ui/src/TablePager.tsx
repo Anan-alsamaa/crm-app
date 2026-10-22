@@ -73,6 +73,8 @@ export function TablePager({
        ReportKpiStrip for why. A pager that slides out of the window when you
        scroll to the far columns is a pager you have to scroll back for. */
     <div
+      /* A hook for a portal's own stylesheet; carries no styling itself. */
+      data-table-pager=""
       className={cn(
         'sticky start-0 flex w-[var(--pin-w,100%)] flex-col gap-3 sm:flex-row sm:items-center sm:gap-4',
         className,

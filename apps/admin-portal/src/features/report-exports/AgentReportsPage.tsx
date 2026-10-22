@@ -1,5 +1,5 @@
-import { Fragment, useMemo, useState } from 'react';
-import type { JSX } from 'react';
+import { createContext, Fragment, useContext, useMemo, useState } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readUsers } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
@@ -401,6 +401,30 @@ function usePagerLabels() {
 }
 
 /**
+ * "Generated 2026-10-22 12:09" — set once by the page, read by every table
+ * footer. It used to float on its own line under the report; it describes the
+ * table's data, so it sits in the table's footer with the row count (owner,
+ * 2026-10-22).
+ */
+const GeneratedAt = createContext<string | undefined>(undefined);
+
+/** The quiet start of a table footer: what the table holds, and when it was built. */
+function FooterMeta({ children }: { children?: ReactNode }) {
+  const generated = useContext(GeneratedAt);
+  return (
+    <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1 tabular-nums">
+      {children}
+      {children && generated && (
+        <span aria-hidden className="opacity-50">
+          ·
+        </span>
+      )}
+      {generated && <span className="font-normal">{generated}</span>}
+    </span>
+  );
+}
+
+/**
  * Rows per page for the report tables.
  *
  * Starts at 10 because a report opened to read wants a screenful, not a scroll;
@@ -761,7 +785,28 @@ function TicketsReport({
         </div>
       </div>
 
-      <TableSurface {...WIDE_TABLE}>
+      <TableSurface
+        {...WIDE_TABLE}
+        footer={
+          <TableFooterBar>
+            <FooterMeta>
+              {t('complaintReport.rowCount', {
+                count: sorted.length,
+                defaultValue: '{{count}} rows',
+              })}
+            </FooterMeta>
+            <div className="ms-auto">
+              <Pagination
+                page={current}
+                pageCount={pageCount}
+                onPage={setPage}
+                prevLabel={t('agentReports.prev', { defaultValue: 'Previous' })}
+                nextLabel={t('agentReports.next', { defaultValue: 'Next' })}
+              />
+            </div>
+          </TableFooterBar>
+        }
+      >
         <Table>
           <thead>
             <tr>
@@ -862,13 +907,6 @@ function TicketsReport({
           </tbody>
         </Table>
       </TableSurface>
-      <Pagination
-        page={current}
-        pageCount={pageCount}
-        onPage={setPage}
-        prevLabel={t('agentReports.prev', { defaultValue: 'Previous' })}
-        nextLabel={t('agentReports.next', { defaultValue: 'Next' })}
-      />
     </div>
   );
 }
@@ -1796,6 +1834,33 @@ function ComplaintsReport({
       <TableSurface
         {...WIDE_TABLE}
         scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}
+        /* The row count, the generated-at stamp and the pager: the card's own
+           footer, under the data they describe (owner, 2026-10-22). */
+        footer={
+          <TableFooterBar>
+            <FooterMeta>
+              {isEmptyFilter(criteria)
+                ? t('complaintReport.rowCount', {
+                    count: complete.length,
+                    defaultValue: '{{count}} rows',
+                  })
+                : t('complaintReport.matches', {
+                    count: visible.length,
+                    total: complete.length,
+                    defaultValue: '{{count}} of {{total}}',
+                  })}
+            </FooterMeta>
+            <TablePager
+              page={current}
+              onPage={setPage}
+              pageSize={pageSize}
+              onPageSize={setPageSize}
+              total={visible.length}
+              pageSizes={REPORT_PAGE_SIZES}
+              labels={pagerLabels}
+            />
+          </TableFooterBar>
+        }
       >
         <Table>
           <thead>
@@ -1902,34 +1967,7 @@ function ComplaintsReport({
             ))}
           </tbody>
         </Table>
-        {/* Footer aggregate band — the row count that used to float above the
-            table now reads as part of it, boards-style: same strings, same
-            numbers, anchored under the data they describe. */}
-        <TableFooterBar>
-          <span className="font-medium tabular-nums">
-            {isEmptyFilter(criteria)
-              ? t('complaintReport.rowCount', {
-                  count: complete.length,
-                  defaultValue: '{{count}} rows',
-                })
-              : t('complaintReport.matches', {
-                  count: visible.length,
-                  total: complete.length,
-                  defaultValue: '{{count}} of {{total}}',
-                })}
-          </span>
-        </TableFooterBar>
       </TableSurface>
-
-      <TablePager
-        page={current}
-        onPage={setPage}
-        pageSize={pageSize}
-        onPageSize={setPageSize}
-        total={visible.length}
-        pageSizes={REPORT_PAGE_SIZES}
-        labels={pagerLabels}
-      />
       <ConfirmDialog
         open={!!confirmDelete}
         onCancel={() => setConfirmDelete(null)}
@@ -2266,6 +2304,16 @@ function AgentKpiReport({
         <ReportKpi
           label={t('agentReports.col.chats', { defaultValue: 'Chats' })}
           value={String(totals.chats)}
+          hint={
+            totals.agents > 0 && totals.chats > 0
+              ? String(
+                  t('agentReports.kpiPerAgent', {
+                    n: Math.round((totals.chats / totals.agents) * 10) / 10,
+                    defaultValue: '{{n}} per agent',
+                  }),
+                )
+              : undefined
+          }
           tone="violet"
           icon={<InboxIcon size={18} />}
         />
@@ -2352,6 +2400,25 @@ function AgentKpiReport({
       <TableSurface
         {...WIDE_TABLE}
         scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}
+        footer={
+          <TableFooterBar>
+            <FooterMeta>
+              <span className="flex items-baseline gap-1.5">
+                <span className="font-semibold tabular-nums text-foreground">{sorted.length}</span>
+                <span>{t('agentReports.kpiAgents', { defaultValue: 'Agents' })}</span>
+              </span>
+            </FooterMeta>
+            <TablePager
+              page={page}
+              onPage={setPage}
+              pageSize={pageSize}
+              onPageSize={setPageSize}
+              total={sorted.length}
+              pageSizes={REPORT_PAGE_SIZES}
+              labels={pagerLabels}
+            />
+          </TableFooterBar>
+        }
       >
         <Table>
           <thead>
@@ -2379,27 +2446,7 @@ function AgentKpiReport({
             ))}
           </tbody>
         </Table>
-        {/* Footer aggregate band, boards-style — reuses the KPI tile's label so
-            the band adds no new strings. */}
-        <TableFooterBar>
-          <span className="flex items-baseline gap-1.5">
-            <span className="font-semibold tabular-nums text-foreground">{sorted.length}</span>
-            <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
-              {t('agentReports.kpiAgents', { defaultValue: 'Agents' })}
-            </span>
-          </span>
-        </TableFooterBar>
       </TableSurface>
-
-      <TablePager
-        page={page}
-        onPage={setPage}
-        pageSize={pageSize}
-        onPageSize={setPageSize}
-        total={sorted.length}
-        pageSizes={REPORT_PAGE_SIZES}
-        labels={pagerLabels}
-      />
     </div>
   );
 }
@@ -2579,6 +2626,17 @@ function ConversationReport({
     );
   };
 
+  /** "40% of chats" — the supporting line under a count tile. */
+  const shareOfChats = (n: number) =>
+    report.total > 0 && n > 0
+      ? String(
+          t('agentReports.kpiShareOfChats', {
+            pct: fmtPct((n / report.total) * 100),
+            defaultValue: '{{pct}} of chats',
+          }),
+        )
+      : undefined;
+
   return (
     <div className="space-y-3">
       <ReportKpiStrip>
@@ -2591,12 +2649,14 @@ function ConversationReport({
         <ReportKpi
           label={t('status.open', { ns: 'common', defaultValue: 'Open' })}
           value={String(totals.open)}
+          hint={shareOfChats(totals.open)}
           tone="violet"
           icon={<TicketIcon size={18} />}
         />
         <ReportKpi
           label={t('agentReports.kpiUrgent', { defaultValue: 'Urgent + high' })}
           value={String(totals.urgent)}
+          hint={shareOfChats(totals.urgent)}
           tone="amber"
           icon={<ZapIcon size={18} />}
         />
@@ -2829,18 +2889,64 @@ function ConversationReport({
           <TableSurface
             {...WIDE_TABLE}
             scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
+            footer={
+              <TableFooterBar>
+                <FooterMeta>
+                  {visible.length === report.rows.length
+                    ? t('complaintReport.rowCount', {
+                        count: report.rows.length,
+                        defaultValue: '{{count}} rows',
+                      })
+                    : t('complaintReport.matches', {
+                        count: visible.length,
+                        total: report.rows.length,
+                        defaultValue: '{{count}} of {{total}}',
+                      })}
+                </FooterMeta>
+                <TablePager
+                  page={page}
+                  onPage={setPage}
+                  pageSize={pageSize}
+                  onPageSize={setPageSize}
+                  total={visible.length}
+                  pageSizes={REPORT_PAGE_SIZES}
+                  labels={pagerLabels}
+                />
+              </TableFooterBar>
+            }
           >
             <Table>
+              {/* Shares of the row, so the columns spread by what they hold
+                  rather than by their longest value - the customer column took
+                  a third of the row while the order and the last-message time
+                  were squeezed against the end (owner, 2026-10-22). A table
+                  that needs more room than this still grows and scrolls. */}
               <thead>
                 <tr>
-                  <Th>{tr('agentReports.col.customer', { defaultValue: 'Customer' })}</Th>
-                  <Th>{tr('agentReports.col.phone', { defaultValue: 'Phone' })}</Th>
-                  <Th>{tr('agentReports.col.status', { defaultValue: 'Status' })}</Th>
-                  <Th>{tr('agentReports.col.priority', { defaultValue: 'Priority' })}</Th>
-                  <Th>{tr('agentReports.col.agent', { defaultValue: 'Agent' })}</Th>
-                  <Th>{tr('agentReports.col.startedBy', { defaultValue: 'Started by' })}</Th>
-                  <Th>{tr('agentReports.col.orderNumber', { defaultValue: 'Order' })}</Th>
-                  <Th>{tr('agentReports.col.lastMessage', { defaultValue: 'Last message' })}</Th>
+                  <Th className="w-[19%]">
+                    {tr('agentReports.col.customer', { defaultValue: 'Customer' })}
+                  </Th>
+                  <Th className="w-[13%]">
+                    {tr('agentReports.col.phone', { defaultValue: 'Phone' })}
+                  </Th>
+                  <Th className="w-[10%]">
+                    {tr('agentReports.col.status', { defaultValue: 'Status' })}
+                  </Th>
+                  <Th className="w-[10%]">
+                    {tr('agentReports.col.priority', { defaultValue: 'Priority' })}
+                  </Th>
+                  <Th className="w-[13%]">
+                    {tr('agentReports.col.agent', { defaultValue: 'Agent' })}
+                  </Th>
+                  <Th className="w-[10%]">
+                    {tr('agentReports.col.startedBy', { defaultValue: 'Started by' })}
+                  </Th>
+                  <Th className="w-[10%]">
+                    {tr('agentReports.col.orderNumber', { defaultValue: 'Order' })}
+                  </Th>
+                  <Th className="w-[15%]">
+                    {tr('agentReports.col.lastMessage', { defaultValue: 'Last message' })}
+                  </Th>
                 </tr>
               </thead>
               <tbody>
@@ -2856,9 +2962,7 @@ function ConversationReport({
                         t('agentReports.noName', { defaultValue: '—' })
                       )}
                     </Td>
-                    <Td className="font-mono tabular-nums text-muted-foreground">
-                      {r.customerPhone || '—'}
-                    </Td>
+                    <Td className="tabular-nums text-muted-foreground">{r.customerPhone || '—'}</Td>
                     <Td>
                       <StatusPill value={r.status} />
                     </Td>
@@ -2871,9 +2975,7 @@ function ConversationReport({
                         ? tr('agentReports.startedByAgent', { defaultValue: 'Agent' })
                         : tr('agentReports.startedByCustomer', { defaultValue: 'Customer' })}
                     </Td>
-                    <Td className="font-mono tabular-nums text-muted-foreground">
-                      {orderLabel(r.orderId)}
-                    </Td>
+                    <Td className="tabular-nums text-muted-foreground">{orderLabel(r.orderId)}</Td>
                     <Td className="tabular-nums text-muted-foreground">
                       {r.lastMessageAt ? fmtDateTime(r.lastMessageAt) : '—'}
                     </Td>
@@ -2881,31 +2983,7 @@ function ConversationReport({
                 ))}
               </tbody>
             </Table>
-            <TableFooterBar>
-              <span className="font-medium tabular-nums">
-                {visible.length === report.rows.length
-                  ? t('complaintReport.rowCount', {
-                      count: report.rows.length,
-                      defaultValue: '{{count}} rows',
-                    })
-                  : t('complaintReport.matches', {
-                      count: visible.length,
-                      total: report.rows.length,
-                      defaultValue: '{{count}} of {{total}}',
-                    })}
-              </span>
-            </TableFooterBar>
           </TableSurface>
-
-          <TablePager
-            page={page}
-            onPage={setPage}
-            pageSize={pageSize}
-            onPageSize={setPageSize}
-            total={visible.length}
-            pageSizes={REPORT_PAGE_SIZES}
-            labels={pagerLabels}
-          />
         </>
       )}
 
@@ -2916,6 +2994,16 @@ function ConversationReport({
         <TableSurface
           {...WIDE_TABLE}
           scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}
+          footer={
+            <TableFooterBar>
+              <FooterMeta>
+                {t('agentReports.dayCount', {
+                  count: report.byDay.length,
+                  defaultValue: '{{count}} days',
+                })}
+              </FooterMeta>
+            </TableFooterBar>
+          }
         >
           <Table>
             <thead>
@@ -2945,14 +3033,6 @@ function ConversationReport({
               ))}
             </tbody>
           </Table>
-          <TableFooterBar>
-            <span className="font-medium tabular-nums">
-              {t('agentReports.dayCount', {
-                count: report.byDay.length,
-                defaultValue: '{{count}} days',
-              })}
-            </span>
-          </TableFooterBar>
         </TableSurface>
       )}
     </div>
@@ -3125,7 +3205,14 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
               })}
             />
           ) : (
-            <>
+            <GeneratedAt.Provider
+              value={String(
+                t('agentReports.generatedAt', {
+                  at: fmtDateTime(data.generatedAt),
+                  defaultValue: 'Generated {{at}}',
+                }),
+              )}
+            >
               {/* No KPI strip here any more. It lived in the shell, so all
                   three reports showed the SAME four numbers — total tickets,
                   total conversations, agent count, overall CSAT — whichever
@@ -3207,14 +3294,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                     })}
                   />
                 ))}
-
-              <p className="pt-1 text-2xs text-muted-foreground">
-                {t('agentReports.generatedAt', {
-                  at: fmtDateTime(data.generatedAt),
-                  defaultValue: 'Generated {{at}}',
-                })}
-              </p>
-            </>
+            </GeneratedAt.Provider>
           )}
         </div>
         <ColumnScroller portRef={pinRef} />

@@ -1,5 +1,12 @@
-import type { ReactNode } from 'react';
-import { cn, ProgressRing, type MetricTone } from '@yiji/ui';
+import type { CSSProperties, ReactNode } from 'react';
+import {
+  cn,
+  CountUp,
+  isEmptyMetric,
+  ProgressRing,
+  useMetricMotion,
+  type MetricTone,
+} from '@yiji/ui';
 
 /*
  * The Ticket deadlines report's own tile, shared by BOTH stat rows (owner,
@@ -115,10 +122,20 @@ export function Kpi({
 }
 
 /*
- * ONE PANEL, FOUR FIGURES (owner, 2026-10-15: "the 2 cards and everything look
- * very weird ... needs to be beautiful"). The page's two stat groups sit side
- * by side as two calm panels instead of two stacked rows of tinted tiles with
- * a paragraph over each. The tone colours only the NUMBER and its dot.
+ * ONE GROUP, FOUR FIGURES (owner, 2026-10-15: "the 2 cards and everything look
+ * very weird ... needs to be beautiful"). The page's stat groups sit side by
+ * side, each a heading over its own figures.
+ *
+ * Rapport metric cards (owner, 2026-10-22: the one-line tiles "look very
+ * badly designed"): each figure is the same card as a report's headline tile
+ * (`ReportKpi`) - the label on top with its state dot, the numeral large under
+ * it, a supporting line at the foot - so every report opens on one card
+ * language. The group is a heading over the cards rather than a card holding
+ * them: a card inside a card is the one nesting the design bans.
+ *
+ * The cards are laid out by the GROUP's width, not the screen's (a container
+ * query in index.css): four across when the group has the room, two when it
+ * sits in half a laptop screen, one on a phone.
  */
 export interface StatCell {
   label: string;
@@ -144,62 +161,68 @@ export function StatPanel({
   cells: StatCell[];
   loading?: boolean;
 }) {
+  const { emptyHint } = useMetricMotion();
   return (
-    <section
-      aria-labelledby={id}
-      className="flex flex-col rounded-2xl bg-card p-[1.125rem] shadow-soft ring-1 ring-foreground/[0.06]"
-    >
-      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+    <section aria-labelledby={id} data-stat-panel="" className="flex min-w-0 flex-col gap-3">
+      <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-1">
         <div className="min-w-0">
-          <h2 id={id} className="text-[0.9375rem] font-semibold tracking-tight text-foreground">
+          <h2 id={id} className="text-base font-semibold tracking-tight text-foreground">
             {title}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
         </div>
         {aside && <div className="flex shrink-0 items-center gap-2">{aside}</div>}
       </header>
-      {/* A hairline BETWEEN cells of a row, never at the start of one: a
-          divide-x put a stray rule before the first cell of every wrapped
-          row (the Admin KPI coupon panel has three). Logical `border-s`, so
-          Arabic needs no reversal. */}
-      <div className="mt-4 grid grid-cols-2 gap-y-4 sm:grid-cols-4">
-        {cells.map((c) => (
-          <div
-            key={c.label}
-            className="flex min-w-0 items-center gap-3 sm:border-s sm:border-foreground/[0.08] sm:px-4 sm:[&:nth-child(4n+1)]:border-s-0 sm:[&:nth-child(4n+1)]:ps-0"
-          >
-            <div className="min-w-0">
+      {/* At most four across; a longer group wraps into rows of four. */}
+      <div data-stat-grid="" style={{ '--cells': Math.min(cells.length, 4) } as CSSProperties}>
+        {cells.map((c) => {
+          const tone = c.tone ?? 'blue';
+          const empty = !loading && isEmptyMetric(c.value);
+          return (
+            <div
+              key={c.label}
+              data-report-kpi=""
+              data-tone={tone}
+              data-empty={loading || empty ? '' : undefined}
+              className="relative grid min-h-[8.25rem] min-w-0 grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_1fr_auto] gap-x-2 rounded-[1.375rem] bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft"
+            >
+              {!loading && c.ring != null && (
+                <ProgressRing
+                  className="col-start-2 row-start-1"
+                  value={c.ring}
+                  size={34}
+                  stroke={4}
+                  tone={RING_TONE[tone]}
+                />
+              )}
+              {/* Numeral, then label: the pair the tests read as siblings. */}
               <div
                 data-kpi-value
                 className={cn(
-                  'text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.03em]',
-                  loading ? 'text-muted-foreground/40' : KPI_NUMERAL[c.tone ?? 'blue'],
+                  'col-span-2 row-start-2 mt-3 self-end truncate text-[2rem] font-semibold leading-none tabular-nums tracking-[-0.035em]',
+                  loading || empty ? 'text-muted-foreground/70' : KPI_NUMERAL[tone],
                 )}
               >
-                {loading ? '–' : c.value}
+                {loading ? '–' : <CountUp value={c.value} />}
               </div>
               <div
                 data-kpi-label
-                className="mt-1.5 flex min-w-0 items-center gap-1.5 text-2xs font-medium text-muted-foreground"
+                /* Two lines reserved, so a card whose label wraps is the same
+                   height as its neighbours. */
+                className="col-start-1 row-start-1 flex min-h-[2.5rem] min-w-0 items-start gap-2 text-sm font-semibold leading-snug text-foreground/80"
               >
                 <span
                   aria-hidden
-                  className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[c.tone ?? 'blue'])}
+                  className={cn('mt-[0.4rem] h-2 w-2 shrink-0 rounded-full', KPI_DOT[tone])}
                 />
-                <span className="truncate">{c.label}</span>
+                <span className="line-clamp-2 min-w-0">{c.label}</span>
+              </div>
+              <div className="col-span-2 row-start-3 mt-2 min-h-[1rem] truncate text-xs text-muted-foreground">
+                {empty ? emptyHint : null}
               </div>
             </div>
-            {!loading && c.ring != null && (
-              <ProgressRing
-                className="ms-auto hidden xl:block"
-                value={c.ring}
-                size={36}
-                stroke={4}
-                tone={RING_TONE[c.tone ?? 'blue']}
-              />
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );

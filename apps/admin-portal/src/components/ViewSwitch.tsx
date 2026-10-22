@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import { useLayoutEffect, useRef, useState, type JSX } from 'react';
 import { cn } from '@yiji/ui';
 
 /**
@@ -39,17 +39,59 @@ export function ViewSwitch<T extends string>({
   label: string;
   className?: string;
 }): JSX.Element {
+  /*
+   * A segmented control (owner, 2026-10-22): one raised white segment that
+   * SLIDES to the chosen view. The segment is a single element moved with
+   * `transform` - measured from the chosen button, never animated in width
+   * by layout - so a switch costs one composited move. Until it has been
+   * measured (first paint, or a test DOM with no layout) the chosen button
+   * paints its own background, so the selection is never invisible.
+   */
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [thumb, setThumb] = useState<{ x: number; w: number; ready: boolean } | null>(null);
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) return;
+    const measure = () => {
+      const btn = list.querySelector<HTMLElement>('[aria-selected="true"]');
+      if (!btn || btn.offsetWidth === 0) return;
+      setThumb((prev) => {
+        const next = { x: btn.offsetLeft, w: btn.offsetWidth, ready: prev !== null };
+        return prev && prev.x === next.x && prev.w === next.w ? prev : next;
+      });
+    };
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(list);
+    return () => ro.disconnect();
+  }, [value, options]);
+
+  const placed = thumb !== null;
   return (
     <div
+      ref={listRef}
       role="tablist"
       aria-label={label}
       className={cn(
         // `sticky start-0` pins it against a horizontal page scroll — see
         // ReportKpiStrip. `w-fit` so sticking does not stretch the pill row.
-        'sticky start-0 inline-flex w-fit shrink-0 items-center gap-1 rounded-full bg-foreground/[0.06] p-1',
+        'sticky start-0 isolate inline-flex w-fit shrink-0 items-center gap-1 rounded-full bg-foreground/[0.06] p-1',
         className,
       )}
     >
+      {placed && (
+        <span
+          aria-hidden
+          className={cn(
+            'absolute inset-y-1 left-0 -z-10 rounded-full bg-glass shadow-[0_4px_14px_-6px_oklch(var(--shadow-color)/0.45)]',
+            thumb.ready &&
+              'transition-transform duration-[260ms] ease-out motion-reduce:transition-none',
+          )}
+          style={{ width: thumb.w, transform: `translateX(${thumb.x}px)` }}
+        />
+      )}
       {options.map((o) => {
         const active = o.value === value;
         return (
@@ -72,16 +114,26 @@ export function ViewSwitch<T extends string>({
             }}
             onClick={() => onChange(o.value)}
             className={cn(
-              'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
+              'inline-flex h-9 items-center rounded-full px-4 text-sm font-semibold transition-colors duration-fast ease-out',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
-              active
-                ? 'bg-glass text-foreground shadow-[0_4px_12px_-6px_oklch(var(--shadow-color)/0.45)]'
-                : 'text-muted-foreground hover:text-foreground',
+              active ? 'text-foreground' : 'text-muted-foreground hover:text-foreground',
+              active &&
+                !placed &&
+                'bg-glass shadow-[0_4px_14px_-6px_oklch(var(--shadow-color)/0.45)]',
             )}
           >
             {o.label}
             {typeof o.count === 'number' && (
-              <span className="ms-1.5 tabular-nums font-normal opacity-60">{o.count}</span>
+              <span
+                className={cn(
+                  'ms-2 inline-grid h-5 min-w-[1.25rem] place-items-center rounded-full px-1.5 text-2xs font-semibold tabular-nums',
+                  active
+                    ? 'bg-primary/10 text-primary'
+                    : 'bg-foreground/[0.07] text-muted-foreground',
+                )}
+              >
+                {o.count}
+              </span>
             )}
           </button>
         );

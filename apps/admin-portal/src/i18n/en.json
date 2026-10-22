@@ -704,6 +704,8 @@
     "exportCsvCount": "Export CSV ({{count}})",
     "exportCsvFiltered": "Export {{count}} shown",
     "kpiBusiestDay": "Busiest day",
+    "kpiPerAgent": "{{n}} per agent",
+    "kpiShareOfChats": "{{pct}} of chats",
     "kpiUrgent": "Urgent + high",
     "searchAgent": "Search agent",
     "searchConversations": "Search customer, phone, agent or order",
@@ -1657,6 +1659,9 @@
   },
   "shell": {
     "search": "Search (Ctrl+K)",
-    "quickActions": "Quick actions"
+    "quickActions": "Quick actions",
+    "metricEmpty": "No data in range",
+    "tableEmptyTitle": "Nothing to show",
+    "tableEmptyHint": "Try a wider date range or clear the filters."
   }
 }

@@ -441,16 +441,13 @@ export function UsersPage() {
             {/* Micro-label column header band — anchors the pill columns so
                 they read as a table, not floating chips. Reuses the same
                 gap + fixed widths as the rows below. */}
-            <div className="hidden items-center gap-3 border-b border-foreground/[0.06] bg-secondary/30 px-4 py-2 sm:flex">
-              <span className="flex-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('users.title')}
-              </span>
-              <span className="w-28 shrink-0 text-end text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('users.role')}
-              </span>
-              <span className="w-32 shrink-0 text-end text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('users.team')}
-              </span>
+            {/* The table language every list in the console shares (owner,
+                2026-10-22): a quiet sentence-case header row, 28px insets at
+                both ends, and start-aligned columns with room to read. */}
+            <div className="hidden h-12 items-center gap-5 border-b border-foreground/[0.065] px-7 text-[0.78125rem] font-semibold tracking-[0.01em] text-muted-foreground sm:flex">
+              <span className="flex-1">{t('users.title')}</span>
+              <span className="w-40 shrink-0">{t('users.role')}</span>
+              <span className="w-44 shrink-0">{t('users.team')}</span>
             </div>
             <ul className="divide-y divide-foreground/[0.06]">
               {paged.map((u) => {
@@ -463,7 +460,7 @@ export function UsersPage() {
                       type="button"
                       onClick={() => openEdit(u)}
                       className={cn(
-                        'group flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start',
+                        'group flex min-h-[3.75rem] w-full items-center gap-3 px-4 py-3 text-start sm:gap-5 sm:px-7',
                         'transition-colors duration-fast ease-out hover:bg-foreground/[0.03]',
                         'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
                       )}
@@ -496,7 +493,7 @@ export function UsersPage() {
                       </div>
                       {/* Fixed-width column so pills line up under the ROLE
                           header instead of ragging to their own widths. */}
-                      <span className="hidden w-28 shrink-0 justify-end sm:flex">
+                      <span className="hidden w-40 shrink-0 sm:flex">
                         <span
                           className={cn(
                             'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
@@ -511,17 +508,14 @@ export function UsersPage() {
                       {u.team ? (
                         <span
                           title={u.team.name}
-                          className="hidden w-32 shrink-0 truncate text-end text-xs text-muted-foreground sm:block"
+                          className="hidden w-44 shrink-0 truncate text-sm text-muted-foreground sm:block"
                         >
                           {u.team.name}
                         </span>
                       ) : (
                         /* Bare warning ink vanished on the dark canvas — the
                            tinted pill keeps "No team" readable on both themes. */
-                        <span
-                          title={t('users.noTeam')}
-                          className="hidden w-32 shrink-0 justify-end sm:flex"
-                        >
+                        <span title={t('users.noTeam')} className="hidden w-44 shrink-0 sm:flex">
                           <Pill tone="warning" size="sm">
                             {t('users.noTeam')}
                           </Pill>
@@ -532,25 +526,26 @@ export function UsersPage() {
                 );
               })}
             </ul>
-            {pageCount > 1 && (
-              <div className="border-t border-foreground/[0.06] px-2 py-1.5">
-                <Pagination
-                  page={current}
-                  pageCount={pageCount}
-                  onPage={setPage}
-                  prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
-                  nextLabel={t('pagination.next', { defaultValue: 'Next' })}
-                />
-              </div>
-            )}
-            {/* Footer aggregate band — the boards' table anatomy. */}
-            <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
-              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('users.statTotalCap', { defaultValue: 'total' })}
+            {/* One footer, inside the card: the count as quiet meta, the pager
+                at the end. */}
+            <div className="flex min-h-[3.75rem] flex-wrap items-center gap-x-6 gap-y-2 border-t border-foreground/[0.065] px-4 py-2.5 text-[0.78125rem] text-muted-foreground sm:px-7">
+              <span className="flex items-baseline gap-1.5">
+                <span className="font-semibold tabular-nums text-foreground">
+                  {filtered.length}
+                </span>
+                <span>{t('users.statTotalCap', { defaultValue: 'total' })}</span>
               </span>
-              <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
-                {filtered.length}
-              </span>
+              {pageCount > 1 && (
+                <div className="ms-auto">
+                  <Pagination
+                    page={current}
+                    pageCount={pageCount}
+                    onPage={setPage}
+                    prevLabel={t('pagination.prev', { defaultValue: 'Previous' })}
+                    nextLabel={t('pagination.next', { defaultValue: 'Next' })}
+                  />
+                </div>
+              )}
             </div>
           </div>
         )}

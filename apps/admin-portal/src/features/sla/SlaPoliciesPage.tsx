@@ -7,6 +7,7 @@ import { readItems, createItem, updateItem, deleteItem } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  CheckCircleIcon,
   ConfirmDialog,
   cn,
   Drawer,
@@ -16,7 +17,10 @@ import {
   FormField,
   Input,
   Pill,
+  ReportKpi,
+  ReportKpiStrip,
   Select,
+  ShieldIcon,
   Skeleton,
   Textarea,
   toast,
@@ -487,23 +491,26 @@ export function SlaPoliciesPage() {
           ) : (
             <>
               {/* Headline KPIs */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <KpiTile
+              <ReportKpiStrip className="xl:grid-cols-3">
+                <ReportKpi
                   label={t('sla.kpiPolicies', { defaultValue: 'Policies' })}
-                  value={total}
+                  value={String(total)}
                   tone="blue"
+                  icon={<ShieldIcon size={18} />}
                 />
-                <KpiTile
+                <ReportKpi
                   label={t('sla.kpiActive', { defaultValue: 'Active' })}
-                  value={activeCount}
+                  value={String(activeCount)}
                   tone="green"
+                  icon={<CheckCircleIcon size={18} />}
                 />
-                <KpiTile
+                <ReportKpi
                   label={t('sla.kpiAvgFirst', { defaultValue: 'Avg first reply' })}
                   value={`${avgFirst}m`}
                   tone="violet"
+                  icon={<ClockIcon />}
                 />
-              </div>
+              </ReportKpiStrip>
 
               {/* Policy CARDS, not a flat list: each policy is an object an
                   admin reasons about as a whole — what it covers, its three
@@ -1079,31 +1086,5 @@ function ClockIcon() {
       <circle cx="8" cy="8" r="6" />
       <path d="M8 4.8V8l2.2 1.4" />
     </svg>
-  );
-}
-
-/* Board KPI tile - the Dashboard's tile language (Rapport skin, owner
-   2026-10-22): a frosted card, an INK numeral, and the tone carried by the
-   state dot alone. The tinted gradient surface and hue numeral it used to wear
-   were a different family from every other tile in the console. */
-type KpiTone = 'blue' | 'violet' | 'green' | 'amber';
-const DOT_TONE: Record<KpiTone, string> = {
-  blue: 'bg-sky',
-  violet: 'bg-violet',
-  green: 'bg-success',
-  amber: 'bg-warning',
-};
-
-function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: KpiTone }) {
-  return (
-    <div className="rounded-[1.375rem] bg-card px-[1.125rem] py-4 shadow-soft ring-1 ring-inset ring-glass/80">
-      <div className="text-[2rem] font-semibold tabular-nums leading-none tracking-[-0.03em] text-foreground">
-        {value}
-      </div>
-      <div className="mt-2 flex items-center gap-1.5">
-        <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_TONE[tone])} />
-        <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      </div>
-    </div>
   );
 }

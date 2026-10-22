@@ -137,7 +137,9 @@ export function PageTitle({
  * and off the screen. `fill` is the other bargain the primitive already offers
  * - the card keeps the page's width, takes the height left below it, and
  * scrolls on both axes itself, with the column names sticky at its top. The
- * gap leaves the pager under the table on screen. ColumnScroller pages this
- * scroller (it finds it by `data-table-scroller`).
+ * pager, the row count and the generated-at line live in the card's own
+ * footer (`TableSurface footer`), which `fill` measures, so the gap only has
+ * to hold the ColumnScroller pill that sticks to the bottom of the page under
+ * the card (it pages this scroller, finding it by `data-table-scroller`).
  */
-export const WIDE_TABLE = { fill: true, fillGap: 104 } as const;
+export const WIDE_TABLE = { fill: true, fillGap: 64 } as const;

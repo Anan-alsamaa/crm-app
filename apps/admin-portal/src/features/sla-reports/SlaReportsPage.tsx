@@ -759,6 +759,40 @@ function TicketTable({
       <TableSurface
         {...WIDE_TABLE}
         scrollLabel={String(t('slaReports.title', { defaultValue: 'Ticket deadlines' }))}
+        footer={
+          <TableFooterBar>
+            <span className="flex items-baseline gap-1.5">
+              <span className="font-semibold tabular-nums text-foreground">{tickets.length}</span>
+              <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+                {t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
+              </span>
+            </span>
+            <TablePager
+              page={current}
+              onPage={setPage}
+              pageSize={pageSize}
+              onPageSize={setPageSize}
+              total={tickets.length}
+              pageSizes={[10, 25, 50, 100, 250, 500]}
+              labels={{
+                rowsPerPage: String(
+                  t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                ),
+                previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
+                next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                showing: ({ from, to, total }) =>
+                  String(
+                    t('complaintReport.showingRange', {
+                      defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
+                      from,
+                      to,
+                      total,
+                    }),
+                  ),
+              }}
+            />
+          </TableFooterBar>
+        }
       >
         <Table>
           <thead>
@@ -836,41 +870,7 @@ function TicketTable({
             ))}
           </tbody>
         </Table>
-        {/* Footer aggregate band — the count reads as part of the table it
-            describes, boards-style. Reuses the KPI tile's label so the band
-            adds no new strings. */}
-        <TableFooterBar>
-          <span className="flex items-baseline gap-1.5">
-            <span className="font-semibold tabular-nums text-foreground">{tickets.length}</span>
-            <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
-              {t('slaReports.kpiTickets', { defaultValue: 'Tickets' })}
-            </span>
-          </span>
-        </TableFooterBar>
       </TableSurface>
-
-      <TablePager
-        page={current}
-        onPage={setPage}
-        pageSize={pageSize}
-        onPageSize={setPageSize}
-        total={tickets.length}
-        pageSizes={[10, 25, 50, 100, 250, 500]}
-        labels={{
-          rowsPerPage: String(t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' })),
-          previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
-          next: String(t('agentReports.next', { defaultValue: 'Next' })),
-          showing: ({ from, to, total }) =>
-            String(
-              t('complaintReport.showingRange', {
-                defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
-                from,
-                to,
-                total,
-              }),
-            ),
-        }}
-      />
     </div>
   );
 }

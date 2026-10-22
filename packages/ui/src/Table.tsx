@@ -3,6 +3,7 @@ import type {
   HTMLAttributes,
   JSX,
   MutableRefObject,
+  ReactNode,
   TdHTMLAttributes,
   ThHTMLAttributes,
 } from 'react';
@@ -120,6 +121,8 @@ function useViewportFill(
   enabled: boolean,
   min: number,
   gap: number,
+  /** Height of anything inside the box but BELOW the capped scroller. */
+  below?: () => number,
 ): { ref: MutableRefObject<HTMLDivElement | null>; maxHeight?: number } {
   const ref = useRef<HTMLDivElement | null>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
@@ -143,7 +146,7 @@ function useViewportFill(
       const portTop = isRoot ? 0 : port.getBoundingClientRect().top;
       const portHeight = isRoot ? window.innerHeight : port.clientHeight;
       const offset = node.getBoundingClientRect().top - portTop + port.scrollTop;
-      const next = Math.max(min, Math.round(portHeight - offset - gap));
+      const next = Math.max(min, Math.round(portHeight - offset - gap - (below?.() ?? 0)));
       // Only commit a real change: this runs on every render, and writing the
       // same number back would re-render forever.
       setMaxHeight((prev) => (prev !== undefined && Math.abs(prev - next) <= 1 ? prev : next));
@@ -216,6 +219,12 @@ export interface TableSurfaceProps extends HTMLAttributes<HTMLDivElement> {
    * table and scroll inside it.
    */
   flow?: boolean;
+  /**
+   * A footer INSIDE the card but outside the scroller — the row count and the
+   * pager. Outside the scroller so it sits at the foot of the card rather than
+   * after the last row, and so `fill` can leave room for it.
+   */
+  footer?: ReactNode;
 }
 
 export function TableSurface({
@@ -235,12 +244,19 @@ export function TableSurface({
   fillGap = 20,
   flow = false,
   scrollLabel,
+  footer,
   ...rest
 }: TableSurfaceProps): JSX.Element {
   const { ref, start, end } = useScrollEdges();
+  const footerRef = useRef<HTMLDivElement | null>(null);
   // `fill` measures a remainder; in flow mode there is no remainder to measure
   // because nothing is capped, so the hook stays switched off.
-  const outer = useViewportFill(fill && !flow, fillMin, fillGap);
+  const outer = useViewportFill(
+    fill && !flow,
+    fillMin,
+    fillGap,
+    () => footerRef.current?.offsetHeight ?? 0,
+  );
   const scrollable = start || end;
   // An explicit maxHeight still wins; `fill` supplies one when it can measure.
   const cap = maxHeight ?? (outer.maxHeight !== undefined ? `${outer.maxHeight}px` : undefined);
@@ -248,6 +264,9 @@ export function TableSurface({
   return (
     <div
       ref={outer.ref}
+      /* Hooks for a portal's own stylesheet; they carry no styling themselves. */
+      data-table-surface=""
+      data-flow={flow ? '' : undefined}
       className={cn(
         'relative isolate flex min-h-0 flex-col rounded-[1.25rem] bg-card shadow-soft ring-1 ring-foreground/[0.06]',
         flow
@@ -318,6 +337,18 @@ export function TableSurface({
       >
         {children}
       </div>
+
+      {footer != null && footer !== false && (
+        <div
+          ref={footerRef}
+          data-table-footer-slot=""
+          // In flow mode the card is as wide as the table; the footer stays
+          // the width of the screen, pinned against the sideways scroll.
+          className={flow ? 'sticky start-0 w-[var(--pin-w,100%)]' : undefined}
+        >
+          {footer}
+        </div>
+      )}
 
       {/* Edge fades — pointer-events-none so they never swallow a click on the
           cell underneath. Rendered above the content but below the scrollbar.
@@ -472,6 +503,8 @@ export function TableFooterBar({
 }: HTMLAttributes<HTMLDivElement>): JSX.Element {
   return (
     <div
+      /* A hook for a portal's own stylesheet; carries no styling itself. */
+      data-table-footer=""
       className={cn(
         'sticky start-0 flex h-12 items-center gap-6 border-t border-foreground/[0.06] bg-secondary/40 px-6 text-xs text-muted-foreground',
         className,

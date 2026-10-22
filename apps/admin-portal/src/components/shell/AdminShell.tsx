@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
-import { AppShell, useIsDesktop, type AppShellRailContext } from '@yiji/ui';
+import { useMemo, type CSSProperties, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
+import { AppShell, MetricMotionProvider, useIsDesktop, type AppShellRailContext } from '@yiji/ui';
 
 /*
  * THE ADMIN SHELL (Rapport skin, owner 2026-10-22).
@@ -48,69 +49,91 @@ export function AdminShell({
   children,
 }: AdminShellProps) {
   const isDesktop = useIsDesktop();
+  const { t } = useTranslation();
+  /* The headline tiles count up and say why they are empty; the strings for
+     the shared empty-table notice reach the stylesheet as custom properties
+     (index.css, "Empty tables"). Both change only with the language. */
+  const motion = useMemo(
+    () => ({ animate: true, emptyHint: String(t('shell.metricEmpty')) }),
+    // `t` changes identity when the language does.
+    [t],
+  );
+  const skinVars = {
+    '--admin-empty-title': JSON.stringify(String(t('shell.tableEmptyTitle'))),
+    '--admin-empty-hint': JSON.stringify(String(t('shell.tableEmptyHint'))),
+  } as CSSProperties;
 
   if (!isDesktop) {
     return (
-      <div className="admin-skin h-full">
-        <AppShell
-          rail={mobileRail}
-          topBarBrand={mobileBrand}
-          topBarActions={mobileActions}
-          resizeStorageKey="yiji.admin.sidebarWidth"
-          navLabel={navLabel}
-          menuLabel={menuLabel}
-          closeLabel={closeLabel}
-        >
-          {children}
-        </AppShell>
-      </div>
+      <MetricMotionProvider value={motion}>
+        <div className="admin-skin h-full" style={skinVars}>
+          <AppShell
+            rail={mobileRail}
+            topBarBrand={mobileBrand}
+            topBarActions={mobileActions}
+            resizeStorageKey="yiji.admin.sidebarWidth"
+            navLabel={navLabel}
+            menuLabel={menuLabel}
+            closeLabel={closeLabel}
+          >
+            {children}
+          </AppShell>
+        </div>
+      </MetricMotionProvider>
     );
   }
 
   return (
-    <div className="admin-skin flex h-full flex-col text-foreground">
-      <header
-        /* The environment badge finds this bar by name and renders INSIDE it
+    <MetricMotionProvider value={motion}>
+      <div className="admin-skin flex h-full flex-col text-foreground" style={skinVars}>
+        <header
+          /* The environment badge finds this bar by name and renders INSIDE it
            (see EnvironmentBanner), in the slot stacked over the nav. */
-        data-app-topbar=""
-        className="relative z-30 flex h-20 shrink-0 items-center gap-4 px-5 xl:px-8"
-      >
-        <div className="flex shrink-0 items-center gap-2.5">
-          {/* The artwork's corners are already cut; no rounding on the img. */}
-          <img src="/sara-crm-icon.svg" alt="Sara CRM" className="h-10 w-10 shrink-0" />
-          <span
-            aria-hidden
-            className="hidden text-[1.0625rem] font-bold tracking-[-0.01em] text-foreground 2xl:inline"
-          >
-            Sara CRM
-          </span>
-        </div>
-        {/* The nav stays centred; the environment badge sits ABOVE it in the
+          data-app-topbar=""
+          /* `sticky top-0`: the shell never scrolls the document (the pages
+           scroll inside <main>), but if anything ever does - a focus jump, a
+           browser scroll-into-view - the nav stays on screen rather than
+           sliding off the top (owner's screenshot, 2026-10-22). See also the
+           root overflow rule in index.css. */
+          className="sticky top-0 z-30 flex h-20 shrink-0 items-center gap-4 px-5 xl:px-8"
+        >
+          <div className="flex shrink-0 items-center gap-2.5">
+            {/* The artwork's corners are already cut; no rounding on the img. */}
+            <img src="/sara-crm-icon.svg" alt="Sara CRM" className="h-10 w-10 shrink-0" />
+            <span
+              aria-hidden
+              className="hidden text-[1.0625rem] font-bold tracking-[-0.01em] text-foreground 2xl:inline"
+            >
+              Sara CRM
+            </span>
+          </div>
+          {/* The nav stays centred; the environment badge sits ABOVE it in the
             same grid cell, so it never shunts the pills sideways. */}
-        {/* `minmax(0,1fr)` so the column may shrink below the pills' natural
+          {/* `minmax(0,1fr)` so the column may shrink below the pills' natural
             width - otherwise a tight screen centres an overflowing row and it
             slides under the brand instead of truncating. */}
-        <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] place-items-center">
-          <nav
-            aria-label={navLabel}
-            className="col-start-1 row-start-1 flex min-w-0 items-center justify-center rounded-full bg-gradient-to-b from-ink to-rail-deep p-1.5 shadow-[0_24px_48px_-24px_oklch(var(--shadow-color)/0.6)]"
-          >
-            {nav}
-          </nav>
-          <div
-            data-env-slot=""
-            className="col-start-1 row-start-1 -translate-y-[30px] empty:hidden"
-          />
-        </div>
-        <div className="admin-utilities flex shrink-0 items-center gap-2">
-          {language}
-          {utilities}
-        </div>
-      </header>
+          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)] place-items-center">
+            <nav
+              aria-label={navLabel}
+              className="col-start-1 row-start-1 flex min-w-0 items-center justify-center rounded-full bg-gradient-to-b from-ink to-rail-deep p-1.5 shadow-[0_24px_48px_-24px_oklch(var(--shadow-color)/0.6)]"
+            >
+              {nav}
+            </nav>
+            <div
+              data-env-slot=""
+              className="col-start-1 row-start-1 -translate-y-[30px] empty:hidden"
+            />
+          </div>
+          <div className="admin-utilities flex shrink-0 items-center gap-2">
+            {language}
+            {utilities}
+          </div>
+        </header>
 
-      <div className="flex min-h-0 flex-1">
-        <main className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
+        <div className="flex min-h-0 flex-1">
+          <main className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</main>
+        </div>
       </div>
-    </div>
+    </MetricMotionProvider>
   );
 }

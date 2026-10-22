@@ -10,6 +10,7 @@ import {
   Skeleton,
   Table,
   TablePager,
+  TableFooterBar,
   TableSurface,
   Td,
   Th,
@@ -613,7 +614,32 @@ export function AdminKpiPage() {
                   />
                 ) : (
                   <>
-                    <TableSurface>
+                    <TableSurface
+                      footer={
+                        <TableFooterBar>
+                          <TablePager
+                            page={page}
+                            onPage={setPage}
+                            pageSize={pageSize}
+                            onPageSize={(s) => {
+                              setPageSize(s);
+                              setPage(1);
+                            }}
+                            total={recent.length}
+                            pageSizes={PAGE_SIZES}
+                            labels={{
+                              rowsPerPage: String(
+                                t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                              ),
+                              previous: String(
+                                t('agentReports.prev', { defaultValue: 'Previous' }),
+                              ),
+                              next: String(t('agentReports.next', { defaultValue: 'Next' })),
+                            }}
+                          />
+                        </TableFooterBar>
+                      }
+                    >
                       <Table
                         aria-label={t('adminKpi.yiji.recentTable', {
                           defaultValue: 'Yiji failures and backup uses',
@@ -674,24 +700,6 @@ export function AdminKpiPage() {
                         </tbody>
                       </Table>
                     </TableSurface>
-                    <TablePager
-                      page={page}
-                      onPage={setPage}
-                      pageSize={pageSize}
-                      onPageSize={(s) => {
-                        setPageSize(s);
-                        setPage(1);
-                      }}
-                      total={recent.length}
-                      pageSizes={PAGE_SIZES}
-                      labels={{
-                        rowsPerPage: String(
-                          t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
-                        ),
-                        previous: String(t('agentReports.prev', { defaultValue: 'Previous' })),
-                        next: String(t('agentReports.next', { defaultValue: 'Next' })),
-                      }}
-                    />
                   </>
                 )}
               </section>

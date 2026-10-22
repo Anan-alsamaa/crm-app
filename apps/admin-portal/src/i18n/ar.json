@@ -122,6 +122,8 @@
     "exportCsvCount": "تصدير CSV ({{count}})",
     "exportCsvFiltered": "تصدير {{count}} المعروضة",
     "kpiBusiestDay": "أكثر الأيام ازدحامًا",
+    "kpiPerAgent": "{{n}} لكل موظف",
+    "kpiShareOfChats": "{{pct}} من المحادثات",
     "kpiUrgent": "عاجل + مرتفع",
     "searchAgent": "ابحث عن موظف",
     "searchConversations": "ابحث بالعميل أو الجوال أو الموظف أو الطلب",
@@ -2159,6 +2161,9 @@
   },
   "shell": {
     "search": "بحث (Ctrl+K)",
-    "quickActions": "إجراءات سريعة"
+    "quickActions": "إجراءات سريعة",
+    "metricEmpty": "لا توجد بيانات في هذه الفترة",
+    "tableEmptyTitle": "لا يوجد ما يُعرض",
+    "tableEmptyHint": "جرّب فترة أوسع أو امسح عوامل التصفية."
   }
 }

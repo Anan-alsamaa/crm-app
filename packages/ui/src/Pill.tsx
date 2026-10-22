@@ -101,6 +101,9 @@ export function Pill({
   const showDot = dot ?? dotByDefault[tone];
   return (
     <span
+      /* A hook for a portal's own stylesheet (the admin console's badge
+         palette); carries no styling itself. */
+      data-pill={tone}
       className={cn(
         'inline-flex items-center gap-1.5 rounded-full font-medium whitespace-nowrap',
         tones[tone],

@@ -19,6 +19,7 @@ import {
   Skeleton,
   Table,
   TablePager,
+  TableFooterBar,
   TableSurface,
   Th,
   toast,
@@ -971,6 +972,34 @@ export function AllCompensationPage() {
             <TableSurface
               {...WIDE_TABLE}
               scrollLabel={String(t('compensationAll.title', { defaultValue: 'Compensation' }))}
+              footer={
+                <TableFooterBar>
+                  <TablePager
+                    page={current}
+                    onPage={setPage}
+                    pageSize={pageSize}
+                    onPageSize={setPageSize}
+                    total={filtered.length}
+                    pageSizes={[10, 25, 50, 100, 250, 500]}
+                    labels={{
+                      rowsPerPage: String(
+                        t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
+                      ),
+                      previous: String(t('pagination.prev', { defaultValue: 'Previous' })),
+                      next: String(t('pagination.next', { defaultValue: 'Next' })),
+                      showing: ({ from: f, to: tt, total }) =>
+                        String(
+                          t('complaintReport.showingRange', {
+                            defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
+                            from: f,
+                            to: tt,
+                            total,
+                          }),
+                        ),
+                    }}
+                  />
+                </TableFooterBar>
+              }
             >
               <Table className="min-w-[80rem]">
                 <thead>
@@ -1094,31 +1123,6 @@ export function AllCompensationPage() {
               </Table>
             </TableSurface>
           )}
-
-          <TablePager
-            page={current}
-            onPage={setPage}
-            pageSize={pageSize}
-            onPageSize={setPageSize}
-            total={filtered.length}
-            pageSizes={[10, 25, 50, 100, 250, 500]}
-            labels={{
-              rowsPerPage: String(
-                t('complaintReport.rowsPerPage', { defaultValue: 'Rows per page' }),
-              ),
-              previous: String(t('pagination.prev', { defaultValue: 'Previous' })),
-              next: String(t('pagination.next', { defaultValue: 'Next' })),
-              showing: ({ from: f, to: tt, total }) =>
-                String(
-                  t('complaintReport.showingRange', {
-                    defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
-                    from: f,
-                    to: tt,
-                    total,
-                  }),
-                ),
-            }}
-          />
 
           {historyOf && (
             /* The SAME drawer Ticket breakdown uses, pointed at a different

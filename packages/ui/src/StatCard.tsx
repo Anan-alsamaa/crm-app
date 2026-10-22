@@ -1,5 +1,6 @@
 import type { HTMLAttributes, JSX, ReactNode } from 'react';
 import { cn } from './cn.js';
+import { CountUp } from './CountUp.js';
 
 export interface StatCardProps extends HTMLAttributes<HTMLDivElement> {
   label: ReactNode;
@@ -102,13 +103,14 @@ export function StatCard({
       {icon && (
         <span
           aria-hidden
+          data-stat-chip=""
           className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', chipTone[tone])}
         >
           {icon}
         </span>
       )}
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+      <div data-stat-body="" className="min-w-0 flex-1">
+        <div data-stat-figure="" className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
           <span
             data-stat-value=""
             className={cn(
@@ -119,22 +121,35 @@ export function StatCard({
               numeral[tone],
             )}
           >
-            {value}
+            {/* Counts up only where a portal opts in (MetricMotionProvider);
+                everywhere else it renders `value` untouched. */}
+            <CountUp value={value} />
           </span>
           {unit != null && (
             <span className="text-2xs font-semibold text-muted-foreground">{unit}</span>
           )}
           {delta}
         </div>
-        <div className="mt-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <div
+          data-stat-label=""
+          className="mt-1.5 flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+        >
           {tone !== 'default' && !icon && (
             <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', dotBg[tone])} />
           )}
           <span className="truncate">{label}</span>
         </div>
-        {caption && <div className="mt-1 text-xs text-muted-foreground">{caption}</div>}
+        {caption && (
+          <div data-stat-caption="" className="mt-1 text-xs text-muted-foreground">
+            {caption}
+          </div>
+        )}
       </div>
-      {visual && <div className="shrink-0 self-center">{visual}</div>}
+      {visual && (
+        <div data-stat-visual="" className="shrink-0 self-center">
+          {visual}
+        </div>
+      )}
     </div>
   );
 }

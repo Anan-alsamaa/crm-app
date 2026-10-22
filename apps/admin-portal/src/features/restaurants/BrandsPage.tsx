@@ -218,7 +218,20 @@ export function BrandsPage() {
              (code, what Yiji calls them, how many stores, status), and a
              column grid lets them be scanned down rather than read across. */
           <div>
-            <TableSurface>
+            <TableSurface
+              footer={
+                <TableFooterBar>
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {list.length}
+                    </span>
+                    <span className="text-xs font-medium">
+                      {t('brands.title', { defaultValue: 'Brands' })}
+                    </span>
+                  </span>
+                </TableFooterBar>
+              }
+            >
               <Table>
                 <thead>
                   <tr>
@@ -310,14 +323,6 @@ export function BrandsPage() {
                   ))}
                 </tbody>
               </Table>
-              <TableFooterBar>
-                <span className="flex items-baseline gap-1.5">
-                  <span className="font-semibold tabular-nums text-foreground">{list.length}</span>
-                  <span className="text-xs font-medium">
-                    {t('brands.title', { defaultValue: 'Brands' })}
-                  </span>
-                </span>
-              </TableFooterBar>
             </TableSurface>
           </div>
         )}

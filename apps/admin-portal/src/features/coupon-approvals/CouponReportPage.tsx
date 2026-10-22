@@ -2,7 +2,23 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
-import { Button, MeterBar, Skeleton, Table, TableSurface, Td, Th, Tr } from '@yiji/ui';
+import {
+  Button,
+  CheckCircleIcon,
+  ClockIcon,
+  InboxIcon,
+  MeterBar,
+  ReportKpi,
+  ReportKpiStrip,
+  Skeleton,
+  SparkleIcon,
+  Table,
+  TableSurface,
+  Td,
+  Th,
+  Tr,
+  ZapIcon,
+} from '@yiji/ui';
 import {
   couponOutcomes,
   couponOutcomesByAgent,
@@ -217,28 +233,41 @@ export function CouponReportPage() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl bg-card px-[1.125rem] py-3.5 text-sm shadow-soft ring-1 ring-foreground/[0.06]">
-                <Count
+              {/* The counts behind the rates, as the console's metric cards
+                  (owner, 2026-10-22: the one-line strips "look very badly
+                  designed"). Five across on a wide screen, so none is orphaned. */}
+              <ReportKpiStrip className="2xl:grid-cols-5">
+                <ReportKpi
                   label={t('couponReport.requested', { defaultValue: 'Requested' })}
-                  n={total.requested}
+                  value={String(total.requested)}
+                  tone="blue"
+                  icon={<InboxIcon size={18} />}
                 />
-                <Count
+                <ReportKpi
                   label={t('couponReport.asAsked', { defaultValue: 'Not edited' })}
-                  n={total.approvedAsAsked}
+                  value={String(total.approvedAsAsked)}
+                  tone="green"
+                  icon={<CheckCircleIcon size={18} />}
                 />
-                <Count
+                <ReportKpi
                   label={t('couponReport.withChanges', { defaultValue: 'With changes' })}
-                  n={total.approvedWithChanges}
+                  value={String(total.approvedWithChanges)}
+                  tone="violet"
+                  icon={<SparkleIcon size={18} />}
                 />
-                <Count
+                <ReportKpi
                   label={t('couponReport.rejected', { defaultValue: 'Rejected' })}
-                  n={total.rejected}
+                  value={String(total.rejected)}
+                  tone="amber"
+                  icon={<ZapIcon size={18} />}
                 />
-                <Count
+                <ReportKpi
                   label={t('couponReport.pending', { defaultValue: 'Waiting' })}
-                  n={total.pending}
+                  value={String(total.pending)}
+                  tone="blue"
+                  icon={<ClockIcon size={18} />}
                 />
-              </div>
+              </ReportKpiStrip>
 
               <TableSurface>
                 <Table>
@@ -304,14 +333,5 @@ export function CouponReportPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Count({ label, n }: { label: string; n: number }) {
-  return (
-    <span className="flex items-baseline gap-1.5">
-      <span className="text-lg font-semibold tabular-nums text-foreground">{n}</span>
-      <span className="text-xs text-muted-foreground">{label}</span>
-    </span>
   );
 }
