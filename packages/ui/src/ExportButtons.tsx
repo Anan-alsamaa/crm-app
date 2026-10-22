@@ -1,4 +1,4 @@
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { Button } from './Button.js';
 
 export interface ExportButtonsProps {
@@ -17,6 +17,11 @@ export interface ExportButtonsProps {
   /** "Export all (240)" */
   labelAll: string;
   disabled?: boolean;
+  /**
+   * Optional leading glyph on every button (the admin console passes a
+   * download icon). Omitted, the buttons render exactly as before.
+   */
+  icon?: ReactNode;
 }
 
 /**
@@ -47,6 +52,7 @@ export function ExportButtons({
   labelView,
   labelAll,
   disabled,
+  icon,
 }: ExportButtonsProps): JSX.Element {
   const somethingHidden = totalCount > visibleCount;
 
@@ -58,6 +64,8 @@ export function ExportButtons({
         size="sm"
         onClick={onExportView}
         disabled={disabled || totalCount === 0}
+        iconStart={icon}
+        data-export=""
       >
         {labelPlain}
       </Button>
@@ -72,10 +80,20 @@ export function ExportButtons({
         size="sm"
         onClick={onExportView}
         disabled={disabled || visibleCount === 0}
+        iconStart={icon}
+        data-export=""
       >
         {labelView}
       </Button>
-      <Button type="button" variant="ghost" size="sm" onClick={onExportAll} disabled={disabled}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onExportAll}
+        disabled={disabled}
+        iconStart={icon}
+        data-export=""
+      >
         {labelAll}
       </Button>
     </div>

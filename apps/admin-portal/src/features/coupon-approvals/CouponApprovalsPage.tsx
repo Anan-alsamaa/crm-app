@@ -30,6 +30,8 @@ import {
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { FIELD_LABEL, FILTER_CARD, PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { businessDayWindow } from '../../lib/date-range.js';
+import { ClearFiltersButton } from '../../components/ClearFiltersButton.js';
+import { SearchField } from '../../components/SearchField.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import {
   useCouponApprovals,
@@ -1744,10 +1746,11 @@ export function CouponApprovalsPage() {
             {/* Search and period. Both narrow the list the tabs above produced,
               so a supervisor can hold a status AND a date range at once. */}
             <div className="flex flex-wrap items-end gap-2">
-              <Input
-                className="h-9 min-w-[min(16rem,100%)] flex-1"
+              <SearchField
+                className="min-w-[min(16rem,100%)] flex-1"
+                inputClassName="h-9"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                onValueChange={setQuery}
                 aria-label={t('couponApprovals.search', {
                   defaultValue: 'Order ID, phone, or coupon code',
                 })}
@@ -1770,20 +1773,19 @@ export function CouponApprovalsPage() {
                 <span className={FIELD_LABEL}>{t('complaintDash.to', { defaultValue: 'To' })}</span>
                 <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
               </label>
-              {(query || from || to) && (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setQuery('');
-                    setFrom('');
-                    setTo('');
-                  }}
-                >
-                  {t('complaintDash.clear', { defaultValue: 'Clear' })}
-                </Button>
-              )}
+              {/* The page opens with no search and no dates, so anything in
+                  either is something to clear. The status tabs are not part
+                  of Clear and never were. */}
+              <ClearFiltersButton
+                className="self-end"
+                active={!!(query || from || to)}
+                onClear={() => {
+                  setQuery('');
+                  setFrom('');
+                  setTo('');
+                }}
+                label={t('complaintDash.clear', { defaultValue: 'Clear' })}
+              />
               <span className="ms-auto self-end pb-2.5 text-xs tabular-nums text-muted-foreground">
                 {t('couponApprovals.showing', {
                   shown: rows.length,

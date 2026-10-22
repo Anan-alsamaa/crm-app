@@ -470,6 +470,7 @@ export function VendorsPage() {
                   <button
                     type="button"
                     onClick={() => setLogoId(null)}
+                    data-text-action=""
                     className="text-xs text-muted-foreground transition-colors hover:text-foreground"
                   >
                     {t('actions.remove', { ns: 'common', defaultValue: 'Remove' })}

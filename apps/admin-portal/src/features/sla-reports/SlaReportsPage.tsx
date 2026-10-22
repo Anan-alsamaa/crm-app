@@ -7,6 +7,7 @@ import {
   InfoIcon,
   cn,
   EmptyState,
+  DownloadIcon,
   ExportButtons,
   formatDateTime,
   Pill,
@@ -447,6 +448,7 @@ export function SlaReportsPage() {
                    weight of thing depending on which report you stood in. */
                 canExport && (
                   <ExportButtons
+                    icon={<DownloadIcon size={15} />}
                     visibleCount={ticketsShown.length}
                     totalCount={report.data?.tickets.length ?? 0}
                     onExportView={() => runExport('view')}

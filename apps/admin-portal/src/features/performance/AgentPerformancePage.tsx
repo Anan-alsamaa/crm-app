@@ -6,7 +6,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Avatar,
   BellIcon,
-  Button,
   ChartIcon,
   ClockIcon,
   cn,
@@ -19,7 +18,6 @@ import {
   MeterBar,
   Pill,
   ProgressRing,
-  SearchIcon,
   SelectMenu,
   Skeleton,
   TrendChart,
@@ -55,6 +53,8 @@ import {
 } from './api.js';
 import { NoMatchRow, CouponsTab, TicketsTab } from './WorkTabs.js';
 import { Tile } from './Tile.js';
+import { ExportCsvButton } from '../../components/ExportCsvButton.js';
+import { SearchField } from '../../components/SearchField.js';
 
 /**
  * Agent performance for the admin console.
@@ -397,15 +397,14 @@ export function AgentPerformancePage() {
         actions={
           /* Exports the per-agent CHAT totals, so it sits with the Chats tab. */
           canExport && onChats ? (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={exportCsv}
-              disabled={rows.length === 0}
-            >
-              {t('stores.export', { defaultValue: 'Export CSV' })}
-            </Button>
+            <ExportCsvButton
+              onExport={exportCsv}
+              count={rows.length}
+              label={t('agentReports.exportCsvCount', {
+                count: rows.length,
+                defaultValue: 'Export CSV ({{count}})',
+              })}
+            />
           ) : undefined
         }
       />
@@ -422,23 +421,16 @@ export function AgentPerformancePage() {
                 Export CSV (owner, 2026-10-13). Sized on the wrapper: Input's
                 base carries w-full. */}
             <Field label={t('performance.search', { defaultValue: 'Search' })}>
-              <span className="relative block w-[min(16rem,calc(100vw-5rem))]">
-                <SearchIcon
-                  size={14}
-                  aria-hidden
-                  className="pointer-events-none absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-                />
-                <Input
-                  type="search"
-                  className="h-8 ps-8"
-                  value={searchDraft}
-                  onChange={(e) => setSearchDraft(e.target.value)}
-                  aria-label={t('performance.search', { defaultValue: 'Search' })}
-                  placeholder={t('performance.searchPlaceholder', {
-                    defaultValue: 'Order, ticket, coupon code or customer number…',
-                  })}
-                />
-              </span>
+              <SearchField
+                className="w-[min(16rem,calc(100vw-5rem))]"
+                inputClassName="h-8"
+                value={searchDraft}
+                onValueChange={setSearchDraft}
+                aria-label={t('performance.search', { defaultValue: 'Search' })}
+                placeholder={t('performance.searchPlaceholder', {
+                  defaultValue: 'Order, ticket, coupon code or customer number…',
+                })}
+              />
             </Field>
             <Field label={t('performance.agent', { defaultValue: 'Agent' })}>
               <SelectMenu

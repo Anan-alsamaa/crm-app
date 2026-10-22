@@ -14,6 +14,7 @@ import {
   DateField,
   Drawer,
   EmptyState,
+  DownloadIcon,
   ExportButtons,
   InboxIcon,
   Input,
@@ -67,6 +68,9 @@ import { ColumnArranger } from '../../components/ColumnArranger.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { defaultReportRange, useRememberedRange, isoDay } from '../../lib/date-range.js';
 import { ReportFilterBar } from '../../components/ReportFilterBar.js';
+import { ClearFiltersButton } from '../../components/ClearFiltersButton.js';
+import { SearchField } from '../../components/SearchField.js';
+import { ExportCsvButton } from '../../components/ExportCsvButton.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
 import { formatDuration } from '@yiji/reports';
@@ -104,108 +108,14 @@ import {
   type TicketFilterCriteria,
 } from '@yiji/reports';
 import { PageTitle, WIDE_TABLE } from '../../components/shell/Page.js';
+import { RangePreset, type RangeProps } from '../../components/RangePreset.js';
 
 /** Which of the four exportable reports this page instance renders. */
 export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
-/**
- * 365 is here because the history is: the imported operations sheet reaches
- * back to December, and 90 days stops in June — so the longest shortcut showed
- * barely half of what the report holds, and seeing the rest meant typing two
- * dates by hand every time.
- */
 /* These reports open on the LAST 30 DAYS, not today's business day: one day of
    KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
    bar's Clear button and the range hook agree about what "untouched" means. */
 const MANAGER_DEFAULT = defaultReportRange();
-
-const RANGE_DAYS = [7, 30, 90, 365] as const;
-
-/** The remembered range, handed down so each report's filter bar can drive it. */
-interface RangeProps {
-  range: {
-    from: string;
-    to: string;
-    setFrom: (v: string) => void;
-    setTo: (v: string) => void;
-    /** Both ends at once — what the quick-range shortcut writes. */
-    setRange: (r: { from: string; to: string }) => void;
-    reset: () => void;
-  };
-}
-
-/**
- * "Last 7 / 30 / 90 days", rendered inside the filter bar beside the dates.
- *
- * A shortcut, not a second source of truth: picking a preset WRITES the two
- * dates next to it, so the shortcut and the fields can never disagree about
- * which period is on screen. It sat in a toolbar of its own until the toolbar
- * turned out to be 60px of screen saying what the tab strip above it already
- * said.
- */
-function RangePreset({ range }: RangeProps): JSX.Element {
-  const { t } = useTranslation();
-  /**
-   * Which preset the dates currently ARE, so the menu can say so.
-   *
-   * It used to be pinned to "" and so always read "Quick range", whatever had
-   * been picked — on the reports where the two date fields sit beside it that
-   * was merely quiet, but the ticket breakdown reads its whole period from
-   * this control, and a control that never shows its own value looks like a
-   * control that did not work.
-   *
-   * Derived rather than remembered: the dates are the truth, and a stored
-   * selection would go stale the moment someone typed a date by hand. A range
-   * that matches no preset falls back to the placeholder, which is honest —
-   * "last 47 days" is not one of the choices.
-   */
-  const active = useMemo(() => {
-    if (!range.from || !range.to) return '';
-    // The application default (owner, 2026-10-15) has its own name.
-    const def = defaultReportRange();
-    if (range.from === def.from && range.to === def.to) return 'default';
-    if (range.to !== isoDay(new Date())) return '';
-    const days = Math.round((Date.parse(range.to) - Date.parse(range.from)) / 86_400_000);
-    return RANGE_DAYS.includes(days as (typeof RANGE_DAYS)[number]) ? String(days) : '';
-  }, [range.from, range.to]);
-
-  return (
-    <SelectMenu
-      fullWidth
-      value={active}
-      onChange={(v) => {
-        // The placeholder is not a period: re-picking it should leave the
-        // dates alone rather than silently resetting them to today..today.
-        if (!v) return;
-        if (v === 'default') {
-          range.setRange(defaultReportRange());
-          return;
-        }
-        const n = Number(v);
-        const now = new Date();
-        range.setRange({
-          from: isoDay(new Date(now.getTime() - n * 86_400_000)),
-          to: isoDay(now),
-        });
-      }}
-      aria-label={t('agentReports.range', { defaultValue: 'Date range' })}
-      options={[
-        { value: '', label: t('agentReports.presets', { defaultValue: 'Quick range' }) },
-        {
-          value: 'default',
-          label: t('agentReports.yesterdayToday', { defaultValue: 'Yesterday and today' }),
-        },
-        ...RANGE_DAYS.map((d) => ({
-          value: String(d),
-          label: t('agentReports.lastDays', {
-            count: d,
-            days: d,
-            defaultValue: 'Last {{days}} days',
-          }),
-        })),
-      ]}
-    />
-  );
-}
 
 /**
  * "12 tickets were logged in this period but happened earlier."
@@ -751,6 +661,7 @@ function TicketsReport({
                   </span>
                   <button
                     type="button"
+                    data-text-action=""
                     className="text-2xs font-medium text-primary hover:underline"
                     onClick={() => setCols(new Set(TICKET_COLUMN_KEYS))}
                   >
@@ -778,9 +689,16 @@ function TicketsReport({
             </>
           )}
           {canExport && (
-            <Button size="sm" onClick={onExport}>
-              {t('agentReports.exportExcel', { defaultValue: 'Export to Excel' })}
-            </Button>
+            /* Disabled at zero rows: an empty export only ever raised a
+               "Nothing to export" toast, so the button now says it up front. */
+            <ExportCsvButton
+              onExport={onExport}
+              count={merged.length}
+              label={t('controls.exportExcelCount', {
+                count: merged.length,
+                defaultValue: 'Export to Excel ({{count}})',
+              })}
+            />
           )}
         </div>
       </div>
@@ -1422,10 +1340,12 @@ function ComplaintsReport({
             {/* One box rather than five labelled fields: operations look a
                 complaint up by whatever they have to hand, and deciding which
                 field a number belongs to is work the computer can do. */}
-            <Input
+            <SearchField
               value={draft.query ?? ''}
-              onChange={(e) => setCriterion({ query: e.target.value })}
-              className="h-8"
+              onValueChange={(v) => setCriterion({ query: v })}
+              /* The x applies the empty search at once, like a dropdown. */
+              onCleared={() => pickCriterion({ query: '' })}
+              inputClassName="h-8"
               placeholder={t('complaintReport.searchPlaceholder', {
                 defaultValue: 'Order number, phone, branch, or a word from the ticket…',
               })}
@@ -1521,11 +1441,15 @@ function ComplaintsReport({
             value={draft.compensation}
           />
           <div className="ms-auto flex items-end gap-2">
-            {(!isEmptyFilter(criteria) || !isEmptyFilter(draft)) && (
-              <Button size="sm" variant="ghost" className="h-8" onClick={clearFilters}>
-                {t('complaintReport.clearFilters', { defaultValue: 'Clear filters' })}
-              </Button>
-            )}
+            {/* Something to clear = any criterion applied or typed. The
+                report's date window lives in the range hook, not here, so
+                its default (yesterday -> today) never counts. */}
+            <ClearFiltersButton
+              className="h-8"
+              active={!isEmptyFilter(criteria) || !isEmptyFilter(draft)}
+              onClear={clearFilters}
+              label={t('complaintReport.clearFilters', { defaultValue: 'Clear filters' })}
+            />
             {/* Only when something is genuinely waiting. It used to be
                 permanent-but-disabled, which was right while every control
                 needed it; now the dropdowns apply themselves and only typing
@@ -1609,6 +1533,7 @@ function ComplaintsReport({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
+                      data-text-action=""
                       className="text-2xs font-medium text-primary hover:underline"
                       onClick={() => setCols(new Set(COMPLAINT_COLUMN_KEYS))}
                     >
@@ -1616,6 +1541,7 @@ function ComplaintsReport({
                     </button>
                     <button
                       type="button"
+                      data-text-action=""
                       className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
                       onClick={() => {
                         const next = [...COMPLAINT_COLUMN_KEYS];
@@ -1707,6 +1633,7 @@ function ComplaintsReport({
                           col: label,
                           defaultValue: 'Move {{col}} earlier',
                         })}
+                        data-icon-action=""
                         className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
                       >
                         ↑
@@ -1719,6 +1646,7 @@ function ComplaintsReport({
                           col: label,
                           defaultValue: 'Move {{col}} later',
                         })}
+                        data-icon-action=""
                         className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
                       >
                         ↓
@@ -1751,6 +1679,7 @@ function ComplaintsReport({
               that gets re-tested by hand every single time. */}
           {canExport && (
             <ExportButtons
+              icon={<DownloadIcon size={15} />}
               visibleCount={visible.length}
               totalCount={complete.length}
               onExportView={() => onExport('view')}
@@ -1776,7 +1705,6 @@ function ComplaintsReport({
             <Button
               size="sm"
               variant="ghost"
-              className="ring-1 ring-inset ring-foreground/10"
               disabled={!selectedId}
               onClick={() => {
                 const row = visible.find((v) => v.id === selectedId);
@@ -1796,7 +1724,7 @@ function ComplaintsReport({
               size="sm"
               variant="ghost"
               disabled={!selectedId || del.isPending}
-              className="text-destructive ring-1 ring-inset ring-foreground/10 hover:bg-destructive/10"
+              className="text-destructive"
               onClick={() => {
                 const row = visible.find((v) => v.id === selectedId);
                 if (!row) return;
@@ -2374,6 +2302,7 @@ function AgentKpiReport({
             />
             {canExport && (
               <ExportButtons
+                icon={<DownloadIcon size={15} />}
                 visibleCount={sorted.length}
                 totalCount={agents.length}
                 onExportView={() => onExport('view')}
@@ -2855,6 +2784,7 @@ function ConversationReport({
           actions={
             canExport && (
               <ExportButtons
+                icon={<DownloadIcon size={15} />}
                 visibleCount={visible.length}
                 totalCount={report.rows.length}
                 onExportView={() => onExport('view')}

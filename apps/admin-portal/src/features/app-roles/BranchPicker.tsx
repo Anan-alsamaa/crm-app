@@ -1,7 +1,8 @@
 import type { JSX } from 'react';
 import { useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cn, Input } from '@yiji/ui';
+import { cn } from '@yiji/ui';
+import { SearchField } from '../../components/SearchField.js';
 
 /**
  * Pick any number of branches out of a list too long to look at.
@@ -135,6 +136,7 @@ export function BranchPicker({ options, selected, onChange, className }: Props):
           <button
             type="button"
             onClick={() => onChange([])}
+            data-text-action=""
             className="ms-1 text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground transition-colors hover:text-destructive"
           >
             {t('roles.branchClear', { defaultValue: 'Clear all' })}
@@ -143,11 +145,10 @@ export function BranchPicker({ options, selected, onChange, className }: Props):
       )}
 
       {/* ── What could be chosen ───────────────────────────────────────────*/}
-      <Input
+      <SearchField
         ref={inputRef}
-        type="search"
         value={query}
-        onChange={(e) => setQuery(e.target.value)}
+        onValueChange={setQuery}
         onKeyDown={(e) => {
           // Enter takes the top match, so adding several in a row never needs
           // the mouse: type, Enter, type, Enter.
@@ -162,7 +163,7 @@ export function BranchPicker({ options, selected, onChange, className }: Props):
           defaultValue: 'Search {{n}} branches…',
           n: options.length,
         })}
-        className="h-9"
+        inputClassName="h-9"
       />
 
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -180,6 +181,7 @@ export function BranchPicker({ options, selected, onChange, className }: Props):
           <button
             type="button"
             onClick={toggleAllShown}
+            data-text-action=""
             className="text-2xs font-semibold uppercase tracking-[0.1em] text-primary transition-colors hover:underline"
           >
             {allShownSelected

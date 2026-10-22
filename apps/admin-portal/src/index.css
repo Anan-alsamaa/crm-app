@@ -1239,3 +1239,191 @@ body::after {
     animation: none;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ACTIONS LOOK LIKE ACTIONS (owner, 2026-10-22)
+ *
+ *   "When a filter is applied, the Clear should get a circle so we know it
+ *    can be used and is not disabled. Such things to be fixed throughout the
+ *    admin portal."
+ *
+ * One rule for the whole console: a control that can be used LOOKS clickable
+ * (a pill with an edge and a faint tint, firmer on hover), and one that
+ * cannot LOOKS disabled (faded, no edge, the not-allowed cursor) - never
+ * plain text that might be either. The hooks are data attributes on the
+ * shared primitives (`data-variant` on Button and IconButton,
+ * `data-pager-edge` on Pagination) that no other stylesheet reads, so the
+ * agent portal is untouched. Dialogs and drawers portal to <body>, so they
+ * are named beside `.admin-skin`.
+ *
+ * The ghost/link pill is drawn in the text's OWN colour (color-mix with
+ * currentColor), so a red "Delete" gets a red edge and an ink "History" an
+ * ink one without a rule per button. It uses the 1px border the variant
+ * already reserves - never box-shadow, which is where the focus ring lives.
+ * ═════════════════════════════════════════════════════════════════════════ */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled) {
+  border: 1px solid color-mix(in oklch, currentColor 22%, transparent);
+  background-color: color-mix(in oklch, currentColor 4%, transparent);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled):hover {
+  border-color: color-mix(in oklch, currentColor 40%, transparent);
+  background-color: color-mix(in oklch, currentColor 9%, transparent);
+  text-decoration: none;
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled):active {
+  background-color: color-mix(in oklch, currentColor 13%, transparent);
+}
+/* The link variant had no box at all (px-0, square): it takes the pill's. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='link'] {
+  min-height: 2rem;
+  padding-inline: 0.875rem;
+  border-radius: 9999px;
+}
+/* Hand-built text buttons opted in with `data-text-action` get the shape too. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-text-action] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 1.75rem;
+  padding-inline: 0.625rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+/* Small hand-built icon buttons (the column arrangers' move arrows): a
+   circle with a faint edge while usable, faded and edgeless when not. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action] {
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:not(:disabled) {
+  color: oklch(var(--foreground));
+  border-color: oklch(var(--foreground) / 0.14);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:disabled {
+  opacity: 0.35;
+}
+
+/* Every disabled button in the console shows the not-allowed cursor where
+   the pointer can reach it. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) button:disabled {
+  cursor: not-allowed;
+}
+
+/* Icon-only buttons: a round hit area with the same faint edge. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-button] {
+  border-radius: 9999px;
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  [data-icon-button][data-variant='ghost']:not(:disabled) {
+  border: 1px solid color-mix(in oklch, currentColor 18%, transparent);
+}
+
+/* Pager Previous / Next (the shared Pagination's chevron buttons). */
+.admin-skin [data-pager-edge]:not(:disabled) {
+  color: oklch(var(--foreground));
+  box-shadow: inset 0 0 0 1px oklch(var(--foreground) / 0.16);
+  background-color: oklch(var(--foreground) / 0.03);
+}
+.admin-skin [data-pager-edge]:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px oklch(var(--foreground) / 0.3);
+  background-color: oklch(var(--foreground) / 0.07);
+}
+
+/* ── Disabled: one look for every button primitive ─────────────────────────
+     Faded to 45%, no edge, no glow, and the not-allowed cursor - which needs
+     pointer events back (the primitive switches them off). A disabled button
+     never fires its click, so this changes the cursor and nothing else; it is
+     kept out of table bodies, where a click passing through to the row is
+     the behaviour people have. Hover is pinned to the resting look so a dead
+     control does not light up under the pointer. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant], [data-pager-edge]):disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant], [data-pager-edge]):disabled:not(tbody *) {
+  pointer-events: auto;
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-pager-edge]):disabled,
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-pager-edge]):disabled:hover {
+  border-color: transparent;
+  background-color: transparent;
+  text-decoration: none;
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='default']:disabled:hover {
+  background-color: oklch(var(--display));
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='brand']:disabled:hover {
+  background-color: oklch(var(--primary));
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='outline']:disabled:hover {
+  background-color: oklch(var(--card) / 0.4);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  [data-variant='destructive']:disabled:hover {
+  background-color: oklch(var(--destructive));
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='success']:disabled:hover {
+  background-color: oklch(var(--success));
+}
+
+/* ── Export: the secondary pill reads as a button, not a grey chip ────────
+     A firmer edge than the stock secondary hairline, and the glyph in the
+     brand ink, so "Export CSV (12)" is findable in every report's actions. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled) {
+  background-color: oklch(var(--card));
+  --tw-ring-color: oklch(var(--foreground) / 0.16);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled):hover {
+  --tw-ring-color: oklch(var(--primary) / 0.45);
+  background-color: oklch(var(--primary) / 0.06);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled) > svg {
+  color: oklch(var(--primary));
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:focus-visible {
+  --tw-ring-color: oklch(var(--ring) / 0.6);
+}
+
+/* ── Search fields (components/SearchField.tsx) ────────────────────────────
+     A visible rounded edge on the white card, firmer on hover, and the brand
+     ring with a stronger edge on focus. The browser's own cancel glyph goes:
+     the field draws its own round x, which works the same in every browser. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-search-field] input {
+  --tw-ring-color: oklch(var(--foreground) / 0.18);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-search-field] input:hover {
+  --tw-ring-color: oklch(var(--foreground) / 0.28);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-search-field] input:focus-visible {
+  --tw-ring-color: oklch(var(--primary) / 0.6);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  [data-search-field]
+  input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-search-field]:focus-within > svg {
+  color: oklch(var(--primary));
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-search-clear]:hover {
+  color: oklch(var(--foreground));
+  background-color: oklch(var(--foreground) / 0.08);
+}
+
+/* Focus for the hand-built controls above, which carry no ring of their own. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-pager-edge], [data-search-clear], [data-text-action]):focus-visible {
+  outline: 2px solid oklch(var(--ring) / 0.6);
+  outline-offset: 2px;
+}

@@ -51,6 +51,7 @@ export function Pagination({
         disabled={page <= 1}
         onClick={() => onPage(page - 1)}
         className={edgeBtn}
+        data-pager-edge=""
       >
         <span aria-hidden>‹</span>
         <span className="hidden sm:inline">{prevLabel}</span>
@@ -93,6 +94,7 @@ export function Pagination({
         disabled={page >= pageCount}
         onClick={() => onPage(page + 1)}
         className={edgeBtn}
+        data-pager-edge=""
       >
         <span className="hidden sm:inline">{nextLabel}</span>
         <span aria-hidden>›</span>

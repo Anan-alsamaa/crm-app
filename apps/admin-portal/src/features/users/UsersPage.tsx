@@ -43,6 +43,7 @@ import {
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
+import { SearchField } from '../../components/SearchField.js';
 
 const schema = z.object({
   /**
@@ -317,31 +318,15 @@ export function UsersPage() {
         })}
         actions={
           <>
-            <div className="relative w-full sm:w-56">
-              <svg
-                aria-hidden
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-              >
-                <circle cx="7" cy="7" r="4.5" />
-                <path d="m10.5 10.5 3 3" />
-              </svg>
-              <input
-                type="search"
-                aria-label={t('users.searchPlaceholder', { defaultValue: 'Search…' })}
-                placeholder={t('users.searchPlaceholder', {
-                  defaultValue: 'Search…',
-                })}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="block h-10 w-full rounded-full border-0 bg-glass/70 ps-8 pe-3 text-sm text-foreground ring-1 ring-inset ring-glass/80 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-start transition-shadow duration-fast ease-out"
-              />
-            </div>
+            <SearchField
+              className="w-full sm:w-56"
+              aria-label={t('users.searchPlaceholder', { defaultValue: 'Search…' })}
+              placeholder={t('users.searchPlaceholder', {
+                defaultValue: 'Search…',
+              })}
+              value={search}
+              onValueChange={setSearch}
+            />
             <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
               {t('users.create')}
             </Button>

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import {
-  Button,
   CheckCircleIcon,
   ClockIcon,
   InboxIcon,
@@ -31,6 +30,7 @@ import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { ReportVendorFilter, useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
+import { ExportCsvButton } from '../../components/ExportCsvButton.js';
 
 /**
  * What happens to the coupons agents ask for.
@@ -181,15 +181,15 @@ export function CouponReportPage() {
             {/* Renders nothing unless 2+ vendors are active. */}
             <ReportVendorFilter className="flex items-center gap-2" />
             {canExport && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                onClick={exportCsv}
+              <ExportCsvButton
+                onExport={exportCsv}
+                count={rows.length}
                 disabled={total.requested === 0}
-              >
-                {t('stores.export', { defaultValue: 'Export CSV' })}
-              </Button>
+                label={t('agentReports.exportCsvCount', {
+                  count: rows.length,
+                  defaultValue: 'Export CSV ({{count}})',
+                })}
+              />
             )}
           </>
         }

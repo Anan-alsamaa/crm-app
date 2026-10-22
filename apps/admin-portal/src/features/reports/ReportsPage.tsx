@@ -647,6 +647,7 @@ function ReportCard({
         <button
           type="button"
           onClick={onEdit}
+          data-text-action=""
           className="rounded-full px-3 py-1.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/10"
         >
           {t('actions.edit', { ns: 'common', defaultValue: 'edit' })}
@@ -654,6 +655,7 @@ function ReportCard({
         <button
           type="button"
           onClick={onDelete}
+          data-text-action=""
           className="rounded-full px-3 py-1.5 text-xs font-medium text-destructive transition-colors duration-fast ease-out hover:bg-destructive/10"
         >
           {t('actions.delete', { ns: 'common', defaultValue: 'delete' })}

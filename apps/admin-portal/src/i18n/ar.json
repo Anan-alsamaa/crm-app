@@ -2079,7 +2079,8 @@
       "created": "المنشأة",
       "compensated": "تم التعويض",
       "notCompensated": "لم يتم التعويض",
-      "solved": "المحلولة"
+      "solved": "المحلولة",
+      "undecided": "لم يُحسم"
     },
     "coupons": {
       "title": "الكوبونات",
@@ -2095,7 +2096,10 @@
       "removalUsed": "مستخدمة مسبقاً",
       "removalNotOnYiji": "غير موجودة في Yiji",
       "removalPending": "إزالة قيد الانتظار",
-      "removalFailed": "فشلت الإزالة"
+      "removalFailed": "فشلت الإزالة",
+      "funnel": "من الطلب إلى Yiji",
+      "decisions": "القرارات",
+      "removals": "الإزالات"
     },
     "late": {
       "title": "الطلبات المتأخرة",
@@ -2117,7 +2121,8 @@
       "title": "الإشعارات",
       "note": "الإشعارات داخل التطبيق المرسلة في هذه الفترة.",
       "total": "المرسلة",
-      "unread": "غير مقروءة"
+      "unread": "غير مقروءة",
+      "read": "مقروءة"
     },
     "ai": {
       "title": "استدعاءات الذكاء الاصطناعي",
@@ -2125,7 +2130,8 @@
       "calls": "الاستدعاءات",
       "errors": "الأخطاء",
       "cost": "التكلفة التقديرية",
-      "latency": "متوسط زمن الاستجابة"
+      "latency": "متوسط زمن الاستجابة",
+      "ok": "نجحت"
     },
     "yiji": {
       "title": "استخدام واجهة Yiji",
@@ -2156,8 +2162,20 @@
         "operation": "العملية",
         "outcome": "النتيجة",
         "detail": "السبب / الخطأ"
-      }
-    }
+      },
+      "split": "الاستدعاءات حسب الحساب",
+      "crmShare": "{{pct}}% عبر حساب CRM"
+    },
+    "description": "أرقام كل ميزة للفترة المختارة، في لمحة واحدة.",
+    "hero": {
+      "chatsHint": "{{closed}} مغلقة · {{open}} مفتوحة",
+      "ticketsHint": "{{num}} معوّضة",
+      "couponsLabel": "الكوبونات المعتمدة",
+      "couponsHint": "من أصل {{num}} طلب",
+      "yijiLabel": "استدعاءات Yiji",
+      "yijiHint": "{{failed}} فشلت · {{backup}} عبر الرمز الاحتياطي"
+    },
+    "emptySection": "لا شيء في هذه الفترة."
   },
   "shell": {
     "search": "بحث (Ctrl+K)",
@@ -2165,5 +2183,9 @@
     "metricEmpty": "لا توجد بيانات في هذه الفترة",
     "tableEmptyTitle": "لا يوجد ما يُعرض",
     "tableEmptyHint": "جرّب فترة أوسع أو امسح عوامل التصفية."
+  },
+  "controls": {
+    "clearSearch": "مسح البحث",
+    "exportExcelCount": "تصدير إلى إكسل ({{count}})"
   }
 }

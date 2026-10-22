@@ -47,6 +47,7 @@ import {
   type Tone,
 } from '../../components/dash/Dash.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
+import { ClearFiltersButton } from '../../components/ClearFiltersButton.js';
 
 /**
  * The operations manager's Dashboard, rebuilt on our data.
@@ -1028,20 +1029,16 @@ export function ComplaintDashboard({
               {t('complaintDash.apply', { defaultValue: 'Apply' })}
             </Button>
           )}
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            disabled={!anyFilter && !dirty}
-            onClick={() => {
+          <ClearFiltersButton
+            active={anyFilter || dirty}
+            onClear={() => {
               // Back to how the page opened — the last 30 days — not to "every
               // ticket ever", which is what an empty filter set fetches.
               setDraft(opening);
               setApplied(opening);
             }}
-          >
-            {t('complaintDash.clear', { defaultValue: 'Clear' })}
-          </Button>
+            label={t('complaintDash.clear', { defaultValue: 'Clear' })}
+          />
         </div>
       </div>
 

@@ -31,6 +31,9 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     <button
       ref={ref}
       type={type}
+      // Styling hooks only - see Button's `data-variant`.
+      data-icon-button=""
+      data-variant={variant}
       className={cn(
         'inline-flex items-center justify-center transition-[transform,background-color,color,box-shadow] duration-fast ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',

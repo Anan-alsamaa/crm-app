@@ -652,7 +652,8 @@ describe('AgentReportsPage — tickets report', () => {
 
     await userEvent.click(screen.getByRole('button', { name: `Columns ${total}/${total}` }));
     await userEvent.click(screen.getByLabelText('Subject'));
-    await userEvent.click(screen.getByText('Export to Excel'));
+    // The label carries the row count now: "Export to Excel (N)".
+    await userEvent.click(screen.getByRole('button', { name: /Export to Excel/ }));
 
     expect(dl.blobs).toHaveLength(1);
     expect(dl.blobs[0]!.type).toBe(
@@ -1328,10 +1329,12 @@ describe('AgentReportsPage — ticket breakdown', () => {
     expect(container.querySelectorAll('tbody tr')).toHaveLength(3);
   });
 
-  it('hides the clear button when nothing is filtered', () => {
+  it('shows Clear disabled when nothing is filtered', () => {
+    // Always on screen since 2026-10-22, its state saying whether it can act:
+    // a disabled Clear reads as "nothing to clear", not as a missing control.
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
-    expect(screen.queryByText('Clear filters')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeDisabled();
   });
 
   it('can send a column to the front in one action', async () => {

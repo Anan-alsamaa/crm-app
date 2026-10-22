@@ -71,6 +71,7 @@ export function ColumnArranger<K extends string>({
             </span>
             <button
               type="button"
+              data-text-action=""
               className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
               onClick={() => onOrder([...defaults])}
             >
@@ -136,6 +137,7 @@ export function ColumnArranger<K extends string>({
                     col: label,
                     defaultValue: 'Move {{col}} earlier',
                   })}
+                  data-icon-action=""
                   className={arrow}
                 >
                   ↑
@@ -148,6 +150,7 @@ export function ColumnArranger<K extends string>({
                     col: label,
                     defaultValue: 'Move {{col}} later',
                   })}
+                  data-icon-action=""
                   className={arrow}
                 >
                   ↓
@@ -164,6 +167,7 @@ export function ColumnArranger<K extends string>({
                     col: label,
                     defaultValue: 'Move {{col}} to the front',
                   })}
+                  data-icon-action=""
                   className={arrow}
                 >
                   ⤒

@@ -71,6 +71,7 @@ import {
 import { useVendorDirectory } from '../vendors/api.js';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
 import { PAGE_GUTTER, PageTitle, WIDE_TABLE } from '../../components/shell/Page.js';
+import { ExportCsvButton } from '../../components/ExportCsvButton.js';
 
 /**
  * Rows per page. The same ladder the ticket reports use, 1000 included — a
@@ -1238,16 +1239,15 @@ export function LateOrdersReportPage() {
                       {t('lateOrdersReport.summary', { defaultValue: 'Summary' })}
                     </h3>
                     {canExport && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
+                      <ExportCsvButton
+                        onExport={exportSummary}
+                        count={summary.length}
                         className="ms-auto"
-                        onClick={exportSummary}
-                        disabled={summary.length === 0}
-                      >
-                        {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                      </Button>
+                        label={t('agentReports.exportCsvCount', {
+                          count: summary.length,
+                          defaultValue: 'Export CSV ({{count}})',
+                        })}
+                      />
                     )}
                   </div>
                   <Table>
@@ -1290,16 +1290,15 @@ export function LateOrdersReportPage() {
                       {t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })}
                     </h3>
                     {canExport && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
+                      <ExportCsvButton
+                        onExport={exportByAgent}
+                        count={stats.length}
                         className="ms-auto"
-                        onClick={exportByAgent}
-                        disabled={stats.length === 0}
-                      >
-                        {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                      </Button>
+                        label={t('agentReports.exportCsvCount', {
+                          count: stats.length,
+                          defaultValue: 'Export CSV ({{count}})',
+                        })}
+                      />
                     )}
                   </div>
                   {/*
@@ -1418,15 +1417,14 @@ export function LateOrdersReportPage() {
                       {t('agentReports.columns', { defaultValue: 'Columns' })}
                     </Button>
                     {canExport && (
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        size="sm"
-                        onClick={exportDecisions}
-                        disabled={rows.length === 0}
-                      >
-                        {t('lateOrdersReport.exportCsv', { defaultValue: 'Export to CSV' })}
-                      </Button>
+                      <ExportCsvButton
+                        onExport={exportDecisions}
+                        count={rows.length}
+                        label={t('agentReports.exportCsvCount', {
+                          count: rows.length,
+                          defaultValue: 'Export CSV ({{count}})',
+                        })}
+                      />
                     )}
                   </div>
                   {/*
@@ -1621,6 +1619,7 @@ export function LateOrdersReportPage() {
             </span>
             <button
               type="button"
+              data-text-action=""
               className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
               onClick={resetRegisterOrder}
             >
@@ -1670,6 +1669,7 @@ export function LateOrdersReportPage() {
                     col: c.label,
                     defaultValue: 'Move {{col}} earlier',
                   })}
+                  data-icon-action=""
                   className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
                 >
                   ↑
@@ -1682,6 +1682,7 @@ export function LateOrdersReportPage() {
                     col: c.label,
                     defaultValue: 'Move {{col}} later',
                   })}
+                  data-icon-action=""
                   className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
                 >
                   ↓

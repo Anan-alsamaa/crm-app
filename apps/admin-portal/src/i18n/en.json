@@ -1577,7 +1577,8 @@
       "created": "Created",
       "compensated": "Compensated",
       "notCompensated": "Not compensated",
-      "solved": "Solved"
+      "solved": "Solved",
+      "undecided": "Not decided"
     },
     "coupons": {
       "title": "Coupons",
@@ -1593,7 +1594,10 @@
       "removalUsed": "Already used",
       "removalNotOnYiji": "Not on Yiji",
       "removalPending": "Removal waiting",
-      "removalFailed": "Removal failed"
+      "removalFailed": "Removal failed",
+      "funnel": "From request to Yiji",
+      "decisions": "Decisions",
+      "removals": "Removals"
     },
     "late": {
       "title": "Late orders",
@@ -1615,7 +1619,8 @@
       "title": "Notifications",
       "note": "In-app notifications sent in this window.",
       "total": "Sent",
-      "unread": "Still unread"
+      "unread": "Still unread",
+      "read": "Read"
     },
     "ai": {
       "title": "AI calls",
@@ -1623,7 +1628,8 @@
       "calls": "Calls",
       "errors": "Errors",
       "cost": "Est. cost",
-      "latency": "Avg latency"
+      "latency": "Avg latency",
+      "ok": "Succeeded"
     },
     "yiji": {
       "title": "Yiji API usage",
@@ -1654,8 +1660,20 @@
         "operation": "Operation",
         "outcome": "Outcome",
         "detail": "Why / error"
-      }
-    }
+      },
+      "split": "Calls by account",
+      "crmShare": "{{pct}}% by the CRM account"
+    },
+    "description": "Every feature's figures for the chosen window, at a glance.",
+    "hero": {
+      "chatsHint": "{{closed}} closed · {{open}} open",
+      "ticketsHint": "{{num}} compensated",
+      "couponsLabel": "Coupons approved",
+      "couponsHint": "of {{num}} requested",
+      "yijiLabel": "Yiji calls",
+      "yijiHint": "{{failed}} failed · {{backup}} via backup"
+    },
+    "emptySection": "Nothing in this window."
   },
   "shell": {
     "search": "Search (Ctrl+K)",
@@ -1663,5 +1681,9 @@
     "metricEmpty": "No data in range",
     "tableEmptyTitle": "Nothing to show",
     "tableEmptyHint": "Try a wider date range or clear the filters."
+  },
+  "controls": {
+    "clearSearch": "Clear search",
+    "exportExcelCount": "Export to Excel ({{count}})"
   }
 }

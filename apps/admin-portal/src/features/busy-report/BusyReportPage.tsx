@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
-  Button,
   ClockIcon,
   IdentityCell,
   EmptyState,
@@ -32,6 +31,7 @@ import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useUsers } from '../users/api.js';
 import { summarize, toRows } from './busy.js';
 import { PAGE_GUTTER, PageTitle } from '../../components/shell/Page.js';
+import { ExportCsvButton } from '../../components/ExportCsvButton.js';
 
 /**
  * AGENT KPI → BUSY TIME (owner, 2026-10-11).
@@ -169,14 +169,14 @@ export function BusyReportPage() {
               reset();
             }}
             actions={
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={exportCsv}
-                disabled={rows.length === 0}
-              >
-                {t('busyReport.export', { defaultValue: 'Export CSV' })}
-              </Button>
+              <ExportCsvButton
+                onExport={exportCsv}
+                count={rows.length}
+                label={t('agentReports.exportCsvCount', {
+                  count: rows.length,
+                  defaultValue: 'Export CSV ({{count}})',
+                })}
+              />
             }
           />
 

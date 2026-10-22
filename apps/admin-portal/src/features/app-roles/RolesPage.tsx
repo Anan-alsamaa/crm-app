@@ -32,6 +32,7 @@ import {
 } from '../../lib/privileges.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
+import { ClearFiltersButton } from '../../components/ClearFiltersButton.js';
 
 /**
  * Roles & privileges, the way the ops portal does it: a named role is a set of
@@ -562,18 +563,16 @@ export function RolesPage() {
                   </span>
                   {/* Nothing could clear a selection once made, so a built-in
                       role's read-only panel became a dead end. */}
-                  {draft.id && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCreating(false);
-                        setDraft(EMPTY);
-                      }}
-                      className="rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10"
-                    >
-                      {t('roles.clearSelection', { defaultValue: 'Clear' })}
-                    </button>
-                  )}
+                  {/* Always shown; usable only while a role is selected
+                      (owner, 2026-10-22: a usable Clear must look usable). */}
+                  <ClearFiltersButton
+                    active={!!draft.id}
+                    onClear={() => {
+                      setCreating(false);
+                      setDraft(EMPTY);
+                    }}
+                    label={t('roles.clearSelection', { defaultValue: 'Clear' })}
+                  />
                 </div>
                 <ul className="divide-y divide-foreground/[0.06]">
                   {(roles.data ?? []).map((r) => (

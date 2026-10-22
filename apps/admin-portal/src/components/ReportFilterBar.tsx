@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Button, DateField, Input, SelectMenu } from '@yiji/ui';
+import { Button, DateField, SelectMenu } from '@yiji/ui';
+import { ClearFiltersButton } from './ClearFiltersButton.js';
+import { SearchField } from './SearchField.js';
 import { defaultReportRange } from '../lib/date-range.js';
 import {
   clearReportVendor,
@@ -252,9 +254,14 @@ export function ReportFilterBar({
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex min-w-0 flex-1 basis-[16rem] flex-col gap-1.5">
           <span className="text-xs font-medium text-muted-foreground">{searchLabel}</span>
-          <Input
+          <SearchField
             value={draftSearch}
-            onChange={(e) => setDraftSearch(e.target.value)}
+            onValueChange={setDraftSearch}
+            /* The x clears the APPLIED search too: typed text waits for
+               Apply, but emptying the box is a whole answer on its own. */
+            onCleared={() => {
+              if (search) onSearch('');
+            }}
             placeholder={searchPlaceholder}
           />
         </label>
@@ -351,11 +358,13 @@ function FilterActions({
 }): JSX.Element {
   return (
     <div className="ms-auto flex flex-wrap items-end gap-2">
-      {filtering && (
-        <Button type="button" size="sm" variant="ghost" onClick={clear}>
-          {String(t('inbox.clearFilters', { defaultValue: 'Clear filters' }))}
-        </Button>
-      )}
+      {/* Always on screen; enabled only while something is narrowing the
+          set (owner, 2026-10-22) - see ClearFiltersButton. */}
+      <ClearFiltersButton
+        active={filtering}
+        onClear={clear}
+        label={String(t('inbox.clearFilters', { defaultValue: 'Clear filters' }))}
+      />
       {dirty && (
         <Button type="submit" size="sm" onClick={apply}>
           {String(t('complaintReport.applyPending', { defaultValue: 'Apply changes' }))}

@@ -7,6 +7,7 @@ import {
   cn,
   ConfirmDialog,
   Drawer,
+  DownloadIcon,
   ExportButtons,
   formatDate,
   formatRelative,
@@ -906,11 +907,15 @@ export function AllCompensationPage() {
                 </button>
                 {canExport && (
                   <ExportButtons
+                    icon={<DownloadIcon size={15} />}
                     visibleCount={filtered.length}
                     totalCount={rows.data?.length ?? 0}
                     onExportView={() => exportCsv('view')}
                     onExportAll={() => exportCsv('all')}
-                    labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+                    labelPlain={t('agentReports.exportCsvCount', {
+                      count: rows.data?.length ?? 0,
+                      defaultValue: 'Export CSV ({{count}})',
+                    })}
                     labelView={t('compensationAll.exportFiltered', {
                       count: filtered.length,
                       defaultValue: 'Export {{count}} shown',
@@ -1166,6 +1171,7 @@ export function AllCompensationPage() {
                   </span>
                   <button
                     type="button"
+                    data-text-action=""
                     className="text-2xs font-medium text-muted-foreground hover:text-foreground hover:underline"
                     onClick={resetOrder}
                   >
@@ -1236,6 +1242,7 @@ export function AllCompensationPage() {
                           col: c.label,
                           defaultValue: 'Move {{col}} earlier',
                         })}
+                        data-icon-action=""
                         className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
                       >
                         ↑
@@ -1248,6 +1255,7 @@ export function AllCompensationPage() {
                           col: c.label,
                           defaultValue: 'Move {{col}} later',
                         })}
+                        data-icon-action=""
                         className="grid h-6 w-6 shrink-0 place-items-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-30"
                       >
                         ↓

@@ -121,6 +121,10 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       type={type}
       disabled={isDisabled}
       data-loading={loading || undefined}
+      // A styling HOOK only (no CSS in this package reads it): lets a portal's
+      // own stylesheet restyle one variant - the admin console gives ghost and
+      // link buttons a visible pill so a usable action never reads as text.
+      data-variant={variant}
       className={cn(
         base,
         variants[variant],

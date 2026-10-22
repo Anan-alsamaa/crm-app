@@ -10,6 +10,7 @@ import {
   Drawer,
   DrawerSection,
   EmptyState,
+  DownloadIcon,
   ExportButtons,
   ErrorState,
   FormField,
@@ -38,6 +39,8 @@ import { downloadCsv, parseStoresCsv, toCsv } from './csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { FILTER_CARD, PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { exportFileName } from '@yiji/shared-config';
+import { ClearFiltersButton } from '../../components/ClearFiltersButton.js';
+import { SearchField } from '../../components/SearchField.js';
 
 const schema = z.object({
   code: z.string().optional(),
@@ -446,11 +449,15 @@ export function StoresPage() {
             </Button>
             {canExport && (
               <ExportButtons
+                icon={<DownloadIcon size={15} />}
                 visibleCount={filtered.length}
                 totalCount={list.length}
                 onExportView={() => exportCsv('view')}
                 onExportAll={() => exportCsv('all')}
-                labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+                labelPlain={t('agentReports.exportCsvCount', {
+                  count: list.length,
+                  defaultValue: 'Export CSV ({{count}})',
+                })}
                 labelView={t('stores.exportFiltered', {
                   count: filtered.length,
                   defaultValue: 'Export {{count}} shown',
@@ -501,12 +508,15 @@ export function StoresPage() {
                 'grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,14rem)_auto]',
               )}
             >
-              <Input
+              <SearchField
                 value={query}
-                onChange={(e) => {
-                  setQuery(e.target.value);
+                onValueChange={(v) => {
+                  setQuery(v);
                   setPage(1);
                 }}
+                aria-label={t('stores.search', {
+                  defaultValue: 'Search store, code, city, brand or manager…',
+                })}
                 placeholder={t('stores.search', {
                   defaultValue: 'Search store, code, city, brand or manager…',
                 })}
@@ -534,21 +544,18 @@ export function StoresPage() {
                   ...branchOptions.map((name) => ({ value: String(name), label: String(name) })),
                 ]}
               />
-              {(brandFilter || branchFilter || query.trim()) && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setQuery('');
-                    setBrandFilter('');
-                    setBranchFilter('');
-                    setPage(1);
-                  }}
-                >
-                  {t('inbox.clearFilters', { defaultValue: 'Clear filters' })}
-                </Button>
-              )}
+              {/* The list opens unfiltered: any brand, branch or text is
+                  something to clear. */}
+              <ClearFiltersButton
+                active={!!(brandFilter || branchFilter || query.trim())}
+                onClear={() => {
+                  setQuery('');
+                  setBrandFilter('');
+                  setBranchFilter('');
+                  setPage(1);
+                }}
+                label={t('inbox.clearFilters', { defaultValue: 'Clear filters' })}
+              />
             </div>
           </div>
         )}

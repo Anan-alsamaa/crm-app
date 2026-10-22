@@ -183,6 +183,7 @@ export function NotificationBell(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => void markAllRead()}
+                  data-text-action=""
                   className="text-2xs font-semibold text-primary underline-offset-2 hover:underline"
                 >
                   {t('notifications.markAllRead', { defaultValue: 'Mark all read' })}
@@ -316,6 +317,7 @@ export function NotificationBell(): JSX.Element {
                                     <button
                                       type="button"
                                       onClick={() => void markRead.mutateAsync(n.id)}
+                                      data-text-action=""
                                       className="ms-auto text-2xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                                     >
                                       {t('notifications.markRead', { defaultValue: 'Mark read' })}
