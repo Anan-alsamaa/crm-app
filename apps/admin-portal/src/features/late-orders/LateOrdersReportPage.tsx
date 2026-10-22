@@ -1202,8 +1202,8 @@ export function LateOrdersReportPage() {
                     onClick={() => setTab(key)}
                     className={
                       tab === key
-                        ? 'shrink-0 rounded-full bg-primary/15 px-3.5 py-1.5 text-sm font-semibold text-primary ring-1 ring-inset ring-primary/25'
-                        : 'shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground'
+                        ? 'shrink-0 rounded-full px-4 py-2 text-sm font-semibold bg-ink text-ink-foreground'
+                        : 'shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-fast ease-out bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground'
                     }
                   >
                     {label}

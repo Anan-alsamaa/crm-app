@@ -526,8 +526,8 @@ function OutcomeChip({
       className={cn(
         'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors duration-fast',
         active
-          ? 'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
-          : 'text-muted-foreground ring-1 ring-border hover:bg-secondary hover:text-foreground',
+          ? 'bg-ink text-ink-foreground'
+          : 'bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground',
       )}
     >
       {label}

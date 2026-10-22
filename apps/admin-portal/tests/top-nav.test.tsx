@@ -88,17 +88,17 @@ describe('TopNav (admin, grouped)', () => {
     renderNav('/report-tickets');
     const trigger = screen.getByRole('button', { name: /Reports/ });
     // The filled pill is how selection reads; a side stripe is banned. The
-    // fill is the ink token (AURA LIGHT), not the accent.
-    expect(trigger.className).toContain('bg-primary');
-    expect(screen.getByRole('link', { name: /Dashboard/ }).className).not.toContain('bg-primary');
+    // fill is the solid ink pill (Rapport skin, 2026-10-22), not the accent.
+    expect(trigger.className).toContain('bg-ink');
+    expect(screen.getByRole('link', { name: /Dashboard/ }).className).not.toContain('bg-ink');
   });
 
   it('does not confuse sibling prefixes: /sla-reports must not activate /sla', () => {
     renderNav('/sla-reports');
     // The Policies link points at /sla, which is a string prefix of the current
     // path — matching on startsWith alone would light it up incorrectly.
-    expect(screen.getByRole('link', { name: /^SLA$/ }).className).not.toContain('bg-primary');
-    expect(screen.getByRole('button', { name: /Reports/ }).className).toContain('bg-primary');
+    expect(screen.getByRole('link', { name: /^SLA$/ }).className).not.toContain('bg-ink');
+    expect(screen.getByRole('button', { name: /Reports/ }).className).toContain('bg-ink');
   });
 
   it('a section linking to its first tab stays active on its other tabs', async () => {
@@ -129,11 +129,11 @@ describe('TopNav (admin, grouped)', () => {
       </MemoryRouter>,
     );
     const trigger = screen.getByRole('button', { name: /Reports/ });
-    expect(trigger.className).toContain('bg-primary');
+    expect(trigger.className).toContain('bg-ink');
     await user.click(trigger);
     const [kpi, tickets] = screen.getAllByRole('menuitem');
-    expect(kpi!.className).toContain('bg-primary-subtle');
-    expect(tickets!.className).not.toContain('bg-primary-subtle');
+    expect(kpi!.className).toContain('bg-ink/[0.06]');
+    expect(tickets!.className).not.toContain('bg-ink/[0.06]');
   });
 
   it('selecting a menu item closes the menu', async () => {

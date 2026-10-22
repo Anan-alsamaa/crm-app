@@ -1018,7 +1018,11 @@
     "progressHint": "Solved and still open, in the selected range.",
     "progressSolved": "solved",
     "legendSolved": "Solved",
-    "legendOpen": "Open"
+    "legendOpen": "Open",
+    "stripRange": "tickets, {{from}} to {{to}}",
+    "stripChats": "open chats of {{n}} in range",
+    "stripToDecide": "to decide",
+    "stripCoupons": "coupons awaiting a decision"
   },
   "performance": {
     "title": "Agent performance",
@@ -1650,5 +1654,9 @@
         "detail": "Why / error"
       }
     }
+  },
+  "shell": {
+    "search": "Search (Ctrl+K)",
+    "quickActions": "Quick actions"
   }
 }

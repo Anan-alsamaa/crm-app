@@ -49,30 +49,18 @@ function tileFor(section: NavSection): string {
   return GROUP_TILES[section.items[0].to] ?? NEUTRAL_TILE;
 }
 
-/* Tabs, not pills: the nav now owns its own row in the masthead, so the
- * active destination is marked by a jade underline sitting on the header's
- * bottom edge — the way a masthead marks a section — instead of a filled
- * lozenge that competed with every button on the page. */
-/* The reference marks the current section with a solid DARK pill and leaves
- * everything else as quiet text on the canvas — high contrast where you are,
- * nothing where you are not. */
+/* RAPPORT PILL TABS (owner, 2026-10-22). The current section is a solid DARK
+ * pill - the ink, on the brand hue - and everything else is plain text on the
+ * page: high contrast where you are, nothing where you are not. 13.5px/600,
+ * 10px x 17px, fully rounded, exactly the reference's tab. */
 const TRIGGER_BASE =
-  'group relative flex h-10 min-w-0 items-center gap-1.5 rounded-full px-4 text-sm transition-[background-color,color,box-shadow,font-weight] duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]';
-/* The selected pill is a jade wash with a hairline of the same hue — the glow
- * treatment from the reference boards — rather than a solid fill, which on the
- * floating dark bar read as a button, not a location. */
+  'group relative flex h-10 min-w-0 items-center gap-1.5 rounded-full px-3 text-[0.84375rem] 2xl:px-[17px] font-semibold ' +
+  'transition-[background-color,color,box-shadow] duration-fast ease-out ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background ' +
+  'motion-safe:active:scale-[0.97]';
 const TRIGGER_ACTIVE =
-  'bg-primary font-semibold text-primary-foreground ' +
-  'shadow-[0_6px_18px_-8px_oklch(var(--primary)/0.7)] ' +
-  /* A hairline of the brand at low alpha reads as a lit edge rather than a
-     second border, which is what separates "this is where I am" from "this is
-     a button". */
-  'ring-1 ring-inset ring-primary-foreground/20';
-const TRIGGER_IDLE =
-  /* Idle sits back, hover comes forward, and the label gains weight on the way
-     — so the row feels responsive without anything moving. */
-  'font-medium text-ink-foreground/60 hover:bg-ink-foreground/[0.12] ' +
-  'hover:font-semibold hover:text-ink-foreground';
+  'bg-ink text-ink-foreground shadow-[0_10px_24px_-14px_oklch(var(--ink)/0.9)]';
+const TRIGGER_IDLE = 'text-foreground/80 hover:bg-white/60 hover:text-foreground';
 
 /** A section with one item: a plain link, no menu. */
 function DirectLink({ section }: { section: NavSection }) {
@@ -206,7 +194,7 @@ function MenuGroup({ section }: { section: NavSection }) {
           className={cn(
             'shrink-0 transition-transform duration-fast ease-out',
             open && 'rotate-180',
-            active ? 'text-background/70' : 'text-muted-foreground',
+            active ? 'text-ink-foreground/70' : 'text-muted-foreground',
           )}
         />
       </button>
@@ -216,8 +204,9 @@ function MenuGroup({ section }: { section: NavSection }) {
           role="menu"
           aria-label={section.heading}
           className={cn(
-            'absolute top-full start-0 z-50 mt-1 min-w-[16rem] rounded-2xl p-1.5',
-            'bg-popover/95 text-popover-foreground shadow-xl shadow-black/30 ring-1 ring-border backdrop-blur',
+            'absolute top-full start-0 z-50 mt-2 min-w-[16rem] rounded-[1.25rem] p-1.5',
+            'bg-popover text-popover-foreground ring-1 ring-foreground/[0.06]',
+            'shadow-[0_2px_6px_oklch(var(--shadow-color)/0.06),0_30px_60px_-28px_oklch(var(--shadow-color)/0.45)]',
             'origin-top motion-safe:animate-scale-in',
           )}
         >
@@ -247,11 +236,11 @@ function MenuGroup({ section }: { section: NavSection }) {
                 onKeyDown={(e) => onItemKeyDown(e, i)}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm',
+                    'flex items-center gap-2.5 rounded-xl px-2 py-2 text-sm',
                     'transition-colors duration-fast ease-out',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                     isActive || sectionHere(it)
-                      ? 'bg-primary-subtle font-semibold text-foreground'
+                      ? 'bg-ink/[0.06] font-semibold text-foreground'
                       : 'font-medium text-foreground hover:bg-secondary',
                   )
                 }
@@ -260,8 +249,8 @@ function MenuGroup({ section }: { section: NavSection }) {
                   <>
                     <span
                       className={cn(
-                        'grid h-6 w-6 shrink-0 place-items-center rounded-md',
-                        isActive || sectionHere(it) ? 'bg-primary text-primary-foreground' : tile,
+                        'grid h-7 w-7 shrink-0 place-items-center rounded-full',
+                        isActive || sectionHere(it) ? 'bg-ink text-ink-foreground' : tile,
                       )}
                     >
                       <it.icon size={14} />
@@ -285,7 +274,7 @@ export function TopNav({ sections }: { sections: NavSection[] }) {
     // instead — which needs `min-w-0` all the way down, or a flex child refuses
     // to shrink below its content and the row silently slides underneath the
     // utilities at the end of the masthead instead of compressing.
-    <ul className="flex min-w-0 items-center gap-1">
+    <ul className="flex min-w-0 items-center gap-0.5">
       {sections.map((section, i) => {
         // Divider before the rarely-touched setup groups, so the bar keeps the
         // "daily work / occasional setup" split the rail headings gave it.
@@ -293,7 +282,7 @@ export function TopNav({ sections }: { sections: NavSection[] }) {
         return (
           <li key={section.heading ?? section.items[0].to} className="flex min-w-0 items-center">
             {i > 0 && startsSetup && (
-              <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-border" />
+              <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-foreground/10" />
             )}
             {section.items.length === 1 ? (
               <DirectLink section={section} />

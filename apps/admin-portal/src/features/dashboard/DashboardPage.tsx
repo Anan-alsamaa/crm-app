@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { cn, Toolbar } from '@yiji/ui';
+import { cn, Toolbar, ToolbarSpacer } from '@yiji/ui';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { ComplaintDashboard } from './ComplaintDashboard.js';
 import { UpdateBanner } from '../releases/UpdateBanner.js';
@@ -29,8 +29,7 @@ type Tab = 'operations' | 'agent';
 
 export function DashboardPage() {
   const { t } = useTranslation();
-  const { user, can, isOwner } = useAuth();
-  const firstName = user?.first_name || user?.email?.split('@')[0] || '';
+  const { can, isOwner } = useAuth();
   // Each board is its own switch (owner, 2026-10-12). The Agent one defaults to
   // the old rule - open the page AND see all chats - so nobody's view changed.
   const canSeeAgent = isOwner || can('view_agent_dashboard');
@@ -41,129 +40,95 @@ export function DashboardPage() {
   const [tab, setTab] = useState<Tab>('agent');
   const active: Tab = canSeeAgent && canSeeOps ? tab : canSeeAgent ? 'agent' : 'operations';
 
+  // The element beside the title that the stat strip is portalled into.
+  const [statSlot, setStatSlot] = useState<HTMLDivElement | null>(null);
+
+  /*
+   * THE RAPPORT HEADER (owner, 2026-10-22): the big title, the stat strip
+   * beside it, and on the far side the board switch as a segmented control
+   * and the two jumps a supervisor makes first. It replaces the gradient hero
+   * band, which said the same things in a 100px slab.
+   */
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
         <h1 className="text-sm font-semibold tracking-tight text-foreground">
           {t('dashboard.title', { defaultValue: 'Dashboard' })}
         </h1>
+        <div
+          ref={setStatSlot}
+          className="flex min-w-0 flex-wrap items-center gap-x-8 gap-y-3 ps-2 empty:hidden lg:ps-6"
+        />
+        <ToolbarSpacer />
+        {/* A strip of one is a label, not a choice — a role with a single
+            dashboard is simply shown it. */}
+        {canSeeAgent && canSeeOps && (
+          <nav
+            aria-label={t('dashboard.title', { defaultValue: 'Dashboard' })}
+            className="flex shrink-0 items-center gap-0.5 rounded-full bg-foreground/[0.06] p-1"
+          >
+            {(
+              [
+                ['agent', t('dashboard.tabAgent', { defaultValue: 'Agent' })],
+                ['operations', t('dashboard.tabOperations', { defaultValue: 'Operations' })],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                aria-current={active === key ? 'page' : undefined}
+                className={cn(
+                  'shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold whitespace-nowrap',
+                  'transition-[background-color,color,box-shadow] duration-fast ease-out',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
+                  active === key
+                    ? 'bg-white text-foreground shadow-[0_4px_12px_-6px_oklch(var(--shadow-color)/0.45)]'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
+        {active === 'agent' && (
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              to="/reports/operational-kpi/tickets"
+              className="rounded-full bg-white/60 px-4 py-2 text-sm font-semibold text-foreground ring-1 ring-inset ring-foreground/10 transition-colors duration-fast hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+            >
+              {t('dashboard.heroTickets', { defaultValue: 'Ticket breakdown' })}
+            </Link>
+            <Link
+              to="/agent-performance"
+              className="rounded-full bg-ink px-4 py-2 text-sm font-semibold text-ink-foreground transition-colors duration-fast hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2"
+            >
+              {t('dashboard.heroAgents', { defaultValue: 'Agent performance' })}
+            </Link>
+          </div>
+        )}
       </Toolbar>
 
-      {/* A strip of one is a label, not a choice — a role with a single
-          dashboard is simply shown it. */}
-      {canSeeAgent && canSeeOps && (
-        <nav
-          aria-label={t('dashboard.title', { defaultValue: 'Dashboard' })}
-          className="flex shrink-0 items-center gap-1 border-b border-foreground/[0.06] px-4 py-2"
-        >
-          {(
-            [
-              ['agent', t('dashboard.tabAgent', { defaultValue: 'Agent' })],
-              ['operations', t('dashboard.tabOperations', { defaultValue: 'Operations' })],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              aria-current={active === key ? 'page' : undefined}
-              className={cn(
-                'shrink-0 rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap',
-                'transition-[background-color,color,font-weight] duration-fast ease-out',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                active === key
-                  ? 'bg-primary/15 font-semibold text-primary ring-1 ring-inset ring-primary/25'
-                  : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground',
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-      )}
-
-      <div className="flex min-h-0 flex-1 flex-col overflow-auto p-4 sm:p-6">
-        {/* A published build waiting to be released. Above the hero because it
-            is a decision to make, not a reading to take — and it renders
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto px-5 pb-6 pt-2 sm:px-7">
+        {/* A published build waiting to be released. Above everything because
+            it is a decision to make, not a reading to take — and it renders
             nothing at all when production is up to date, which is most of the
             time. Outside the tab branches so it shows on either board. */}
         <div className="mb-4 shrink-0 empty:mb-0">
           <UpdateBanner />
         </div>
-        {active === 'agent' && (
-          <>
-            {/* The reference dashboard's hero band: a saturated violet→jade
-                sweep with the greeting and the two jumps a supervisor makes
-                first. White ink on purpose — the fill is saturated in BOTH
-                themes, and the theme tokens would flip to unreadable here. */}
-            <div className="relative mb-5 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float">
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
-              />
-              <div className="relative flex flex-wrap items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="font-display text-2xl font-bold tracking-tight text-white">
-                    {firstName
-                      ? t('dashboard.heroWelcome', {
-                          defaultValue: 'Welcome back, {{name}}',
-                          name: firstName,
-                        })
-                      : t('dashboard.heroWelcomeBare', { defaultValue: 'Welcome back' })}
-                  </h2>
-                  <p className="mt-1 max-w-xl text-sm leading-relaxed text-white/85">
-                    {t('dashboard.heroSub', {
-                      defaultValue:
-                        'Here is where every ticket stands right now — filter the range below, or jump straight in.',
-                    })}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Link
-                    to="/reports/operational-kpi/tickets"
-                    className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-[oklch(0.3_0.1_285)] shadow-sm transition-transform duration-fast motion-safe:hover:-translate-y-0.5"
-                  >
-                    {t('dashboard.heroTickets', { defaultValue: 'Ticket breakdown' })}
-                  </Link>
-                  <Link
-                    to="/agent-performance"
-                    className="rounded-full bg-white/15 px-4 py-2 text-sm font-semibold text-white ring-1 ring-inset ring-white/40 transition-colors duration-fast hover:bg-white/25"
-                  >
-                    {t('dashboard.heroAgents', { defaultValue: 'Agent performance' })}
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </>
-        )}
         {active === 'operations' && (
-          /* Operations gets a hero too, and a DIFFERENT sweep.
-             Only the Agent tab had one, so switching to Operations dropped from
-             a saturated band straight into pale cards and the page read as the
-             emptier of the two — when it is the one an operations lead opens
-             daily. Sky→violet rather than violet→jade so the two boards are
-             told apart by colour before a word is read.
-             White ink deliberately: the fill is saturated in BOTH themes, and
-             theme tokens would flip to unreadable on it. */
-          <div className="relative mb-5 shrink-0 overflow-hidden rounded-2xl bg-gradient-to-r from-sky via-primary to-violet p-6 shadow-float">
-            <div
-              aria-hidden
-              className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.28),transparent_60%)]"
-            />
-            <div className="relative min-w-0">
-              <h2 className="font-display text-2xl font-bold tracking-tight text-white">
-                {t('dashboard.opsHero', { defaultValue: 'Operations' })}
-              </h2>
-              <p className="mt-1 max-w-prose text-sm leading-relaxed text-white/85">
-                {t('dashboard.opsHeroHint', {
-                  defaultValue:
-                    'Which branches customers are complaining about, and which area managers own them.',
-                })}
-              </p>
-            </div>
-          </div>
+          /* What this board is for, in one line - the operations hero's
+             sentence, kept now that the hero band is gone. */
+          <p className="mb-4 max-w-prose px-1 text-sm text-muted-foreground">
+            {t('dashboard.opsHeroHint', {
+              defaultValue:
+                'Which branches customers are complaining about, and which area managers own them.',
+            })}
+          </p>
         )}
-        <ComplaintDashboard view={active} />
+        <ComplaintDashboard view={active} statSlot={statSlot} />
       </div>
     </div>
   );

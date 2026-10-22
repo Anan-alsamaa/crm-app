@@ -542,7 +542,11 @@
     "progressHint": "المحلولة والمفتوحة في الفترة المحددة.",
     "progressSolved": "محلولة",
     "legendSolved": "محلولة",
-    "legendOpen": "مفتوحة"
+    "legendOpen": "مفتوحة",
+    "stripRange": "تذكرة، من {{from}} إلى {{to}}",
+    "stripChats": "محادثة مفتوحة من {{n}} في الفترة",
+    "stripToDecide": "بانتظار القرار",
+    "stripCoupons": "كوبونات بانتظار القرار"
   },
   "complaintReport": {
     "outsideWindow": "{{count}} تذكرة أخرى سُجّلت في هذه الفترة لكنها حدثت بين {{earliest}} و {{latest}}، لذا فهي مُدرجة تحت تلك التواريخ.",
@@ -2152,5 +2156,9 @@
         "detail": "السبب / الخطأ"
       }
     }
+  },
+  "shell": {
+    "search": "بحث (Ctrl+K)",
+    "quickActions": "إجراءات سريعة"
   }
 }

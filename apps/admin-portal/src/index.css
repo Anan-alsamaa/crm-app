@@ -46,40 +46,50 @@
    * uses the deeper `--primary` or dark ink, because OKLCH L is perceptual and
    * a bright fill with white text fails AA every time.
    */
-  --radius: 1.25rem;
+  /* RAPPORT SKIN (owner, 2026-10-22). 18px base radius, so `rounded-2xl`
+     (radius + 8px) lands on the reference's 26px card corner. */
+  --radius: 1.125rem;
 
-  /* Surfaces: a cool near-white page, white content on top of it. */
-  --background: 0.98 0.003 250;
-  --canvas: 0.972 0.004 252;
-  --foreground: 0.25 0.02 260;
-  --card: 1 0 0;
-  --card-foreground: 0.25 0.02 260;
+  /* Surfaces: a soft warm-neutral page under a faint indigo/peach wash (see
+     `body`), and softly-white cards floating on it. The card is NOT pure
+     white: the reference's frosted panels read a step above the page, not
+     as holes punched in it. */
+  --background: 0.94 0.007 75;
+  --canvas: 0.925 0.008 75;
+  --foreground: 0.22 0.02 277;
+  --card: 0.985 0.003 80;
+  --card-foreground: 0.22 0.02 277;
   --popover: 1 0 0;
-  --popover-foreground: 0.25 0.02 260;
+  --popover-foreground: 0.22 0.02 277;
 
   /* THE BRAND INDIGO — taken from the SARA CRM logo (#4338CA).
      Every accent in both themes derives from this one hue, so the mark and the
      interface cannot drift apart. Deep enough to carry white text at 7.3:1,
      which is AA with room to spare. */
-  --primary: 0.457 0.215 277;
-  --primary-strong: 0.4 0.215 277;
+  /* #4B3BD5 - the Sara CRM indigo (DESIGN.md). 7.28:1 with white. */
+  --primary: 0.477 0.223 278;
+  --primary-strong: 0.42 0.223 278;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.457 0.215 277 / 0.1;
-  --brand: 0.457 0.215 277;
+  --primary-subtle: 0.477 0.223 278 / 0.1;
+  --brand: 0.477 0.223 278;
 
   --bubble: 0.965 0.012 255;
 
   /* Ink: the dark counterweight in a light app — masthead, table headers, the
      nav rail. Sits on the brand hue rather than a neighbouring navy, so the
      masthead reads as the same family as the mark on it. */
-  --ink: 0.23 0.035 277;
+  --ink: 0.21 0.03 277;
   --ink-foreground: 0.98 0.004 250;
   --ink-muted: 0.7 0.02 277;
 
-  --secondary: 0.955 0.006 252;
-  --secondary-foreground: 0.25 0.02 260;
-  --muted: 0.955 0.006 252;
-  --muted-foreground: 0.55 0.02 262;
+  /* Wells, hovers and inactive chips: a step BELOW the card, on the page's
+     own warm neutral. */
+  --secondary: 0.948 0.006 75;
+  --secondary-foreground: 0.22 0.02 277;
+  --muted: 0.948 0.006 75;
+  /* 0.5, not 0.55: muted text sits on the darker warm page as well as on
+     cards, and has to clear 4.5:1 on both (~5.0 on the page, ~5.7 on a card). */
+  --muted-foreground: 0.5 0.018 277;
 
   --accent: 0.55 0.2 277;
   --accent-foreground: 1 0 0;
@@ -128,11 +138,13 @@
 
   /* Hairlines: barely there. Hierarchy comes from space, weight and surface —
      a border is the last resort, not the first. */
-  --border: 0.25 0.02 260 / 0.08;
-  --border-strong: 0.25 0.02 260 / 0.14;
-  --input: 0.968 0.005 252;
-  --ring: 0.457 0.215 277;
-  --shadow-color: 0.4 0.06 277;
+  --border: 0.22 0.02 277 / 0.08;
+  --border-strong: 0.22 0.02 277 / 0.14;
+  --input: 0.993 0.002 80;
+  --ring: 0.477 0.223 278;
+  /* A warm-indigo shadow: the reference's long drops are brown; ours lean
+     toward the brand so they do not read as dirt on the warm page. */
+  --shadow-color: 0.32 0.045 290;
 
   /* Rail (mobile drawer in the top-nav layout) — the same ink as the masthead. */
   --rail: 0.23 0.035 277;
@@ -146,7 +158,9 @@
   --secondary-brand-foreground: 1 0 0;
 
   /* Display ink — the reference's #292A2F, used for hero type and solid CTAs. */
-  --display: 0.457 0.215 277;
+  /* The solid CTA and the active nav pill: near-black on the brand hue (the
+     reference's dark pill, in our ink). Default buttons are `bg-display`. */
+  --display: 0.21 0.03 277;
   --violet: 0.55 0.17 285;
   /* The blue that carries the brand indigo toward daylight — same family,
      not a separate cyan. Its tint below must stay on this hue. */
@@ -272,31 +286,34 @@
 
 body {
   margin: 0;
-  /* One quiet lift at the top-left so white surfaces read as floating rather
-     than flush. Fixed, so it stays still while content scrolls over it — and
-     restrained, because a page background is not where personality belongs. */
+  /* THE WASH (Rapport skin). A warm-neutral page with three very soft blooms
+     in OUR hues: lavender off the brand at the top-start, a warm peach across
+     the top, a periwinkle at the bottom-end. Fixed, so it stays put while
+     content scrolls over it; low alpha, because the page is where the data
+     sits, not where personality goes. */
   background:
-    radial-gradient(ellipse 85% 50% at 6% 0%, oklch(var(--primary) / 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 0% 0%, oklch(0.86 0.07 292 / 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 45% 40% at 55% -8%, oklch(0.92 0.05 55 / 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 50% at 100% 100%, oklch(0.88 0.055 268 / 0.5) 0%, transparent 70%),
     oklch(var(--background));
   background-attachment: fixed;
   color: oklch(var(--foreground));
-  /* Outfit is the geometric, slightly rounded face the reference uses (Lufga);
-     it now sets the WHOLE interface, not just headings. Body type in a
-     geometric sans is the single biggest reason the reference reads friendly
-     where a grotesque reads administrative. */
+  /* Urbanist at 500 is the reference's body weight; 400 reads thin on the
+     warm page. Arabic falls through per glyph (Urbanist has none). */
   font-family:
-    'Outfit Variable',
-    'Inter Variable',
+    'Urbanist Variable',
+    'Noto Sans Arabic',
+    Tahoma,
     ui-sans-serif,
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
     'Segoe UI',
     Roboto,
-    'Helvetica Neue',
     Arial,
     sans-serif;
-  font-feature-settings: 'cv11', 'ss01';
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -362,7 +379,8 @@ body {
  */
 h1,
 h2 {
-  font-family: 'Outfit Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    'Urbanist Variable', 'Noto Sans Arabic', Tahoma, ui-sans-serif, system-ui, sans-serif;
   text-wrap: balance;
 }
 body::after {
@@ -373,4 +391,165 @@ body::after {
   z-index: 1;
   opacity: 0.014;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * RAPPORT SKIN — component layer (owner, 2026-10-22)
+ *
+ * The admin console's look after the "Rapport" reference, in Sara CRM's own
+ * colours. Tokens above carry the palette; this section reshapes the shared
+ * primitives WHERE THEY RENDER INSIDE THE ADMIN SHELL (`.admin-skin`). It is
+ * this portal's stylesheet, so nothing here can reach the agent portal.
+ *
+ * Every rule is visual only - no display:none on content, no pointer-events
+ * changes - so behaviour cannot move with it. Rollback: delete this section,
+ * the token edits above and the `extend` block in tailwind.config.cjs (or
+ * check out the `admin-redesign-rollback` tag).
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+/* Plain CSS, NOT `@layer components`: inside that layer Tailwind treats
+   every class here as a component and mints hover:/focus: variants of it. */
+/* ── Page header: the big two-line title ────────────────────────────────
+     Every admin page opens with <Toolbar><h1>…</h1>…</Toolbar>. The
+     reference's header is not a bar: the title sits on the page itself, large,
+     with its controls beside it. */
+.admin-skin [data-toolbar] {
+  position: relative;
+  height: auto;
+  min-height: 5.75rem;
+  padding-block: 1.25rem 0.75rem;
+  flex-wrap: wrap;
+  row-gap: 0.75rem;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.admin-skin [data-toolbar]::after {
+  content: none;
+}
+.admin-skin [data-toolbar] > h1 {
+  font-size: 2.375rem;
+  line-height: 1.02;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  /* Two words become two lines, the reference's stacked title. */
+  max-width: 11ch;
+  color: oklch(var(--foreground));
+}
+[dir='rtl'] .admin-skin [data-toolbar] > h1 {
+  letter-spacing: 0;
+  line-height: 1.2;
+  font-size: 2.125rem;
+}
+
+/* ── Frosted cards ───────────────────────────────────────────────────────
+     The large content panels: `rounded-2xl bg-card` (pages), the table
+     surface (`rounded-[1.25rem]`) and the bento cards (`rounded-[1.4rem]`).
+     One corner, one lit edge, one long soft drop. Floating panels (absolute /
+     fixed / popovers) keep their own treatment. */
+.admin-skin main .rounded-2xl.bg-card:not(.absolute):not(.fixed),
+.admin-skin main .rounded-\[1\.25rem\].bg-card,
+.admin-skin main .rounded-\[1\.4rem\].bg-card {
+  border-radius: 1.625rem;
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.78),
+    inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 1px 2px oklch(var(--shadow-color) / 0.05),
+    0 24px 48px -30px oklch(var(--shadow-color) / 0.32);
+}
+
+/* ── Tables: the directory view ──────────────────────────────────────────
+     Header row on the card itself (no grey band), muted 12.5px labels; rows a
+     touch tighter than before (52px) with hairline separators. The header
+     still needs an OPAQUE fill - it is sticky over scrolling rows - so it
+     takes the card colour rather than going transparent. */
+.admin-skin main th.sticky.bg-secondary {
+  background-color: oklch(var(--card));
+  font-size: 0.78125rem;
+  font-weight: 600;
+  color: oklch(var(--muted-foreground));
+  box-shadow: inset 0 -1px 0 oklch(var(--foreground) / 0.07);
+}
+.admin-skin main td.h-\[3\.75rem\] {
+  height: 3.25rem;
+}
+.admin-skin main tr.border-b {
+  border-color: oklch(var(--foreground) / 0.06);
+}
+
+/* Every page title is an h1 - in a Toolbar or at the head of a report -
+     and they all take the reference's display size. */
+.admin-skin main h1 {
+  font-size: 2.375rem;
+  line-height: 1.02;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+[dir='rtl'] .admin-skin main h1 {
+  font-size: 2.125rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+/* Column headings read as words, not tracked capitals (the reference). */
+.admin-skin main th {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Labels read as words, not tracked capitals. The console's field labels,
+     stat captions and section kickers were all small uppercase with wide
+     tracking; the reference has none, and DESIGN.md already bans an eyebrow
+     above every section. The source strings are sentence case, so dropping
+     the transform shows them as written. */
+.admin-skin main .uppercase[class*='tracking-'] {
+  text-transform: none;
+  letter-spacing: normal;
+}
+.admin-skin main .text-2xs.uppercase[class*='tracking-'] {
+  font-size: 0.78125rem;
+}
+
+/* `--border` already carries its alpha, so `border-border` expands to
+     `oklch(… / 0.08 / 1)` - invalid CSS - and the browser falls back to
+     currentColor: a black outline. Restated here in valid form so every
+     hairline in the console is the hairline it was meant to be. */
+.admin-skin .border-border {
+  border-color: oklch(var(--border));
+}
+.admin-skin .divide-border > :not([hidden]) ~ :not([hidden]) {
+  border-color: oklch(var(--border));
+}
+
+/* ── Fields: the reference's rounded, near-white inputs ─────────────────*/
+.admin-skin .bg-input {
+  background-color: oklch(var(--input));
+}
+
+/* The floating dark rail (quick actions) and the round header buttons share
+   one control shape: a 40px circle. */
+.admin-icon-btn {
+  display: inline-grid;
+  place-items: center;
+  height: 2.5rem;
+  min-width: 2.5rem;
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.64);
+  color: oklch(var(--foreground));
+  box-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.8),
+    0 8px 20px -14px oklch(var(--shadow-color) / 0.45);
+  transition:
+    background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
+    transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.admin-icon-btn:hover {
+  background: rgb(255 255 255 / 0.95);
+}
+
+/* The header's utility cluster sat on the dark masthead and is written in the
+   masthead's `ink-foreground`. On the light page that token is re-bound to
+   the dark ink, so the same components read correctly with no edits. */
+.admin-utilities {
+  --ink-foreground: 0.22 0.02 277;
 }

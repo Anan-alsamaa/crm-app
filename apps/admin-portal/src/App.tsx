@@ -3,7 +3,6 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, useLocation } from 're
 import { staffDisplayName } from '@yiji/shared-types';
 import { useTranslation } from 'react-i18next';
 import {
-  AppShell,
   Avatar,
   CalendarIcon,
   ChartIcon,
@@ -25,6 +24,7 @@ import {
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
 import { TopNav } from './components/TopNav.js';
+import { AdminShell } from './components/shell/AdminShell.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
@@ -283,13 +283,17 @@ function MobileBrand() {
      * 64px in an 80px header, leaving an even 8px above and below — and the
      * block is still NARROWER than it was, which gives the nav back a few
      * pixels rather than taking any.
+     *
+     * Since the Rapport shell (2026-10-22) this brand only renders in the
+     * MOBILE bar, which is 56px tall - so the tile is 40px, not the 64px it
+     * was when it sat in the 80px desktop masthead (where it overflowed).
      */
     <img
       src="/sara-crm-icon.svg"
       alt="Sara CRM"
       /* No `rounded-*`: the artwork's corners are already cut and its radius is
          transparent, so rounding the element clips them a second time. */
-      className="h-16 w-16 shrink-0"
+      className="h-10 w-10 shrink-0"
     />
   );
 }
@@ -546,40 +550,36 @@ function Shell({ children }: { children: React.ReactNode }) {
     }))
     .filter((section) => section.items.length > 0) as NavSection[];
 
-  // ONE floating bar (the owner's reference layout — no sidebars): brand at
-  // the start, the grouped nav pills in the middle, utilities at the end. The
-  // rail still exists but only as the mobile drawer.
+  // THE RAPPORT SHELL (owner, 2026-10-22): brand at the start, the grouped
+  // nav pills CENTRED on the page, round utilities and the account at the end,
+  // and a floating dark rail of quick actions. The vertical Rail below still
+  // backs the mobile drawer.
   return (
     <>
-      <AppShell
-        rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
-        topBarBrand={<MobileBrand />}
-        topBarActions={
-          <div className="flex items-center gap-1.5 text-muted-foreground">
-            <PageRefresh />
-            <HelpAssistant />
-          </div>
-        }
-        navBar={<TopNav sections={sections} />}
-        topBar={
+      <AdminShell
+        sections={sections}
+        nav={<TopNav sections={sections} />}
+        onSearch={() => setPaletteOpen(true)}
+        language={<LanguageToggle />}
+        utilities={
           <>
-            {/* The bar is a card surface now, so the utility triggers read
-                correctly with their own tokens — no rebinding needed. */}
-            <div className="flex items-center gap-0.5 rounded-full bg-ink-foreground/10 p-1 ring-1 ring-ink-foreground/15">
-              {/* In the masthead, so it is on every page without thirty copies
-                  of it — thirty chances for one to be wired to the wrong
-                  thing. */}
+            {/* In the masthead, so it is on every page without thirty copies
+                of it — thirty chances for one to be wired to the wrong thing. */}
+            <span className="admin-icon-btn px-1">
               <PageRefresh />
+            </span>
+            <span className="admin-icon-btn">
               <HelpAssistant />
-              {/* The bell belongs on the masthead for the same reason as the
-                  rest of this bar: an alert nobody can see without opening the
-                  right page is not an alert. */}
+            </span>
+            {/* The bell belongs on the masthead for the same reason as the
+                rest of this bar: an alert nobody can see without opening the
+                right page is not an alert. */}
+            <span className="admin-icon-btn">
               <NotificationBell />
-              <LanguageToggle />
-            </div>
-            <span className="hidden items-center gap-2 rounded-full bg-ink-foreground/10 py-1 pe-1 ps-1 ring-1 ring-ink-foreground/15 sm:flex">
+            </span>
+            <span className="admin-icon-btn hidden gap-2 py-1 pe-1 ps-1 sm:flex">
               <Avatar name={displayName} email={user?.email} size="sm" />
-              <span className="max-w-[9rem] truncate text-xs font-semibold text-ink-foreground">
+              <span className="hidden max-w-[9rem] truncate text-xs font-semibold text-foreground 2xl:inline">
                 {displayName}
               </span>
               <button
@@ -587,14 +587,21 @@ function Shell({ children }: { children: React.ReactNode }) {
                 onClick={() => void logout()}
                 aria-label={t('auth.signOut', { ns: 'common' })}
                 title={t('auth.signOut', { ns: 'common' })}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[background-color,color] duration-fast ease-out hover:bg-secondary hover:text-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[background-color,color] duration-fast ease-out hover:bg-secondary hover:text-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               >
                 <SignOutIcon size={14} />
               </button>
             </span>
           </>
         }
-        resizeStorageKey="yiji.admin.sidebarWidth"
+        mobileRail={(ctx) => <Rail ctx={ctx} sections={sections} />}
+        mobileBrand={<MobileBrand />}
+        mobileActions={
+          <div className="admin-utilities flex items-center gap-1.5 text-muted-foreground">
+            <PageRefresh />
+            <HelpAssistant />
+          </div>
+        }
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
         closeLabel={t('nav.closeMenu', { defaultValue: 'Close menu' })}
@@ -619,7 +626,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </Suspense>
         </ErrorBoundary>
-      </AppShell>
+      </AdminShell>
       <AppCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       {/* Says so when this tab is running a build the server has replaced. */}
       <NewVersionBanner />

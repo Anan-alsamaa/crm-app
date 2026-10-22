@@ -46,7 +46,7 @@ export function ViewSwitch<T extends string>({
       className={cn(
         // `sticky start-0` pins it against a horizontal page scroll — see
         // ReportKpiStrip. `w-fit` so sticking does not stretch the pill row.
-        'sticky start-0 inline-flex w-fit shrink-0 items-center gap-1 rounded-full bg-secondary p-1',
+        'sticky start-0 inline-flex w-fit shrink-0 items-center gap-1 rounded-full bg-foreground/[0.06] p-1',
         className,
       )}
     >
@@ -75,7 +75,7 @@ export function ViewSwitch<T extends string>({
               'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
               active
-                ? 'bg-card text-foreground shadow-soft'
+                ? 'bg-white text-foreground shadow-[0_4px_12px_-6px_oklch(var(--shadow-color)/0.45)]'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >

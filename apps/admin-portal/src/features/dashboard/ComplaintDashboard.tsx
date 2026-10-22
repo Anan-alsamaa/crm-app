@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
@@ -10,6 +11,8 @@ import {
   ChartIcon,
   ClockIcon,
   InboxIcon,
+  ShieldIcon,
+  TicketIcon,
   MeterBar,
   ProgressRing,
   SelectMenu,
@@ -45,6 +48,8 @@ import {
   StatCard,
   TrendPill,
   type Tone,
+  HeaderBadge,
+  HeaderStat,
 } from '../../components/dash/Dash.js';
 import { ReportVendorFilter } from '../../lib/report-vendor.js';
 
@@ -258,9 +263,7 @@ function Kpi({
           card's anatomy, which gives the number the whole width instead of
           squeezing it beside a chip. */}
       <div className="flex items-start justify-between gap-3">
-        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {label}
-        </span>
+        <span className="text-xs font-semibold text-muted-foreground">{label}</span>
         <span
           aria-hidden
           className={cn(
@@ -677,7 +680,19 @@ function DrillDown({
  * KPI strip and the ops snapshot. Split past that, because the two audiences
  * have nothing else in common.
  */
-export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'operations' } = {}) {
+export function ComplaintDashboard({
+  view = 'agent',
+  statSlot,
+}: {
+  view?: 'agent' | 'operations';
+  /**
+   * Where the page header's stat strip goes (Rapport skin): the dashboard
+   * page hands in an element beside its title and the strip is portalled
+   * there, so it reads the same data and filters as everything below it.
+   * Without one, the plain "Showing N tickets" line renders as before.
+   */
+  statSlot?: HTMLElement | null;
+} = {}) {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   // Draft vs applied: his bar only re-runs the dashboard on Apply, which matters
@@ -811,11 +826,11 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
   // they summed — see the note further down.
 
   return (
-    <div className="mx-auto max-w-7xl space-y-4">
+    <div className="mx-auto w-full min-w-0 max-w-[110rem] space-y-4">
       {/* ── Filter bar ─────────────────────────────────────────────────
           Same surface as every SectionCard on the page; the fields inside
           carry the shared Input/SelectMenu styling on their own. */}
-      <div className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+      <div className="flex flex-wrap items-end gap-x-3 gap-y-3 rounded-2xl bg-card p-[1.125rem] shadow-soft">
         {/* Year first, because it is the filter people actually reach for.
             Typing two dates to see "last year" is four interactions for a
             question asked constantly; this is one. The list comes from the
@@ -824,7 +839,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             than filling the draft — a year is a whole answer, not the start of
             one, and the dates below stay in step so the two never disagree. */}
         <div className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.year', { defaultValue: 'Year' })}
           </span>
           <div className="flex items-center gap-1.5">
@@ -866,7 +881,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           </div>
         </div>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.from', { defaultValue: 'From' })}
           </span>
           <DateField
@@ -877,7 +892,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.to', { defaultValue: 'To' })}
           </span>
           <DateField
@@ -888,7 +903,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.brand', { defaultValue: 'Brand' })}
           </span>
           <SelectMenu
@@ -904,7 +919,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.area', { defaultValue: 'Area' })}
           </span>
           <SelectMenu
@@ -923,7 +938,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
             spans several areas, so "everything under this chain manager" is a
             question Area cannot answer by itself. */}
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.chain', { defaultValue: 'Chain' })}
           </span>
           <SelectMenu
@@ -942,7 +957,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.city', { defaultValue: 'City' })}
           </span>
           <SelectMenu
@@ -958,7 +973,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.restaurant', { defaultValue: 'Restaurant' })}
           </span>
           <SelectMenu
@@ -977,7 +992,7 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <span className="text-xs font-semibold text-muted-foreground">
             {t('complaintDash.agent', { defaultValue: 'Agent' })}
           </span>
           {/*
@@ -1064,26 +1079,98 @@ export function ComplaintDashboard({ view = 'agent' }: { view?: 'agent' | 'opera
         </div>
       ) : (
         <>
+          {/* THE HEADER STAT STRIP (Rapport skin), beside the page title when
+              the page gives it a place; the plain headline otherwise. */}
+          {statSlot
+            ? createPortal(
+                <>
+                  <HeaderStat
+                    icon={<TicketIcon size={17} />}
+                    value={d.total.toLocaleString()}
+                    badge={(() => {
+                      const cur = d.months[d.months.length - 1]?.count;
+                      const prev = d.months[d.months.length - 2]?.count;
+                      if (cur == null || prev == null || prev === 0) return undefined;
+                      const pct = Math.round(((cur - prev) / prev) * 100);
+                      if (pct === 0 || Math.abs(pct) > 200) return undefined;
+                      return (
+                        <HeaderBadge>
+                          {pct > 0 ? `+${pct}%` : `${pct}%`}{' '}
+                          {t('complaintDash.vsLastMonth', { defaultValue: 'vs last month' })}
+                        </HeaderBadge>
+                      );
+                    })()}
+                    caption={
+                      d.total > 0
+                        ? t('complaintDash.stripRange', {
+                            defaultValue: 'tickets, {{from}} to {{to}}',
+                            from: d.firstDate ?? '—',
+                            to: d.lastDate ?? '—',
+                          })
+                        : t('complaintDash.noMatch', {
+                            defaultValue: 'No tickets match these filters.',
+                          })
+                    }
+                  />
+                  {view === 'agent' && (
+                    <HeaderStat
+                      icon={<InboxIcon size={17} />}
+                      value={d.chatsWaiting.toLocaleString()}
+                      badge={
+                        d.chatsTotal > 0 ? (
+                          <HeaderBadge variant="plain">
+                            {Math.round((d.chatsWaiting / d.chatsTotal) * 100)}%
+                          </HeaderBadge>
+                        ) : undefined
+                      }
+                      caption={t('complaintDash.stripChats', {
+                        defaultValue: 'open chats of {{n}} in range',
+                        n: d.chatsTotal.toLocaleString(),
+                      })}
+                    />
+                  )}
+                  {view === 'agent' && (
+                    <HeaderStat
+                      icon={<ShieldIcon size={17} />}
+                      value={coupons.pendingCount.toLocaleString()}
+                      badge={
+                        coupons.pendingCount > 0 ? (
+                          <HeaderBadge variant="highlight">
+                            {t('complaintDash.stripToDecide', { defaultValue: 'to decide' })}
+                          </HeaderBadge>
+                        ) : undefined
+                      }
+                      caption={t('complaintDash.stripCoupons', {
+                        defaultValue: 'coupons awaiting a decision',
+                      })}
+                    />
+                  )}
+                </>,
+                statSlot,
+              )
+            : null}
           {/* Headline, exactly as his subtitle reads. */}
-          <p className="px-1 text-xs text-muted-foreground">
-            {d.total > 0
-              ? t('complaintDash.summary', {
-                  // The span is the range the DATA covers, which is not the
-                  // range you filtered on — "last 90 days" over three
-                  // complaints logged in one week should say so.
-                  // No money here any more. It was the ticket-side sum,
-                  // which counted refused and un-approved amounts; the KPI tile
-                  // carries the approved figure, and one number in one place is
-                  // the whole point of removing the other.
-                  defaultValue: 'Showing {{n}} tickets from {{from}} to {{to}}',
-                  n: d.total.toLocaleString(),
-                  from: d.firstDate ?? '—',
-                  to: d.lastDate ?? '—',
-                })
-              : t('complaintDash.noMatch', {
-                  defaultValue: 'No tickets match these filters.',
-                })}
-          </p>
+          {!statSlot && (
+            <p className="px-1 text-xs text-muted-foreground">
+              {d.total > 0
+                ? t('complaintDash.summary', {
+                    // The span is the range the DATA covers, which is not the
+                    // range you filtered on — "last 90 days" over three
+                    // complaints logged in one week should say so.
+                    // No money here any more. It was the ticket-side sum,
+                    // which counted refused and un-approved amounts; the KPI tile
+                    // carries the approved figure, and one number in one place is
+                    // the whole point of removing the other.
+                    defaultValue: 'Showing {{n}} tickets from {{from}} to {{to}}',
+                    n: d.total.toLocaleString(),
+                    from: d.firstDate ?? '—',
+                    to: d.lastDate ?? '—',
+                  })
+                : t('complaintDash.noMatch', {
+                    defaultValue: 'No tickets match these filters.',
+                  })}
+            </p>
+          )}
 
           {/* WHAT THE OPERATIONS STRIP IS NOT.
               Six readings have been proposed here and rejected, and they had

@@ -361,7 +361,7 @@ export function UsersPage() {
             })}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="block h-8 w-full rounded-md border border-border bg-background/60 ps-8 pe-3 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none text-start transition-colors duration-fast ease-out"
+            className="block h-10 w-full rounded-full border-0 bg-white/70 ps-8 pe-3 text-sm text-foreground ring-1 ring-inset ring-white/80 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-start transition-shadow duration-fast ease-out"
           />
         </div>
         <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>

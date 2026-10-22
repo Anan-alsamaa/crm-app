@@ -43,7 +43,12 @@ export function ReportGroupTabs({ tabs }: { tabs: ReportTab[] }): JSX.Element {
         // Sticky and hairlined: it belongs to the masthead above it, not to
         // the report below, and scrolling a long table must not take the
         // reader's place in the section away with it.
-        className="sticky top-0 z-10 flex shrink-0 items-center gap-1 overflow-x-auto border-b border-foreground/[0.06] bg-background/95 px-4 py-2 backdrop-blur"
+        /* `hidden` as a CLASS too: the attribute alone loses to `flex`, which
+           left a lone, single-report group showing its one chip. */
+        className={cn(
+          'shrink-0 items-center gap-1.5 overflow-x-auto px-5 pb-1 pt-3 sm:px-7',
+          visible.length < 2 ? 'hidden' : 'flex',
+        )}
       >
         {visible.map((tab) => (
           <NavLink
@@ -52,12 +57,14 @@ export function ReportGroupTabs({ tabs }: { tabs: ReportTab[] }): JSX.Element {
             end
             className={({ isActive }) =>
               cn(
-                'shrink-0 rounded-full px-3.5 py-1.5 text-sm whitespace-nowrap',
-                'transition-[background-color,color,font-weight] duration-fast ease-out',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                /* Rapport filter chips: the current report a solid ink chip,
+                   the rest frosted white chips with a hairline. */
+                'shrink-0 rounded-full px-4 py-2 text-sm font-semibold whitespace-nowrap',
+                'transition-[background-color,color,box-shadow] duration-fast ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60',
                 isActive
-                  ? 'bg-primary/15 font-semibold text-primary ring-1 ring-inset ring-primary/25'
-                  : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground',
+                  ? 'bg-ink text-ink-foreground'
+                  : 'bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground',
               )
             }
           >

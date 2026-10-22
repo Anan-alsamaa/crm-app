@@ -14,6 +14,9 @@ export function Toolbar({
 }: HTMLAttributes<HTMLDivElement>): JSX.Element {
   return (
     <div
+      /* A stable hook for a portal's own stylesheet (the admin console
+         restyles its page header from here). Carries no styling itself. */
+      data-toolbar=""
       className={cn(
         'relative',
         'sticky top-0 z-20 flex h-[4.5rem] items-center gap-3 px-5 sm:px-7',

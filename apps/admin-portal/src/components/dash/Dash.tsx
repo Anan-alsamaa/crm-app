@@ -12,9 +12,14 @@ import { cn } from '@yiji/ui';
  * renders immediately, nothing moves.
  */
 
-/** The deep indigo hero surface, shared by the hero tile and the gauge accent. */
+/**
+ * The ACCENT card surface (Rapport skin, 2026-10-22): a solid near-black on
+ * the brand hue - the reference's dark accent card, in our ink - with one
+ * faint indigo glow in the far corner so it reads as ours, not as black.
+ * White text on it measures ~16:1.
+ */
 export const HERO_SURFACE =
-  'bg-[radial-gradient(120%_120%_at_100%_0%,oklch(0.62_0.19_288/0.55),transparent_55%),linear-gradient(140deg,oklch(0.27_0.12_278),oklch(0.38_0.19_277)_55%,oklch(0.47_0.21_280))]';
+  'bg-[radial-gradient(90%_80%_at_100%_0%,oklch(0.477_0.223_278/0.55),transparent_60%),linear-gradient(160deg,oklch(0.25_0.04_278),oklch(0.19_0.03_278))]';
 
 /** The hatched track behind pill bars - the reference's striped "remaining". */
 export const HATCH =
@@ -154,11 +159,11 @@ export function StatCard({
           ? { type: 'button' as const, onClick: onOpen, 'aria-label': openLabel ?? title }
           : {})}
         className={cn(
-          'group relative flex h-full w-full flex-col overflow-hidden rounded-[1.4rem] p-5 text-start',
+          'group relative flex h-full w-full flex-col overflow-hidden rounded-[1.625rem] p-[1.125rem] text-start',
           'transition-[box-shadow,transform] duration-base ease-out',
           hero
-            ? cn(HERO_SURFACE, 'text-white shadow-[0_18px_40px_-18px_oklch(0.35_0.19_277/0.7)]')
-            : 'bg-card text-foreground shadow-soft ring-1 ring-foreground/[0.06] hover:shadow-[0_2px_4px_oklch(var(--shadow-color)/0.06),0_16px_36px_-16px_oklch(var(--shadow-color)/0.22)]',
+            ? cn(HERO_SURFACE, 'text-white shadow-[0_24px_48px_-24px_oklch(0.2_0.05_278/0.8)]')
+            : 'bg-card text-foreground shadow-soft ring-1 ring-inset ring-white/80 hover:shadow-float',
           onOpen &&
             'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-safe:hover:-translate-y-0.5',
         )}
@@ -178,7 +183,10 @@ export function StatCard({
         )}
         <div className="relative flex items-start justify-between gap-3">
           <span
-            className={cn('text-sm font-semibold', hero ? 'text-white/90' : 'text-foreground/80')}
+            className={cn(
+              'text-[0.9375rem] font-semibold',
+              hero ? 'text-white/90' : 'text-foreground',
+            )}
           >
             {title}
           </span>
@@ -186,11 +194,11 @@ export function StatCard({
             <span
               aria-hidden
               className={cn(
-                'grid h-8 w-8 shrink-0 place-items-center rounded-full ring-1 transition-transform duration-base ease-out',
+                'grid h-9 w-9 shrink-0 place-items-center rounded-full ring-1 transition-transform duration-base ease-out',
                 'motion-safe:group-hover:rotate-45',
                 hero
-                  ? 'bg-white text-[oklch(0.32_0.15_278)] ring-white'
-                  : 'bg-card text-foreground ring-foreground/15',
+                  ? 'bg-white/[0.12] text-white ring-white/25'
+                  : 'bg-white/70 text-foreground ring-white',
               )}
             >
               <ArrowGlyph />
@@ -209,7 +217,7 @@ export function StatCard({
                 {display}
               </span>
             ) : (
-              <span className="text-[2.6rem] font-extrabold leading-none tracking-[-0.04em]">
+              <span className="text-[2.625rem] font-semibold leading-none tracking-[-0.03em]">
                 <CountUp value={value ?? 0} decimals={decimals} />
                 {unit && (
                   <span
@@ -444,7 +452,7 @@ export function Gauge({
             })}
         </svg>
         <div className="absolute inset-x-0 bottom-0 flex flex-col items-center">
-          <span className="text-4xl font-extrabold leading-none tracking-[-0.04em] text-foreground">
+          <span className="text-4xl font-semibold leading-none tracking-[-0.03em] text-foreground">
             <CountUp value={share} />%
           </span>
           <span className="mt-1 text-xs text-muted-foreground">{centerLabel}</span>
@@ -662,7 +670,7 @@ export function BentoCard({
     <Rise index={index} className={className}>
       <section
         className={cn(
-          'flex h-full flex-col rounded-[1.4rem] bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]',
+          'flex h-full flex-col rounded-[1.625rem] bg-card p-[1.125rem] shadow-soft ring-1 ring-inset ring-white/80',
           t?.wash,
         )}
       >
@@ -672,7 +680,7 @@ export function BentoCard({
               <span
                 aria-hidden
                 className={cn(
-                  'grid h-9 w-9 shrink-0 place-items-center rounded-xl',
+                  'grid h-9 w-9 shrink-0 place-items-center rounded-full',
                   t?.chip ?? 'bg-secondary text-muted-foreground',
                 )}
               >
@@ -680,7 +688,9 @@ export function BentoCard({
               </span>
             )}
             <div className="min-w-0">
-              <h2 className="text-base font-semibold tracking-tight text-foreground">{title}</h2>
+              <h2 className="text-[0.9375rem] font-semibold tracking-tight text-foreground">
+                {title}
+              </h2>
               {hint && (
                 <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{hint}</p>
               )}
@@ -691,5 +701,66 @@ export function BentoCard({
         <div className="min-h-0 flex-1">{children}</div>
       </section>
     </Rise>
+  );
+}
+
+/**
+ * One reading in the page header's stat strip (Rapport skin): a round icon
+ * chip, the value, an optional badge pill and a one-line caption. Sits beside
+ * the big page title.
+ */
+export function HeaderStat({
+  icon,
+  value,
+  badge,
+  caption,
+}: {
+  icon: ReactNode;
+  value: ReactNode;
+  badge?: ReactNode;
+  caption: ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <span
+        aria-hidden
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/70 text-foreground shadow-[inset_0_0_0_1px_rgb(255_255_255/0.85),0_10px_24px_-16px_oklch(var(--shadow-color)/0.5)]"
+      >
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-semibold leading-tight tracking-[-0.01em] text-foreground tabular-nums">
+            {value}
+          </span>
+          {badge}
+        </div>
+        <div className="max-w-[13rem] text-xs leading-snug text-muted-foreground">{caption}</div>
+      </div>
+    </div>
+  );
+}
+
+/** The small pill beside a header stat ("+5% vs last month"). */
+export function HeaderBadge({
+  children,
+  variant = 'ink',
+}: {
+  children: ReactNode;
+  /* `variant`, not `tone`: `tone=` on the dashboard is reserved for the card
+     tone table, and a test holds every `tone=` there to that table. */
+  variant?: 'ink' | 'highlight' | 'plain';
+}) {
+  return (
+    <span
+      className={cn(
+        'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-bold',
+        variant === 'ink' && 'bg-ink text-ink-foreground',
+        variant === 'highlight' && 'bg-highlight text-highlight-foreground',
+        variant === 'plain' && 'bg-white/80 text-foreground ring-1 ring-inset ring-foreground/10',
+      )}
+    >
+      {children}
+    </span>
   );
 }

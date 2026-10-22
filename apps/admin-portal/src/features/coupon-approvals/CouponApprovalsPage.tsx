@@ -1725,11 +1725,11 @@ export function CouponApprovalsPage() {
                 onClick={() => setView(s)}
                 aria-pressed={view === s}
                 className={cn(
-                  'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
+                  'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
                   view === s
-                    ? // The selected filter is a jade wash, the board's pill idiom.
-                      'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
-                    : 'bg-secondary/60 text-muted-foreground hover:text-foreground',
+                    ? // The selected filter is a solid ink chip (Rapport skin).
+                      'bg-ink text-ink-foreground'
+                    : 'bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground',
                 )}
               >
                 {t(`couponApprovals.status.${s}`, { defaultValue: s })}

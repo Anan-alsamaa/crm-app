@@ -49,10 +49,10 @@ function TypeToggle({
         enabled
           ? // Selected reads as a jade wash — the board's tinted-pill idiom —
             // with an inset ring so the edge holds on both themes.
-            'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
+            'bg-ink text-ink-foreground'
           : // Filled, not outlined: on a bare card a hairline ring alone is
             // invisible, and these stop reading as controls at all.
-            'bg-secondary/60 text-muted-foreground hover:text-foreground',
+            'bg-secondary text-foreground/80 hover:text-foreground',
       )}
     >
       {type}
