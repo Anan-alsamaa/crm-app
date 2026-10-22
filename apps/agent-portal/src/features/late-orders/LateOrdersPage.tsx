@@ -97,6 +97,16 @@ function placedIso(raw: string): string {
 const LIVE_MODE_KEY = 'late-orders-live-mode';
 /** Remembers BOARD vs TABLE in this browser, like live mode. */
 const VIEW_KEY = 'late-orders-view';
+
+/** The wall-screen role (app role "TV Screen"), matched like the other role checks. */
+export function isTvScreenRole(roleName: string | null | undefined): boolean {
+  return (
+    String(roleName ?? '')
+      .trim()
+      .toLowerCase()
+      .replace(/\s+/g, ' ') === 'tv screen'
+  );
+}
 type LateOrdersView = 'board' | 'table';
 /** How long an order that just arrived carries the NEW tag in live mode. */
 const NEW_FOR_MS = 2 * 60_000;
@@ -466,20 +476,27 @@ export function LateOrdersPage() {
    * The BOARD is the wall view: one large row per late order, the minutes as
    * the number you read from across the room. The TABLE is the full
    * nineteen-column register an agent works a history range in - unchanged,
-   * one click away. Remembered in this browser like Live, so the TV comes back
-   * as a board after a reload.
+   * one click away.
+   *
+   * First visit (owner, 2026-10-22): the TV Screen role opens on the BOARD,
+   * everyone else on the TABLE. After that the last choice is kept, per user
+   * in this browser, so the TV comes back as a board after a reload and an
+   * agent sharing a PC is not handed the TV's choice.
    */
+  const viewKey = `${VIEW_KEY}:${user?.id ?? 'anon'}`;
+  const defaultView: LateOrdersView = isTvScreenRole(user?.role?.name) ? 'board' : 'table';
   const [view, setViewState] = useState<LateOrdersView>(() => {
     try {
-      return window.localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'board';
+      const stored = window.localStorage.getItem(viewKey);
+      return stored === 'table' || stored === 'board' ? stored : defaultView;
     } catch {
-      return 'board';
+      return defaultView;
     }
   });
   const setView = (next: LateOrdersView) => {
     setViewState(next);
     try {
-      window.localStorage.setItem(VIEW_KEY, next);
+      window.localStorage.setItem(viewKey, next);
     } catch {
       /* the choice still holds for this visit */
     }
