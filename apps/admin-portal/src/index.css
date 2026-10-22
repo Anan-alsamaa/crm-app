@@ -1256,25 +1256,45 @@ body::after {
  * agent portal is untouched. Dialogs and drawers portal to <body>, so they
  * are named beside `.admin-skin`.
  *
- * The ghost/link pill is drawn in the text's OWN colour (color-mix with
- * currentColor), so a red "Delete" gets a red edge and an ink "History" an
- * ink one without a rule per button. It uses the 1px border the variant
- * already reserves - never box-shadow, which is where the focus ring lives.
+ * FILLED, NOT OUTLINED (owner, same day: "by highlighting I meant a
+ * different colour... not a fan of the outline"). A usable secondary action
+ * is a soft BRAND-tinted pill with brand text, a step deeper on hover; a
+ * destructive one (red text) keeps its red and gets a soft red fill. The
+ * primary action stays solid ink, so the hierarchy still reads. Disabled is
+ * flat grey (below) - the difference is the colour, not a hairline.
  * ═════════════════════════════════════════════════════════════════════════ */
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel])
   :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled) {
-  border: 1px solid color-mix(in oklch, currentColor 22%, transparent);
-  background-color: color-mix(in oklch, currentColor 4%, transparent);
+  color: oklch(var(--primary));
+  border: 1px solid transparent;
+  background-color: oklch(var(--primary) / 0.1);
 }
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel])
   :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled):hover {
-  border-color: color-mix(in oklch, currentColor 40%, transparent);
-  background-color: color-mix(in oklch, currentColor 9%, transparent);
+  background-color: oklch(var(--primary) / 0.17);
   text-decoration: none;
 }
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel])
   :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled):active {
-  background-color: color-mix(in oklch, currentColor 13%, transparent);
+  background-color: oklch(var(--primary) / 0.24);
+}
+/* Destructive text actions ("Delete", "Remove") keep their red. */
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is(
+    [data-variant='ghost'],
+    [data-variant='link'],
+    [data-text-action]
+  )[class*='text-destructive']:not(:disabled) {
+  color: oklch(var(--destructive));
+  background-color: oklch(var(--destructive) / 0.1);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel])
+  :is(
+    [data-variant='ghost'],
+    [data-variant='link'],
+    [data-text-action]
+  )[class*='text-destructive']:not(:disabled):hover {
+  background-color: oklch(var(--destructive) / 0.17);
 }
 /* The link variant had no box at all (px-0, square): it takes the pill's. */
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='link'] {
@@ -1301,8 +1321,11 @@ body::after {
   border: 1px solid transparent;
 }
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:not(:disabled) {
-  color: oklch(var(--foreground));
-  border-color: oklch(var(--foreground) / 0.14);
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
+}
+:is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:not(:disabled):hover {
+  background-color: oklch(var(--primary) / 0.17);
 }
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:disabled {
   opacity: 0.35;
@@ -1320,18 +1343,18 @@ body::after {
 }
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel])
   [data-icon-button][data-variant='ghost']:not(:disabled) {
-  border: 1px solid color-mix(in oklch, currentColor 18%, transparent);
+  border: 1px solid transparent;
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
 }
 
 /* Pager Previous / Next (the shared Pagination's chevron buttons). */
 .admin-skin [data-pager-edge]:not(:disabled) {
-  color: oklch(var(--foreground));
-  box-shadow: inset 0 0 0 1px oklch(var(--foreground) / 0.16);
-  background-color: oklch(var(--foreground) / 0.03);
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
 }
 .admin-skin [data-pager-edge]:not(:disabled):hover {
-  box-shadow: inset 0 0 0 1px oklch(var(--foreground) / 0.3);
-  background-color: oklch(var(--foreground) / 0.07);
+  background-color: oklch(var(--primary) / 0.17);
 }
 
 /* ── Disabled: one look for every button primitive ─────────────────────────
@@ -1342,8 +1365,9 @@ body::after {
      the behaviour people have. Hover is pinned to the resting look so a dead
      control does not light up under the pointer. */
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel])
-  :is([data-variant], [data-pager-edge]):disabled {
-  opacity: 0.45;
+  :is([data-variant], [data-pager-edge], [data-text-action], [data-icon-action]):disabled {
+  color: oklch(var(--muted-foreground));
+  opacity: 0.5;
   cursor: not-allowed;
   box-shadow: none;
 }
@@ -1380,12 +1404,12 @@ body::after {
      A firmer edge than the stock secondary hairline, and the glyph in the
      brand ink, so "Export CSV (12)" is findable in every report's actions. */
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled) {
-  background-color: oklch(var(--card));
-  --tw-ring-color: oklch(var(--foreground) / 0.16);
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
+  --tw-ring-color: transparent;
 }
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled):hover {
-  --tw-ring-color: oklch(var(--primary) / 0.45);
-  background-color: oklch(var(--primary) / 0.06);
+  background-color: oklch(var(--primary) / 0.17);
 }
 :is(.admin-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled) > svg {
   color: oklch(var(--primary));
