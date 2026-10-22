@@ -89,16 +89,18 @@ describe('TopNav (admin, grouped)', () => {
     const trigger = screen.getByRole('button', { name: /Reports/ });
     // The filled pill is how selection reads; a side stripe is banned. The
     // fill is the solid ink pill (Rapport skin, 2026-10-22), not the accent.
-    expect(trigger.className).toContain('bg-ink');
-    expect(screen.getByRole('link', { name: /Dashboard/ }).className).not.toContain('bg-ink');
+    expect(trigger.className).toContain('bg-background');
+    expect(screen.getByRole('link', { name: /Dashboard/ }).className).not.toContain(
+      'bg-background',
+    );
   });
 
   it('does not confuse sibling prefixes: /sla-reports must not activate /sla', () => {
     renderNav('/sla-reports');
     // The Policies link points at /sla, which is a string prefix of the current
     // path — matching on startsWith alone would light it up incorrectly.
-    expect(screen.getByRole('link', { name: /^SLA$/ }).className).not.toContain('bg-ink');
-    expect(screen.getByRole('button', { name: /Reports/ }).className).toContain('bg-ink');
+    expect(screen.getByRole('link', { name: /^SLA$/ }).className).not.toContain('bg-background');
+    expect(screen.getByRole('button', { name: /Reports/ }).className).toContain('bg-background');
   });
 
   it('a section linking to its first tab stays active on its other tabs', async () => {
@@ -129,7 +131,7 @@ describe('TopNav (admin, grouped)', () => {
       </MemoryRouter>,
     );
     const trigger = screen.getByRole('button', { name: /Reports/ });
-    expect(trigger.className).toContain('bg-ink');
+    expect(trigger.className).toContain('bg-background');
     await user.click(trigger);
     const [kpi, tickets] = screen.getAllByRole('menuitem');
     expect(kpi!.className).toContain('bg-ink/[0.06]');

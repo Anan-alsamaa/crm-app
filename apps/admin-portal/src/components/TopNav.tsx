@@ -58,9 +58,11 @@ const TRIGGER_BASE =
   'transition-[background-color,color,box-shadow] duration-fast ease-out ' +
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background ' +
   'motion-safe:active:scale-[0.97]';
-const TRIGGER_ACTIVE =
-  'bg-ink text-ink-foreground shadow-[0_10px_24px_-14px_oklch(var(--ink)/0.9)]';
-const TRIGGER_IDLE = 'text-foreground/80 hover:bg-white/60 hover:text-foreground';
+/* The tabs sit on the dark nav bar (owner, 2026-10-22): the active one is a
+   light pill, the rest light text on ink. */
+const TRIGGER_ACTIVE = 'bg-background text-ink shadow-[0_8px_20px_-12px_oklch(0_0_0/0.6)]';
+const TRIGGER_IDLE =
+  'text-ink-foreground/75 hover:bg-ink-foreground/[0.12] hover:text-ink-foreground';
 
 /** A section with one item: a plain link, no menu. */
 function DirectLink({ section }: { section: NavSection }) {
@@ -194,7 +196,7 @@ function MenuGroup({ section }: { section: NavSection }) {
           className={cn(
             'shrink-0 transition-transform duration-fast ease-out',
             open && 'rotate-180',
-            active ? 'text-ink-foreground/70' : 'text-muted-foreground',
+            active ? 'text-ink/60' : 'text-ink-foreground/60',
           )}
         />
       </button>
@@ -282,7 +284,7 @@ export function TopNav({ sections }: { sections: NavSection[] }) {
         return (
           <li key={section.heading ?? section.items[0].to} className="flex min-w-0 items-center">
             {i > 0 && startsSetup && (
-              <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-foreground/10" />
+              <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-ink-foreground/15" />
             )}
             {section.items.length === 1 ? (
               <DirectLink section={section} />

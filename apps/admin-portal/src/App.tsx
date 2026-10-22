@@ -557,9 +557,7 @@ function Shell({ children }: { children: React.ReactNode }) {
   return (
     <>
       <AdminShell
-        sections={sections}
         nav={<TopNav sections={sections} />}
-        onSearch={() => setPaletteOpen(true)}
         language={<LanguageToggle />}
         utilities={
           <>
