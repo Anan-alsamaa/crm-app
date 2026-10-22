@@ -120,33 +120,38 @@ export function TicketCompensationField({
   return (
     <div className="space-y-3">
       <FormField label={t('complaint.compensation', { defaultValue: 'Compensation' })}>
-        <div
-          role="radiogroup"
-          aria-label={t('complaint.compensation', { defaultValue: 'Compensation' })}
-          className="flex flex-wrap items-center gap-2"
-        >
-          {options.map(([v, label]) => {
-            const checked = value.trim() === v;
-            const disabled = v === NOT_COMPENSATED && allUsed;
-            return (
-              <button
-                key={v}
-                type="button"
-                role="radio"
-                aria-checked={checked}
-                disabled={disabled}
-                onClick={() => pick(v)}
-                className={cn(
-                  'rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 ring-inset transition-colors duration-fast ease-out disabled:cursor-not-allowed disabled:opacity-50',
-                  checked
-                    ? 'bg-primary text-primary-foreground ring-primary'
-                    : 'bg-card text-foreground ring-border-strong hover:bg-secondary',
-                )}
-              >
-                {label}
-              </button>
-            );
-          })}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* A segmented switch, the composer's Reply / Internal note shape:
+              the choice is a state you can see at a glance. */}
+          <div
+            role="radiogroup"
+            aria-label={t('complaint.compensation', { defaultValue: 'Compensation' })}
+            className="inline-flex items-center rounded-full bg-foreground/[0.05] p-1 ring-1 ring-inset ring-foreground/[0.06]"
+          >
+            {options.map(([v, label]) => {
+              const checked = value.trim() === v;
+              const disabled = v === NOT_COMPENSATED && allUsed;
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={checked}
+                  disabled={disabled}
+                  onClick={() => pick(v)}
+                  className={cn(
+                    'inline-flex h-8 items-center rounded-full px-4 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out disabled:cursor-not-allowed disabled:opacity-50',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                    checked
+                      ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
           <Button type="button" size="sm" variant="ghost" onClick={onAssign}>
             {t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })}
           </Button>
@@ -154,7 +159,10 @@ export function TicketCompensationField({
       </FormField>
 
       {blocked && (
-        <p role="alert" className="rounded-xl bg-warning/10 px-3 py-2 text-xs text-foreground">
+        <p
+          role="alert"
+          className="rounded-2xl bg-warning-tint px-3.5 py-2.5 text-xs leading-relaxed text-foreground"
+        >
           {t('complaint.compensatedNeedsCoupon', {
             defaultValue:
               'A ticket is Compensated only when a coupon is linked to it. Use “Assign a coupon” to raise one for this ticket.',
@@ -163,7 +171,7 @@ export function TicketCompensationField({
       )}
 
       {allUsed && (
-        <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-foreground">
+        <p className="rounded-2xl bg-foreground/[0.04] px-3.5 py-2.5 text-xs leading-relaxed text-foreground">
           {t('complaint.couponAlreadyUsed', {
             defaultValue:
               'The customer already used this coupon on an order, so it cannot be removed. The ticket stays Compensated.',
@@ -172,8 +180,8 @@ export function TicketCompensationField({
       )}
 
       {removing && (
-        <div className="space-y-2 rounded-xl bg-destructive/[0.08] px-3 py-2.5">
-          <p role="alert" className="text-xs leading-relaxed text-foreground">
+        <div className="space-y-3 rounded-2xl bg-destructive-tint/70 p-4 ring-1 ring-inset ring-destructive/15">
+          <p role="alert" className="text-sm leading-relaxed text-foreground">
             {t('complaint.removeCouponWarning', {
               defaultValue:
                 'Saving removes {{coupons}} from this ticket. If it is already in the customer’s Yiji app it is taken out of it, so the customer no longer sees it. A coupon the customer already used cannot be removed.',
@@ -186,7 +194,7 @@ export function TicketCompensationField({
             })}
           >
             <Textarea
-              rows={2}
+              rows={3}
               dir="auto"
               value={reason}
               onChange={(e) => onReasonChange(e.target.value)}

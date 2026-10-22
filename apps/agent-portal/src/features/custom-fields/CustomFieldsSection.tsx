@@ -110,7 +110,7 @@ export function CustomFieldsSection({ entityType, entityId }: Props) {
 
   if (defs.isLoading)
     return (
-      <div className="rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] px-5 py-4 space-y-2">
+      <div className="rounded-[1.625rem] bg-card/60 ring-1 ring-foreground/[0.04] px-5 py-5 space-y-2">
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-9 w-full" />
       </div>
@@ -118,15 +118,15 @@ export function CustomFieldsSection({ entityType, entityId }: Props) {
   if (!defs.data || defs.data.length === 0) return null;
 
   return (
-    <div className="rounded-2xl bg-card/70 ring-1 ring-foreground/[0.04] shadow-soft px-5 py-4 space-y-4">
-      <div className="flex items-baseline justify-between">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+    <div className="rounded-[1.625rem] bg-card ring-1 ring-foreground/[0.04] shadow-soft px-5 py-5 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-md font-semibold text-foreground">
           {t('customFields.title', { defaultValue: 'Custom fields' })}
         </h3>
         <Button
           type="button"
           size="sm"
-          variant="outline"
+          variant="ghost"
           loading={save.isPending}
           onClick={() => save.mutate()}
         >
@@ -227,10 +227,10 @@ function FieldInput({
                   onClick={() =>
                     onChange(checked ? current.filter((x) => x !== opt) : [...current, opt])
                   }
-                  className={`inline-flex items-center rounded-full px-3 h-7 text-xs transition-colors duration-fast ease-out ${
+                  className={`inline-flex h-8 items-center rounded-full px-3.5 text-xs font-semibold transition-colors duration-fast ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 ${
                     checked
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-secondary/60 text-muted-foreground hover:text-foreground'
+                      : 'bg-foreground/[0.05] text-foreground/75 hover:bg-primary/10 hover:text-primary'
                   }`}
                 >
                   {opt}

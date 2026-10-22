@@ -120,6 +120,7 @@
   },
   "ai": {
     "title": "AI assistance",
+    "short": "AI",
     "running": "Working…",
     "action": {
       "summarize": "Summarize",
@@ -257,6 +258,7 @@
     "bulkTagDone_other": "Tagged {{count}} chats.",
     "allVendors": "All vendors",
     "startChat": {
+      "subtitle": "Message a customer by their mobile number. The chat opens in your inbox.",
       "vendor": "Vendor",
       "pickVendor": "Choose a vendor",
       "needVendorPick": "Choose the vendor."
@@ -316,6 +318,7 @@
     "sending": "Sending…",
     "tab": {
       "reply": "Reply",
+      "mode": "Message type",
       "note": "Internal note"
     },
     "sendHint": "to send",
@@ -548,7 +551,25 @@
     "saved": "Preferences saved.",
     "error": "Could not save preferences.",
     "group": {
-      "sound": "Sound"
+      "sound": "Sound",
+      "sla": "SLA",
+      "slaHint": "Stay ahead of response and resolution deadlines.",
+      "tickets": "Tickets",
+      "ticketsHint": "Work assigned to you and updates on tickets you own.",
+      "mentions": "Mentions & reminders",
+      "mentionsHint": "When teammates loop you in or you schedule a follow-up.",
+      "automation": "Automation",
+      "automationHint": "Automated actions taken on your behalf."
+    },
+    "desc": {
+      "sla_warning": "Heads-up before an SLA deadline arrives.",
+      "sla_breach": "An SLA deadline was missed — act fast.",
+      "assignment": "A conversation or ticket was assigned to you.",
+      "mention": "A teammate @mentioned you in an internal note.",
+      "ticket_update": "A ticket you own changed status or priority.",
+      "reminder": "Scheduled reminders for follow-ups.",
+      "escalation": "Something was escalated to you for review.",
+      "automation": "An automation rule ran on your behalf."
     },
     "scope": "Editing",
     "scopeMine": "My notifications",
@@ -642,7 +663,18 @@
     "terminal": "This request is closed — no further actions.",
     "title": "Compensation",
     "type": "Type",
-    "unclassified": "Unclassified"
+    "unclassified": "Unclassified",
+    "requestsCount": "requests",
+    "pendingCount": "pending",
+    "statusFilter": "Status",
+    "rowsPerPage": "Rows per page",
+    "showingRange": "Showing {{from}}-{{to}} of {{total}}",
+    "colRequest": "Request",
+    "colPlace": "Brand / restaurant",
+    "colAmount": "Amount",
+    "colCreated": "Created",
+    "openRequest": "Open request {{code}}",
+    "summary": "Summary"
   },
   "app": {
     "workspace": "User workspace"
@@ -931,6 +963,28 @@
     "live": "LIVE",
     "stop": "STOP",
     "goLive": "Go live",
+    "board": {
+      "view": "View",
+      "viewBoard": "Board",
+      "viewTable": "Table",
+      "filters": "Filters",
+      "filtersOn": "{{count}} filters applied",
+      "filtersOn_one": "{{count}} filter applied",
+      "filtersOn_other": "{{count}} filters applied",
+      "lateNow": "late now",
+      "lateInRange": "late in this range",
+      "updated": "Updated {{time}}",
+      "colRunning": "Running for",
+      "colBranch": "Brand / branch",
+      "colHandling": "Handling",
+      "byAgent": "by {{name}}",
+      "cart": "Cart",
+      "severity": {
+        "late": "Late",
+        "veryLate": "Very late",
+        "critical": "Critical"
+      }
+    },
     "liveTip": "Live: new late orders appear here. Click to stop.",
     "goLiveTip": "Show late orders live, as they arrive.",
     "columns": {

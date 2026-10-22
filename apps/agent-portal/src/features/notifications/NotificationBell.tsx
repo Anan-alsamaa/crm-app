@@ -150,7 +150,7 @@ export function NotificationBell() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          'relative inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground',
+          'relative inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground',
           'transition-[transform,background-color,color] duration-fast ease-out',
           'hover:bg-secondary hover:text-foreground active:scale-95',
         )}
@@ -181,15 +181,17 @@ export function NotificationBell() {
                 ? { left: coords.left }
                 : { right: coords.right }),
             }}
-            className="fixed z-[60] w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-2xl bg-popover text-popover-foreground shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in origin-top-end"
+            /* The frosted float card of the portal's dialogs: the 26px corner,
+               one hairline, the long soft drop. */
+            className="fixed z-[60] w-[26rem] max-w-[calc(100vw-1rem)] overflow-hidden rounded-[1.625rem] bg-popover/95 text-popover-foreground backdrop-blur-xl animate-scale-in origin-top-end shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_2px_6px_oklch(var(--shadow-color)/0.06),0_30px_60px_-32px_oklch(var(--shadow-color)/0.45)]"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-5 pt-4 pb-3">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">
+            <div className="flex items-center justify-between gap-3 px-5 pb-3 pt-5">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold leading-tight tracking-[-0.01em] text-foreground">
                   {t('notifications.title')}
                 </h2>
-                <p className="text-2xs text-muted-foreground">
+                <p className="mt-0.5 text-xs text-muted-foreground">
                   {unread.length === 0
                     ? t('notifications.allRead', { defaultValue: 'All caught up' })
                     : t('notifications.unreadCount', {
@@ -202,7 +204,7 @@ export function NotificationBell() {
                 <button
                   type="button"
                   onClick={() => void markAllRead()}
-                  className="text-2xs font-semibold text-primary underline-offset-2 hover:underline"
+                  className="inline-flex items-center rounded-full bg-primary/10 px-3 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-8 shrink-0 text-xs"
                 >
                   {t('notifications.markAllRead', { defaultValue: 'Mark all read' })}
                 </button>
@@ -210,7 +212,8 @@ export function NotificationBell() {
             </div>
 
             {/* Filter tabs */}
-            <div className="flex gap-1 px-3 pb-2">
+            {/* The composer's segmented pill: one track, the chosen tab lifted. */}
+            <div className="mx-5 mb-2 flex rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]">
               {[
                 {
                   id: 'unread' as const,
@@ -226,9 +229,10 @@ export function NotificationBell() {
                   type="button"
                   onClick={() => setFilter(tab.id)}
                   className={cn(
-                    'flex-1 rounded-md px-2 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
+                    'inline-flex h-7 flex-1 items-center justify-center rounded-full px-3 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                     filter === tab.id
-                      ? 'bg-secondary text-foreground'
+                      ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
                       : 'text-muted-foreground hover:text-foreground',
                   )}
                 >
@@ -238,7 +242,7 @@ export function NotificationBell() {
             </div>
 
             {/* Body */}
-            <div className="max-h-[28rem] overflow-auto">
+            <div className="max-h-[28rem] overflow-auto pb-2">
               {shown.length === 0 ? (
                 <div className="flex flex-col items-center gap-3 px-6 py-12 text-center">
                   <span
@@ -280,7 +284,7 @@ export function NotificationBell() {
                   .filter((g) => g.items.length > 0)
                   .map((g) => (
                     <div key={g.id}>
-                      <h3 className="px-5 pt-3 pb-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      <h3 className="px-5 pb-1 pt-3 text-xs font-semibold text-muted-foreground">
                         {g.heading}
                       </h3>
                       <ul>
@@ -290,14 +294,14 @@ export function NotificationBell() {
                             <li
                               key={n.id}
                               className={cn(
-                                'group flex gap-3 px-5 py-3 transition-colors duration-fast ease-out hover:bg-secondary/50',
-                                !n.read_at && 'bg-primary-subtle/30',
+                                'group mx-2 flex gap-3 rounded-2xl px-3 py-3 transition-colors duration-fast ease-out hover:bg-secondary/60',
+                                !n.read_at && 'bg-primary/[0.04]',
                               )}
                             >
                               <span
                                 aria-hidden
                                 className={cn(
-                                  'mt-0.5 inline-flex h-2 w-2 shrink-0 items-center justify-center rounded-full',
+                                  'mt-1.5 inline-flex h-2 w-2 shrink-0 items-center justify-center rounded-full',
                                   !n.read_at ? 'bg-primary' : 'bg-transparent',
                                 )}
                               />
@@ -310,10 +314,10 @@ export function NotificationBell() {
                                     {formatRelative(n.date_created)}
                                   </span>
                                 </div>
-                                <p className="text-xs text-muted-foreground line-clamp-2">
+                                <p className="line-clamp-2 text-xs leading-relaxed text-muted-foreground">
                                   {n.body}
                                 </p>
-                                <div className="flex items-center gap-2 pt-0.5">
+                                <div className="flex items-center gap-2 pt-1">
                                   <Pill tone={tone} size="sm">
                                     {t(`notifications.type.${n.type}`, { defaultValue: n.type })}
                                   </Pill>
@@ -326,7 +330,7 @@ export function NotificationBell() {
                                         setOpen(false);
                                         if (n.link) navigate(n.link);
                                       }}
-                                      className="text-2xs font-semibold text-primary underline-offset-2 hover:underline"
+                                      className="inline-flex items-center rounded-full bg-primary/10 px-3 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-7 text-xs"
                                     >
                                       {t('notifications.view', { defaultValue: 'View' })}
                                     </button>
@@ -335,7 +339,7 @@ export function NotificationBell() {
                                     <button
                                       type="button"
                                       onClick={() => void markRead.mutateAsync(n.id)}
-                                      className="ms-auto text-2xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                                      className="ms-auto inline-flex h-7 items-center rounded-full bg-foreground/[0.05] px-2.5 text-xs font-medium text-foreground/75 transition-colors duration-fast hover:bg-foreground/[0.09] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                     >
                                       {t('notifications.markRead', { defaultValue: 'Mark read' })}
                                     </button>
@@ -352,14 +356,14 @@ export function NotificationBell() {
             </div>
 
             {/* Footer */}
-            <div className="bg-secondary/30 px-4 py-2.5 text-center text-2xs text-muted-foreground">
+            <div className="flex justify-center px-4 py-3 shadow-[inset_0_1px_0_oklch(var(--foreground)/0.065)]">
               <button
                 type="button"
                 onClick={() => {
                   setOpen(false);
                   navigate('/preferences');
                 }}
-                className="hover:text-foreground"
+                className="inline-flex items-center rounded-full bg-primary/10 px-3 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-8 text-xs"
               >
                 {t('notifications.managePreferences', {
                   defaultValue: 'Manage notification preferences',

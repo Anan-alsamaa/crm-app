@@ -20,7 +20,7 @@ export function DrawerSection({
   className,
 }: DrawerSectionProps): JSX.Element {
   return (
-    <section className={cn('space-y-4 pt-2 first:pt-0', className)}>
+    <section data-drawer-section="" className={cn('space-y-4 pt-2 first:pt-0', className)}>
       <div className="space-y-1">
         <h3 className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
           {title}

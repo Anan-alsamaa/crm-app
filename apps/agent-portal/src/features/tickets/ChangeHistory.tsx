@@ -134,7 +134,7 @@ export function ChangeHistory({ ticketId }: { ticketId: string }) {
     return (
       // Composed placeholder in the detail's shared dashed idiom — an empty
       // audit trail is a state of the section, not a stray line of copy.
-      <p className="rounded-xl border border-dashed border-border-strong px-4 py-5 text-center text-xs text-muted-foreground">
+      <p className="rounded-2xl bg-foreground/[0.035] px-4 py-6 text-center text-xs text-muted-foreground">
         {t('tickets.noFieldChanges', {
           defaultValue: 'No field changes recorded since this ticket was created.',
         })}
@@ -142,12 +142,13 @@ export function ChangeHistory({ ticketId }: { ticketId: string }) {
     );
 
   return (
-    // Timeline cards in the board idiom: a jade start-hairline carries the
-    // thread, the actor leads in bold, and the old→new diff stays intact.
+    // Timeline cards in the board idiom: a brand dot leads each entry (no
+    // side stripe), the actor follows in bold, and the old→new diff stays intact.
     <ol className="space-y-3">
       {entries.map((e) => (
-        <li key={e.id} className="rounded-xl border-s-2 border-primary/40 bg-secondary/40 p-3">
-          <div className="mb-1.5 flex flex-wrap items-baseline gap-x-2 text-2xs text-muted-foreground">
+        <li key={e.id} className="rounded-2xl bg-foreground/[0.035] px-4 py-3">
+          <div className="mb-1.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
             <span className="font-semibold text-foreground">
               {e.userId
                 ? (names.data?.get(e.userId) ??

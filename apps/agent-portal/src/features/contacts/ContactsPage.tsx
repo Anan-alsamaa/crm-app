@@ -132,7 +132,7 @@ export function ContactsPage() {
           )}
         </span>
         <ToolbarSpacer />
-        <div className="relative w-56">
+        <div className="relative w-full max-w-xs sm:w-72">
           <svg
             aria-hidden
             viewBox="0 0 16 16"
@@ -141,7 +141,7 @@ export function ContactsPage() {
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+            className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
           >
             <circle cx="7" cy="7" r="4.5" />
             <path d="m10.5 10.5 3 3" />
@@ -152,12 +152,12 @@ export function ContactsPage() {
             placeholder={t('contacts.searchPlaceholder', { defaultValue: 'Search…' })}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="block h-8 w-full rounded-lg bg-input ps-8 pe-3 text-xs text-foreground placeholder:text-muted-foreground/60 ring-1 ring-inset ring-foreground/[0.08] hover:ring-foreground/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 text-start transition-[box-shadow,background-color] duration-fast ease-out"
+            className="block h-10 w-full rounded-full bg-input pe-4 ps-10 text-sm text-foreground placeholder:text-muted-foreground/60 ring-1 ring-inset ring-foreground/[0.08] hover:ring-foreground/[0.14] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 text-start transition-[box-shadow,background-color] duration-fast ease-out"
           />
         </div>
         {/* `export_contacts` (owner, 2026-10-06). */}
         {can('export_contacts') && (
-          <Button type="button" variant="outline" size="sm" onClick={onExport}>
+          <Button type="button" variant="ghost" size="sm" data-export="" onClick={onExport}>
             {t('contacts.exportCsv', { defaultValue: 'Export CSV' })}
           </Button>
         )}
@@ -198,7 +198,7 @@ export function ContactsPage() {
         )}
         {contacts.isLoading ? (
           <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-            <ul className="divide-y divide-foreground/[0.06]">
+            <ul className="divide-y divide-foreground/[0.065]">
               {Array.from({ length: 8 }).map((_, i) => (
                 <li key={i} className="flex items-center gap-3 px-4 py-3">
                   {/* h-9 w-9 — the md Avatar the real rows render, so the list
@@ -236,13 +236,13 @@ export function ContactsPage() {
           // headers, hairline row separators, and a footer aggregate band —
           // not loose hover rows on the canvas.
           <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-            <div className="hidden border-b border-foreground/[0.08] bg-foreground/[0.02] px-4 py-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:grid sm:grid-cols-[auto_minmax(0,1fr)_8.5rem_9rem] sm:items-center sm:gap-3">
+            <div className="hidden h-11 border-b border-foreground/[0.065] px-6 text-xs font-semibold text-muted-foreground sm:grid sm:grid-cols-[auto_minmax(0,1fr)_8.5rem_9rem] sm:items-center sm:gap-4">
               <span aria-hidden className="w-9" />
               <span>{t('contacts.name', { defaultValue: 'Name' })}</span>
               <span className="text-end">{t('contacts.phone', { defaultValue: 'Phone' })}</span>
               <span className="text-end">{t('contacts.vendor', { defaultValue: 'Vendor' })}</span>
             </div>
-            <ul className="divide-y divide-foreground/[0.06]">
+            <ul className="divide-y divide-foreground/[0.065]">
               {filtered.map((c) => {
                 /* Same rule as the inbox list (owner, 2026-10-07): a name that
                    is really the phone reads as the canonical 05 number. */
@@ -256,10 +256,10 @@ export function ContactsPage() {
                       // Fixed columns (avatar | identity | phone | vendor) so the
                       // end-aligned cells line up down the list like table columns.
                       className={cn(
-                        'group grid w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-3 px-4 py-3 text-start',
+                        'group grid min-h-[3.75rem] w-full grid-cols-[auto_minmax(0,1fr)] items-center gap-4 px-6 py-3 text-start',
                         'sm:grid-cols-[auto_minmax(0,1fr)_8.5rem_9rem]',
                         'transition-colors duration-fast ease-out hover:bg-primary/[0.07]',
-                        'focus-visible:outline-none focus-visible:bg-secondary/60',
+                        'focus-visible:outline-none focus-visible:bg-primary/[0.07]',
                       )}
                     >
                       <Avatar
@@ -282,7 +282,7 @@ export function ContactsPage() {
                         {c.vendor?.name ? (
                           <span
                             title={c.vendor.name}
-                            className="inline-flex max-w-full items-center rounded-full bg-secondary px-2 py-0.5 text-2xs font-medium text-foreground ring-1 ring-inset ring-foreground/[0.06]"
+                            className="inline-flex h-6 max-w-full items-center rounded-full bg-primary/[0.08] px-2.5 text-2xs font-semibold text-primary"
                           >
                             <span className="truncate">{c.vendor.name}</span>
                           </span>
@@ -295,7 +295,7 @@ export function ContactsPage() {
                 );
               })}
             </ul>
-            <footer className="flex h-11 items-center gap-6 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground">
+            <footer className="flex h-14 items-center gap-6 border-t border-foreground/[0.065] px-6 text-xs text-muted-foreground">
               <span className="tabular-nums">
                 <strong className="font-semibold text-foreground">{filtered.length}</strong>{' '}
                 {filtered.length === total
@@ -311,7 +311,7 @@ export function ContactsPage() {
 }
 
 /** Board stat tile: tinted rounded-square icon chip, extrabold tabular numeral,
-    uppercase micro-label. The hue lives on the chip so the numeral stays in
+    sentence-case label. The hue lives on the chip so the numeral stays in
     foreground ink on both themes. */
 function StatTile({
   icon,
@@ -328,18 +328,19 @@ function StatTile({
   return (
     <div
       role="listitem"
-      className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3.5 shadow-soft ring-1 ring-foreground/[0.06]"
+      className="flex items-center gap-3.5 rounded-[1.375rem] bg-card px-5 py-4 shadow-soft ring-1 ring-foreground/[0.06]"
     >
-      <span aria-hidden className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-lg', chip)}>
+      <span
+        aria-hidden
+        className={cn('grid h-10 w-10 shrink-0 place-items-center rounded-full', chip)}
+      >
         {icon}
       </span>
       <div className="min-w-0">
         <div className="text-2xl font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
           {value}
         </div>
-        <div className="mt-1.5 truncate text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {label}
-        </div>
+        <div className="mt-1.5 truncate text-xs font-semibold text-muted-foreground">{label}</div>
       </div>
     </div>
   );

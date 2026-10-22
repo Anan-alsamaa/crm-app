@@ -108,7 +108,7 @@ export function ContactPicker({
       }
     >
       {value ? (
-        <div className="flex items-center gap-2.5 rounded-xl bg-secondary px-3 py-2 ring-1 ring-foreground/[0.05]">
+        <div className="flex min-h-14 items-center gap-3 rounded-2xl bg-primary/[0.05] py-2 pe-2 ps-3 ring-1 ring-inset ring-primary/15">
           <Avatar name={value.name} email={value.email} phone={value.phone} size="sm" />
           <div className="min-w-0 flex-1">
             <div dir="auto" className="truncate text-sm font-medium text-foreground">
@@ -145,20 +145,20 @@ export function ContactPicker({
             inputMode="tel"
           />
           {tooShort ? null : (
-            <div className="max-h-44 overflow-auto rounded-xl ring-1 ring-foreground/[0.05]">
+            <div className="max-h-56 overflow-auto rounded-2xl bg-input p-1 ring-1 ring-inset ring-foreground/[0.08]">
               {contactSearch.isFetching ? (
                 <div className="flex items-center justify-center py-5 text-muted-foreground">
                   <Spinner size={16} />
                 </div>
               ) : matches.length > 0 ? (
-                <ul className="divide-y divide-foreground/[0.04]">
+                <ul className="space-y-0.5">
                   {matches.map((c) => (
                     <li key={c.id}>
                       <button
                         type="button"
                         onClick={() => onChange(c)}
                         className={cn(
-                          'flex w-full items-center gap-2.5 px-3 py-2 text-start transition-colors duration-fast ease-out hover:bg-secondary',
+                          'flex min-h-12 w-full items-center gap-3 rounded-xl px-3 py-2 text-start transition-colors duration-fast ease-out hover:bg-primary/[0.06] focus-visible:bg-primary/[0.06] focus-visible:outline-none',
                           // A contact with no vendor cannot carry a ticket, so it
                           // is shown but visibly weaker rather than hidden — the
                           // agent searched for it and needs to know it was found.

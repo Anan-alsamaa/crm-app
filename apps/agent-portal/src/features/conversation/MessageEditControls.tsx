@@ -166,13 +166,15 @@ export function InlineMessageEditor({
             save();
           }
         }}
-        className="w-full resize-none rounded-xl border border-input bg-background px-3 py-2 text-[15px] leading-relaxed text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50"
+        className="w-full resize-none rounded-2xl border-none bg-input px-3.5 py-2.5 text-[15px] leading-relaxed text-foreground ring-1 ring-inset ring-foreground/[0.08] focus:outline-none focus:ring-2 focus:ring-primary/40"
       />
+      {/* Soft Cancel, solid ink Save, flat grey while there is nothing to
+          save - the portal's one vocabulary for actions. */}
       <div className="flex items-center justify-end gap-1.5 text-xs">
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md px-2.5 py-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
+          className="inline-flex h-8 items-center rounded-full bg-primary/10 px-3.5 font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
         </button>
@@ -180,7 +182,7 @@ export function InlineMessageEditor({
           type="button"
           onClick={save}
           disabled={!canSave}
-          className="rounded-md bg-primary px-2.5 py-1 font-medium text-primary-foreground disabled:opacity-50"
+          className="inline-flex h-8 items-center rounded-full bg-display px-3.5 font-semibold text-background transition-colors duration-fast hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-foreground/[0.06] disabled:text-muted-foreground"
         >
           {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
         </button>

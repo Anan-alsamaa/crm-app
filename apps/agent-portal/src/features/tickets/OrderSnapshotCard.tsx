@@ -219,10 +219,8 @@ function fmtDateTime(iso: string | undefined): string {
 
 function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start justify-between gap-3 py-1.5">
-      <dt className="shrink-0 text-2xs font-medium uppercase tracking-[0.08em] text-muted-foreground">
-        {label}
-      </dt>
+    <div className="flex items-start justify-between gap-3 py-2">
+      <dt className="shrink-0 text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="min-w-0 text-end text-xs text-foreground">{value}</dd>
     </div>
   );
@@ -293,7 +291,7 @@ export function OrderSnapshotCard({
             orderId: order.orderId,
             defaultValue: 'Order {{orderId}} details',
           })}
-          className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 bg-primary/[0.06] px-4 py-3 text-start transition-colors duration-fast ease-out hover:bg-primary/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+          className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 bg-primary/[0.06] px-5 py-3.5 text-start transition-colors duration-fast ease-out hover:bg-primary/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
         >
           <svg
             viewBox="0 0 16 16"
@@ -313,7 +311,7 @@ export function OrderSnapshotCard({
           <HeaderContents order={order} t={t} />
         </button>
       ) : (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-primary/[0.06] px-4 py-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 bg-primary/[0.06] px-5 py-3.5">
           <HeaderContents order={order} t={t} />
         </div>
       )}
@@ -379,7 +377,7 @@ function HeaderlessBody({
   showSubtotal: boolean;
 }) {
   return (
-    <div className="px-4 py-3">
+    <div className="px-5 py-4">
       {restaurant && (
         <div className="mb-2.5">
           <div className="text-sm font-semibold tracking-tight text-foreground">{restaurant}</div>

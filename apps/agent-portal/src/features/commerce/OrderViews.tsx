@@ -90,7 +90,7 @@ function ExpandableOrder({
           its own button — so the toggle is a stretched overlay UNDERNEATH the
           header rather than a <button> wrapping it, which would nest one button
           inside another. */}
-      <div className="relative flex items-center gap-2 rounded-2xl px-4 py-3 text-start transition-colors duration-fast ease-out hover:bg-secondary/40">
+      <div className="relative flex items-center gap-2 rounded-2xl px-4 py-3 text-start transition-colors duration-fast ease-out hover:bg-primary/[0.04]">
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}
@@ -109,7 +109,7 @@ function ExpandableOrder({
         />
       </div>
       {open && (
-        <div className="rounded-b-2xl bg-secondary/40 px-4 py-3">
+        <div className="rounded-b-2xl bg-foreground/[0.03] px-4 py-3.5">
           {detail.isLoading ? (
             <div className="space-y-2">
               <Skeleton className="h-4 w-full" />
@@ -218,12 +218,13 @@ function ManualOrderLookup({
           inputMode="numeric"
           aria-label={t('commerce.lookupLabel', { defaultValue: 'Look up an order by ID' })}
           placeholder={t('commerce.lookupPlaceholder', { defaultValue: 'Type an order ID…' })}
-          className="h-8 min-w-[8rem] flex-1 rounded-lg bg-input px-2.5 font-mono text-xs tabular-nums text-foreground ring-1 ring-inset ring-foreground/15 placeholder:font-sans placeholder:text-muted-foreground/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          className="h-9 min-w-[8rem] flex-1 rounded-full bg-input px-3.5 font-mono text-xs tabular-nums text-foreground ring-1 ring-inset ring-foreground/[0.12] transition-shadow duration-fast placeholder:font-sans placeholder:text-muted-foreground hover:ring-foreground/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/45"
         />
         <button
           type="submit"
           disabled={!input.trim()}
-          className="h-8 shrink-0 rounded-lg bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-opacity disabled:opacity-40"
+          data-press=""
+          className="h-9 shrink-0 rounded-full bg-display px-4 text-xs font-semibold text-background transition-colors duration-fast hover:bg-primary-strong disabled:cursor-not-allowed disabled:bg-foreground/[0.06] disabled:text-muted-foreground"
         >
           {t('commerce.lookupGo', { defaultValue: 'Find' })}
         </button>
@@ -239,7 +240,7 @@ function ManualOrderLookup({
           })}
         </p>
       ) : found ? (
-        <div className="space-y-1.5 rounded-2xl bg-secondary/40 p-2">
+        <div className="space-y-2 rounded-[1.25rem] bg-foreground/[0.035] p-2">
           <ExpandableOrder vendorId={vendorId} summary={found} defaultOpen />
           <button
             type="button"
@@ -252,7 +253,7 @@ function ManualOrderLookup({
               setOrderId('');
             }}
             disabled={!conversationId || !onAdd}
-            className="h-7 w-full rounded-lg bg-primary/10 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-40"
+            className="h-9 w-full rounded-full bg-primary/10 text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] disabled:cursor-not-allowed disabled:bg-foreground/[0.05] disabled:text-muted-foreground"
           >
             {t('commerce.addToPanel', { defaultValue: '+ Keep this order' })}
           </button>
@@ -496,7 +497,7 @@ export function LatestOrder({
           */}
           {pinned && (
             <li className="space-y-1">
-              <p className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-primary">
+              <p className="flex items-center gap-1.5 px-1 text-xs font-semibold text-primary">
                 <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
                 {t('commerce.orderFromChat', {
                   defaultValue: 'The order this chat is about',
@@ -529,7 +530,7 @@ export function LatestOrder({
                   orderId: o.orderId,
                   defaultValue: 'Remove order {{orderId}}',
                 })}
-                className="h-6 w-full rounded-lg text-2xs font-medium text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                className="h-8 w-full rounded-full bg-destructive/[0.07] text-xs font-semibold text-destructive transition-colors duration-fast hover:bg-destructive/[0.14]"
               >
                 {t('commerce.removeOrderShort', { defaultValue: 'Remove' })}
               </button>

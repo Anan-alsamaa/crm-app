@@ -37,7 +37,7 @@ export function SoundToggle() {
       aria-label={actionLabel}
       title={actionLabel}
       className={cn(
-        'inline-flex h-9 w-9 items-center justify-center rounded-lg',
+        'inline-flex h-9 w-9 items-center justify-center rounded-full',
         'transition-colors duration-fast ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
         muted

@@ -102,7 +102,7 @@ function ImageThumb({
         name: a.filename ?? 'image',
       })}
       className={cn(
-        'group relative h-32 w-32 shrink-0 overflow-hidden rounded-xl bg-secondary',
+        'group relative h-32 w-32 shrink-0 overflow-hidden rounded-[1.125rem] bg-secondary',
         'ring-1 ring-foreground/[0.06] shadow-sm shadow-foreground/[0.06]',
         'transition-[box-shadow,transform] duration-fast ease-out',
         'hover:shadow-md hover:shadow-foreground/[0.12] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
@@ -120,7 +120,7 @@ function ImageThumb({
       )}
       {/* Expand affordance on hover */}
       <span className="pointer-events-none absolute inset-0 flex items-end justify-end bg-gradient-to-t from-foreground/30 to-transparent p-1.5 opacity-0 transition-opacity duration-fast group-hover:opacity-100">
-        <span className="grid h-6 w-6 place-items-center rounded-md bg-background/85 text-foreground shadow-sm">
+        <span className="grid h-7 w-7 place-items-center rounded-full bg-background/90 text-foreground shadow-sm">
           <svg
             viewBox="0 0 16 16"
             fill="none"
@@ -148,7 +148,7 @@ function FileChip({ a, onClick }: { a: MessageAttachment; onClick: () => void })
       type="button"
       onClick={onClick}
       className={cn(
-        'group inline-flex w-full max-w-[18rem] items-center gap-2.5 rounded-xl bg-card/70 px-2.5 py-2 text-start',
+        'group inline-flex w-full max-w-[18rem] items-center gap-2.5 rounded-2xl bg-card/80 px-3 py-2.5 text-start',
         'ring-1 ring-foreground/[0.06] shadow-soft',
         'transition-[box-shadow,background-color] duration-fast ease-out',
         'hover:bg-card hover:shadow-md hover:shadow-foreground/[0.1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
@@ -159,12 +159,12 @@ function FileChip({ a, onClick }: { a: MessageAttachment; onClick: () => void })
         <span className="block truncate text-xs font-medium text-foreground">
           {a.filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
         </span>
-        <span className="block text-2xs tabular-nums text-muted-foreground">
+        <span className="block text-xs tabular-nums text-muted-foreground">
           {label}
           {size && ` · ${size}`}
         </span>
       </span>
-      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-fast group-hover:bg-secondary group-hover:text-foreground">
+      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary transition-colors duration-fast group-hover:bg-primary/[0.17]">
         <svg
           viewBox="0 0 16 16"
           fill="none"

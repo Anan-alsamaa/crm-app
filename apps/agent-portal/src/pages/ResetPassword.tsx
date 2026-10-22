@@ -78,9 +78,11 @@ export function ResetPassword() {
   });
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4 py-12">
       <div className="absolute end-5 top-5 z-10">
-        <LanguageToggle />
+        <span className="agent-icon-btn">
+          <LanguageToggle />
+        </span>
       </div>
       <div className="absolute start-6 top-5 z-10 flex items-center">
         {/* The supplied lockup. A real asset rather than the traced vector: the
@@ -89,12 +91,12 @@ export function ResetPassword() {
       </div>
 
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
-        <div className="overflow-hidden rounded-2xl bg-card shadow-2xl shadow-black/40 ring-1 ring-foreground/[0.08]">
-          <div className="overflow-hidden rounded-2xl bg-card">
-            <div className="flex flex-col items-center gap-4 px-8 pb-2 pt-8 text-center">
+        <div className="overflow-hidden rounded-[1.625rem] bg-card/95 shadow-[var(--agent-card-shadow),0_40px_80px_-40px_oklch(var(--shadow-color)/0.5)] backdrop-blur-xl">
+          <div className="overflow-hidden rounded-[1.625rem]">
+            <div className="flex flex-col items-center gap-5 px-8 pb-2 pt-9 text-center">
               <img src="/sara-crm-lockup.svg" alt="Sara CRM" className="h-12 w-auto" />
               <div className="space-y-1.5">
-                <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
+                <h1 className="text-[1.625rem] font-semibold leading-tight tracking-[-0.02em] text-foreground">
                   {t('reset.title', { defaultValue: 'Choose a new password' })}
                 </h1>
                 <p className="text-sm text-muted-foreground">
@@ -139,7 +141,7 @@ export function ResetPassword() {
                 {submitError && (
                   <p
                     role="alert"
-                    className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 ring-1 ring-destructive/20 px-3.5 py-2.5 text-sm text-destructive"
+                    className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
                   >
                     {submitError}
                   </p>
@@ -153,7 +155,7 @@ export function ResetPassword() {
               <div className="space-y-4 px-8 py-7">
                 <p
                   role="alert"
-                  className="rounded-2xl bg-destructive/10 ring-1 ring-destructive/20 px-3.5 py-2.5 text-sm text-destructive"
+                  className="rounded-2xl bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
                 >
                   {t('reset.missingToken', {
                     defaultValue: 'This reset link is incomplete. Request a new one from sign in.',
@@ -162,10 +164,10 @@ export function ResetPassword() {
               </div>
             )}
 
-            <div className="px-8 py-3 text-center text-2xs text-muted-foreground">
+            <div className="flex justify-center px-8 pb-5 pt-1 text-center text-xs">
               <Link
                 to="/login"
-                className="rounded-md transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="inline-flex items-center rounded-full bg-primary/10 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-9 px-4 text-xs"
               >
                 {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
               </Link>
@@ -174,7 +176,7 @@ export function ResetPassword() {
         </div>
       </div>
 
-      <p className="absolute bottom-4 inset-x-0 z-10 text-center text-2xs text-muted-foreground">
+      <p className="absolute bottom-4 inset-x-0 z-10 text-center text-xs text-muted-foreground">
         © Sara CRM
       </p>
     </div>

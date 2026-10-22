@@ -35,6 +35,7 @@ export function ErrorState({
   return (
     <div
       role="alert"
+      data-empty-state="error"
       className={cn(
         'flex flex-col items-center justify-center gap-4 px-6 py-20 text-center',
         className,

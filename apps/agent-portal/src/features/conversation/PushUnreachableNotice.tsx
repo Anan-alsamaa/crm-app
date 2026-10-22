@@ -101,9 +101,11 @@ export function PushUnreachableNotice({
   return (
     <div
       className={cn(
-        'flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl',
-        'border border-warning/30 bg-warning/[0.07] px-3 py-2',
-        'text-2xs leading-relaxed text-foreground',
+        // A soft warning card on the portal's corner; the wash carries the
+        // tone, no outline.
+        'flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[1.25rem]',
+        'bg-warning/[0.08] px-4 py-2.5 ring-1 ring-inset ring-warning/20',
+        'text-xs leading-relaxed text-foreground',
         className,
       )}
     >
@@ -120,10 +122,11 @@ export function PushUnreachableNotice({
         target="_blank"
         rel="noreferrer noopener"
         className={cn(
-          'inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1',
-          'bg-foreground/[0.06] font-semibold text-foreground',
-          'ring-1 ring-inset ring-border transition-colors duration-fast',
-          'hover:bg-foreground/[0.1]',
+          // A usable action: the soft brand pill, the toolbar's height.
+          'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5',
+          'bg-primary/10 font-semibold text-primary transition-colors duration-fast',
+          'hover:bg-primary/[0.17] active:bg-primary/[0.24]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         )}
       >
         {t('conversation.pushFallback.action', { defaultValue: 'Nudge on WhatsApp' })}

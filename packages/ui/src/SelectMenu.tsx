@@ -275,6 +275,8 @@ export function SelectMenu({
             id={listId}
             role="listbox"
             tabIndex={-1}
+            /* A hook for a portal's own stylesheet; carries no styling itself. */
+            data-menu-panel=""
             className={cn(
               'fixed z-[60] max-h-72 overflow-auto rounded-xl bg-popover/95 backdrop-blur p-1 text-sm shadow-xl shadow-black/30 ring-1 ring-border animate-scale-in',
               coords.up ? 'origin-bottom' : 'origin-top',

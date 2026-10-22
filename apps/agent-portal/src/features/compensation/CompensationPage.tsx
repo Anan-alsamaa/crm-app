@@ -13,9 +13,16 @@ import {
   Pill,
   Select,
   Skeleton,
+  Table,
+  TablePager,
+  TableSurface,
+  Td,
   Textarea,
+  Th,
+  Tr,
   cn,
   formatDateTime,
+  pageCountOf,
   toast,
 } from '@yiji/ui';
 import {
@@ -79,131 +86,257 @@ function StatusPill({ status }: { status: CompensationStatus }) {
 
 /* ── Queue ───────────────────────────────────────────────────────── */
 
+/**
+ * THE QUEUE AS A REPORT (owner, 2026-10-22: the page "looks very bad - uses
+ * half the page").
+ *
+ * It was a 5xl column of stacked cards, so on a desk monitor the right half of
+ * the screen was empty canvas and only five requests fitted. Now it is the
+ * admin console's report shape: the title block across the page, one filter
+ * card, then one full-width table with its count and pager inside the card.
+ * The data, the filter and where a row leads are unchanged.
+ */
 function RequestQueue() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { data, isLoading, isError } = useCompensationRequests();
   const [filter, setFilter] = useState<'all' | CompensationStatus>('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
 
   const rows = useMemo(
     () => (data ?? []).filter((r) => filter === 'all' || r.status === filter),
     [data, filter],
   );
+  /* Per-status counts for the filter chips - read off the list already loaded. */
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: data?.length ?? 0 };
+    for (const r of data ?? []) c[r.status] = (c[r.status] ?? 0) + 1;
+    return c;
+  }, [data]);
+  const current = Math.min(page, pageCountOf(rows.length, pageSize));
+  const paged = rows.slice((current - 1) * pageSize, current * pageSize);
+  const open = (r: CompensationRow) => navigate(`/compensation-requests/${r.id}`);
 
   return (
-    <div className="agent-gutter h-full w-full max-w-5xl overflow-y-auto pb-8 pt-4">
-      <header className="mb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
-          {t('compensation.title', { defaultValue: 'Compensation' })}
-        </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {t('compensation.subtitle', {
-            defaultValue: 'Review customer compensation requests and run each step.',
-          })}
-        </p>
+    <div className="h-full w-full overflow-y-auto pb-10">
+      {/* Title block: big title + description, the queue's size on the far side. */}
+      <header className="agent-gutter flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-5 pt-5">
+        <div className="min-w-0">
+          <h1 className="text-foreground">
+            {t('compensation.title', { defaultValue: 'Compensation' })}
+          </h1>
+          <p className="mt-2 max-w-[46rem] text-sm leading-relaxed text-muted-foreground">
+            {t('compensation.subtitle', {
+              defaultValue: 'Review customer compensation requests and run each step.',
+            })}
+          </p>
+        </div>
+        {data && (
+          <p className="text-sm text-muted-foreground">
+            <span className="font-semibold tabular-nums text-foreground">{counts.all}</span>{' '}
+            {t('compensation.requestsCount', { defaultValue: 'requests' })}
+            <span aria-hidden className="mx-2 opacity-50">
+              ·
+            </span>
+            <span className="font-semibold tabular-nums text-foreground">
+              {counts.Pending ?? 0}
+            </span>{' '}
+            {t('compensation.pendingCount', { defaultValue: 'pending' })}
+          </p>
+        )}
       </header>
 
-      {/* Status filter */}
-      <div className="mb-4 flex flex-wrap gap-1.5">
-        {(['all', ...COMPENSATION_STATUSES] as const).map((s) => (
-          <button
-            key={s}
-            type="button"
-            onClick={() => setFilter(s)}
-            className={cn(
-              'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-              // The current view is the solid ink chip; the others are usable
-              // secondary actions in the soft brand fill.
-              filter === s
-                ? 'bg-ink text-ink-foreground'
-                : 'bg-primary/10 text-primary hover:bg-primary/[0.17]',
-            )}
+      <div className="agent-gutter space-y-4">
+        {/* Filter card: the status chips, each with its count. */}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-card px-4 py-3">
+          <span className="text-sm font-semibold text-foreground/80">
+            {t('compensation.statusFilter', { defaultValue: 'Status' })}
+          </span>
+          <div
+            role="group"
+            aria-label={t('compensation.statusFilter', { defaultValue: 'Status' })}
+            className="flex flex-wrap gap-1.5"
           >
-            {s === 'all' ? t('compensation.all', { defaultValue: 'All' }) : s}
-          </button>
-        ))}
-      </div>
+            {(['all', ...COMPENSATION_STATUSES] as const).map((s) => (
+              <button
+                key={s}
+                type="button"
+                aria-pressed={filter === s}
+                onClick={() => {
+                  setFilter(s);
+                  setPage(1);
+                }}
+                className={cn(
+                  'inline-flex h-8 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition-colors duration-fast',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                  // The current view is the solid ink chip; the others are usable
+                  // secondary actions in the soft brand fill.
+                  filter === s
+                    ? 'bg-ink text-ink-foreground'
+                    : 'bg-primary/10 text-primary hover:bg-primary/[0.17]',
+                )}
+              >
+                {s === 'all' ? t('compensation.all', { defaultValue: 'All' }) : s}
+                {/* The count is a glance aid; the chip's name stays the status. */}
+                {data && (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'font-medium tabular-nums',
+                      filter === s ? 'text-ink-foreground/80' : 'text-primary',
+                    )}
+                  >
+                    {counts[s] ?? 0}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
 
-      {isLoading ? (
-        <div className="space-y-2">
-          <Skeleton className="h-20 w-full rounded-2xl" />
-          <Skeleton className="h-20 w-full rounded-2xl" />
-          <Skeleton className="h-20 w-full rounded-2xl" />
-        </div>
-      ) : isError ? (
-        // Composed failure state on the card surface — a bare sentence adrift
-        // in the queue column reads as a rendering bug, not as an error.
-        <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-          <ErrorState
-            title={t('compensation.loadError', {
-              defaultValue: 'Could not load compensation requests.',
-            })}
-          />
-        </div>
-      ) : rows.length === 0 ? (
-        // Same card surface as the request cards, so "empty" keeps the page's
-        // shape instead of leaving a headline floating over dead canvas.
-        <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-          <EmptyState
-            icon={<InboxIcon size={24} />}
-            title={t('compensation.empty', { defaultValue: 'No compensation requests' })}
-            description={t('compensation.emptyHint', {
-              defaultValue: 'Requests submitted by customers will appear here.',
-            })}
-          />
-        </div>
-      ) : (
-        <ul className="space-y-2">
-          {rows.map((r) => (
-            <li key={r.id}>
-              <QueueCard row={r} onOpen={() => navigate(`/compensation-requests/${r.id}`)} />
-            </li>
-          ))}
-        </ul>
-      )}
+        {isLoading ? (
+          <div className="space-y-px overflow-hidden rounded-2xl bg-card p-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-12 w-full rounded-xl" />
+            ))}
+          </div>
+        ) : isError ? (
+          // Composed failure state on the card surface — a bare sentence adrift
+          // under the filters reads as a rendering bug, not as an error.
+          <div className="rounded-2xl bg-card">
+            <ErrorState
+              title={t('compensation.loadError', {
+                defaultValue: 'Could not load compensation requests.',
+              })}
+            />
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-2xl bg-card">
+            <EmptyState
+              icon={<InboxIcon size={24} />}
+              title={t('compensation.empty', { defaultValue: 'No compensation requests' })}
+              description={t('compensation.emptyHint', {
+                defaultValue: 'Requests submitted by customers will appear here.',
+              })}
+            />
+          </div>
+        ) : (
+          <TableSurface
+            scrollLabel={t('compensation.title', { defaultValue: 'Compensation' })}
+            footer={
+              <div className="px-6 py-3">
+                <TablePager
+                  page={current}
+                  onPage={setPage}
+                  pageSize={pageSize}
+                  onPageSize={(n) => {
+                    setPageSize(n);
+                    setPage(1);
+                  }}
+                  total={rows.length}
+                  labels={{
+                    rowsPerPage: String(
+                      t('compensation.rowsPerPage', { defaultValue: 'Rows per page' }),
+                    ),
+                    previous: String(
+                      t('actions.previous', { ns: 'common', defaultValue: 'Previous' }),
+                    ),
+                    next: String(t('actions.next', { ns: 'common', defaultValue: 'Next' })),
+                    showing: ({ from, to, total }) =>
+                      String(
+                        t('compensation.showingRange', {
+                          defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
+                          from,
+                          to,
+                          total,
+                        }),
+                      ),
+                  }}
+                />
+              </div>
+            }
+          >
+            <Table>
+              <thead>
+                <Tr>
+                  <Th>{t('compensation.colRequest', { defaultValue: 'Request' })}</Th>
+                  <Th>{t('compensation.customer', { defaultValue: 'Customer' })}</Th>
+                  <Th>{t('compensation.colPlace', { defaultValue: 'Brand / restaurant' })}</Th>
+                  <Th>{t('compensation.order', { defaultValue: 'Order' })}</Th>
+                  <Th>{t('compensation.statusFilter', { defaultValue: 'Status' })}</Th>
+                  <Th className="text-end">
+                    {t('compensation.colAmount', { defaultValue: 'Amount' })}
+                  </Th>
+                  <Th className="text-end">
+                    {t('compensation.colCreated', { defaultValue: 'Created' })}
+                  </Th>
+                </Tr>
+              </thead>
+              <tbody>
+                {paged.map((r) => (
+                  <QueueRow key={r.id} row={r} onOpen={() => open(r)} />
+                ))}
+              </tbody>
+            </Table>
+          </TableSurface>
+        )}
+      </div>
     </div>
   );
 }
 
-function QueueCard({ row, onOpen }: { row: CompensationRow; onOpen: () => void }) {
+/**
+ * One request, one row. The whole row opens it (as the card did); the request
+ * code is a real button so the row stays reachable from the keyboard.
+ */
+function QueueRow({ row, onOpen }: { row: CompensationRow; onOpen: () => void }) {
+  const { t } = useTranslation();
+  const place = [row.brand_name, row.restaurant_name].filter(Boolean).join(' · ');
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      // Each request is a CARD, not a bare row. On the tinted canvas the old
-      // transparent rows had no edges, so four requests read as one run-on block
-      // with no sense of where one ended and the next began.
-      className="w-full rounded-2xl bg-card px-4 py-3.5 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-fast ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5"
-    >
-      <div className="flex items-center gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-xs text-muted-foreground">
-              {row.request_code ?? row.id.slice(0, 8)}
-            </span>
-            <StatusPill status={row.status} />
-          </div>
-          <div className="mt-1 truncate text-sm font-semibold text-foreground">
-            {row.customer_name ?? row.customer_mobile ?? '—'}
-          </div>
+    <Tr className="cursor-pointer" onClick={onOpen}>
+      <Td>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpen();
+          }}
+          aria-label={t('compensation.openRequest', {
+            code: row.request_code ?? row.id.slice(0, 8),
+            defaultValue: 'Open request {{code}}',
+          })}
+          className="rounded-md font-mono text-sm font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        >
+          {row.request_code ?? row.id.slice(0, 8)}
+        </button>
+      </Td>
+      <Td>
+        <div className="max-w-[16rem] truncate font-semibold text-foreground">
+          {row.customer_name ?? row.customer_mobile ?? '—'}
         </div>
-        {/* The money is the card's headline numeral — board-style emphasis. */}
-        <div className="shrink-0 text-end text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-          {money(row.final_compensation_value ?? row.user_complaint_amount)}
-        </div>
-      </div>
-      {/* Hairline meta row: where the order came from, and when. */}
-      <div className="mt-2.5 flex items-baseline gap-3 border-t border-foreground/[0.06] pt-2 text-2xs text-muted-foreground">
-        <span className="min-w-0 truncate">
-          {[row.brand_name, row.restaurant_name].filter(Boolean).join(' · ') || '—'}
-          {normalizeOrderId(row.order_id) ? ` · #${row.order_id}` : ''}
-        </span>
-        <span className="ms-auto shrink-0 tabular-nums">
-          {fmtDate(row.date_created).split(',')[0]}
-        </span>
-      </div>
-    </button>
+        {row.customer_name && row.customer_mobile && (
+          <div className="mt-0.5 text-xs tabular-nums text-muted-foreground" dir="ltr">
+            {row.customer_mobile}
+          </div>
+        )}
+      </Td>
+      <Td>
+        <span className="block max-w-[20rem] truncate text-foreground/90">{place || '—'}</span>
+      </Td>
+      <Td className="tabular-nums text-foreground/90">
+        {normalizeOrderId(row.order_id) ? `#${row.order_id}` : '—'}
+      </Td>
+      <Td>
+        <StatusPill status={row.status} />
+      </Td>
+      <Td className="text-end text-base font-bold tabular-nums tracking-[-0.02em] text-foreground">
+        {money(row.final_compensation_value ?? row.user_complaint_amount)}
+      </Td>
+      <Td className="text-end text-xs tabular-nums text-muted-foreground">
+        {fmtDate(row.date_created)}
+      </Td>
+    </Tr>
   );
 }
 
@@ -216,11 +349,9 @@ function QueueCard({ row, onOpen }: { row: CompensationRow; onOpen: () => void }
  */
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="min-w-0 py-1.5">
-      <dt className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </dt>
-      <dd className="mt-0.5 break-words text-sm text-foreground">{value}</dd>
+    <div className="min-w-0 py-2">
+      <dt className="text-xs font-semibold text-muted-foreground">{label}</dt>
+      <dd className="mt-1 break-words text-sm font-medium text-foreground">{value}</dd>
     </div>
   );
 }
@@ -235,17 +366,22 @@ function Section({
   className?: string;
 }) {
   return (
-    <section
-      className={cn(
-        'rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in',
-        className,
-      )}
-    >
-      <h3 className="mb-3 border-b border-foreground/[0.07] pb-2.5 text-sm font-semibold tracking-tight text-foreground">
-        {title}
-      </h3>
-      <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">{children}</dl>
+    <section className={cn('rounded-2xl bg-card px-6 pb-5 pt-5', className)}>
+      <h2 className="mb-2 text-base font-semibold tracking-tight text-foreground">{title}</h2>
+      <dl className="grid gap-x-8 gap-y-1 sm:grid-cols-2">{children}</dl>
     </section>
+  );
+}
+
+/** A label / value line in the side summary: label on the start, value at the end. */
+function SummaryLine({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2.5">
+      <dt className="shrink-0 text-sm text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 break-words text-end text-sm font-semibold text-foreground">
+        {value}
+      </dd>
+    </div>
   );
 }
 
@@ -255,177 +391,241 @@ function RequestDetail({ id }: { id: string }) {
   const { data: r, isLoading } = useCompensationRequest(id);
   const { data: items } = useCompensationItems(id);
 
+  /* Back to the queue, at the top of every state of this page. */
+  const back = (
+    <Button
+      variant="ghost"
+      size="sm"
+      iconStart={<ArrowLeftIcon size={16} className="rtl:-scale-x-100" />}
+      onClick={() => navigate('/compensation')}
+    >
+      {t('compensation.back', { defaultValue: 'Back' })}
+    </Button>
+  );
+
   if (isLoading) {
     return (
-      <div className="agent-gutter h-full w-full max-w-5xl space-y-3 overflow-y-auto pb-8 pt-4">
-        <Skeleton className="h-8 w-40" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
-        <Skeleton className="h-40 w-full rounded-2xl" />
+      <div className="h-full w-full overflow-y-auto pb-10">
+        <div className="agent-gutter space-y-4 pt-5">
+          <Skeleton className="h-8 w-24 rounded-full" />
+          <Skeleton className="h-10 w-72" />
+          <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+            <Skeleton className="h-72 w-full rounded-2xl" />
+            <Skeleton className="h-72 w-full rounded-2xl" />
+          </div>
+        </div>
       </div>
     );
   }
   if (!r) {
     return (
-      <div className="agent-gutter h-full w-full max-w-5xl overflow-y-auto pb-8 pt-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
-          <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
-          {t('compensation.back', { defaultValue: 'Back' })}
-        </Button>
-        {/* Dashed quiet panel — the "nothing here" idiom the other boards use,
-            rather than a stray sentence under the Back button. */}
-        <div className="mt-4 rounded-2xl border border-dashed border-foreground/[0.08] bg-card/40">
-          <EmptyState title={t('compensation.notFound', { defaultValue: 'Request not found.' })} />
+      <div className="h-full w-full overflow-y-auto pb-10">
+        <div className="agent-gutter pt-5">
+          {back}
+          {/* The "nothing here" card, rather than a stray sentence under the
+              Back button. */}
+          <div className="mt-4 rounded-2xl bg-card">
+            <EmptyState
+              title={t('compensation.notFound', { defaultValue: 'Request not found.' })}
+            />
+          </div>
         </div>
       </div>
     );
   }
 
-  return (
-    <div className="agent-gutter h-full w-full space-y-4 overflow-y-auto pb-8 pt-4">
-      <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
-        <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
-        {t('compensation.back', { defaultValue: 'Back' })}
-      </Button>
+  const place = [r.brand_name, r.restaurant_name].filter(Boolean).join(' · ');
 
-      {/* Hero: who, how much, and where it stands — the three facts anyone
-          opening a request needs before reading anything else. The old header
-          was a thin strip of a code and a pill, so the page opened on nothing
-          in particular. */}
-      <header className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+  /*
+   * TWO COLUMNS THAT FILL THE PAGE (owner, 2026-10-22).
+   *
+   * The work - the actions and the four editable sections - runs in the wide
+   * main column; the facts anyone opening a request needs first (where it
+   * stands, how much, which coupon) sit in a side summary that stays in view
+   * while the main column scrolls. Below xl the summary drops under the title,
+   * before the work, so a laptop still opens on the answer.
+   */
+  return (
+    <div className="h-full w-full overflow-y-auto pb-10">
+      <header className="agent-gutter pb-5 pt-5">
+        {back}
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-2xs text-muted-foreground">
+              <span className="font-mono text-sm text-muted-foreground">
                 {r.request_code ?? r.id.slice(0, 8)}
               </span>
               <StatusPill status={r.status} />
             </div>
-            <h2 className="mt-1.5 truncate text-2xl font-bold tracking-tight text-foreground">
+            <h1 className="mt-2 truncate text-foreground">
               {r.customer_name ?? t('compensation.unknownCustomer', { defaultValue: 'Customer' })}
-            </h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {[r.brand_name, r.restaurant_name].filter(Boolean).join(' · ') || '—'}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {place || '—'}
               {normalizeOrderId(r.order_id) ? ` · #${r.order_id}` : ''}
             </p>
-          </div>
-          <div className="text-end">
-            <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-              {t('compensation.final', { defaultValue: 'Final value' })}
-            </div>
-            <div className="mt-1 text-[2.25rem] font-extrabold leading-none tabular-nums tracking-[-0.035em] text-foreground">
-              {money(r.final_compensation_value)}
-            </div>
-            {r.suggested_compensation_value != null && (
-              <div className="mt-1.5 text-2xs text-muted-foreground">
-                {t('compensation.suggested', { defaultValue: 'Suggested' })}:{' '}
-                <span className="tabular-nums text-foreground">
-                  {r.suggested_compensation_value}
-                </span>
-              </div>
-            )}
           </div>
         </div>
       </header>
 
-      <ActionPanel request={r} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Section title={t('compensation.customer', { defaultValue: 'Customer' })}>
-          <Row
-            label={t('compensation.name', { defaultValue: 'Name' })}
-            value={r.customer_name ?? '—'}
-          />
-          <Row
-            label={t('compensation.mobile', { defaultValue: 'Mobile' })}
-            value={r.customer_mobile ?? '—'}
-          />
-          <Row label="ID" value={r.customer_id ?? '—'} />
-        </Section>
-        <Section title={t('compensation.order', { defaultValue: 'Order' })}>
-          <Row label="#" value={orderLabel(r.order_id)} />
-          <Row
-            label={t('compensation.brand', { defaultValue: 'Brand' })}
-            value={r.brand_name ?? '—'}
-          />
-          <Row
-            label={t('compensation.restaurant', { defaultValue: 'Restaurant' })}
-            value={r.restaurant_name ?? '—'}
-          />
-          <div className="mt-1 space-y-2">
-            <EditableAmount
-              request={r}
-              field="order_total"
-              label={t('compensation.orderTotal', { defaultValue: 'Order total (SAR)' })}
-            />
-            <EditableAmount
-              request={r}
-              field="delivery_fee"
-              label={t('compensation.deliveryFee', { defaultValue: 'Delivery fee (SAR)' })}
-              hint={t('compensation.deliveryFeeHint', {
-                defaultValue: 'Used by DELIVERY-type compensation rules.',
-              })}
-            />
-          </div>
-        </Section>
-        <Section title={t('compensation.complaint', { defaultValue: 'Ticket' })}>
-          <ClassificationEditor request={r} />
-          <div className="mt-1">
-            <EditableAmount
-              request={r}
-              field="user_complaint_amount"
-              label={t('compensation.claimed', { defaultValue: 'Claimed amount (SAR)' })}
-              hint={t('compensation.claimedHint', {
-                defaultValue: 'Used by PERCENT-type compensation rules.',
-              })}
-            />
-          </div>
-          {r.description && (
-            <p className="mt-2 whitespace-pre-wrap text-xs text-foreground/90">{r.description}</p>
-          )}
-        </Section>
-        <Section title={t('compensation.resolution', { defaultValue: 'Compensation' })}>
-          <Row
-            label={t('compensation.suggested', { defaultValue: 'Suggested' })}
-            value={r.suggested_compensation_value ?? '—'}
-          />
-          <Row
-            label={t('compensation.final', { defaultValue: 'Final value' })}
-            value={money(r.final_compensation_value)}
-          />
-          <Row
-            label={t('compensation.coupon', { defaultValue: 'Coupon' })}
-            value={r.coupons?.Code ?? r.coupon_code ?? '—'}
-          />
-          {r.decline_reason && (
-            <Row
-              label={t('compensation.declineReason', { defaultValue: 'Decline reason' })}
-              value={r.decline_reason}
-            />
-          )}
-        </Section>
-      </div>
-
-      <ItemsEditor request={r} />
-
-      {items && items.length > 0 && (
-        <Section title={t('compensation.orderItems', { defaultValue: 'Order line items' })}>
-          <ul className="sm:col-span-2 divide-y divide-foreground/[0.06] text-sm">
-            {items.map((it) => (
-              <li key={it.id} className="flex items-baseline justify-between gap-3 py-2">
-                <span className="min-w-0">
-                  <span className="me-1.5 tabular-nums text-muted-foreground">
-                    {it.quantity ?? 1}×
+      <div className="agent-gutter grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_24rem]">
+        {/* Side summary - first in the source so it leads on a narrow screen,
+            placed in the end column on a wide one. */}
+        <aside className="space-y-4 xl:sticky xl:top-4 xl:col-start-2 xl:row-start-1">
+          <section className="rounded-2xl bg-card px-6 pb-4 pt-5">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              {t('compensation.summary', { defaultValue: 'Summary' })}
+            </h2>
+            <div className="mt-4 rounded-2xl bg-secondary/70 px-4 py-4">
+              <div className="text-xs font-semibold text-muted-foreground">
+                {t('compensation.final', { defaultValue: 'Final value' })}
+              </div>
+              <div className="mt-1.5 text-[2.25rem] font-bold leading-none tabular-nums tracking-[-0.035em] text-foreground">
+                {money(r.final_compensation_value)}
+              </div>
+              {r.suggested_compensation_value != null && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {t('compensation.suggested', { defaultValue: 'Suggested' })}:{' '}
+                  <span className="font-semibold tabular-nums text-foreground">
+                    {r.suggested_compensation_value}
                   </span>
-                  <span className="break-words text-foreground">{it.name}</span>
-                </span>
-                <span className="shrink-0 font-semibold tabular-nums text-foreground">
-                  {money(it.price)}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </Section>
-      )}
+                </div>
+              )}
+            </div>
+            <dl className="mt-2 divide-y divide-foreground/[0.06]">
+              <SummaryLine
+                label={t('compensation.statusFilter', { defaultValue: 'Status' })}
+                value={<StatusPill status={r.status} />}
+              />
+              <SummaryLine
+                label={t('compensation.coupon', { defaultValue: 'Coupon' })}
+                value={<span className="font-mono">{r.coupons?.Code ?? r.coupon_code ?? '—'}</span>}
+              />
+              <SummaryLine
+                label={t('compensation.claimed', { defaultValue: 'Claimed amount' })}
+                value={<span className="tabular-nums">{money(r.user_complaint_amount)}</span>}
+              />
+              <SummaryLine label="#" value={orderLabel(r.order_id)} />
+              <SummaryLine
+                label={t('compensation.colCreated', { defaultValue: 'Created' })}
+                value={<span className="tabular-nums">{fmtDate(r.date_created)}</span>}
+              />
+              {r.decline_reason && (
+                <SummaryLine
+                  label={t('compensation.declineReason', { defaultValue: 'Decline reason' })}
+                  value={r.decline_reason}
+                />
+              )}
+            </dl>
+          </section>
+        </aside>
+
+        <div className="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
+          <ActionPanel request={r} />
+
+          <div className="grid gap-4 2xl:grid-cols-2">
+            <Section title={t('compensation.customer', { defaultValue: 'Customer' })}>
+              <Row
+                label={t('compensation.name', { defaultValue: 'Name' })}
+                value={r.customer_name ?? '—'}
+              />
+              <Row
+                label={t('compensation.mobile', { defaultValue: 'Mobile' })}
+                value={r.customer_mobile ?? '—'}
+              />
+              <Row label="ID" value={r.customer_id ?? '—'} />
+            </Section>
+            <Section title={t('compensation.order', { defaultValue: 'Order' })}>
+              <Row label="#" value={orderLabel(r.order_id)} />
+              <Row
+                label={t('compensation.brand', { defaultValue: 'Brand' })}
+                value={r.brand_name ?? '—'}
+              />
+              <Row
+                label={t('compensation.restaurant', { defaultValue: 'Restaurant' })}
+                value={r.restaurant_name ?? '—'}
+              />
+              <div className="mt-1 grid gap-3 sm:col-span-2 sm:grid-cols-2">
+                <EditableAmount
+                  request={r}
+                  field="order_total"
+                  label={t('compensation.orderTotal', { defaultValue: 'Order total (SAR)' })}
+                />
+                <EditableAmount
+                  request={r}
+                  field="delivery_fee"
+                  label={t('compensation.deliveryFee', { defaultValue: 'Delivery fee (SAR)' })}
+                  hint={t('compensation.deliveryFeeHint', {
+                    defaultValue: 'Used by DELIVERY-type compensation rules.',
+                  })}
+                />
+              </div>
+            </Section>
+            <Section title={t('compensation.complaint', { defaultValue: 'Ticket' })}>
+              <div className="sm:col-span-2">
+                <ClassificationEditor request={r} />
+              </div>
+              <div className="mt-1 sm:col-span-2">
+                <EditableAmount
+                  request={r}
+                  field="user_complaint_amount"
+                  label={t('compensation.claimed', { defaultValue: 'Claimed amount (SAR)' })}
+                  hint={t('compensation.claimedHint', {
+                    defaultValue: 'Used by PERCENT-type compensation rules.',
+                  })}
+                />
+              </div>
+              {r.description && (
+                <p className="mt-3 whitespace-pre-wrap rounded-xl bg-secondary/60 px-4 py-3 text-sm leading-relaxed text-foreground/90 sm:col-span-2">
+                  {r.description}
+                </p>
+              )}
+            </Section>
+            <Section title={t('compensation.resolution', { defaultValue: 'Compensation' })}>
+              <Row
+                label={t('compensation.suggested', { defaultValue: 'Suggested' })}
+                value={r.suggested_compensation_value ?? '—'}
+              />
+              <Row
+                label={t('compensation.final', { defaultValue: 'Final value' })}
+                value={money(r.final_compensation_value)}
+              />
+              <Row
+                label={t('compensation.coupon', { defaultValue: 'Coupon' })}
+                value={r.coupons?.Code ?? r.coupon_code ?? '—'}
+              />
+              {r.decline_reason && (
+                <Row
+                  label={t('compensation.declineReason', { defaultValue: 'Decline reason' })}
+                  value={r.decline_reason}
+                />
+              )}
+            </Section>
+          </div>
+
+          <ItemsEditor request={r} />
+
+          {items && items.length > 0 && (
+            <Section title={t('compensation.orderItems', { defaultValue: 'Order line items' })}>
+              <ul className="divide-y divide-foreground/[0.06] text-sm sm:col-span-2">
+                {items.map((it) => (
+                  <li key={it.id} className="flex items-baseline justify-between gap-3 py-2.5">
+                    <span className="min-w-0">
+                      <span className="me-2 tabular-nums text-muted-foreground">
+                        {it.quantity ?? 1}×
+                      </span>
+                      <span className="break-words text-foreground">{it.name}</span>
+                    </span>
+                    <span className="shrink-0 font-semibold tabular-nums text-foreground">
+                      {money(it.price)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -480,7 +680,7 @@ function ClassificationEditor({ request }: { request: CompensationRow }) {
   };
 
   return (
-    <div className="mb-1 space-y-2">
+    <div className="mb-1 grid gap-3 sm:grid-cols-2">
       <FormField label={t('compensation.type', { defaultValue: 'Category' })}>
         <Select value={catId} onChange={(e) => onCategory(e.currentTarget.value)}>
           <option value="">
@@ -598,15 +798,15 @@ function ItemsEditor({ request }: { request: CompensationRow }) {
 
   return (
     <Section title={t('compensation.itemsWithIssue', { defaultValue: 'Items with issue' })}>
-      <p className="mb-2 text-2xs text-muted-foreground">
+      <p className="mb-3 text-xs text-muted-foreground sm:col-span-2">
         {t('compensation.itemsWithIssueHint', {
           defaultValue: 'Used by ITEMS-type compensation rules (sums the prices below).',
         })}
       </p>
       {items.length > 0 && (
-        <ul className="mb-2 space-y-1.5">
+        <ul className="mb-3 space-y-2 sm:col-span-2">
           {items.map((it, i) => (
-            <li key={i} className="flex items-center gap-1.5">
+            <li key={i} className="flex items-center gap-2">
               <Input
                 className="flex-1"
                 placeholder={t('compensation.itemName', { defaultValue: 'Item' })}
@@ -615,7 +815,7 @@ function ItemsEditor({ request }: { request: CompensationRow }) {
                 onBlur={() => persist(items)}
               />
               <Input
-                className="w-16"
+                className="w-20"
                 type="number"
                 inputMode="numeric"
                 placeholder="Qty"
@@ -624,7 +824,7 @@ function ItemsEditor({ request }: { request: CompensationRow }) {
                 onBlur={() => persist(items)}
               />
               <Input
-                className="w-24"
+                className="w-28"
                 type="number"
                 inputMode="decimal"
                 step="0.01"
@@ -646,7 +846,7 @@ function ItemsEditor({ request }: { request: CompensationRow }) {
           ))}
         </ul>
       )}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between sm:col-span-2">
         <Button
           type="button"
           variant="outline"
@@ -656,7 +856,7 @@ function ItemsEditor({ request }: { request: CompensationRow }) {
           + {t('compensation.addItem', { defaultValue: 'Add item' })}
         </Button>
         {items.length > 0 && (
-          <span className="text-xs tabular-nums text-muted-foreground">
+          <span className="text-sm tabular-nums text-muted-foreground">
             {t('compensation.itemsTotal', { defaultValue: 'Total' })}: {money(total)}
           </span>
         )}
@@ -709,10 +909,10 @@ function ActionPanel({ request }: { request: CompensationRow }) {
   const openAction = COMPENSATION_ACTIONS.find((a) => a.key === formKey) ?? null;
 
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-      <h3 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+    <div className="rounded-2xl bg-card px-6 py-5">
+      <h2 className="mb-3.5 text-base font-semibold tracking-tight text-foreground">
         {t('compensation.actions', { defaultValue: 'Actions' })}
-      </h3>
+      </h2>
       <div className="flex flex-wrap gap-2">
         {COMPENSATION_ACTIONS.map((a) => (
           <Button
@@ -787,13 +987,13 @@ function ActionForm({
 
   return (
     <form
-      className="mt-4 space-y-3 rounded-xl bg-secondary/30 p-4 ring-1 ring-foreground/[0.04]"
+      className="mt-4 space-y-4 rounded-2xl bg-secondary/60 p-5"
       onSubmit={(e) => {
         e.preventDefault();
         submit();
       }}
     >
-      <p className="text-xs font-medium text-foreground">
+      <p className="text-sm font-semibold text-foreground">
         {t('compensation.formTitle', {
           label: action.label,
           defaultValue: '{{label}} — fill the required fields',
@@ -808,7 +1008,7 @@ function ActionForm({
           onChange={(v) => set(inp.field, v)}
         />
       ))}
-      <div className="flex gap-2 pt-1">
+      <div className="flex flex-wrap gap-2 pt-1">
         <Button type="submit" size="sm" variant={BTN_VARIANT[action.type]} loading={pending}>
           {t('compensation.submit', { label: action.label, defaultValue: 'Confirm {{label}}' })}
         </Button>

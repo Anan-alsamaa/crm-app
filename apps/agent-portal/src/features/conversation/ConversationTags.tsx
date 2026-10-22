@@ -138,7 +138,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
         <span
           className={cn(
             'text-2xs font-semibold tabular-nums',
-            atMax ? 'text-primary' : 'text-muted-foreground/70',
+            atMax ? 'text-primary' : 'text-muted-foreground',
           )}
         >
           {assigned.length}/{MAX_TAGS}
@@ -179,7 +179,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
         !adding && (
           /* Composed mini-empty — the sidebar's dashed placeholder-slot grammar,
              not a bare line floating over the card. */
-          <p className="rounded-xl border border-dashed border-border px-3 py-3.5 text-center text-xs text-muted-foreground">
+          <p className="rounded-2xl bg-foreground/[0.035] px-3 py-3.5 text-center text-xs text-muted-foreground">
             {t('conversation.noTagsYet', { defaultValue: 'No tags yet.' })}
           </p>
         )
@@ -188,10 +188,10 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
       {/* Add / create — inline editor, never a clipped popover. */}
       <div className="mt-2.5">
         {atMax ? (
-          <p className="text-2xs text-muted-foreground">{limitMsg}</p>
+          <p className="text-xs text-muted-foreground">{limitMsg}</p>
         ) : adding ? (
-          <div className="rounded-xl bg-secondary/40 p-1.5 ring-1 ring-foreground/[0.05]">
-            <div className="flex items-center gap-1">
+          <div className="rounded-[1.25rem] bg-card p-2 shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.07),0_10px_24px_-20px_oklch(var(--shadow-color)/0.45)]">
+            <div className="flex items-center gap-1.5">
               <input
                 ref={inputRef}
                 type="text"
@@ -215,12 +215,12 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                 aria-label={t('conversation.tagSearchPlaceholder', {
                   defaultValue: 'Search or create a tag',
                 })}
-                className="h-7 min-w-0 flex-1 rounded-md border-none bg-secondary/50 px-2 text-xs text-foreground ring-1 ring-inset ring-foreground/10 placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 transition-[background-color,box-shadow] duration-fast ease-out"
+                className="h-8 min-w-0 flex-1 rounded-full border-none bg-input px-3 text-xs text-foreground ring-1 ring-inset ring-foreground/[0.08] placeholder:text-muted-foreground hover:ring-foreground/[0.14] focus:outline-none focus:ring-2 focus:ring-primary/40 transition-[background-color,box-shadow] duration-fast ease-out"
               />
               <button
                 type="button"
                 onClick={closeEditor}
-                className="inline-flex h-7 shrink-0 items-center rounded-md px-2 text-2xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="inline-flex h-8 shrink-0 items-center rounded-full bg-primary/10 px-3 text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
               >
                 {t('actions.done', { ns: 'common', defaultValue: 'Done' })}
               </button>
@@ -232,7 +232,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                 return (
                   <div
                     key={tg.id}
-                    className="group/tag flex items-center rounded-md pe-1 transition-colors duration-fast hover:bg-secondary"
+                    className="group/tag flex items-center rounded-xl pe-1 transition-colors duration-fast hover:bg-primary/[0.05]"
                   >
                     <button
                       type="button"
@@ -240,7 +240,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                         isAdded ? void unassign(junctionByTag.get(tg.id)!) : void assign(tg.id)
                       }
                       className={cn(
-                        'flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs',
+                        'flex min-h-8 min-w-0 flex-1 items-center gap-2 rounded-xl px-2.5 py-1.5 text-start text-xs',
                         isAdded ? 'text-muted-foreground' : 'text-foreground',
                       )}
                     >
@@ -279,7 +279,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                       title={t('conversation.deleteTagTitle', {
                         defaultValue: 'Delete tag everywhere',
                       })}
-                      className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity duration-fast hover:bg-destructive/10 hover:text-destructive focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40 group-hover/tag:opacity-100"
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity duration-fast hover:bg-destructive/10 hover:text-destructive focus:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive/40 group-hover/tag:opacity-100"
                     >
                       <svg
                         viewBox="0 0 16 16"
@@ -303,7 +303,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
                 <button
                   type="button"
                   onClick={() => void createAndAssign()}
-                  className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs text-foreground transition-colors duration-fast hover:bg-secondary"
+                  className="flex min-h-8 w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-start text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.06]"
                 >
                   <span className="text-sm leading-none text-primary">+</span>
                   <span className="truncate">
@@ -316,7 +316,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
               )}
 
               {matching.length === 0 && !query.trim() && (
-                <p className="px-2 py-1.5 text-2xs text-muted-foreground">
+                <p className="px-2.5 py-1.5 text-xs text-muted-foreground">
                   {t('conversation.noTagsYetHint', {
                     defaultValue: 'No tags yet — type to create one.',
                   })}
@@ -328,7 +328,7 @@ export function ConversationTags({ conversation }: { conversation: InboxConversa
           <button
             type="button"
             onClick={openEditor}
-            className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/40 hover:text-foreground"
+            className="inline-flex h-8 items-center gap-1 rounded-full bg-primary/10 px-3 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
           >
             <span className="text-sm leading-none">+</span>
             <span>{t('conversation.addTag')}</span>

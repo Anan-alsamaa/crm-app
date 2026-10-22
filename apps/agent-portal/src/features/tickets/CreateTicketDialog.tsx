@@ -187,10 +187,10 @@ function IncludeToggle({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-2.5">
+    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50">
       <span
         className={cn(
-          'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-md ring-1 transition-colors duration-fast ease-out',
+          'mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-[5px] ring-1 transition-colors duration-fast ease-out',
           checked
             ? 'bg-primary text-primary-foreground ring-primary'
             : 'bg-card text-transparent ring-foreground/20',
@@ -736,14 +736,14 @@ function CreateTicketForm({
     >
       {/* One header, not a back-strip stacked on a title bar. Save stays
           reachable from anywhere without scrolling to find it. */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 border-b border-border px-5 py-3.5 sm:px-7">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 pb-2 pt-5 sm:px-7">
         {backLabel && (
           <button
             type="button"
             onClick={onClose}
             aria-label={backLabel}
             title={backLabel}
-            className="-ms-1.5 grid h-8 w-8 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]"
+            className="agent-icon-btn shrink-0 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 motion-safe:active:scale-[0.97]"
           >
             {/* Logical mirroring: a hard-coded arrow points forward in Arabic. */}
             <svg
@@ -816,7 +816,7 @@ function CreateTicketForm({
       {draftRestored && (
         <div
           role="status"
-          className="flex items-center gap-2 border-b border-border bg-primary/[0.05] px-5 py-1.5 text-xs text-foreground sm:px-7"
+          className="mx-5 mt-3 flex items-center gap-2.5 rounded-2xl bg-primary/[0.07] py-1.5 pe-1.5 ps-4 text-xs text-foreground sm:mx-7"
         >
           <span aria-hidden className="h-1 w-1 shrink-0 rounded-full bg-primary" />
           <span className="min-w-0 flex-1">
@@ -939,7 +939,7 @@ function CreateTicketForm({
                       {!walkInService && (
                         <Button
                           type="button"
-                          variant="secondary"
+                          variant="ghost"
                           loading={typedOrderQuery.isFetching}
                           disabled={!typedOrderId.trim() || !yijiVendorId}
                           onClick={() => setLookupId(typedOrderId.trim())}
@@ -1003,7 +1003,7 @@ function CreateTicketForm({
                   complaint types the description and the resolution notes are
                   forwarded to the branch, and the agent is writing them now. */}
               {notifiesStore && (
-                <p className="flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+                <p className="flex items-start gap-2.5 rounded-2xl bg-warning-tint px-3.5 py-2.5 text-xs leading-relaxed text-foreground">
                   <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning" />
                   <span>
                     {chosenMatch?.store
@@ -1020,7 +1020,7 @@ function CreateTicketForm({
               )}
               {/* `request_coupons` (owner, 2026-10-06). */}
               {canRequestCoupon && (
-                <div className="rounded-2xl bg-primary/[0.05] p-3.5 ring-1 ring-inset ring-primary/15">
+                <div className="rounded-2xl bg-primary/[0.05] p-4 ring-1 ring-inset ring-primary/15">
                   <label className="flex items-start gap-2.5 text-sm">
                     <input
                       type="checkbox"
@@ -1036,10 +1036,10 @@ function CreateTicketForm({
                       className="mt-0.5 h-4 w-4 shrink-0 rounded accent-primary"
                     />
                     <span className="min-w-0">
-                      <span className="block font-medium text-foreground">
+                      <span className="block font-semibold text-foreground">
                         {t('coupons.assign', { defaultValue: 'Assign a coupon' })}
                       </span>
-                      <span className="block text-2xs leading-relaxed text-muted-foreground">
+                      <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
                         {t('coupons.assignHint', {
                           defaultValue:
                             'A supervisor approves it before anything reaches the customer.',
@@ -1047,7 +1047,7 @@ function CreateTicketForm({
                       </span>
                     </span>
                   </label>
-                  <div className="mt-3 flex items-center gap-3">
+                  <div className="mt-3.5 flex flex-wrap items-center gap-3 ps-[1.625rem]">
                     <Button
                       type="button"
                       size="sm"
@@ -1057,7 +1057,7 @@ function CreateTicketForm({
                       {t('coupons.create', { defaultValue: 'Create coupon' })}
                     </Button>
                     {collectedCoupon && (
-                      <span className="text-2xs font-medium text-success">
+                      <span className="text-xs font-semibold text-success-foreground">
                         {t('coupons.attached', {
                           code: collectedCoupon.code,
                           defaultValue: '{{code}} will be sent for approval',
@@ -1117,7 +1117,7 @@ function CreateTicketForm({
               {/* Said while the agent is still typing the coupon, not after
                   they have told the customer about it. */}
               {needsApproval && (
-                <p className="flex items-start gap-2 rounded-xl bg-primary/[0.08] px-3 py-2 text-xs leading-relaxed text-foreground">
+                <p className="flex items-start gap-2.5 rounded-2xl bg-primary/[0.07] px-3.5 py-2.5 text-xs leading-relaxed text-foreground">
                   <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
                   <span>
                     {t('coupons.needsApproval', {
@@ -1197,18 +1197,18 @@ function OrderRail({
   if (!order && !matched) return null;
 
   return (
-    <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-background px-6 py-5 lg:w-[20rem] lg:border-s lg:border-t-0">
+    <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-card px-6 py-5 lg:my-5 lg:me-5 lg:w-[20rem] lg:rounded-[1.625rem] lg:border-t-0 lg:shadow-[var(--agent-card-shadow)]">
       {/* Same head as the form sections, in the fourth hue — the tinted chip
           with the sky dot — so the rail reads as a peer of the columns rather
           than a stray panel. */}
       <header className="mb-4 flex items-center gap-2.5">
         <span
-          className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-sky-tint"
+          className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-sky-tint"
           aria-hidden
         >
           <span className="h-1.5 w-1.5 rounded-full bg-sky" />
         </span>
-        <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">
+        <h2 className="text-md font-semibold tracking-[-0.01em] text-foreground">
           {t('complaint.context', { defaultValue: 'Context' })}
         </h2>
         <span className="ms-auto shrink-0 text-2xs text-muted-foreground">

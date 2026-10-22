@@ -77,17 +77,15 @@ export function ContactTags({
   };
 
   return (
-    <section className="rounded-2xl bg-card p-4 ring-1 ring-foreground/[0.06] shadow-soft">
-      <h2 className="mb-3 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        {t('sidebar.tags')}
-      </h2>
+    <section className="rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft">
+      <h2 className="mb-3.5 text-md font-semibold text-foreground">{t('sidebar.tags')}</h2>
 
       {assigned.length > 0 ? (
         <div className="flex flex-wrap gap-1.5">
           {assigned.map((j) => (
             <span
               key={j.id}
-              className="inline-flex items-center gap-1.5 rounded-full bg-secondary py-1 ps-2 pe-1 text-xs font-medium text-foreground"
+              className="inline-flex h-8 items-center gap-2 rounded-full bg-foreground/[0.05] pe-1.5 ps-3 text-xs font-semibold text-foreground"
             >
               <span
                 aria-hidden
@@ -105,7 +103,7 @@ export function ContactTags({
                     defaultValue: `Remove ${j.tags_id!.name}`,
                     name: j.tags_id!.name,
                   })}
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-muted-foreground transition-colors duration-fast hover:bg-foreground/10 hover:text-foreground"
+                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 >
                   <CloseIcon size={11} />
                 </button>
@@ -115,16 +113,16 @@ export function ContactTags({
         </div>
       ) : (
         !adding && (
-          <p className="text-xs text-muted-foreground">
+          <p className="rounded-2xl bg-foreground/[0.035] px-4 py-3.5 text-center text-xs text-muted-foreground">
             {t('conversation.noTagsYet', { defaultValue: 'No tags yet.' })}
           </p>
         )
       )}
 
       {!readOnly && (
-        <div className="mt-2.5">
+        <div className="mt-3">
           {adding ? (
-            <div className="rounded-xl bg-secondary/40 p-1.5 ring-1 ring-foreground/[0.05]">
+            <div className="rounded-2xl bg-input p-1.5 ring-1 ring-inset ring-foreground/[0.08] transition-shadow duration-fast focus-within:ring-2 focus-within:ring-primary/40">
               <div className="flex items-center gap-1">
                 <input
                   ref={inputRef}
@@ -147,12 +145,13 @@ export function ContactTags({
                   aria-label={t('conversation.tagSearchPlaceholder', {
                     defaultValue: 'Search or create a tag',
                   })}
-                  className="h-7 min-w-0 flex-1 rounded-md border border-border bg-background/80 px-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none"
+                  className="h-9 min-w-0 flex-1 rounded-xl border-none bg-transparent px-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:shadow-none"
                 />
                 <button
                   type="button"
                   onClick={closeEditor}
-                  className="inline-flex h-7 shrink-0 items-center rounded-md px-2 text-2xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground"
+                  data-text-action=""
+                  className="h-8 shrink-0 text-xs font-semibold"
                 >
                   {t('actions.done', { ns: 'common', defaultValue: 'Done' })}
                 </button>
@@ -163,7 +162,7 @@ export function ContactTags({
                     key={tg.id}
                     type="button"
                     onClick={() => void assign(tg.id)}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs text-foreground transition-colors duration-fast hover:bg-secondary"
+                    className="flex min-h-9 w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-start text-sm text-foreground transition-colors duration-fast hover:bg-primary/[0.06] focus-visible:bg-primary/[0.06] focus-visible:outline-none"
                   >
                     <span
                       aria-hidden
@@ -177,7 +176,7 @@ export function ContactTags({
                   <button
                     type="button"
                     onClick={() => void createAndAssign()}
-                    className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-start text-xs text-foreground transition-colors duration-fast hover:bg-secondary"
+                    className="flex min-h-9 w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-start text-sm text-foreground transition-colors duration-fast hover:bg-primary/[0.06] focus-visible:bg-primary/[0.06] focus-visible:outline-none"
                   >
                     <span className="text-sm leading-none text-primary">+</span>
                     <span className="truncate">
@@ -189,7 +188,7 @@ export function ContactTags({
                   </button>
                 )}
                 {available.length === 0 && !query.trim() && (
-                  <p className="px-2 py-1.5 text-2xs text-muted-foreground">
+                  <p className="px-2.5 py-2 text-xs text-muted-foreground">
                     {t('conversation.allTagsAdded', {
                       defaultValue: 'All tags added — type to create a new one.',
                     })}
@@ -201,7 +200,7 @@ export function ContactTags({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="inline-flex h-7 items-center gap-1 rounded-full border border-dashed border-border px-2.5 text-xs text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/40 hover:text-foreground"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <span className="text-sm leading-none">+</span>
               <span>{t('conversation.addTag', { defaultValue: 'Add tag' })}</span>

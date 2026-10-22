@@ -123,21 +123,28 @@ export function EnhanceButton({
         <div
           role="region"
           aria-label={String(t('ai.suggestionTitle', { defaultValue: 'AI suggestion' }))}
+          /* Anchored to the END edge: the button sits at the end of the
+             composer toolbar, so a start-anchored card ran off the pane. */
           className={cn(
-            'absolute bottom-full z-30 mb-2 w-[min(32rem,calc(100vw-2rem))]',
-            'rounded-xl border border-primary/20 bg-popover p-3',
-            'shadow-float ring-1 ring-foreground/[0.04]',
+            'absolute bottom-full end-0 z-30 mb-2 w-[min(32rem,calc(100vw-2rem))]',
+            'rounded-[1.25rem] bg-popover p-4',
+            'shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_2px_6px_oklch(var(--shadow-color)/0.06),0_28px_56px_-28px_oklch(var(--shadow-color)/0.5)]',
           )}
         >
-          <div className="mb-1.5 flex items-center gap-1.5">
-            <SparkleIcon size={12} className="text-primary" />
-            <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-primary">
+          <div className="mb-2 flex items-center gap-2">
+            <span
+              aria-hidden
+              className="grid h-6 w-6 place-items-center rounded-full bg-primary/10 text-primary"
+            >
+              <SparkleIcon size={12} />
+            </span>
+            <span className="text-sm font-semibold text-foreground">
               {t('ai.suggestionTitle', { defaultValue: 'AI suggestion' })}
             </span>
             <button
               type="button"
               onClick={() => setSuggestion(null)}
-              className="ms-auto text-2xs font-medium text-muted-foreground hover:text-foreground"
+              className="ms-auto inline-flex h-7 items-center rounded-full bg-foreground/[0.06] px-3 text-xs font-semibold text-foreground/75 transition-colors duration-fast hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {t('actions.dismiss', { ns: 'common', defaultValue: 'Dismiss' })}
             </button>
@@ -147,18 +154,18 @@ export function EnhanceButton({
               become their reply. */}
           <p
             dir="auto"
-            className="max-h-48 overflow-y-auto whitespace-pre-wrap text-xs leading-relaxed text-foreground"
+            className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-xl bg-primary/[0.04] px-3 py-2.5 text-sm leading-relaxed text-foreground"
           >
             {suggestion}
           </p>
-          <div className="mt-2.5 flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2">
             <button
               type="button"
               onClick={() => {
                 onAccept(suggestion);
                 setSuggestion(null);
               }}
-              className="rounded-full bg-primary px-3 py-1 text-2xs font-semibold text-primary-foreground transition-colors duration-fast hover:bg-primary/90"
+              className="inline-flex h-8 items-center rounded-full bg-display px-4 text-xs font-semibold text-background transition-colors duration-fast hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               {t('ai.useSuggestion', { defaultValue: 'Use this' })}
             </button>
@@ -169,7 +176,7 @@ export function EnhanceButton({
               type="button"
               disabled={busy}
               onClick={() => enhance.mutate()}
-              className="rounded-full px-2.5 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast hover:text-foreground disabled:opacity-50"
+              className="inline-flex h-8 items-center rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-foreground/[0.05] disabled:text-muted-foreground disabled:opacity-60"
             >
               {t('ai.regenerate', { defaultValue: 'Try again' })}
             </button>
@@ -199,7 +206,9 @@ export function EnhanceButton({
           'transition-colors duration-fast ease-out',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
           empty || busy
-            ? 'cursor-not-allowed bg-transparent text-muted-foreground opacity-50'
+            ? /* Flat grey, the console's disabled look: the pill keeps its
+                 shape in the toolbar row instead of dissolving into text. */
+              'cursor-not-allowed bg-foreground/[0.05] text-muted-foreground opacity-60'
             : 'bg-primary/10 text-primary hover:bg-primary/[0.17] active:bg-primary/[0.24]',
         )}
       >

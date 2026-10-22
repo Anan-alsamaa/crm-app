@@ -151,6 +151,7 @@ export function CommandPalette({
       />
       <div
         ref={panelRef}
+        data-palette-panel=""
         className="relative w-full max-w-xl overflow-hidden rounded-2xl bg-popover/95 backdrop-blur-md text-popover-foreground shadow-xl shadow-black/30 ring-1 ring-border animate-scale-in origin-top"
       >
         {/* Search input */}

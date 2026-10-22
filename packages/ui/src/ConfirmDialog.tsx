@@ -178,6 +178,8 @@ export function ConfirmDialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descId : undefined}
         onKeyDown={onPanelKey}
+        /* A hook for a portal's own stylesheet; carries no styling itself. */
+        data-confirm-panel=""
         className="w-full max-w-sm rounded-2xl bg-card p-7 shadow-xl shadow-black/30 ring-1 ring-border animate-scale-in"
       >
         <div className="mb-6 space-y-1.5">

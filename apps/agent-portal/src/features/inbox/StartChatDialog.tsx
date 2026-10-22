@@ -8,6 +8,9 @@ import { lookupContactByPhone, soleYijiVendorId, startChatWithCustomer } from '.
 import { QuickReplies } from '../conversation/QuickReplies.js';
 import { useVendorDirectory } from '../../lib/vendors.js';
 
+/** A field label: a word above its control, not a tracked capital. */
+const FIELD_LABEL = 'block text-[0.8125rem] font-semibold leading-tight text-foreground/[0.78]';
+
 /**
  * AN AGENT OPENS A CHAT WITH A CUSTOMER WHO HAS NOT WRITTEN TO US (EMA-10).
  *
@@ -142,17 +145,53 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
      reply exactly as every later one can (owner, 2026-10-05). */
   const slashMatch = /^\/(.*)$/s.exec(message);
 
+  /* The actions live in the dialog's own sticky footer (Modal `footer`),
+     on its hairline: solid ink Send, soft Cancel. */
+  const footer = (
+    <>
+      {/* WHY the button is dead, since a disabled control cannot explain
+          itself and "nothing happens" is the most-reported shape in this
+          app. */}
+      {!ready && !start.isPending && (
+        <p className="me-auto text-xs leading-snug text-muted-foreground">
+          {!phoneValid
+            ? t('inbox.startChat.needPhone', { defaultValue: 'Enter a valid mobile number.' })
+            : !message.trim()
+              ? t('inbox.startChat.needMessage', { defaultValue: 'Write the first message.' })
+              : vendors.show
+                ? t('inbox.startChat.needVendorPick', { defaultValue: 'Choose the vendor.' })
+                : t('inbox.startChat.needVendor', { defaultValue: 'No vendor is configured.' })}
+        </p>
+      )}
+      <Button type="button" variant="ghost" onClick={onClose} disabled={start.isPending}>
+        {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+      </Button>
+      <Button
+        type="button"
+        disabled={!ready}
+        loading={start.isPending}
+        onClick={() => start.mutate()}
+      >
+        {t('inbox.startChat.send', { defaultValue: 'Send' })}
+      </Button>
+    </>
+  );
+
   return (
     <Modal
       open={open}
       onClose={onClose}
       size="md"
       title={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
+      description={t('inbox.startChat.subtitle', {
+        defaultValue: 'Message a customer by their mobile number. The chat opens in your inbox.',
+      })}
+      footer={footer}
     >
-      <div className="space-y-4 px-5 py-4">
+      <div className="space-y-5">
         {vendors.show && (
-          <label className="block space-y-1.5">
-            <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <label className="block space-y-2">
+            <span className={FIELD_LABEL}>
               {t('inbox.startChat.vendor', { defaultValue: 'Vendor' })}
             </span>
             <SelectMenu
@@ -180,8 +219,8 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
         {/* THE NUMBER. `inputMode="tel"` so a phone keyboard appears, and the
             canonical form is shown back once it resolves — an agent who typed
             `+966 50 …` should see the `05…` the CRM actually stores. */}
-        <label className="block space-y-1.5">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <label className="block space-y-2">
+          <span className={FIELD_LABEL}>
             {t('inbox.startChat.phone', { defaultValue: 'Customer mobile' })}
           </span>
           <Input
@@ -206,8 +245,8 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
         {/* THE FIRST MESSAGE. Free text, per the spec — whether a cold outbound
             needs an approved template is a separate decision (EMA-15), and
             guessing at one now would ship a restriction nobody asked for. */}
-        <label className="block space-y-1.5">
-          <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        <label className="block space-y-2">
+          <span className={FIELD_LABEL}>
             {t('inbox.startChat.message', { defaultValue: 'First message' })}
           </span>
           {/*
@@ -250,38 +289,13 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
         {/* THE FAILURE, where the agent is looking, in words rather than a
             status code. */}
         {error && (
-          <p role="alert" className="text-xs leading-relaxed text-destructive">
+          <p
+            role="alert"
+            className="rounded-2xl bg-destructive/10 px-3.5 py-2.5 text-xs leading-relaxed text-destructive"
+          >
             {error}
           </p>
         )}
-      </div>
-
-      <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
-        {/* WHY the button is dead, since a disabled control cannot explain
-            itself and "nothing happens" is the most-reported shape in this
-            app. */}
-        {!ready && !start.isPending && (
-          <p className="me-auto text-2xs leading-snug text-muted-foreground">
-            {!phoneValid
-              ? t('inbox.startChat.needPhone', { defaultValue: 'Enter a valid mobile number.' })
-              : !message.trim()
-                ? t('inbox.startChat.needMessage', { defaultValue: 'Write the first message.' })
-                : vendors.show
-                  ? t('inbox.startChat.needVendorPick', { defaultValue: 'Choose the vendor.' })
-                  : t('inbox.startChat.needVendor', { defaultValue: 'No vendor is configured.' })}
-          </p>
-        )}
-        <Button type="button" variant="ghost" onClick={onClose} disabled={start.isPending}>
-          {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
-        </Button>
-        <Button
-          type="button"
-          disabled={!ready}
-          loading={start.isPending}
-          onClick={() => start.mutate()}
-        >
-          {t('inbox.startChat.send', { defaultValue: 'Send' })}
-        </Button>
       </div>
     </Modal>
   );
@@ -300,14 +314,14 @@ function WhoIsThis({ lookup, typed, valid }: { lookup: Lookup; typed: string; va
   if (!typed.trim()) return null;
   if (!valid) {
     return (
-      <p className="text-2xs text-destructive">
+      <p className="text-xs text-destructive">
         {t('inbox.startChat.invalidPhone', { defaultValue: 'That is not a mobile number.' })}
       </p>
     );
   }
   if (lookup.state === 'checking') {
     return (
-      <p className="flex items-center gap-1.5 text-2xs text-muted-foreground">
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Spinner size={11} />
         {t('inbox.startChat.checking', { defaultValue: 'Looking them up…' })}
       </p>
@@ -315,7 +329,7 @@ function WhoIsThis({ lookup, typed, valid }: { lookup: Lookup; typed: string; va
   }
   if (lookup.state === 'known') {
     return (
-      <p className={cn('text-2xs font-medium text-foreground')}>
+      <p className={cn('text-xs font-medium text-foreground')}>
         {lookup.name
           ? t('inbox.startChat.known', {
               name: lookup.name,
@@ -329,7 +343,7 @@ function WhoIsThis({ lookup, typed, valid }: { lookup: Lookup; typed: string; va
   }
   if (lookup.state === 'new') {
     return (
-      <p className="text-2xs text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         {t('inbox.startChat.newContact', { defaultValue: 'New customer — no record yet' })}
       </p>
     );

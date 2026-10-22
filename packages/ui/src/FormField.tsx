@@ -43,10 +43,11 @@ export function FormField({
       ? cloneElement(childEl, { id: controlId })
       : children;
   return (
-    <div className={cn('flex flex-col gap-1.5', className)}>
+    <div data-form-field="" className={cn('flex flex-col gap-1.5', className)}>
       {label && (
         <label
           htmlFor={controlId}
+          data-field-label=""
           className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
         >
           {label}

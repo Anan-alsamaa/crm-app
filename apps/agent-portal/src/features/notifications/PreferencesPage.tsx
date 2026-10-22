@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Children, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   BellIcon,
@@ -6,7 +6,6 @@ import {
   ClockIcon,
   cn,
   InboxIcon,
-  SectionCard,
   SelectMenu,
   SettingsIcon,
   SoundOffIcon,
@@ -14,11 +13,9 @@ import {
   Spinner,
   TicketIcon,
   toast,
-  Toolbar,
-  ToolbarSpacer,
   UsersIcon,
 } from '@yiji/ui';
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { isSoundMuted, playMessageBeep, setSoundMuted } from '../../lib/sound.js';
 import {
   CHANNELS,
@@ -223,82 +220,96 @@ export function PreferencesPage() {
     }
   };
 
-  // The toolbar (title + Save) renders immediately; only the list body waits on
-  // data — consistent with the other admin/agent pages and so the heading is
-  // available right away.
+  /*
+   * A SETTINGS PAGE THAT USES THE PAGE (owner, 2026-10-22: it "looks very bad -
+   * uses half the page").
+   *
+   * It was one 5xl column of cards-inside-cards, so the right half of a desk
+   * monitor was empty. Now: the title block across the page with the actions on
+   * the far side; then each group as a band - its name and purpose on the
+   * start edge, its settings in a card of ROWS on the end (what it is and why on
+   * the start of the row, the control at its end), the rows two abreast on a
+   * very wide screen. Same controls, same draft, same Save; only the arrangement
+   * moved.
+   */
+  /* One segmented control, pill-shaped, the same for scope and for sound. */
+  const segment = (active: boolean) =>
+    cn(
+      'inline-flex h-8 items-center rounded-full px-3.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
+      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+      active
+        ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
+        : 'text-muted-foreground hover:text-foreground',
+    );
+
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('preferences.title')}
-        </h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
-          <span className="opacity-50">·</span> {t('preferences.description')}
-        </span>
-        <ToolbarSpacer />
-        {/*
-          WHOSE SETTINGS AM I EDITING? Only an administrator sees this, and it
-          is deliberately explicit rather than a mode the page slips into: the
-          two halves look identical, so without a visible switch it would be
-          possible to change the whole organisation believing you had changed
-          your own notifications.
-        */}
-        {isAdmin && (
-          <div
-            role="group"
-            aria-label={t('preferences.scope', { defaultValue: 'Editing' })}
-            className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
+    <div className="h-full w-full overflow-y-auto overflow-x-hidden pb-10">
+      <header className="agent-gutter flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-5 pt-5">
+        <div className="min-w-0">
+          <h1 className="text-foreground">{t('preferences.title')}</h1>
+          <p className="mt-2 max-w-[46rem] text-sm leading-relaxed text-muted-foreground">
+            {t('preferences.description')}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/*
+            WHOSE SETTINGS AM I EDITING? Only an administrator sees this, and it
+            is deliberately explicit rather than a mode the page slips into: the
+            two halves look identical, so without a visible switch it would be
+            possible to change the whole organisation believing you had changed
+            your own notifications.
+          */}
+          {isAdmin && (
+            <div
+              role="group"
+              aria-label={t('preferences.scope', { defaultValue: 'Editing' })}
+              className="inline-flex shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]"
+            >
+              {(['mine', 'everyone'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  aria-pressed={scope === s}
+                  onClick={() => setScope(s)}
+                  className={segment(scope === s)}
+                >
+                  {s === 'mine'
+                    ? t('preferences.scopeMine', { defaultValue: 'My notifications' })
+                    : t('preferences.scopeEveryone', { defaultValue: 'Everyone' })}
+                </button>
+              ))}
+            </div>
+          )}
+          <Button
+            type="button"
+            onClick={() => void save()}
+            loading={update.isPending}
+            disabled={loading}
           >
-            {(['mine', 'everyone'] as const).map((s) => (
-              <button
-                key={s}
-                type="button"
-                aria-pressed={scope === s}
-                onClick={() => setScope(s)}
-                className={cn(
-                  'rounded-md px-3 py-1.5 font-medium transition-colors duration-fast ease-out',
-                  scope === s
-                    ? 'bg-card text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {s === 'mine'
-                  ? t('preferences.scopeMine', { defaultValue: 'My notifications' })
-                  : t('preferences.scopeEveryone', { defaultValue: 'Everyone' })}
-              </button>
-            ))}
-          </div>
-        )}
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => void save()}
-          loading={update.isPending}
-          disabled={loading}
-        >
-          {t('actions.save', { ns: 'common' })}
-        </Button>
-      </Toolbar>
+            {t('actions.save', { ns: 'common' })}
+          </Button>
+        </div>
+      </header>
 
       {loading ? (
-        <div className="flex flex-1 items-center justify-center text-muted-foreground">
+        <div className="flex items-center justify-center py-24 text-muted-foreground">
           <Spinner />
         </div>
       ) : (
-        <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="agent-gutter w-full max-w-5xl space-y-4 pb-8 pt-2">
-            {/* New-message sound — a per-browser toggle, kept visually distinct
-              from the server-saved channel rows below. Same SectionCard surface
-              as the groups so the page reads as one board. */}
-            <SectionCard
+        <div className="agent-gutter">
+          <div className="min-w-0 space-y-5">
+            {/* New-message sound - a per-browser setting, applied at once. */}
+            <SettingsCard
+              id="pref-sound"
               title={t('preferences.group.sound', { defaultValue: 'Sound' })}
               hint={t('sound.prefHint')}
             >
-              <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex min-w-0 flex-1 items-center gap-3">
+              <SettingRow
+                icon={
                   <span
+                    aria-hidden
                     className={cn(
-                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors',
+                      'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors',
                       soundOn
                         ? 'bg-primary-tint text-primary'
                         : 'bg-secondary text-muted-foreground',
@@ -306,141 +317,86 @@ export function PreferencesPage() {
                   >
                     {soundOn ? <SoundOnIcon size={18} /> : <SoundOffIcon size={18} />}
                   </span>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium text-foreground">
-                      {t('sound.prefTitle')}
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {soundOn ? t('sound.statusOn') : t('sound.statusMuted')}
-                    </p>
+                }
+                title={t('sound.prefTitle')}
+                description={soundOn ? t('sound.statusOn') : t('sound.statusMuted')}
+                control={
+                  <div
+                    role="group"
+                    aria-label={t('sound.prefTitle')}
+                    className="inline-flex shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={soundOn}
+                      onClick={() => setSound(true)}
+                      className={segment(soundOn)}
+                    >
+                      {t('sound.on')}
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={!soundOn}
+                      onClick={() => setSound(false)}
+                      className={segment(!soundOn)}
+                    >
+                      {t('sound.off')}
+                    </button>
                   </div>
-                </div>
-                <div
-                  role="group"
-                  aria-label={t('sound.prefTitle')}
-                  className="inline-flex shrink-0 rounded-lg bg-secondary p-0.5 text-xs"
-                >
-                  <button
-                    type="button"
-                    aria-pressed={soundOn}
-                    onClick={() => setSound(true)}
-                    className={cn(
-                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
-                      soundOn
-                        ? 'bg-card text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {t('sound.on')}
-                  </button>
-                  <button
-                    type="button"
-                    aria-pressed={!soundOn}
-                    onClick={() => setSound(false)}
-                    className={cn(
-                      'rounded-md px-3.5 py-1.5 font-medium transition-colors duration-fast ease-out',
-                      !soundOn
-                        ? 'bg-card text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {t('sound.off')}
-                  </button>
-                </div>
-              </div>
-            </SectionCard>
+                }
+              />
+            </SettingsCard>
 
             {GROUPS.map((g) => (
-              <SectionCard
+              <SettingsCard
                 key={g.key}
+                id={`pref-${g.key}`}
                 title={t(g.titleKey, { defaultValue: g.titleFallback })}
                 hint={t(g.descriptionKey, { defaultValue: g.descriptionFallback })}
               >
-                {/* Two-column card grid, matching the AI assistance page: each
-                  notification type is its OWN card rather than a row in a shared
-                  list. A divided list reads as settings-you-scan; discrete cards
-                  read as features-you-choose, which is what these are. */}
-                <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {g.types.map((type, i) => {
-                    const meta = META[type];
-                    const Icon = meta?.icon;
-                    const muted = draft[type] === 'none';
-                    // An odd count strands the last card beside a dead cell at
-                    // two-up; letting it span keeps the group a solid block.
-                    const spans = i === g.types.length - 1 && g.types.length % 2 === 1;
-                    return (
-                      <li
-                        key={type}
-                        className={cn(
-                          'group flex items-start gap-3.5 rounded-2xl px-4 py-4 transition-colors duration-fast ease-out',
-                          spans && 'sm:col-span-2',
-                          // Same active/inactive treatment as the AI assistance
-                          // cards: a live setting is tinted and ringed, a disabled
-                          // one recedes, so the grid is readable without reading.
-                          // Tints sit ON the SectionCard surface now, so the
-                          // muted state uses the secondary wash for its edge.
-                          muted
-                            ? 'bg-secondary/40 ring-1 ring-foreground/[0.04]'
-                            : 'bg-primary/10 shadow-soft ring-1 ring-primary/25',
-                        )}
-                      >
-                        {Icon && (
+                {g.types.map((type) => {
+                  const meta = META[type];
+                  const Icon = meta?.icon;
+                  const muted = draft[type] === 'none';
+                  return (
+                    <SettingRow
+                      key={type}
+                      icon={
+                        Icon && (
                           <span
                             aria-hidden
                             className={cn(
-                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-fast ease-out',
-                              muted
-                                ? 'bg-secondary/60 text-muted-foreground ring-1 ring-foreground/[0.04]'
-                                : 'bg-primary/15 text-primary ring-1 ring-primary/20',
+                              'flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors duration-fast ease-out',
+                              muted ? 'bg-secondary text-muted-foreground' : meta?.tone,
                             )}
                           >
                             <Icon size={18} />
                           </span>
-                        )}
-                        <div className="min-w-0 flex-1 pt-0.5">
-                          <div
-                            className={cn(
-                              'text-sm font-medium transition-colors duration-fast ease-out',
-                              muted ? 'text-foreground/90' : 'text-foreground',
-                            )}
-                          >
-                            {t(`notifications.type.${type}`, { defaultValue: type })}
-                          </div>
-                          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                            {t(meta?.descriptionKey ?? '', {
-                              defaultValue: meta?.fallbackDescription ?? '',
-                            })}
-                          </p>
-                          {!editingOrg && lockedByPolicy(type) && (
-                            <p className="mt-1.5 text-xs font-medium text-muted-foreground">
-                              {t('preferences.setByAdmin', {
-                                defaultValue: 'Set for everyone by an administrator',
-                              })}
-                            </p>
-                          )}
-                        </div>
-                        {/* Dropdown rather than a toggle: this is a four-way
-                            choice (in-app / email / both / none), not on-off. */}
+                        )
+                      }
+                      title={t(`notifications.type.${type}`, { defaultValue: type })}
+                      description={t(meta?.descriptionKey ?? '', {
+                        defaultValue: meta?.fallbackDescription ?? '',
+                      })}
+                      note={
+                        !editingOrg && lockedByPolicy(type)
+                          ? t('preferences.setByAdmin', {
+                              defaultValue: 'Set for everyone by an administrator',
+                            })
+                          : undefined
+                      }
+                      control={
+                        /* Dropdown rather than a toggle: this is a four-way
+                           choice (in-app / email / both / none), not on-off. */
                         <SelectMenu
                           size="sm"
-                          // Same green as the icon chip beside it — the control
-                          // and the glyph then read as one component rather than
-                          // a coloured icon next to a neutral form field. Muted
-                          // rows keep the plain treatment so "none" still reads
-                          // as switched off.
-                          className={cn(
-                            'w-28 shrink-0',
-                            !muted &&
-                              'border-primary/35 bg-primary/10 font-medium text-primary-strong hover:bg-primary/15',
-                          )}
+                          className="w-36 shrink-0"
                           value={draft[type] ?? (editingOrg ? ORG_UNSET : 'both')}
                           onChange={(v: string) => setDraft((d) => ({ ...d, [type]: v }))}
                           aria-label={type}
                           /* Set by the organisation: say so and lock it, rather
                              than letting an agent pick something that would be
-                             overruled the moment it was saved. A control that
-                             accepts a choice and then ignores it is worse than
-                             one that is plainly not theirs to make. */
+                             overruled the moment it was saved. */
                           disabled={!editingOrg && lockedByPolicy(type)}
                           options={[
                             /* Editing the POLICY gets one extra choice: leave
@@ -462,15 +418,85 @@ export function PreferencesPage() {
                             })),
                           ]}
                         />
-                      </li>
-                    );
-                  })}
-                </ul>
-              </SectionCard>
+                      }
+                    />
+                  );
+                })}
+              </SettingsCard>
             ))}
           </div>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A group of settings as a band: the group's name and purpose on the start
+ * edge, its rows in a card on the end. Stacks on a narrow screen.
+ */
+function SettingsCard({
+  id,
+  title,
+  hint,
+  children,
+}: {
+  id: string;
+  title: string;
+  hint?: string;
+  children: ReactNode;
+}) {
+  return (
+    <section
+      id={id}
+      aria-labelledby={`${id}-title`}
+      className="grid items-start gap-x-8 gap-y-3 border-t border-foreground/[0.07] pt-5 first:border-t-0 first:pt-0 lg:grid-cols-[minmax(0,17rem)_minmax(0,1fr)]"
+    >
+      <div className="lg:pt-4">
+        <h2 id={`${id}-title`} className="text-base font-semibold tracking-tight text-foreground">
+          {title}
+        </h2>
+        {hint && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{hint}</p>}
+      </div>
+      <ul
+        className={cn(
+          'grid rounded-2xl bg-card px-6',
+          Children.count(children) > 1 && '2xl:grid-cols-2 2xl:gap-x-10',
+        )}
+      >
+        {children}
+      </ul>
+    </section>
+  );
+}
+
+/** One setting: what it is and why on the start, its control on the end. */
+function SettingRow({
+  icon,
+  title,
+  description,
+  note,
+  control,
+}: {
+  icon?: ReactNode;
+  title: string;
+  description?: string;
+  note?: string;
+  control: ReactNode;
+}) {
+  return (
+    /* The hairline sits ABOVE each row after the first in its column, so a
+       two-up card has no stray line over its top row. */
+    <li className="flex min-h-[4.75rem] flex-wrap items-center gap-x-4 gap-y-3 border-t border-foreground/[0.06] py-4 first:border-t-0 2xl:[&:nth-child(2)]:border-t-0">
+      {icon}
+      <div className="min-w-[12rem] flex-1">
+        <div className="text-sm font-semibold text-foreground">{title}</div>
+        {description && (
+          <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{description}</p>
+        )}
+        {note && <p className="mt-1 text-xs font-semibold text-foreground/70">{note}</p>}
+      </div>
+      <div className="ms-auto flex shrink-0 items-center">{control}</div>
+    </li>
   );
 }

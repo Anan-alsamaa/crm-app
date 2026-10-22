@@ -125,6 +125,7 @@ export function MultiSelectMenu({
               left: rect()?.left ?? 0,
               minWidth: rect()?.width ?? 180,
             }}
+            data-menu-panel=""
             className="z-50 max-h-72 overflow-auto rounded-xl bg-card p-1.5 shadow-float ring-1 ring-foreground/10"
           >
             {/* CLEARS rather than ticking every box: the two give the same rows,

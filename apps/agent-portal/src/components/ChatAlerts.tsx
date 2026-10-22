@@ -312,7 +312,7 @@ export function ChatAlerts() {
           <div
             key={a.conversationId}
             role="status"
-            className="pointer-events-auto flex items-start gap-3 rounded-2xl bg-card p-3 shadow-2xl ring-1 ring-foreground/10 motion-safe:animate-slide-down-and-fade"
+            className="pointer-events-auto flex items-start gap-3 rounded-[1.375rem] bg-card/95 p-3.5 backdrop-blur-xl shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_2px_6px_oklch(var(--shadow-color)/0.06),0_30px_60px_-32px_oklch(var(--shadow-color)/0.5)] motion-safe:animate-slide-down-and-fade"
           >
             <span className="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
               <InboxIcon size={16} aria-hidden />
@@ -324,7 +324,7 @@ export function ChatAlerts() {
             >
               <div className="flex items-baseline gap-2">
                 <span className="truncate text-sm font-semibold text-foreground">{a.name}</span>
-                <span className="shrink-0 text-2xs font-semibold uppercase tracking-[0.1em] text-primary">
+                <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-semibold text-primary">
                   {a.waiting
                     ? t('chatAlerts.waitingLabel', { defaultValue: 'New chat waiting' })
                     : t('chatAlerts.mineLabel', { defaultValue: 'New message' })}
@@ -341,14 +341,14 @@ export function ChatAlerts() {
               type="button"
               onClick={() => dismissBanner(a.conversationId)}
               aria-label={t('chatAlerts.close', { defaultValue: 'Close' })}
-              className="shrink-0 rounded px-1 text-muted-foreground hover:text-foreground"
+              className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-foreground/[0.06] text-base leading-none text-foreground/70 transition-colors duration-fast hover:bg-foreground/10 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               ×
             </button>
           </div>
         ))}
         {alerts.length > MAX_BANNERS && (
-          <p className="pointer-events-auto self-end rounded-full bg-card px-3 py-1 text-xs text-muted-foreground shadow ring-1 ring-foreground/10">
+          <p className="pointer-events-auto self-end rounded-full bg-card px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_2px_6px_oklch(var(--shadow-color)/0.06),0_30px_60px_-32px_oklch(var(--shadow-color)/0.5)]">
             {t('chatAlerts.more', {
               defaultValue: '+{{n}} more waiting',
               n: alerts.length - MAX_BANNERS,
@@ -370,7 +370,7 @@ export function ChatAlerts() {
         aria-labelledby="chat-alert-title"
         aria-describedby="chat-alert-preview"
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-2xl bg-card p-6 text-center shadow-2xl ring-1 ring-foreground/10 motion-safe:animate-scale-in"
+        className="w-full max-w-sm rounded-[1.625rem] bg-card p-7 text-center shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_2px_6px_oklch(var(--shadow-color)/0.06),0_30px_60px_-32px_oklch(var(--shadow-color)/0.5)] motion-safe:animate-scale-in"
       >
         <div className="relative mx-auto mb-4 flex h-14 w-14 items-center justify-center">
           <span
@@ -381,12 +381,15 @@ export function ChatAlerts() {
             <InboxIcon size={24} aria-hidden />
           </span>
         </div>
-        <div className="text-2xs font-semibold uppercase tracking-[0.14em] text-primary">
+        <div className="mx-auto inline-flex rounded-full bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary">
           {top.waiting
             ? t('chatAlerts.waitingLabel', { defaultValue: 'New chat waiting' })
             : t('chatAlerts.mineLabel', { defaultValue: 'New message' })}
         </div>
-        <h2 id="chat-alert-title" className="mt-1 truncate text-lg font-semibold text-foreground">
+        <h2
+          id="chat-alert-title"
+          className="mt-2.5 truncate text-xl font-semibold tracking-[-0.01em] text-foreground"
+        >
           {top.name}
         </h2>
         <p
@@ -396,13 +399,19 @@ export function ChatAlerts() {
         >
           {top.preview}
         </p>
-        <div className="mt-5 flex justify-center gap-2">
+        <div className="mt-6 flex justify-center gap-2">
           <Button type="button" onClick={() => open(top.conversationId)}>
             {t('chatAlerts.open', { defaultValue: 'Open chat' })}
           </Button>
-          <Button type="button" variant="ghost" onClick={dismissAll}>
+          {/* Soft secondary pill, explicit: this card may render outside the
+              skin's dialog hooks. */}
+          <button
+            type="button"
+            onClick={dismissAll}
+            className="inline-flex h-10 items-center rounded-full bg-primary/10 px-5 text-sm font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          >
             {t('chatAlerts.later', { defaultValue: 'Later' })}
-          </Button>
+          </button>
         </div>
         {more > 0 && (
           <p className={cn('mt-3 text-xs text-muted-foreground')}>

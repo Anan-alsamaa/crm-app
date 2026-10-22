@@ -65,12 +65,14 @@ export function AiDraftCard({
   return (
     <div
       className={cn(
-        'rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-xs',
+        // A soft brand card, not a dashed slot: it is a real suggestion, and
+        // the "not sent" in its title already says it is provisional.
+        'rounded-[1.25rem] bg-primary/[0.05] px-4 py-3 text-xs ring-1 ring-inset ring-primary/15',
         className,
       )}
     >
       <div className="flex items-center justify-between gap-2">
-        <span className="font-semibold uppercase tracking-[0.1em] text-primary">
+        <span className="font-semibold text-primary">
           {t('aiDraft.title', { defaultValue: 'AI suggestion - not sent' })}
         </span>
         {draft.action === 'reply' && draft.reply && (
@@ -80,7 +82,10 @@ export function AiDraftCard({
         )}
       </div>
       {draft.action === 'reply' && draft.reply ? (
-        <p dir="auto" className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+        <p
+          dir="auto"
+          className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground"
+        >
           {draft.reply}
         </p>
       ) : (

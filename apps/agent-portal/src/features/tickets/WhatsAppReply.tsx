@@ -63,11 +63,11 @@ export function WhatsAppReply({ ticket }: { ticket: TicketRow }) {
   };
 
   return (
-    <div className="space-y-1">
-      <Button type="button" size="sm" variant="secondary" fullWidth onClick={open}>
+    <div className="space-y-1.5">
+      <Button type="button" size="sm" variant="ghost" fullWidth onClick={open}>
         {t('tickets.waReply', { defaultValue: 'WhatsApp the customer' })}
       </Button>
-      <p className="text-2xs leading-relaxed text-muted-foreground">
+      <p className="px-1 text-xs leading-relaxed text-muted-foreground">
         {t('tickets.waHint', {
           defaultValue: 'Opens the drafted message and records that you made the contact.',
         })}

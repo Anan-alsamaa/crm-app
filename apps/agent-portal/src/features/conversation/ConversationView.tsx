@@ -1660,13 +1660,74 @@ export function ConversationView({
                 onUse={(text) => applyEnhanced(text, 'ai_suggestion')}
               />
             )}
-            {!internalNote && (
-              /* Wraps rather than overlaps: on a phone the replies control
-                 and the AI tools take two lines instead of sliding under
-                 each other. */
-              <div className="mb-2 flex flex-wrap items-center gap-2">
+            {/*
+              THE COMPOSER TOOLBAR - ONE ROW (owner, 2026-10-22: "4 buttons, 2
+              on each row, not looking good").
+
+              Mode first, because it decides what the box below IS; then the
+              two ways of not typing from scratch (quick replies + their
+              language); then the AI tools pushed to the end. Every control is
+              one 32px pill or a 32px segmented pill, so the row has one height
+              and one baseline. It wraps only when the pane is genuinely
+              narrow, and then the AI pair keeps to the end of its own line.
+              The quick-replies list opens on its own full-width line UNDER the
+              row (QuickReplies `inToolbar`), never splitting it.
+            */}
+            <div
+              data-composer-toolbar=""
+              className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-2"
+            >
+              {/* Reply / internal note: one segmented control, so the mode is
+                  a state you can SEE before typing - the note side lights
+                  amber, like the box below it. */}
+              <div
+                role="group"
+                aria-label={t('conversation.tab.mode', { defaultValue: 'Message type' })}
+                className="inline-flex h-8 shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]"
+              >
+                <button
+                  type="button"
+                  aria-pressed={!internalNote}
+                  onClick={() => {
+                    setInternalNote(false);
+                    setMentionMenu(null);
+                  }}
+                  className={cn(
+                    'inline-flex h-7 items-center rounded-full px-3.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                    !internalNote
+                      ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t('conversation.tab.reply', { defaultValue: 'Reply' })}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={internalNote}
+                  onClick={() => setInternalNote(true)}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                    internalNote
+                      ? 'bg-note-tint text-note-foreground shadow-[0_2px_8px_-4px_oklch(var(--note)/0.8)] ring-1 ring-inset ring-note/70'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <LockIcon size={12} aria-hidden />
+                  {t('conversation.tab.note', { defaultValue: 'Internal note' })}
+                </button>
+              </div>
+
+              {internalNote && (
+                <span className="ms-auto min-w-0 truncate text-xs font-medium text-note-foreground">
+                  {t('conversation.mentionHint')}
+                </span>
+              )}
+
+              {!internalNote && (
                 <QuickReplies
-                  className="min-w-[15.5rem] flex-1"
+                  inToolbar
                   customerText={customerText}
                   query={replyFilter}
                   searching={replySearching}
@@ -1682,41 +1743,52 @@ export function ConversationView({
                      (MV-4). A chat with no vendor recorded is not narrowed. */
                   vendorId={aiVendorId || undefined}
                 />
-                {/* ENHANCE — improve what the agent already wrote (ops,
-                    2026-10-04). Beside Quick replies, because those are the two
-                    ways of not typing a reply from scratch, and an agent
-                    reaches for them in the same moment. */}
-                <EnhanceButton
-                  conversationId={conversationId}
-                  vendorId={aiVendorId}
-                  draft={draft}
-                  onAccept={applyEnhanced}
-                  onError={(m) => toast.error(m)}
-                />
-                {aiVendorId && (
-                  <button
-                    type="button"
-                    onClick={() => setAiOpen((v) => !v)}
-                    aria-expanded={aiOpen}
-                    title={t('ai.title', { defaultValue: 'AI' })}
-                    data-press=""
-                    className={cn(
-                      'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-primary',
-                      'transition-colors duration-fast ease-out',
-                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                      aiOpen ? 'bg-primary/[0.24]' : 'bg-primary/10 hover:bg-primary/[0.17]',
-                    )}
-                  >
-                    <SparkleIcon size={13} />
-                    {t('ai.title', { defaultValue: 'AI' })}
-                    <ChevronDownIcon
-                      size={12}
-                      className={cn('transition-transform duration-fast', aiOpen && 'rotate-180')}
-                    />
-                  </button>
-                )}
-              </div>
-            )}
+              )}
+
+              {/* ENHANCE + AI ASSISTANCE, at the end of the row (ops,
+                  2026-10-04: Enhance improves what the agent already wrote). */}
+              {!internalNote && (
+                <div className="ms-auto flex shrink-0 items-center gap-2">
+                  <EnhanceButton
+                    conversationId={conversationId}
+                    vendorId={aiVendorId}
+                    draft={draft}
+                    onAccept={applyEnhanced}
+                    onError={(m) => toast.error(m)}
+                  />
+                  {aiVendorId && (
+                    <button
+                      type="button"
+                      onClick={() => setAiOpen((v) => !v)}
+                      aria-expanded={aiOpen}
+                      aria-label={t('ai.title', { defaultValue: 'AI assistance' })}
+                      title={t('ai.title', { defaultValue: 'AI assistance' })}
+                      data-press=""
+                      className={cn(
+                        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full ps-3 pe-2.5 text-xs font-semibold text-primary',
+                        'transition-colors duration-fast ease-out',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                        aiOpen ? 'bg-primary/[0.24]' : 'bg-primary/10 hover:bg-primary/[0.17]',
+                      )}
+                    >
+                      <SparkleIcon size={13} />
+                      {/* The long name where the row has room, the short one
+                          where it does not (index.css, container query). */}
+                      <span data-label-long="" aria-hidden>
+                        {t('ai.title', { defaultValue: 'AI assistance' })}
+                      </span>
+                      <span data-label-short="" aria-hidden>
+                        {t('ai.short', { defaultValue: 'AI' })}
+                      </span>
+                      <ChevronDownIcon
+                        size={12}
+                        className={cn('transition-transform duration-fast', aiOpen && 'rotate-180')}
+                      />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             {!internalNote && aiVendorId && aiOpen && (
               <AiPanel
                 className="mb-2"
@@ -1729,51 +1801,6 @@ export function ConversationView({
                 onReplySuggested={(text) => applyEnhanced(text, 'ai_suggestion')}
               />
             )}
-
-            {/* Reply / internal note: one segmented control, so the mode is
-                a state you can SEE before typing - the note side lights amber,
-                like the box below it. */}
-            <div className="mb-2 flex items-center gap-3 text-xs">
-              <div className="inline-flex items-center rounded-full bg-secondary/80 p-1 ring-1 ring-inset ring-foreground/[0.06]">
-                <button
-                  type="button"
-                  aria-pressed={!internalNote}
-                  onClick={() => {
-                    setInternalNote(false);
-                    setMentionMenu(null);
-                  }}
-                  className={cn(
-                    'inline-flex h-7 items-center rounded-full px-3.5 font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                    !internalNote
-                      ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  {t('conversation.tab.reply', { defaultValue: 'Reply' })}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={internalNote}
-                  onClick={() => setInternalNote(true)}
-                  className={cn(
-                    'inline-flex h-7 items-center gap-1.5 rounded-full px-3.5 font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                    internalNote
-                      ? 'bg-note-tint text-note-foreground shadow-[0_2px_8px_-4px_oklch(var(--note)/0.8)] ring-1 ring-inset ring-note/70'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <LockIcon size={12} aria-hidden />
-                  {t('conversation.tab.note', { defaultValue: 'Internal note' })}
-                </button>
-              </div>
-              {internalNote && (
-                <span className="ms-auto truncate text-2xs font-medium text-note-foreground">
-                  {t('conversation.mentionHint')}
-                </span>
-              )}
-            </div>
 
             <div
               /* The primary surface: a roomy white well lit indigo on focus,

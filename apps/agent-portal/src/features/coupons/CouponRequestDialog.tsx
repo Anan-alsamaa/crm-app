@@ -3,6 +3,7 @@ import type { JSX } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  cn,
   DateField,
   Drawer,
   DrawerSection,
@@ -253,12 +254,12 @@ function ItemPicker({
       <div
         role="group"
         aria-label={t('coupons.itemField', { defaultValue: 'Items (optional)' })}
-        className="grid max-h-52 gap-0.5 overflow-y-auto rounded-xl bg-secondary/40 p-1.5 ring-1 ring-inset ring-foreground/[0.06]"
+        className="grid max-h-56 gap-0.5 overflow-y-auto rounded-2xl bg-input p-1 ring-1 ring-inset ring-foreground/[0.08]"
       >
         {unique.map((it) => (
           <label
             key={it.name}
-            className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm hover:bg-card"
+            className="flex min-h-10 cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-sm transition-colors duration-fast ease-out hover:bg-primary/[0.05] has-[:checked]:bg-primary/[0.08]"
           >
             <input
               type="checkbox"
@@ -290,7 +291,7 @@ function ItemPicker({
       {/* The arithmetic, shown. The agent is about to see this number land in
           the value field, and seeing it add up is what makes that unsurprising. */}
       {selected.size > 0 && (
-        <p className="text-2xs text-muted-foreground">
+        <p className="text-xs font-medium tabular-nums text-primary">
           {t('coupons.itemsSelected', {
             count: selected.size,
             total,
@@ -574,9 +575,11 @@ export function CouponRequestDialog({
             })
       }
       footer={
-        <div className="flex w-full items-center justify-end gap-2">
+        <div className="flex w-full flex-wrap items-center justify-end gap-2.5">
           {blockedReason && (
-            <span className="me-auto text-2xs text-muted-foreground">{blockedReason}</span>
+            <span className="me-auto min-w-0 flex-1 basis-40 text-xs leading-snug text-muted-foreground">
+              {blockedReason}
+            </span>
           )}
           <Button type="button" variant="ghost" onClick={onClose}>
             {t('actions.cancel', { ns: 'common' })}
@@ -636,7 +639,8 @@ export function CouponRequestDialog({
             />
             <Button
               type="button"
-              variant="secondary"
+              variant="ghost"
+              className="shrink-0"
               // The prefix belongs to the issuing side, so a REGENERATED code
               // has to carry it too. Without this the button handed back a
               // SARA- code on an Operations coupon, and the prefix is how
@@ -652,7 +656,7 @@ export function CouponRequestDialog({
             </Button>
           </div>
         </FormField>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2">
           <FormField label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}>
             <SelectMenu
               fullWidth
@@ -696,11 +700,13 @@ export function CouponRequestDialog({
                         ),
                       )
                     }
-                    className={
+                    className={cn(
+                      'inline-flex h-8 items-center rounded-full px-3.5 text-xs font-semibold transition-colors duration-fast ease-out',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                       selected
-                        ? 'rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors duration-fast ease-out'
-                        : 'rounded-full bg-secondary px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground'
-                    }
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-foreground/[0.05] text-foreground/75 hover:bg-primary/10 hover:text-primary',
+                    )}
                   >
                     {v}
                   </button>
@@ -802,7 +808,7 @@ export function CouponRequestDialog({
         {(brandName || branchName) && (
           // Where this coupon lands, said rather than assumed: the branch is
           // resolved from the ticket's order/branch choice and not editable here.
-          <p className="rounded-lg bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
+          <p className="rounded-2xl bg-primary/[0.06] px-3.5 py-2.5 text-xs text-muted-foreground">
             {t('coupons.branchContext', { defaultValue: 'For' })}{' '}
             <span className="font-medium text-foreground">
               {[brandName, branchName].filter(Boolean).join(' · ')}
@@ -818,7 +824,7 @@ export function CouponRequestDialog({
             'Whole days: a coupon is live from the start of the first day to the end of the last.',
         })}
       >
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2">
           <FormField label={t('performance.from', { defaultValue: 'From' })}>
             <DateField value={draft.valid_from} onChange={(v) => set('valid_from', v)} />
           </FormField>
@@ -889,7 +895,7 @@ export function CouponRequestDialog({
               className={
                 isPercentageCategory(draft.discount_category)
                   ? undefined
-                  : 'bg-secondary/60 text-muted-foreground'
+                  : 'bg-foreground/[0.04] text-muted-foreground'
               }
               value={String(draft.max_discount)}
               onChange={(e) => set('max_discount', Number(e.target.value))}
@@ -917,7 +923,7 @@ export function CouponRequestDialog({
             out. Unticked is the generous answer, which is the right default for
             an apology: a coupon that stops working during a promotion is a
             worse apology. */}
-        <label className="mt-4 flex cursor-pointer items-start gap-2.5">
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-2xl bg-input px-3.5 py-3 ring-1 ring-inset ring-foreground/[0.08] transition-colors duration-fast ease-out hover:ring-foreground/[0.14] has-[:checked]:bg-primary/[0.06] has-[:checked]:ring-primary/25">
           <input
             type="checkbox"
             className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
@@ -925,12 +931,12 @@ export function CouponRequestDialog({
             onChange={(e) => set('no_other_discounts', e.target.checked)}
           />
           <span className="min-w-0">
-            <span className="block text-xs font-medium text-foreground">
+            <span className="block text-sm font-semibold text-foreground">
               {t('coupons.noOtherDiscounts', {
                 defaultValue: 'Cannot be used with other discounts',
               })}
             </span>
-            <span className="mt-0.5 block text-2xs leading-relaxed text-muted-foreground">
+            <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
               {t('coupons.noOtherDiscountsHint', {
                 defaultValue:
                   'Tick this and the customer cannot use it on an item that is already discounted. Left unticked, it applies on top.',
@@ -1018,8 +1024,13 @@ export function CouponRequestDialog({
             surprised to hear an admin was paged about their coupon. It is not a
             block: large compensations are legitimate, they just get watched. */}
         {highValue && (
-          <p className="mt-3 flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-2xs leading-relaxed text-warning-foreground ring-1 ring-inset ring-warning/25">
-            <span aria-hidden>!</span>
+          <p className="mt-3 flex items-start gap-2.5 rounded-2xl bg-warning-tint px-3.5 py-3 text-xs leading-relaxed text-warning">
+            <span
+              aria-hidden
+              className="mt-px grid h-4 w-4 shrink-0 place-items-center rounded-full bg-warning text-[10px] font-bold text-warning-foreground"
+            >
+              !
+            </span>
             <span>
               {t('coupons.highValueNotice', {
                 threshold: COUPON_ALERT_THRESHOLD_SAR,

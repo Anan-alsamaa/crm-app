@@ -50,7 +50,7 @@ export function ViewSwitch<T extends string>({
       className={cn(
         // `sticky start-0` pins it against a horizontal page scroll — see
         // ReportKpiStrip. `w-fit` so sticking does not stretch the pill row.
-        'sticky start-0 inline-flex w-fit shrink-0 items-center gap-1 rounded-full bg-secondary p-1',
+        'sticky start-0 inline-flex w-fit shrink-0 items-center gap-0.5 rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]',
         className,
       )}
     >
@@ -76,16 +76,18 @@ export function ViewSwitch<T extends string>({
             }}
             onClick={() => onChange(o.value)}
             className={cn(
-              'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
+              'inline-flex h-8 items-center rounded-full px-3.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
               active
-                ? 'bg-card text-foreground shadow-soft'
+                ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {o.label}
             {typeof o.count === 'number' && (
-              <span className="ms-1.5 tabular-nums font-normal opacity-60">{o.count}</span>
+              <span className="ms-1.5 tabular-nums font-medium text-muted-foreground">
+                {o.count}
+              </span>
             )}
           </button>
         );

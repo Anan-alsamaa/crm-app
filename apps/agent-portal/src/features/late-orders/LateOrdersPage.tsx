@@ -85,6 +85,7 @@ import {
   FALLBACK_THRESHOLD,
 } from './api.js';
 import { useLateOrdersPush } from './live-push.js';
+import { BoardClock, LateBy, ViewSwitch } from './board.js';
 
 /** Yiji stamps are Riyadh wall-clock with no zone; as a real instant for display. */
 function placedIso(raw: string): string {
@@ -94,6 +95,9 @@ function placedIso(raw: string): string {
 
 /** Remembers LIVE ORDERS mode in this browser (the TV screen keeps it). */
 const LIVE_MODE_KEY = 'late-orders-live-mode';
+/** Remembers BOARD vs TABLE in this browser, like live mode. */
+const VIEW_KEY = 'late-orders-view';
+type LateOrdersView = 'board' | 'table';
 /** How long an order that just arrived carries the NEW tag in live mode. */
 const NEW_FOR_MS = 2 * 60_000;
 /**
@@ -455,6 +459,35 @@ export function LateOrdersPage() {
       /* a browser refusing storage still gets the mode for this visit */
     }
   };
+  /*
+   * BOARD OR TABLE (owner, 2026-10-22: "a report to be displayed on a TV, and
+   * this interface of boxes will be confusing").
+   *
+   * The BOARD is the wall view: one large row per late order, the minutes as
+   * the number you read from across the room. The TABLE is the full
+   * nineteen-column register an agent works a history range in - unchanged,
+   * one click away. Remembered in this browser like Live, so the TV comes back
+   * as a board after a reload.
+   */
+  const [view, setViewState] = useState<LateOrdersView>(() => {
+    try {
+      return window.localStorage.getItem(VIEW_KEY) === 'table' ? 'table' : 'board';
+    } catch {
+      return 'board';
+    }
+  });
+  const setView = (next: LateOrdersView) => {
+    setViewState(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      /* the choice still holds for this visit */
+    }
+  };
+  /* The filters fold away on the board (a TV shows the queue, not the
+     controls) and open by default on the table, where they are the work. They
+     still APPLY while folded - folding hides the controls, never the filter. */
+  const [filtersOpen, setFiltersOpen] = useState(() => view === 'table');
   /** The window actually asked for: a searched range, else today (always today when live). */
   const activeRange = (liveMode ? null : range) ?? todayRange ?? undefined;
   /** True while showing today — which is the only window that still moves. */
@@ -757,41 +790,49 @@ export function LateOrdersPage() {
   const rows = useMemo(() => {
     const order = orderQuery.trim();
     const brand = brandQuery.trim().toLowerCase();
-    return allOrders.filter((r) => {
-      /* LIVE ORDERS (owner, 2026-10-11): every late order of TODAY's business
+    return allOrders
+      .filter((r) => {
+        /* LIVE ORDERS (owner, 2026-10-11): every late order of TODAY's business
          day that is still Pending or Commented. Once it is handled - a coupon
          given - it drops off; the day turns at 08:00 (`showingToday`). */
-      if (liveMode && stateOf(r.orderId) === 'handled') return false;
-      /*
-       * TODAY MEANS TODAY'S BUSINESS DAY, not the calendar date.
-       *
-       * Trading runs 08:00 to 04:00, so a calendar cut splits one night's work
-       * in two: an order at 01:00 is still tonight's trading and an order at
-       * 06:00 belongs to the night that just ended. Only applied while showing
-       * today — a searched range is whatever the agent asked for.
-       */
-      if (showingToday && businessDay(r.placedAt) !== currentBusinessDay) return false;
+        if (liveMode && stateOf(r.orderId) === 'handled') return false;
+        /*
+         * TODAY MEANS TODAY'S BUSINESS DAY, not the calendar date.
+         *
+         * Trading runs 08:00 to 04:00, so a calendar cut splits one night's work
+         * in two: an order at 01:00 is still tonight's trading and an order at
+         * 06:00 belongs to the night that just ended. Only applied while showing
+         * today — a searched range is whatever the agent asked for.
+         */
+        if (showingToday && businessDay(r.placedAt) !== currentBusinessDay) return false;
 
-      /*
-       * THE HANDLING STATE — pending / commented / handled.
-       *
-       * NOT the order's own status, which is filtered separately below. An
-       * order can be `force_closed` upstream and still `pending` here, because
-       * nobody has touched it (owner, 2026-09-29: do not mix these).
-       */
-      if (handlingFilter !== 'all' && stateOf(r.orderId) !== handlingFilter) return false;
+        /*
+         * THE HANDLING STATE — pending / commented / handled.
+         *
+         * NOT the order's own status, which is filtered separately below. An
+         * order can be `force_closed` upstream and still `pending` here, because
+         * nobody has touched it (owner, 2026-09-29: do not mix these).
+         */
+        if (handlingFilter !== 'all' && stateOf(r.orderId) !== handlingFilter) return false;
 
-      /*
-       * THE ORDER'S OWN STATUS — multi-select, so several can be watched at
-       * once. An empty set means every status, which is what "All" selects.
-       */
-      if (statusFilter.size > 0 && !statusFilter.has(r.status)) return false;
+        /*
+         * THE ORDER'S OWN STATUS — multi-select, so several can be watched at
+         * once. An empty set means every status, which is what "All" selects.
+         */
+        if (statusFilter.size > 0 && !statusFilter.has(r.status)) return false;
 
-      if (order && !r.orderId.includes(order)) return false;
-      if (brand && !`${r.brandName ?? ''} ${r.restaurantName ?? ''}`.toLowerCase().includes(brand))
-        return false;
-      return true;
-    });
+        if (order && !r.orderId.includes(order)) return false;
+        if (
+          brand &&
+          !`${r.brandName ?? ''} ${r.restaurantName ?? ''}`.toLowerCase().includes(brand)
+        )
+          return false;
+        return true;
+        /* MOST LATE FIRST (owner, 2026-10-22): the board is read from the top,
+         and the top is the order that has waited longest. `filter` already
+         returned a fresh array, so sorting it touches nothing upstream. */
+      })
+      .sort((a, b) => b.minutesElapsed - a.minutesElapsed);
   }, [
     allOrders,
     liveMode,
@@ -1324,15 +1365,16 @@ export function LateOrdersPage() {
               distinction between "late" and "later" that nobody asked
               for, and it made half the column the washed-out amber the
               change set out to remove.
+
+              AMBER TO RED AGAIN, AS A SCALE (owner, 2026-10-22, the TV
+              board: "minutes late ... with a clear colour scale, amber >
+              red as it grows"). Not the washed amber this replaced: each
+              step is a measured ink-on-fill pair, the number stays the
+              boldest thing on the row, and the step is also named in
+              words, so colour is never the only signal.
             */}
           <Td className="whitespace-nowrap">
-            <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-destructive">
-              <span
-                aria-hidden="true"
-                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-destructive"
-              />
-              {elapsed(row.minutesElapsed)}
-            </span>
+            <LateBy minutes={row.minutesElapsed} threshold={threshold} size="table" />
           </Td>
         </>
       ),
@@ -1770,6 +1812,158 @@ export function LateOrdersPage() {
     },
   };
 
+  /*
+   * THE BOARD ROW (owner, 2026-10-22: the wall-TV view).
+   *
+   * One line per late order, read left to right in the order a supervisor
+   * asks the questions: how late, which order, whose kitchen, where is it
+   * now, has anyone handled it - then the same three actions the table has,
+   * compact at the end. The handlers are the table's own (`openDecision`,
+   * `setExpanded`, `pickKind`), so nothing about deciding changes with the view.
+   */
+  const boardCols =
+    'grid grid-cols-[8.5rem_6.5rem_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_28rem] items-center gap-x-5 2xl:grid-cols-[11rem_8.5rem_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_30rem] 2xl:gap-x-8';
+  const stateTone: Record<LateOrderState, { dot: string; label: string }> = {
+    pending: {
+      dot: 'bg-warning',
+      label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
+    },
+    commented: {
+      dot: 'bg-sky',
+      label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
+    },
+    handled: {
+      dot: 'bg-success',
+      label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
+    },
+  };
+  const boardRow = (row: (typeof paged)[number]) => {
+    const state = stateOf(row.orderId);
+    const agentName = decisionMap.get(row.orderId)?.decided_by?.first_name;
+    return (
+      <li
+        key={row.orderId}
+        role="row"
+        className={cn(
+          boardCols,
+          'min-h-[4.25rem] px-6 py-2.5 2xl:min-h-[5.25rem] 2xl:px-8',
+          '[&:not(:last-child)]:border-b [&:not(:last-child)]:border-foreground/[0.07]',
+          'transition-colors duration-fast hover:bg-primary/[0.03]',
+        )}
+      >
+        <div role="cell">
+          <LateBy minutes={row.minutesElapsed} threshold={threshold} />
+        </div>
+        <div role="cell" className="min-w-0">
+          <span
+            dir="ltr"
+            className="block text-lg font-bold tabular-nums text-foreground 2xl:text-2xl"
+          >
+            {row.orderId}
+          </span>
+          {isNew(row.orderId) && (
+            <span className="mt-1 inline-flex rounded-full bg-emerald-700 px-2 py-0.5 text-xs font-bold text-white">
+              {t('lateOrders.new', { defaultValue: 'New' })}
+            </span>
+          )}
+        </div>
+        <div role="cell" className="min-w-0">
+          <span className="block truncate text-lg font-semibold text-foreground 2xl:text-[1.375rem]">
+            {row.brandName || '-'}
+          </span>
+          <span className="block truncate text-sm text-muted-foreground 2xl:text-base">
+            {row.restaurantName || '-'}
+          </span>
+        </div>
+        <div role="cell" className="min-w-0 text-base text-foreground/80 2xl:text-lg">
+          {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
+        </div>
+        <div role="cell" className="min-w-0">
+          <span className="inline-flex items-center gap-2 text-base font-semibold text-foreground 2xl:text-lg">
+            <span
+              aria-hidden
+              className={cn('h-2.5 w-2.5 shrink-0 rounded-full', stateTone[state].dot)}
+            />
+            {stateTone[state].label}
+          </span>
+          {agentName && (
+            <span className="block truncate text-sm text-muted-foreground 2xl:text-base">
+              {t('lateOrders.board.byAgent', { name: agentName, defaultValue: 'by {{name}}' })}
+            </span>
+          )}
+        </div>
+        <div role="cell" className="flex flex-wrap items-center justify-end gap-1.5 2xl:gap-2">
+          <SelectMenu
+            value={kindOf(row)}
+            size="sm"
+            aria-label={t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}
+            onChange={(v) => pickKind(row.orderId, v)}
+            options={causeOptions}
+          />
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-haspopup="dialog"
+            onClick={() => setExpanded(row.orderId)}
+          >
+            {t('lateOrders.board.cart', { defaultValue: 'Cart' })}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => openDecision(row, 'commented', true)}
+          >
+            {state === 'pending'
+              ? t('lateOrders.comment', { defaultValue: 'Comment' })
+              : t('lateOrders.editComment', { defaultValue: 'Edit' })}
+          </Button>
+          {state === 'handled' ? null : !canRequestCoupon ? null : (
+            <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
+              {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
+            </Button>
+          )}
+        </div>
+      </li>
+    );
+  };
+
+  /* What the folded filter bar says is in force, so a narrowed board never
+     passes for the whole queue. */
+  const activeFilterCount =
+    (orderQuery.trim() ? 1 : 0) +
+    (brandQuery.trim() ? 1 : 0) +
+    (handlingFilter !== 'pending' ? 1 : 0) +
+    (statusFilter.size > 0 ? 1 : 0) +
+    (vendorFilter ? 1 : 0) +
+    (!showingToday && range ? 1 : 0);
+
+  /* One pager for both views - the board pages exactly like the table, so the
+     duration batch below never asks about more than one page of ids. */
+  const pager = (
+    <TablePager
+      page={current}
+      onPage={setPage}
+      pageSize={pageSize}
+      onPageSize={setPageSize}
+      total={rows.length}
+      pageSizes={LATE_ORDER_PAGE_SIZES}
+      labels={{
+        rowsPerPage: String(t('lateOrders.rowsPerPage', { defaultValue: 'Rows per page' })),
+        previous: String(t('actions.previous', { ns: 'common', defaultValue: 'Previous' })),
+        next: String(t('actions.next', { ns: 'common', defaultValue: 'Next' })),
+        showing: ({ from: f, to: tTo, total }) =>
+          String(
+            t('lateOrders.showingRange', {
+              defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
+              from: f,
+              to: tTo,
+              total,
+            }),
+          ),
+      }}
+    />
+  );
+
   return (
     /*
       THE SAME THREE-PART SHELL THE REPORT TABLES USE (owner, 2026-09-30: "make
@@ -1802,14 +1996,82 @@ export function LateOrdersPage() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* PINNED, outside the sideways scroll (owner, 2026-10-11): the Live
           button sat at the far right of a table wider than the screen. */}
+      {/*
+        THE BOARD'S HEADER STRIP (owner, 2026-10-22): what a glance from across
+        the room needs and nothing else - how many are late, how fresh the list
+        is, the wall clock, and whether it is live. The controls (filters, the
+        view, Live) sit at the far end, small.
+      */}
       <PageHeader
-        className="agent-page-header agent-gutter pt-4"
+        className="agent-page-header agent-gutter pt-4 sm:!items-center"
         title={t('lateOrders.title', { defaultValue: 'Late orders' })}
         subtitle={t('lateOrders.subtitle', {
           minutes: threshold,
           defaultValue: 'Delivery orders running longer than {{minutes}} minutes.',
         })}
-        actions={<LiveToggle live={liveMode} onChange={setLiveMode} />}
+        actions={
+          <div className="flex flex-wrap items-center justify-end gap-x-5 gap-y-3">
+            {/* The count - the one number the strip leads with. */}
+            {queue.data && (
+              <div className="flex items-baseline gap-2" role="status" aria-live="polite">
+                <span className="text-[2rem] font-bold leading-none tabular-nums text-foreground 2xl:text-[2.5rem]">
+                  {rows.length}
+                </span>
+                <span className="text-sm font-semibold text-muted-foreground 2xl:text-base">
+                  {showingToday
+                    ? t('lateOrders.board.lateNow', { defaultValue: 'late now' })
+                    : t('lateOrders.board.lateInRange', { defaultValue: 'late in this range' })}
+                </span>
+              </div>
+            )}
+            <div className="flex flex-col items-end leading-tight">
+              <BoardClock className="text-xl font-semibold text-foreground 2xl:text-2xl" />
+              {queue.dataUpdatedAt > 0 && (
+                <span className="text-xs text-muted-foreground 2xl:text-sm">
+                  {t('lateOrders.board.updated', {
+                    time: new Date(queue.dataUpdatedAt).toLocaleTimeString('en-GB', {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    }),
+                    defaultValue: 'Updated {{time}}',
+                  })}
+                </span>
+              )}
+            </div>
+            <span aria-hidden className="hidden h-8 w-px bg-foreground/10 sm:block" />
+            <button
+              type="button"
+              onClick={() => setFiltersOpen((v) => !v)}
+              aria-expanded={filtersOpen}
+              data-press=""
+              className={cn(
+                'inline-flex h-9 items-center gap-2 rounded-full px-4 text-sm font-semibold text-primary transition-colors duration-fast ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                filtersOpen ? 'bg-primary/[0.2]' : 'bg-primary/10 hover:bg-primary/[0.17]',
+              )}
+            >
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                className="h-4 w-4"
+                aria-hidden
+              >
+                <path d="M2.5 4h11M4.5 8h7M6.5 12h3" />
+              </svg>
+              {t('lateOrders.board.filters', { defaultValue: 'Filters' })}
+              {activeFilterCount > 0 && (
+                <span className="rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
+            <ViewSwitch value={view} onChange={setView} />
+            <LiveToggle live={liveMode} onChange={setLiveMode} />
+          </div>
+        }
       />
       {/*
         THE SCROLLPORT. `flex-1 overflow-auto`, and NO vertical padding: `sticky
@@ -1835,191 +2097,9 @@ export function LateOrdersPage() {
         Order id, then dates, then brand/branch — the owner's order (2026-09-21),
         which is also the order an agent narrows in: they usually have a number.
       */}
-          <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-end gap-2 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06] sm:p-4">
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('lateOrders.filter.order', { defaultValue: 'Order number' })}
-              </span>
-              <Input
-                value={orderQuery}
-                onChange={(e) => setOrderQuery(e.target.value)}
-                placeholder={t('lateOrders.filter.orderPlaceholder', {
-                  defaultValue: 'e.g. 1314302',
-                })}
-                inputMode="numeric"
-                className="w-40"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('lateOrders.filter.from', { defaultValue: 'From' })}
-              </span>
-              {/* `DateField`, not `<Input type="date">`: a native date input renders
-              in the BROWSER's locale, so an en-US machine showed mm/dd/yyyy on a
-              page every other date in this app writes as dd/mm/yyyy. DateField
-              takes and emits the same ISO `yyyy-mm-dd` string, so the state, the
-              `max` bound and the query are unchanged. */}
-              <DateField
-                value={draftFrom}
-                max={today}
-                onChange={(v) => setDraftFrom(v)}
-                className="w-40"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('lateOrders.filter.to', { defaultValue: 'To' })}
-              </span>
-              <DateField
-                value={draftTo}
-                max={today}
-                onChange={(v) => setDraftTo(v)}
-                className="w-40"
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                {t('lateOrders.filter.brand', { defaultValue: 'Brand or branch' })}
-              </span>
-              <Input
-                value={brandQuery}
-                onChange={(e) => setBrandQuery(e.target.value)}
-                placeholder={t('lateOrders.filter.brandPlaceholder', {
-                  defaultValue: 'e.g. Okashi, Narjis',
-                })}
-                className="w-52"
-              />
-            </label>
-            {/* Whose orders (MV-7) — only with 2+ active vendors. Applies at
-            once: it picks a different queue, not a wider date walk. */}
-            {vendorDir.show && (
-              <label className="flex flex-col gap-1">
-                <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-                  {t('lateOrders.filter.vendor', { defaultValue: 'Vendor' })}
-                </span>
-                <SelectMenu
-                  value={vendorFilter}
-                  size="sm"
-                  onChange={(v) => setVendorChoice(v)}
-                  aria-label={t('lateOrders.filter.vendor', { defaultValue: 'Vendor' })}
-                  options={[
-                    {
-                      value: '',
-                      label: t('lateOrders.filter.allVendors', { defaultValue: 'All vendors' }),
-                    },
-                    ...vendorDir.options.map((v) => ({ value: v.id, label: v.name })),
-                  ]}
-                />
-              </label>
-            )}
-            {/* Applied on click, not per keystroke: a range walks upstream pages,
-            so typing a date would fire a query per character. */}
-            {/*
-              BRAND FILL, NOT GREY (owner, 2026-10-05: "the search button being
-              gray is not very visible").
-
-              It was `secondary`, which is the same muted grey as the row of
-              filter labels it sits among — so the one control that actually
-              RUNS the query looked like another piece of chrome. This is the
-              page's primary action: nothing on screen changes until it is
-              pressed, because a date range deliberately does not query per
-              keystroke. It has to look like the thing to press.
-            */}
-            <Button
-              variant="brand"
-              disabled={!draftFrom || !draftTo || draftFrom > draftTo}
-              onClick={() => setRange({ from: draftFrom, to: draftTo })}
-            >
-              {t('lateOrders.filter.apply', { defaultValue: 'Search' })}
-            </Button>
-
-            {/*
-          THE HANDLING STATE — what WeCare has done, not what the order is.
-          Opens on Pending, because the queue exists to surface work nobody has
-          done yet (owner, 2026-09-29).
-        */}
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              {t('lateOrders.filter.handling', { defaultValue: 'Status' })}
-              <SelectMenu
-                value={handlingFilter}
-                size="sm"
-                onChange={(v) => setHandlingFilter(v as LateOrderState | 'all')}
-                aria-label={t('lateOrders.filter.handling', { defaultValue: 'Status' })}
-                options={[
-                  {
-                    value: 'pending',
-                    label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
-                    dot: 'oklch(var(--warning))',
-                  },
-                  {
-                    value: 'commented',
-                    label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
-                    dot: 'oklch(var(--sky))',
-                  },
-                  {
-                    value: 'handled',
-                    label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
-                    dot: 'oklch(var(--success))',
-                  },
-                  {
-                    value: 'all',
-                    label: t('lateOrders.filter.allStates', { defaultValue: 'All' }),
-                  },
-                ]}
-              />
-            </label>
-
-            {/*
-          THE ORDER'S OWN STATUS — a different question, and several can be
-          watched at once. Offered from the statuses actually PRESENT in the
-          window, so every option returns rows.
-        */}
-            <MultiSelectMenu
-              selected={statusFilter}
-              onChange={setStatusFilter}
-              label={t('lateOrders.filter.orderStatus', { defaultValue: 'Order status' })}
-              allLabel={t('lateOrders.filter.allStatuses', { defaultValue: 'All statuses' })}
-              options={presentStatuses.map((v) => ({
-                value: v,
-                label: t(`commerce.orderStatuses.${v}`, { defaultValue: v }),
-              }))}
-            />
-
-            {/* Back to the default view: today, pending, nothing typed. */}
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setRange(null);
-                setDraftFrom(isoDaysAgo(0));
-                setDraftTo(isoDaysAgo(0));
-                setOrderQuery('');
-                setBrandQuery('');
-                setHandlingFilter('pending');
-                setStatusFilter(new Set());
-                setVendorChoice('');
-              }}
-            >
-              {t('lateOrders.filter.reset', { defaultValue: 'Reset' })}
-            </Button>
-
-            {/* Which columns, and in what order — the tickets breakdown's
-            picker (owner, 2026-10-11). A view preference, so Reset above
-            leaves it alone. */}
-            <LateOrderColumnsPicker
-              order={columnOrder}
-              hidden={hiddenColumns}
-              onOrder={setColumnOrder}
-              onHidden={setHiddenColumns}
-              labelOf={(k) =>
-                t(LATE_ORDER_COLUMN_LABELS[k].key, {
-                  defaultValue: LATE_ORDER_COLUMN_LABELS[k].def,
-                })
-              }
-            />
-
-            {/* Names the business day, because "today" is not the calendar date
-            here: trading runs 08:00 to 04:00, so at 01:00 the answer is still
-            yesterday's date and an agent has to see which day they are on. */}
+          {/* WHICH WINDOW THIS IS - always in view, folded or not, so a board
+              never passes for something it is not. */}
+          <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-2">
             {showingToday && (
               <Pill tone="success" size="sm">
                 {t('lateOrders.filter.todayNote', {
@@ -2037,7 +2117,203 @@ export function LateOrdersPage() {
                 })}
               </Pill>
             )}
+            {!filtersOpen && activeFilterCount > 0 && (
+              <span className="text-xs font-medium text-muted-foreground">
+                {t('lateOrders.board.filtersOn', {
+                  count: activeFilterCount,
+                  defaultValue: '{{count}} filters applied',
+                })}
+              </span>
+            )}
           </div>
+          {filtersOpen && (
+            <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-end gap-x-3 gap-y-3 rounded-[1.375rem] bg-card/85 px-4 py-3.5 shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_10px_24px_-22px_oklch(var(--shadow-color)/0.45)] sm:px-5">
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-foreground/70">
+                  {t('lateOrders.filter.order', { defaultValue: 'Order number' })}
+                </span>
+                <Input
+                  value={orderQuery}
+                  onChange={(e) => setOrderQuery(e.target.value)}
+                  placeholder={t('lateOrders.filter.orderPlaceholder', {
+                    defaultValue: 'e.g. 1314302',
+                  })}
+                  inputMode="numeric"
+                  className="w-40"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-foreground/70">
+                  {t('lateOrders.filter.from', { defaultValue: 'From' })}
+                </span>
+                {/* `DateField`, not `<Input type="date">`: a native date input renders
+              in the BROWSER's locale, so an en-US machine showed mm/dd/yyyy on a
+              page every other date in this app writes as dd/mm/yyyy. DateField
+              takes and emits the same ISO `yyyy-mm-dd` string, so the state, the
+              `max` bound and the query are unchanged. */}
+                <DateField
+                  value={draftFrom}
+                  max={today}
+                  onChange={(v) => setDraftFrom(v)}
+                  className="w-40"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-foreground/70">
+                  {t('lateOrders.filter.to', { defaultValue: 'To' })}
+                </span>
+                <DateField
+                  value={draftTo}
+                  max={today}
+                  onChange={(v) => setDraftTo(v)}
+                  className="w-40"
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className="text-xs font-semibold text-foreground/70">
+                  {t('lateOrders.filter.brand', { defaultValue: 'Brand or branch' })}
+                </span>
+                <Input
+                  value={brandQuery}
+                  onChange={(e) => setBrandQuery(e.target.value)}
+                  placeholder={t('lateOrders.filter.brandPlaceholder', {
+                    defaultValue: 'e.g. Okashi, Narjis',
+                  })}
+                  className="w-52"
+                />
+              </label>
+              {/* Whose orders (MV-7) — only with 2+ active vendors. Applies at
+            once: it picks a different queue, not a wider date walk. */}
+              {vendorDir.show && (
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-semibold text-foreground/70">
+                    {t('lateOrders.filter.vendor', { defaultValue: 'Vendor' })}
+                  </span>
+                  <SelectMenu
+                    value={vendorFilter}
+                    size="sm"
+                    onChange={(v) => setVendorChoice(v)}
+                    aria-label={t('lateOrders.filter.vendor', { defaultValue: 'Vendor' })}
+                    options={[
+                      {
+                        value: '',
+                        label: t('lateOrders.filter.allVendors', { defaultValue: 'All vendors' }),
+                      },
+                      ...vendorDir.options.map((v) => ({ value: v.id, label: v.name })),
+                    ]}
+                  />
+                </label>
+              )}
+              {/* Applied on click, not per keystroke: a range walks upstream pages,
+            so typing a date would fire a query per character. */}
+              {/*
+              BRAND FILL, NOT GREY (owner, 2026-10-05: "the search button being
+              gray is not very visible").
+
+              It was `secondary`, which is the same muted grey as the row of
+              filter labels it sits among — so the one control that actually
+              RUNS the query looked like another piece of chrome. This is the
+              page's primary action: nothing on screen changes until it is
+              pressed, because a date range deliberately does not query per
+              keystroke. It has to look like the thing to press.
+            */}
+              <Button
+                variant="brand"
+                disabled={!draftFrom || !draftTo || draftFrom > draftTo}
+                onClick={() => setRange({ from: draftFrom, to: draftTo })}
+              >
+                {t('lateOrders.filter.apply', { defaultValue: 'Search' })}
+              </Button>
+
+              {/*
+          THE HANDLING STATE — what WeCare has done, not what the order is.
+          Opens on Pending, because the queue exists to surface work nobody has
+          done yet (owner, 2026-09-29).
+        */}
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                {t('lateOrders.filter.handling', { defaultValue: 'Status' })}
+                <SelectMenu
+                  value={handlingFilter}
+                  size="sm"
+                  onChange={(v) => setHandlingFilter(v as LateOrderState | 'all')}
+                  aria-label={t('lateOrders.filter.handling', { defaultValue: 'Status' })}
+                  options={[
+                    {
+                      value: 'pending',
+                      label: t('lateOrders.state.pending', { defaultValue: 'Pending' }),
+                      dot: 'oklch(var(--warning))',
+                    },
+                    {
+                      value: 'commented',
+                      label: t('lateOrders.state.commented', { defaultValue: 'Commented' }),
+                      dot: 'oklch(var(--sky))',
+                    },
+                    {
+                      value: 'handled',
+                      label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
+                      dot: 'oklch(var(--success))',
+                    },
+                    {
+                      value: 'all',
+                      label: t('lateOrders.filter.allStates', { defaultValue: 'All' }),
+                    },
+                  ]}
+                />
+              </label>
+
+              {/*
+          THE ORDER'S OWN STATUS — a different question, and several can be
+          watched at once. Offered from the statuses actually PRESENT in the
+          window, so every option returns rows.
+        */}
+              <MultiSelectMenu
+                selected={statusFilter}
+                onChange={setStatusFilter}
+                label={t('lateOrders.filter.orderStatus', { defaultValue: 'Order status' })}
+                allLabel={t('lateOrders.filter.allStatuses', { defaultValue: 'All statuses' })}
+                options={presentStatuses.map((v) => ({
+                  value: v,
+                  label: t(`commerce.orderStatuses.${v}`, { defaultValue: v }),
+                }))}
+              />
+
+              {/* Back to the default view: today, pending, nothing typed. */}
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setRange(null);
+                  setDraftFrom(isoDaysAgo(0));
+                  setDraftTo(isoDaysAgo(0));
+                  setOrderQuery('');
+                  setBrandQuery('');
+                  setHandlingFilter('pending');
+                  setStatusFilter(new Set());
+                  setVendorChoice('');
+                }}
+              >
+                {t('lateOrders.filter.reset', { defaultValue: 'Reset' })}
+              </Button>
+
+              {/* Which columns, and in what order — the tickets breakdown's
+            picker (owner, 2026-10-11). A view preference, so Reset above
+            leaves it alone. */}
+              <LateOrderColumnsPicker
+                order={columnOrder}
+                hidden={hiddenColumns}
+                onOrder={setColumnOrder}
+                onHidden={setHiddenColumns}
+                labelOf={(k) =>
+                  t(LATE_ORDER_COLUMN_LABELS[k].key, {
+                    defaultValue: LATE_ORDER_COLUMN_LABELS[k].def,
+                  })
+                }
+              />
+
+              {/* The business-day / history note moved ABOVE this bar (it names
+            the window, which a folded bar must still say): trading runs 08:00
+            to 04:00, so at 01:00 "today" is still yesterday's date. */}
+            </div>
+          )}
 
           {/* A refresh failed but the last good table is still here: keep it
               on screen and say so quietly (owner, 2026-10-11, the TV). */}
@@ -2086,6 +2362,49 @@ export function LateOrdersPage() {
                   'No delivery order has passed {{minutes}} minutes. This updates itself.',
               })}
             />
+          ) : view === 'board' ? (
+            /*
+              THE BOARD: one card, one hairline between rows, no box inside a
+              box. Pinned to the viewport's width (`--pin-w`), because unlike
+              the table it never needs to scroll sideways.
+            */
+            <section
+              role="table"
+              aria-label={t('lateOrders.title', { defaultValue: 'Late orders' })}
+              aria-rowcount={rows.length}
+              className="sticky start-0 w-[var(--pin-w,100%)] overflow-hidden rounded-[1.625rem] bg-card shadow-[var(--agent-card-shadow)]"
+            >
+              <div role="rowgroup">
+                <div
+                  role="row"
+                  className={cn(
+                    boardCols,
+                    'h-12 border-b border-foreground/[0.07] px-6 text-xs font-semibold text-muted-foreground 2xl:h-14 2xl:px-8 2xl:text-sm',
+                  )}
+                >
+                  <span role="columnheader">
+                    {t('lateOrders.board.colRunning', { defaultValue: 'Running for' })}
+                  </span>
+                  <span role="columnheader">
+                    {t('lateOrders.col.order', { defaultValue: 'Order' })}
+                  </span>
+                  <span role="columnheader">
+                    {t('lateOrders.board.colBranch', { defaultValue: 'Brand / branch' })}
+                  </span>
+                  <span role="columnheader">
+                    {t('lateOrders.col.status', { defaultValue: 'Order status' })}
+                  </span>
+                  <span role="columnheader">
+                    {t('lateOrders.board.colHandling', { defaultValue: 'Handling' })}
+                  </span>
+                  <span role="columnheader" className="text-end">
+                    {t('lateOrders.col.actions', { defaultValue: 'Decision' })}
+                  </span>
+                </div>
+              </div>
+              <ol role="rowgroup">{paged.map(boardRow)}</ol>
+              <div className="border-t border-foreground/[0.07] px-6 py-2.5 2xl:px-8">{pager}</div>
+            </section>
           ) : (
             /*
           `TableSurface flow`, not a `Card` with its own scroll.
@@ -2177,32 +2496,7 @@ export function LateOrdersPage() {
               </TableSurface>
               {/* Outside the surface, like the report tables: it belongs to the table
             rather than scrolling away inside it. */}
-              <TablePager
-                page={current}
-                onPage={setPage}
-                pageSize={pageSize}
-                onPageSize={setPageSize}
-                total={rows.length}
-                pageSizes={LATE_ORDER_PAGE_SIZES}
-                labels={{
-                  rowsPerPage: String(
-                    t('lateOrders.rowsPerPage', { defaultValue: 'Rows per page' }),
-                  ),
-                  previous: String(
-                    t('actions.previous', { ns: 'common', defaultValue: 'Previous' }),
-                  ),
-                  next: String(t('actions.next', { ns: 'common', defaultValue: 'Next' })),
-                  showing: ({ from: f, to: tTo, total }) =>
-                    String(
-                      t('lateOrders.showingRange', {
-                        defaultValue: 'Showing {{from}}-{{to}} of {{total}}',
-                        from: f,
-                        to: tTo,
-                        total,
-                      }),
-                    ),
-                }}
-              />
+              {pager}
             </>
           )}
 

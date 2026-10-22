@@ -1086,8 +1086,10 @@ body::after {
   padding-inline: 0.875rem;
   border-radius: 9999px;
 }
-/* Hand-built text buttons opted in with `data-text-action` get the shape too. */
-:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-text-action] {
+/* Hand-built text buttons opted in with `data-text-action` get the shape too.
+   Zero specificity (`:where`), so a layout utility on the element itself -
+   `lg:hidden`, its own padding - still wins over the default shape. */
+:where(.agent-skin, [data-modal-panel], [data-drawer-panel]) :where([data-text-action]) {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -1164,7 +1166,9 @@ body::after {
 :is(.agent-skin, [data-modal-panel], [data-drawer-panel])
   :is([data-variant='ghost'], [data-variant='link'], [data-pager-edge]):disabled:hover {
   border-color: transparent;
-  background-color: transparent;
+  /* Flat grey, not nothing: a dead secondary keeps its pill so a row of
+     actions keeps its shape (owner: "flat grey = disabled"). */
+  background-color: oklch(var(--foreground) / 0.06);
   text-decoration: none;
 }
 :is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='default']:disabled:hover {
@@ -1244,6 +1248,23 @@ body::after {
     inset 0 0 0 2px oklch(var(--note)),
     0 14px 32px -22px oklch(var(--note) / 0.8);
 }
+/* The composer toolbar is one row (owner, 2026-10-22). Where the pane is too
+   narrow for every label, AI assistance shows its short name instead of
+   breaking the row; the button's accessible name is the full one either way. */
+[data-composer-toolbar] {
+  container: composer-toolbar / inline-size;
+}
+[data-composer-toolbar] [data-label-short] {
+  display: none;
+}
+@container composer-toolbar (max-width: 44rem) {
+  [data-composer-toolbar] [data-label-long] {
+    display: none;
+  }
+  [data-composer-toolbar] [data-label-short] {
+    display: inline;
+  }
+}
 /* The details panel's two counters are small wells, not headline tiles. */
 .agent-skin main [data-convo-sidebar] [data-stat-card] {
   min-height: 0;
@@ -1267,8 +1288,305 @@ body::after {
   content: none;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * PANELS, FORMS AND FLOATING SURFACES (owner, 2026-10-22: "all and each
+ * component to be transformed")
+ *
+ * The shared Drawer / Modal / ConfirmDialog / menus / toasts carry data hooks
+ * (no styling of their own); this is where the agent portal dresses them, so
+ * the admin console - which never loads this file - cannot move.
+ *
+ *   panel    frosted card at the 26px corner, one long soft drop
+ *   header   title + subtitle on a hairline, a ROUND close at the end
+ *   body     a quiet well; each section a soft white card
+ *   footer   a hairline, then the actions: solid ink primary, soft secondary
+ *   fields   label above (words, not capitals), helper / error below
+ * ═════════════════════════════════════════════════════════════════════════ */
+[data-drawer-panel].bg-card,
+[data-modal-panel].bg-card {
+  background-color: oklch(var(--card) / 0.94);
+  backdrop-filter: blur(24px) saturate(1.3);
+  -webkit-backdrop-filter: blur(24px) saturate(1.3);
+}
+[data-drawer-panel],
+[data-modal-panel],
+[data-confirm-panel],
+[data-palette-panel][data-palette-panel] {
+  --tw-ring-color: transparent;
+}
+
+/* Header */
+:is([data-drawer-panel], [data-modal-panel]) > [data-panel-header],
+[data-modal-panel] [data-panel-header] {
+  padding: 1.625rem 4.5rem 1.25rem 1.75rem;
+  box-shadow: inset 0 -1px 0 var(--agent-row-line);
+}
+[dir='rtl'] :is([data-drawer-panel], [data-modal-panel]) [data-panel-header] {
+  padding: 1.625rem 1.75rem 1.25rem 4.5rem;
+}
+[data-panel-header][data-panel-header] h2 {
+  font-size: 1.375rem;
+  line-height: 1.2;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+[dir='rtl'] [data-panel-header][data-panel-header] h2 {
+  letter-spacing: 0;
+}
+[data-panel-header] h2 + p {
+  margin-top: 0.375rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: oklch(var(--muted-foreground));
+  text-wrap: pretty;
+}
+
+/* The round close, in the header's top-end corner. */
+[data-panel-close][data-panel-close] {
+  top: 1.375rem;
+  inset-inline-end: 1.375rem;
+  height: 2.25rem;
+  width: 2.25rem;
+  border-radius: 9999px;
+  color: oklch(var(--foreground) / 0.72);
+  background-color: oklch(var(--foreground) / 0.06);
+}
+[data-panel-close][data-panel-close]:hover {
+  color: oklch(var(--foreground));
+  background-color: oklch(var(--foreground) / 0.1);
+}
+[data-panel-close]:focus-visible {
+  outline: 2px solid oklch(var(--ring) / 0.6);
+  outline-offset: 2px;
+}
+
+/* Body: a quiet well the section cards sit on. */
+[data-drawer-panel] > [data-panel-body][data-panel-body] {
+  padding: 1.25rem 1.75rem 1.5rem;
+  background-color: oklch(var(--foreground) / 0.022);
+}
+[data-modal-panel] [data-panel-body][data-panel-body] {
+  padding-top: 1.25rem;
+}
+
+/* Sections as soft cards (DrawerSection, anywhere it renders). Scoped twice
+   so it outranks the primitive's own `first:pt-0`. */
+:is(.agent-skin, [data-drawer-panel], [data-modal-panel])
+  [data-drawer-section][data-drawer-section] {
+  padding: 1.125rem 1.25rem 1.25rem;
+  border-radius: 1.25rem;
+  background-color: oklch(var(--glass) / 0.82);
+  box-shadow:
+    inset 0 0 0 1px oklch(var(--foreground) / 0.06),
+    0 10px 24px -22px oklch(var(--shadow-color) / 0.45);
+}
+[data-drawer-section] > div:first-child > h3 {
+  font-size: 0.9375rem;
+  font-weight: 650;
+  line-height: 1.3;
+  color: oklch(var(--foreground));
+}
+[data-drawer-section] > div:first-child > p {
+  font-size: 0.8125rem;
+  color: oklch(var(--muted-foreground));
+}
+
+/* Footer: one hairline, then the actions. Always visible (outside the body
+   scroller), so it IS the sticky footer. */
+:is([data-drawer-panel], [data-modal-panel]) [data-panel-footer][data-panel-footer] {
+  padding: 1rem 1.75rem;
+  gap: 0.625rem;
+  box-shadow: inset 0 1px 0 var(--agent-row-line);
+  background-color: oklch(var(--card) / 0.9);
+}
+:is([data-drawer-panel], [data-modal-panel]) [data-panel-footer] [data-variant] {
+  min-height: 2.75rem;
+  padding-inline: 1.375rem;
+  font-weight: 600;
+}
+
+/* ── Fields: labels above as words, helper / error under ────────────────── */
+[data-field-label][data-field-label] {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: oklch(var(--foreground) / 0.78);
+}
+[data-form-field] > [data-field-label] + * {
+  margin-top: 0.125rem;
+}
+[data-form-field] > span:last-child:not([data-field-label]) {
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+/* The portal's own `.input` (hand-built fields) takes the shared field's
+   shape: a near-white pill well on a hairline, lit by focus. */
+.input {
+  min-height: 2.5rem;
+  border-radius: 1rem;
+  border-color: transparent;
+  background-color: oklch(var(--input));
+  box-shadow: inset 0 0 0 1px oklch(var(--foreground) / 0.08);
+  padding-inline: 0.875rem;
+  transition: box-shadow 150ms var(--ease-out, ease-out);
+}
+.input:hover {
+  box-shadow: inset 0 0 0 1px oklch(var(--foreground) / 0.14);
+}
+.input:focus,
+.input:focus-visible {
+  border-color: transparent;
+  box-shadow:
+    inset 0 0 0 2px oklch(var(--primary) / 0.4),
+    0 0 0 4px oklch(var(--primary) / 0.08);
+  border-radius: 1rem;
+}
+textarea.input {
+  padding-block: 0.625rem;
+  line-height: 1.6;
+}
+
+/* Native checkboxes and radios in the brand ink, a size you can hit. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel], [data-confirm-panel])
+  input:is([type='checkbox'], [type='radio']) {
+  accent-color: oklch(var(--primary));
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel], [data-confirm-panel])
+  input:is([type='checkbox'], [type='radio']):disabled {
+  cursor: not-allowed;
+}
+
+/* ── Confirm dialogs ──────────────────────────────────────────────────────── */
+[data-confirm-panel][data-confirm-panel] {
+  max-width: 26rem;
+  padding: 1.75rem;
+  border-radius: 1.625rem;
+  background-color: oklch(var(--card));
+  box-shadow:
+    var(--agent-shadow-float),
+    0 40px 80px -40px oklch(var(--shadow-color) / 0.55);
+  animation-duration: 200ms;
+}
+[data-confirm-panel][data-confirm-panel] h3 {
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.015em;
+}
+[data-confirm-panel] h3 + p {
+  font-size: 0.875rem;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+[data-confirm-panel] [data-variant] {
+  min-height: 2.75rem;
+  padding-inline: 1.375rem;
+  font-weight: 600;
+}
+[data-confirm-panel] [data-variant='ghost']:not(:disabled) {
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
+}
+[data-confirm-panel] [data-variant='ghost']:not(:disabled):hover {
+  background-color: oklch(var(--primary) / 0.17);
+}
+
+/* ── Menus, pickers, the command palette ───────────────────────────────────
+   Floating surfaces: a solid white card at a smaller corner, the long soft
+   drop instead of a hard ring. Options are rounded rows with a brand wash. */
+[data-menu-panel][data-menu-panel] {
+  border-radius: 1.125rem;
+  padding: 0.375rem;
+  background-color: oklch(var(--popover));
+  backdrop-filter: none;
+  --tw-ring-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px oklch(var(--foreground) / 0.06),
+    0 2px 6px oklch(var(--shadow-color) / 0.06),
+    0 24px 48px -24px oklch(var(--shadow-color) / 0.42);
+}
+[data-menu-panel] li > button,
+[data-menu-panel] > button {
+  min-height: 2.25rem;
+  border-radius: 0.75rem;
+}
+[data-menu-panel] li > button.bg-secondary {
+  background-color: oklch(var(--primary) / 0.08);
+}
+[data-menu-panel] li > input {
+  height: 2.25rem;
+  border-radius: 0.75rem;
+}
+[data-palette-panel][data-palette-panel] {
+  border-radius: 1.625rem;
+  background-color: oklch(var(--popover) / 0.96);
+  box-shadow:
+    var(--agent-shadow-float),
+    0 40px 80px -40px oklch(var(--shadow-color) / 0.55);
+}
+[data-palette-panel][data-palette-panel] input {
+  height: 3.5rem;
+  font-size: 0.9375rem;
+}
+/* Group headings in the palette and the emoji picker read as words. */
+:is([data-palette-panel], [data-menu-panel], [data-confirm-panel]) .uppercase[class*='tracking-'] {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 0.75rem;
+}
+
+/* ── Toasts: a floating card; the tone lives in the round icon ─────────────
+   The start-edge colour bar was a side-stripe accent, which the design bans;
+   the tone already reads from the icon chip beside the title. */
+[data-toast][data-toast] {
+  border-radius: 1.25rem;
+  background-color: oklch(var(--card) / 0.97);
+  --tw-ring-color: transparent;
+  box-shadow:
+    inset 0 0 0 1px oklch(var(--foreground) / 0.06),
+    var(--agent-shadow-float);
+  padding-block: 0.875rem;
+}
+[data-toast] > span.absolute[aria-hidden] {
+  display: none;
+}
+[data-toast] p:first-of-type {
+  font-weight: 600;
+}
+
+/* ── Empty / error states: the type of the page, not a display face ─────── */
+[data-empty-state][data-empty-state] h3 {
+  font-size: 1.0625rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+[data-empty-state][data-empty-state] > div:first-child {
+  border-radius: 9999px;
+}
+
+/* ── New-version strip: floats like the rest ─────────────────────────────── */
+[data-version-banner][data-version-banner] {
+  padding: 0.5rem 0.5rem 0.5rem 1.125rem;
+  box-shadow: var(--agent-shadow-float);
+  --tw-ring-color: transparent;
+}
+[data-version-banner][data-version-banner] > button {
+  min-height: 2rem;
+  padding-inline: 0.875rem;
+}
+
 /* ── Reduced motion: none of the above moves ─────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
+  [data-confirm-panel],
+  [data-palette-panel],
+  [data-menu-panel],
+  [data-toast] {
+    animation: none !important;
+  }
   .agent-skin main :is(*:not(.animate-spin)),
   [data-modal-panel],
   [data-drawer-panel],

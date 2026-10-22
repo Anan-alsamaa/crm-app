@@ -124,6 +124,7 @@ export function Drawer({
             type="button"
             onClick={onClose}
             aria-label="Close"
+            data-panel-close=""
             className="absolute end-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground active:scale-[0.94]"
           >
             <svg
@@ -142,7 +143,7 @@ export function Drawer({
 
         {/* Header — borderless, generous spacing */}
         {!hideChrome && (
-          <div className="shrink-0 px-8 pt-10 pb-6">
+          <div data-panel-header="" className="shrink-0 px-8 pt-10 pb-6">
             <div className="min-w-0">
               {typeof title === 'string' ? (
                 <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">
@@ -162,6 +163,7 @@ export function Drawer({
 
         {/* Body — scrollable. A themed panel owns its own padding. */}
         <div
+          data-panel-body={hideChrome ? undefined : ''}
           className={cn('flex-1 overflow-y-auto', hideChrome ? 'min-h-0' : 'space-y-6 px-8 py-2')}
         >
           {children}
@@ -183,6 +185,7 @@ export function Drawer({
              * to a second line instead of overflowing, which is what a column
              * was presumably guarding against.
              */
+            data-panel-footer={hideChrome ? undefined : ''}
             className={cn(
               'flex shrink-0 flex-row flex-wrap',
               hideChrome ? '' : 'items-center justify-end gap-2 px-8 py-5',

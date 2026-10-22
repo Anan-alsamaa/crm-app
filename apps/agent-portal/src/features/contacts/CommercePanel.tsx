@@ -39,13 +39,13 @@ export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
   });
 
   if (!yijiVendorId || !externalCustomerId) {
-    // Composed quiet state — a dashed panel with an icon chip, so "no data"
+    // Composed quiet state — a soft panel with an icon chip, so "no data"
     // reads as a deliberate state of the board rather than a stray sentence.
     return (
-      <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-foreground/[0.08] bg-card/40 px-5 py-8 text-center">
+      <div className="flex flex-col items-center gap-3 rounded-[1.625rem] bg-card/60 px-5 py-8 text-center ring-1 ring-foreground/[0.04]">
         <span
           aria-hidden
-          className="grid h-9 w-9 place-items-center rounded-lg bg-secondary text-muted-foreground"
+          className="grid h-10 w-10 place-items-center rounded-full bg-primary-tint text-primary"
         >
           <StoreIcon size={18} />
         </span>
@@ -61,8 +61,8 @@ export function CommercePanel({ yijiVendorId, externalCustomerId }: Props) {
   return (
     <div className="space-y-4">
       {/* Activity summary */}
-      <div className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-4">
-        <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+      <div className="rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft px-5 py-5">
+        <h3 className="text-sm font-semibold text-foreground/80">
           {t('commerce.activity', { defaultValue: 'Lifetime activity' })}
         </h3>
         {activity.isLoading ? (
@@ -97,7 +97,7 @@ function ActivitySummary({ data }: { data: YijiPurchaseActivity }) {
           {t('commerce.ltv', { defaultValue: 'lifetime value' })}
         </span>
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-2xs text-muted-foreground tabular-nums">
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground tabular-nums">
         <span>
           <strong className="font-medium text-foreground">{data.orderCount}</strong>{' '}
           {t('commerce.orders', { defaultValue: 'orders' })}

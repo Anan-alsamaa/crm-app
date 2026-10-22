@@ -63,15 +63,15 @@ export function Lightbox({
       aria-modal="true"
       aria-label={filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
       onClick={onClose}
-      className="fixed inset-0 z-[80] flex flex-col bg-foreground/80 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-[80] flex flex-col bg-[oklch(0.16_0.025_277/0.86)] backdrop-blur-md animate-fade-in"
     >
       {/* Top bar: name + size, actions */}
-      <div className="flex items-center gap-3 px-4 py-3 text-background">
+      <div className="m-3 flex items-center gap-3 rounded-full bg-white/[0.08] py-1.5 pe-1.5 ps-5 text-white ring-1 ring-inset ring-white/10">
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">
+          <p className="truncate text-sm font-semibold">
             {filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
           </p>
-          {size && <p className="text-2xs text-background/60 tabular-nums">{size}</p>}
+          {size && <p className="text-xs tabular-nums text-white/70">{size}</p>}
         </div>
         {onDownload && (
           <button
@@ -81,7 +81,7 @@ export function Lightbox({
               onDownload();
             }}
             aria-label={t('conversation.download', { defaultValue: 'Download' })}
-            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-background/15 px-3.5 text-sm font-medium text-background transition-colors duration-fast ease-out hover:bg-background/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/50"
+            className="inline-flex h-10 items-center gap-1.5 rounded-full bg-white px-4 text-sm font-semibold text-[oklch(0.21_0.03_277)] transition-colors duration-fast ease-out hover:bg-white/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
           >
             <DownloadIcon />
             {t('conversation.download', { defaultValue: 'Download' })}
@@ -94,7 +94,7 @@ export function Lightbox({
             onClose();
           }}
           aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-background/15 text-background transition-colors duration-fast ease-out hover:bg-background/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-background/50"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.14] text-white transition-colors duration-fast ease-out hover:bg-white/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
         >
           <CloseIcon />
         </button>
@@ -108,7 +108,7 @@ export function Lightbox({
           alt={filename ?? ''}
           onClick={stop}
           className={cn(
-            'max-h-full max-w-full rounded-lg object-contain shadow-2xl shadow-foreground/40',
+            'max-h-full max-w-full rounded-[1.25rem] object-contain shadow-2xl shadow-black/50',
             'motion-safe:animate-scale-in',
           )}
         />

@@ -202,6 +202,8 @@ function ToastCard({ toast: t, onDismiss }: { toast: ToastRecord; onDismiss: () 
     <div
       role="status"
       aria-labelledby={labelId}
+      /* Hooks for a portal's own stylesheet; they carry no styling. */
+      data-toast={tone}
       className={cn(
         'pointer-events-auto relative flex w-full max-w-sm items-start gap-3 overflow-hidden rounded-2xl bg-card/90 backdrop-blur-md py-3.5 ps-4 pe-3.5 shadow-xl shadow-black/30 ring-1 ring-border animate-slide-up-and-fade',
         toneStyles[tone],

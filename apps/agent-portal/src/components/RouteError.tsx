@@ -11,7 +11,7 @@ export function RouteError({ onRetry }: { onRetry: () => void }) {
     >
       <div
         aria-hidden
-        className="grid h-14 w-14 place-items-center rounded-2xl bg-destructive/10 text-destructive"
+        className="grid h-14 w-14 place-items-center rounded-full bg-destructive/10 text-destructive"
       >
         <svg
           viewBox="0 0 24 24"

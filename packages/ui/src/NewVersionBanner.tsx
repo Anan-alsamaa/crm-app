@@ -74,6 +74,7 @@ export function NewVersionBanner({
   return (
     <div
       role="status"
+      data-version-banner=""
       className={cn(
         'fixed inset-x-0 bottom-4 z-50 mx-auto flex w-fit items-center gap-3 rounded-full',
         'bg-ink px-4 py-2.5 text-sm text-ink-foreground shadow-lg ring-1 ring-ink-foreground/15',

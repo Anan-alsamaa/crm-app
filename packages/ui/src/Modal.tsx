@@ -132,6 +132,7 @@ export function Modal({
               type="button"
               onClick={onClose}
               aria-label="Close"
+              data-panel-close=""
               className="absolute end-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground active:scale-[0.94]"
             >
               <svg
@@ -150,7 +151,7 @@ export function Modal({
 
           {/* Header — borderless, like the drawer's. */}
           {!hideChrome && (
-            <div className="shrink-0 px-8 pt-8 pb-4 pe-14">
+            <div data-panel-header="" className="shrink-0 px-8 pt-8 pb-4 pe-14">
               {typeof title === 'string' ? (
                 <h2 className="font-display text-xl font-bold tracking-tight text-foreground">
                   {title}
@@ -166,7 +167,10 @@ export function Modal({
             </div>
           )}
 
-          <div className={cn('min-h-0 flex-1 overflow-y-auto', hideChrome ? '' : 'px-8 pb-8 pt-2')}>
+          <div
+            data-panel-body={hideChrome ? undefined : ''}
+            className={cn('min-h-0 flex-1 overflow-y-auto', hideChrome ? '' : 'px-8 pb-8 pt-2')}
+          >
             {children}
           </div>
 
@@ -175,7 +179,10 @@ export function Modal({
            * rule above it — the spacing separates it.
            */}
           {footer && (
-            <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-8 pb-8 pt-2">
+            <div
+              data-panel-footer=""
+              className="flex shrink-0 flex-wrap items-center justify-end gap-2 px-8 pb-8 pt-2"
+            >
               {footer}
             </div>
           )}

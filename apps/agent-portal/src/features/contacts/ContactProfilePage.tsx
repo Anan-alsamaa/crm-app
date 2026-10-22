@@ -159,13 +159,15 @@ export function ContactProfilePage() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Toolbar>
-        <Link
-          to="/contacts"
-          className="text-2xs text-muted-foreground hover:text-foreground transition-colors duration-fast ease-out"
-        >
+        <Link to="/contacts" data-text-action="" className="text-xs font-semibold">
           {t('contacts.allContacts', { defaultValue: 'Contacts' })}
         </Link>
-        <span className="opacity-30 text-xs text-muted-foreground">›</span>
+        <span
+          aria-hidden
+          className="inline-block text-sm text-muted-foreground/60 rtl:-scale-x-100"
+        >
+          ›
+        </span>
         <h1 className="text-sm font-semibold tracking-tight text-foreground truncate">
           {contact.isLoading ? <Skeleton className="h-3 w-32 inline-block" /> : fullName}
         </h1>
@@ -173,7 +175,8 @@ export function ContactProfilePage() {
         <button
           type="button"
           onClick={() => navigate(-1)}
-          className="text-xs text-muted-foreground hover:text-foreground transition-colors duration-fast ease-out"
+          data-text-action=""
+          className="h-9 text-xs font-semibold"
         >
           {t('actions.close', { ns: 'common', defaultValue: 'Close' })}
         </button>
@@ -199,7 +202,7 @@ export function ContactProfilePage() {
               <CustomFieldsSection entityType="contact" entityId={contact.data.id} />
             )}
             <div className="space-y-3">
-              <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              <h2 className="px-1 text-md font-semibold text-foreground">
                 {t('commerce.title', { defaultValue: 'Commerce' })}
               </h2>
               <CommercePanel
@@ -233,7 +236,7 @@ export function ContactProfilePage() {
             {editing ? (
               <div className="space-y-3">
                 <label className="block text-xs">
-                  <span className="mb-1 block text-muted-foreground">
+                  <span className="mb-1.5 block text-[0.8125rem] font-semibold text-foreground/80">
                     {t('contacts.name', { defaultValue: 'Name' })}
                   </span>
                   <Input
@@ -245,7 +248,7 @@ export function ContactProfilePage() {
                 </label>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <label className="block text-xs">
-                    <span className="mb-1 block text-muted-foreground">
+                    <span className="mb-1.5 block text-[0.8125rem] font-semibold text-foreground/80">
                       {t('contacts.email', { defaultValue: 'Email' })}
                     </span>
                     <Input
@@ -266,11 +269,11 @@ export function ContactProfilePage() {
                       call. */}
                   {contact.data?.phone && (
                     <div className="block text-xs">
-                      <span className="mb-1 block text-muted-foreground">
+                      <span className="mb-1.5 block text-[0.8125rem] font-semibold text-foreground/80">
                         {t('contacts.phone', { defaultValue: 'Phone' })}
                       </span>
                       <p
-                        className="flex items-center gap-1.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.04]"
+                        className="flex h-10 items-center gap-2 rounded-2xl bg-foreground/[0.04] px-3.5 text-sm tabular-nums text-muted-foreground"
                         dir="ltr"
                       >
                         <LockIcon />
@@ -279,7 +282,7 @@ export function ContactProfilePage() {
                     </div>
                   )}
                 </div>
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2 pt-2">
                   <Button
                     size="sm"
                     onClick={() => void saveContact()}
@@ -340,7 +343,8 @@ export function ContactProfilePage() {
               type="button"
               onClick={startEdit}
               aria-label={t('contacts.editContact', { defaultValue: 'Edit contact' })}
-              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              data-icon-action=""
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors duration-fast ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >
               <PencilIcon />
             </button>
@@ -353,7 +357,7 @@ export function ContactProfilePage() {
   function TimelineSection({ loading, items }: { loading: boolean; items: TimelineItem[] }) {
     return (
       <section className="space-y-3">
-        <h2 className="px-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+        <h2 className="px-1 text-md font-semibold text-foreground">
           {t('contacts.timeline', { defaultValue: 'History' })}
         </h2>
         {loading ? (
@@ -363,9 +367,9 @@ export function ContactProfilePage() {
             <Skeleton className="h-14 w-full rounded-2xl" />
           </div>
         ) : items.length === 0 ? (
-          // A composed quiet state on a dashed panel — a bare centered line in
+          // A composed quiet state on a soft panel — a bare centered line in
           // this much canvas read as a rendering gap, not as an empty history.
-          <div className="rounded-2xl border border-dashed border-foreground/[0.08] bg-card/40">
+          <div className="rounded-[1.625rem] bg-card/60 ring-1 ring-foreground/[0.04]">
             <EmptyState
               icon={<InboxIcon size={24} />}
               title={t('contacts.noHistory', { defaultValue: 'No chats or tickets yet.' })}
@@ -440,7 +444,7 @@ export function ContactProfilePage() {
                   defaultValue: normaliseTicketStatus(ticket.status),
                 })}
               </Pill>
-              <span className="text-2xs uppercase tracking-wide text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {t('contacts.ticket', { defaultValue: 'Ticket' })}
               </span>
             </div>

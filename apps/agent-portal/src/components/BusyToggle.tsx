@@ -67,17 +67,23 @@ export function BusyToggle() {
       title={title}
       aria-label={title}
       className={cn(
-        'inline-flex h-8 min-w-[5.5rem] items-center justify-center gap-1.5 rounded-full px-3 text-xs font-semibold',
-        'transition-colors duration-fast ease-out disabled:opacity-60',
+        // The header's control height (40px) so it sits level with the round
+        // buttons beside it; Ready is a soft green fill, Busy keeps the
+        // owner's yellow outline.
+        'inline-flex h-10 min-w-[6rem] items-center justify-center gap-2 rounded-full px-4 text-xs font-semibold',
+        'transition-colors duration-fast ease-out disabled:cursor-not-allowed disabled:opacity-60',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
         busy
-          ? 'bg-amber-50 text-amber-700 ring-2 ring-inset ring-amber-500 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300'
-          : 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-500/40 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300',
+          ? 'bg-amber-50 text-amber-800 ring-2 ring-inset ring-amber-500 hover:bg-amber-100 dark:bg-amber-500/10 dark:text-amber-300'
+          : 'bg-emerald-50 text-emerald-800 shadow-[0_8px_20px_-14px_oklch(var(--shadow-color)/0.45)] hover:bg-emerald-100 dark:bg-emerald-500/10 dark:text-emerald-300',
       )}
     >
       <span
         aria-hidden
-        className={cn('h-2 w-2 rounded-full', busy ? 'bg-amber-500' : 'bg-emerald-500')}
+        className={cn(
+          'h-2 w-2 rounded-full ring-[3px]',
+          busy ? 'bg-amber-500 ring-amber-500/20' : 'bg-emerald-500 ring-emerald-500/20',
+        )}
       />
       {busy ? t('busy.on', { defaultValue: 'Busy' }) : t('busy.ready', { defaultValue: 'Ready' })}
     </button>

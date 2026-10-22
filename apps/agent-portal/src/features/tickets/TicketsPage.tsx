@@ -638,7 +638,8 @@ export function TicketsPage() {
                       // the way it opened.
                       ticketsRange.reset();
                     }}
-                    className="h-7 rounded-lg px-2 text-2xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                    data-text-action=""
+                    className="text-xs font-semibold"
                   >
                     {t('tickets.clearSearch', { defaultValue: 'Clear' })}
                   </button>
@@ -925,8 +926,8 @@ function ChatMediaRow({
 
   return (
     // Inset on the dialog's card surface — bg-card here would vanish into it.
-    <li className="flex items-center gap-2 rounded-lg bg-secondary/40 px-2 py-1.5 ring-1 ring-foreground/[0.04]">
-      <span className="grid h-8 w-8 shrink-0 place-items-center overflow-hidden rounded-md bg-secondary">
+    <li className="flex items-center gap-3 rounded-2xl bg-foreground/[0.035] py-2 pe-2 ps-2">
+      <span className="grid h-10 w-10 shrink-0 place-items-center overflow-hidden rounded-xl bg-card">
         {showImg && url ? (
           <img src={url} alt="" className="h-full w-full object-cover" />
         ) : (
@@ -947,11 +948,13 @@ function ChatMediaRow({
         disabled={added || pending}
         onClick={onAdd}
         className={cn(
-          'shrink-0 rounded-full border border-dashed px-2 py-0.5 text-2xs transition-colors duration-fast',
+          'inline-flex h-8 shrink-0 items-center rounded-full px-3.5 text-xs font-semibold transition-colors duration-fast',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
           added
-            ? 'border-success/40 text-success'
-            : 'border-border-strong text-muted-foreground hover:border-primary/50 hover:text-foreground',
-          'disabled:cursor-default disabled:opacity-70',
+            ? 'bg-success-tint text-success-foreground'
+            : 'bg-primary/10 text-primary hover:bg-primary/[0.17]',
+          'disabled:cursor-default',
+          pending && !added && 'opacity-50',
         )}
       >
         {added
@@ -999,15 +1002,15 @@ function ChatMediaDialog({
     <div
       role="dialog"
       aria-modal="true"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-md animate-fade-in"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl bg-card p-6 shadow-2xl shadow-foreground/15 ring-1 ring-foreground/[0.06] animate-scale-in">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div className="space-y-1">
-            <h3 className="text-lg font-semibold tracking-[-0.02em] text-foreground">
+      <div className="flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-[1.625rem] bg-card shadow-float animate-scale-in">
+        <div className="flex items-start justify-between gap-3 px-7 pb-5 pt-6 shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.065)]">
+          <div className="space-y-1.5">
+            <h3 className="text-[1.375rem] font-semibold leading-tight tracking-[-0.02em] text-foreground">
               {t('tickets.attachFromChat', { defaultValue: 'From chat' })}
             </h3>
             <p className="text-sm leading-relaxed text-muted-foreground">
@@ -1020,13 +1023,13 @@ function ChatMediaDialog({
             type="button"
             onClick={onClose}
             aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
-            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+            className="-me-1 grid h-9 w-9 shrink-0 place-items-center rounded-full bg-foreground/[0.06] text-foreground/70 transition-colors duration-fast hover:bg-foreground/10 hover:text-foreground"
           >
             <CloseIcon size={16} />
           </button>
         </div>
 
-        <div className="-mx-1 min-h-0 flex-1 overflow-y-auto px-1">
+        <div className="min-h-0 flex-1 overflow-y-auto px-7 py-4">
           {loading ? (
             <div className="flex justify-center py-8">
               <Spinner size={16} />
@@ -1062,8 +1065,8 @@ function ChatMediaDialog({
           )}
         </div>
 
-        <div className="mt-5 flex justify-end">
-          <Button type="button" variant="ghost" size="md" onClick={onClose}>
+        <div className="flex justify-end px-7 py-4 shadow-[inset_0_1px_0_oklch(var(--foreground)/0.065)]">
+          <Button type="button" size="md" onClick={onClose}>
             {t('actions.done', { ns: 'common', defaultValue: 'Done' })}
           </Button>
         </div>
@@ -1224,7 +1227,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-md lg:hidden"
+          /* Not `data-text-action`: that hook sets `display`, which would
+             outrank `lg:hidden` and show the mobile-only back link on desktop. */
+          className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 lg:hidden"
         >
           <ArrowLeftIcon size={15} className="rtl:-scale-x-100" />
           {t('tickets.backToList', { defaultValue: 'All tickets' })}
@@ -1324,7 +1329,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
             </div>
             {/* Meta row in the board idiom: micro-labelled groups rather than a
                 run-on sentence, with the two actions kept at the end. */}
-            <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+            <div className="flex flex-wrap items-end gap-x-6 gap-y-2.5">
               <div className="min-w-0">
                 <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {t('tickets.metaCustomer', { defaultValue: 'Customer' })}
@@ -1356,7 +1361,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                       {},
                     )
                   }
-                  className="pb-px text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                  data-text-action=""
+                  className="text-xs font-semibold"
                 >
                   {t('tickets.exportTicket', { defaultValue: 'Export to Excel' })}
                 </button>
@@ -1378,7 +1384,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     <button
                       type="button"
                       onClick={() => navigate(`/?conv=${tk.conversation}`)}
-                      className="pb-px text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                      data-text-action=""
+                      className="text-xs font-semibold"
                     >
                       {t('tickets.viewConversation', { defaultValue: 'View chat →' })}
                     </button>
@@ -1393,7 +1400,8 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                     defaultValue:
                       "This ticket was not raised from a chat - opens the customer's latest chat",
                   })}
-                  className="pb-px text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded"
+                  data-text-action=""
+                  className="text-xs font-semibold"
                 >
                   {t('tickets.viewConversation', { defaultValue: 'View chat →' })}
                 </button>
@@ -1405,7 +1413,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
         {/* The agent's own words only — the order block is stripped out of
             legacy descriptions and rendered as a card below instead. */}
         {(legacyOrder ? legacyOrder.description : tk.description) && (
-          <p className="max-w-prose whitespace-pre-wrap rounded-xl bg-secondary/50 px-4 py-3 text-sm leading-relaxed text-foreground/85 ring-1 ring-foreground/[0.04]">
+          <p className="max-w-prose whitespace-pre-wrap rounded-2xl bg-foreground/[0.035] px-4 py-3 text-sm leading-relaxed text-foreground/85">
             {legacyOrder ? legacyOrder.description : tk.description}
           </p>
         )}
@@ -1575,7 +1583,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
 
           {/* Attachments — front and center with live image previews, so the
               agent sees what was shared without clicking anything. On the
-              shared SectionCard surface, with the two dashed attach actions in
+              shared SectionCard surface, with the two soft-fill attach actions in
               the card's own aside slot. */}
           <SectionCard
             title={
@@ -1594,7 +1602,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   <button
                     type="button"
                     onClick={() => setShowChatMedia(true)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-border-strong px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/50 hover:text-foreground"
+                    className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                   >
                     <span>{t('tickets.attachFromChat', { defaultValue: 'From chat' })}</span>
                     <span className="tabular-nums opacity-70">{chatItems.length}</span>
@@ -1604,7 +1612,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full border border-dashed border-border-strong px-3 text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-primary/50 hover:text-foreground disabled:opacity-50"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:bg-foreground/[0.05] disabled:text-muted-foreground"
                 >
                   {uploading ? (
                     <Spinner size={13} />
@@ -1650,10 +1658,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 }
               />
             ) : (
-              /* Composed placeholder, not a stray sentence: the dashed frame
-                 marks out where files will land, in the same idiom as the
-                 dashed attach buttons above it. */
-              <p className="rounded-xl border border-dashed border-border-strong px-4 py-5 text-center text-xs text-muted-foreground">
+              /* Composed placeholder, not a stray sentence: a soft well marks
+                 out where files will land. */
+              <p className="rounded-2xl bg-foreground/[0.035] px-4 py-6 text-center text-xs text-muted-foreground">
                 {t('tickets.noAttachments', { defaultValue: 'No attachments yet.' })}
               </p>
             )}
@@ -1663,7 +1670,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               The composer itself is an inset on the card (bg-secondary), not a
               second card: card-on-card at the same lightness reads flat. */}
           <SectionCard title={t('tickets.addNote', { defaultValue: 'Add internal note' })}>
-            <div className="rounded-xl bg-secondary/40 p-2 ring-1 ring-foreground/[0.04] focus-within:ring-primary/30">
+            <div className="rounded-2xl bg-input p-2 ring-1 ring-inset ring-foreground/[0.08] transition-shadow duration-fast focus-within:ring-2 focus-within:ring-primary/40">
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
@@ -1779,7 +1786,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                           </span>
                         </div>
                         {commentText && (
-                          <p className="mt-1 whitespace-pre-wrap rounded-lg bg-secondary/60 px-3 py-2 text-sm leading-relaxed text-foreground">
+                          <p className="mt-1.5 whitespace-pre-wrap rounded-xl bg-foreground/[0.04] px-3.5 py-2.5 text-sm leading-relaxed text-foreground">
                             {commentText}
                           </p>
                         )}
@@ -1789,9 +1796,9 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
                 })}
               </ol>
             ) : (
-              /* Same dashed frame as the attachments placeholder — an empty
+              /* Same soft well as the attachments placeholder — an empty
                  timeline is a state of the section, not a floating sentence. */
-              <p className="rounded-xl border border-dashed border-border-strong px-4 py-5 text-center text-xs text-muted-foreground">
+              <p className="rounded-2xl bg-foreground/[0.035] px-4 py-6 text-center text-xs text-muted-foreground">
                 {t('tickets.noEvents')}
               </p>
             )}
@@ -2139,7 +2146,8 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               setStoreId(ticket.store ?? '');
               setEditing(true);
             }}
-            className="text-xs font-medium text-primary transition-colors duration-fast ease-out hover:underline"
+            data-text-action=""
+            className="text-xs font-semibold"
           >
             {rows.length
               ? t('actions.edit', { ns: 'common', defaultValue: 'Edit' })
@@ -2179,7 +2187,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               have told the customer about it — the same warning the create
               dialog carries, because this path raises the same request. */}
           {couponChanged && (
-            <p className="flex items-start gap-2 rounded-xl bg-primary/[0.08] px-3 py-2 text-xs leading-relaxed text-foreground">
+            <p className="flex items-start gap-2.5 rounded-2xl bg-primary/[0.07] px-3.5 py-2.5 text-xs leading-relaxed text-foreground">
               <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-primary" />
               <span>
                 {t('coupons.needsApproval', {
@@ -2189,7 +2197,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
               </span>
             </p>
           )}
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
             <SavedTick
               saved={update.isSuccess}
               label={t('actions.saved', { ns: 'common', defaultValue: 'Saved' })}
@@ -2250,7 +2258,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           {stored.response_desc && (
             <p
               dir="auto"
-              className="max-w-prose whitespace-pre-wrap rounded-xl bg-secondary/50 px-4 py-3 text-sm leading-relaxed text-foreground/85"
+              className="max-w-prose whitespace-pre-wrap rounded-2xl bg-foreground/[0.035] px-4 py-3 text-sm leading-relaxed text-foreground/85"
             >
               {stored.response_desc}
             </p>
@@ -2320,10 +2328,7 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
       </h4>
       <ul className="space-y-2">
         {rows.map((c) => (
-          <li
-            key={c.id}
-            className="rounded-xl bg-secondary/50 px-4 py-3 ring-1 ring-inset ring-foreground/[0.06]"
-          >
+          <li key={c.id} className="rounded-2xl bg-foreground/[0.035] px-4 py-3.5">
             <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="font-mono text-sm font-semibold text-foreground">
                 {c.coupon_code ?? '—'}
@@ -2408,7 +2413,7 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
                 .filter((r): r is [string, string] => !!r[1])
                 .map(([label, value]) => (
                   <div key={label} className="flex items-baseline gap-1.5">
-                    <dt className="font-semibold uppercase tracking-[0.1em]">{label}</dt>
+                    <dt className="font-semibold text-foreground/65">{label}</dt>
                     <dd dir="auto" className="text-foreground">
                       {value}
                     </dd>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { AI_SKIN, Button, cn, Pill, Spinner } from '@yiji/ui';
+import { Button, cn, Pill, Spinner } from '@yiji/ui';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -176,30 +176,25 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
   return (
     <div
       className={cn(
-        'overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.08]',
+        // A soft floating card in the portal's language: the heavy indigo band
+        // read as a different product sitting on top of the composer. The
+        // brand now lives in the sparkle chip, as it does on the toolbar.
+        'overflow-hidden rounded-[1.375rem] bg-card',
+        'shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.07),0_18px_40px_-28px_oklch(var(--shadow-color)/0.5)]',
         className,
       )}
     >
-      {/* Same identity as the Aura drawer — an indigo band with the mark. The
-          two AI surfaces used to look like unrelated features; carrying one
-          treatment across both is what makes them read as one assistant. */}
-      <div
-        className={cn(
-          'flex items-center justify-between gap-2 px-4 py-2.5',
-          AI_SKIN.head,
-          AI_SKIN.headText,
-        )}
-      >
+      <div className="flex items-center justify-between gap-2 px-4 pb-1 pt-3">
         <span className="flex min-w-0 items-center gap-2">
           <span
             aria-hidden
-            className={cn('grid h-6 w-6 shrink-0 place-items-center rounded-lg', AI_SKIN.headChip)}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary/10 text-primary"
           >
             <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
               <path d="M8 1.6 9.4 5.2 13 6.6 9.4 8 8 11.6 6.6 8 3 6.6 6.6 5.2 8 1.6ZM12.6 10.4l.5 1.4 1.4.5-1.4.5-.5 1.4-.5-1.4-1.4-.5 1.4-.5.5-1.4Z" />
             </svg>
           </span>
-          <h3 className="truncate text-2xs font-bold uppercase tracking-[0.14em]">
+          <h3 className="truncate text-sm font-semibold text-foreground">
             {tl('ai.title', { defaultValue: 'AI assistance' })}
           </h3>
         </span>
@@ -210,7 +205,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         <div
           role="group"
           aria-label={tl('ai.replyLanguage', { defaultValue: 'Assistant language' })}
-          className="flex shrink-0 overflow-hidden rounded-md ring-1 ring-white/30"
+          className="flex shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]"
         >
           {(['en', 'ar'] as const).map((code) => (
             <button
@@ -222,8 +217,11 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
               // including before anyone has touched it.
               aria-pressed={uiLocale === code}
               className={cn(
-                'px-2 py-0.5 text-2xs font-semibold uppercase tracking-wide transition-colors duration-fast ease-out',
-                uiLocale === code ? 'bg-white text-primary' : 'text-white/75 hover:bg-white/15',
+                'inline-flex h-7 items-center rounded-full px-3 text-xs font-semibold uppercase transition-[background-color,color,box-shadow] duration-fast ease-out',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                uiLocale === code
+                  ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               {code}
@@ -232,16 +230,19 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         </div>
       </div>
 
-      <div className="space-y-3 px-4 py-3.5">
+      <div className="space-y-3 px-4 pb-4 pt-2.5">
         <div className="flex flex-wrap gap-1.5">
           {actions.map((a) => (
             <Button
               key={a.key}
               type="button"
-              variant="outline"
+              // Usable secondary actions: soft brand pills (the agent skin
+              // fills the ghost variant), one height with the toolbar's.
+              variant="ghost"
               size="sm"
               loading={a.busy}
               onClick={a.run}
+              className="h-8 px-3.5 font-semibold"
             >
               {a.label}
             </Button>
@@ -326,7 +327,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
             <p
               key={i}
               className={cn(
-                'flex items-center gap-2 rounded-xl bg-destructive/10 ring-1 ring-destructive/20 px-3 py-2',
+                'flex items-center gap-2 rounded-2xl bg-destructive/10 px-3.5 py-2.5',
                 'text-xs text-destructive',
               )}
             >
@@ -346,8 +347,10 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
 
 function ResultCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-2 rounded-xl border-s-2 border-primary/40 bg-primary-tint/40 px-4 py-3 ring-1 ring-primary/10">
-      <div className="text-2xs font-semibold uppercase tracking-[0.12em] text-primary">{label}</div>
+    /* A soft card, no side stripe (the design bans it): the brand wash and
+       the label carry which action answered. */
+    <div className="space-y-2 rounded-2xl bg-primary/[0.05] px-4 py-3 ring-1 ring-inset ring-primary/10">
+      <div className="text-xs font-semibold text-primary">{label}</div>
       {children}
     </div>
   );

@@ -57,7 +57,7 @@ export function QueueStat({
       onClick={selectable ? onClick : undefined}
       disabled={!selectable}
       className={cn(
-        'flex flex-1 flex-col gap-0.5 rounded-xl bg-card px-2.5 py-2 text-start ring-1 ring-foreground/[0.06]',
+        'flex flex-1 flex-col gap-0.5 rounded-2xl bg-card px-3 py-2.5 text-start ring-1 ring-inset ring-foreground/[0.06]',
         'transition-[background-color,box-shadow] duration-fast ease-out',
         selectable
           ? 'hover:bg-secondary/60 active:scale-[0.98]'
@@ -95,14 +95,15 @@ export function QueueStat({
           'text-lg font-extrabold tabular-nums tracking-[-0.03em]',
           tone === 'pink' && 'text-magenta',
           tone === 'primary' && 'text-primary',
-          tone === 'warning' && 'text-warning-foreground',
+          // The warning HUE: its -foreground is white (ink for a solid fill).
+          tone === 'warning' && 'text-warning',
           tone === 'destructive' && 'text-destructive',
           tone === 'default' && 'text-foreground',
         )}
       >
         {value}
       </span>
-      <span className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <span
           aria-hidden
           className={cn(

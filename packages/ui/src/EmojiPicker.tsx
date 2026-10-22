@@ -156,6 +156,7 @@ export function EmojiPicker({ onPick, label, disabled, className }: EmojiPickerP
               bottom: Math.max(8, window.innerHeight - (rect()?.top ?? 0) + 6),
               left: Math.max(8, rect()?.left ?? 0),
             }}
+            data-menu-panel=""
             className="z-50 max-h-80 w-[19rem] overflow-y-auto rounded-2xl bg-card p-3 shadow-float ring-1 ring-foreground/10"
           >
             {GROUPS.map((g) => (

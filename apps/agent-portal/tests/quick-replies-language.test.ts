@@ -131,7 +131,10 @@ describe('the quick-reply chooser', () => {
     expect(list).not.toMatch(/'[^'\n]*\babsolute\b[^'\n]*'/);
     expect(list).not.toMatch(/'[^'\n]*bottom-full[^'\n]*'/);
     // In the flow by default; only the explicit floatAbove mode floats.
-    expect(list).toMatch(/floatAbove \? 'shadow-float' : 'mt-2 max-h-64 shadow-sm'/);
+    expect(list).toMatch(/floatAbove\s*\?\s*'shadow-float[^']*'\s*:\s*'max-h-64/);
+    /* In the composer toolbar it drops onto its own line under the row
+       (owner, 2026-10-22: one row) - still in the flow, never an overlay. */
+    expect(list).toMatch(/inToolbar \? 'order-last max-w-none basis-full' : 'mt-2'/);
     expect(SRC).toMatch(/\{listOpen && !floatAbove && list\}/);
   });
 
@@ -266,7 +269,11 @@ describe('closing when the agent clicks away', () => {
    * rather than on the panel alone.
    */
   it('keeps the ref on the wrapper that holds the toggle', () => {
-    expect(SRC).toMatch(/<div ref=\{wrap\} className=\{cn\('relative', className\)\}>/);
+    /* `contents` in the composer toolbar keeps the same element (and so the
+       same ref) around the trigger and the toggle; it only stops boxing them. */
+    expect(SRC).toMatch(
+      /<div ref=\{wrap\} className=\{cn\(inToolbar \? 'contents' : 'relative', className\)\}>/,
+    );
   });
 
   /* Only while open: a document-wide listener armed on every conversation for

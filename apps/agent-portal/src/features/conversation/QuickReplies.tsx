@@ -245,6 +245,7 @@ export function QuickReplies({
   dismissSearchOnOutside = false,
   floatAbove = false,
   vendorId,
+  inToolbar = false,
 }: {
   /** What the customer has written, for language ranking. */
   customerText: string;
@@ -297,6 +298,14 @@ export function QuickReplies({
    * Omitted where no chat exists yet — then nothing is narrowed.
    */
   vendorId?: string | null;
+  /**
+   * LAY OUT INSIDE THE COMPOSER TOOLBAR (owner, 2026-10-22: one row, not
+   * two). The trigger and the language switch become items of the caller's
+   * flex row (`display: contents`), and the list drops onto its own full-width
+   * line under the whole row (`order-last basis-full`) instead of splitting
+   * it. Layout only: the same elements, refs and handlers either way.
+   */
+  inToolbar?: boolean;
 }) {
   const { t, i18n } = useTranslation();
   const replies = useQuickReplies(kind, vendorId);
@@ -435,8 +444,11 @@ export function QuickReplies({
        * it. Capped and scrollable so a long library stays reachable.
        */
       className={cn(
-        'w-full max-w-lg overflow-y-auto overscroll-contain rounded-xl border border-border/80 bg-popover p-1.5 ring-1 ring-foreground/[0.04]',
-        floatAbove ? 'shadow-float' : 'mt-2 max-h-64 shadow-sm',
+        'w-full max-w-lg overflow-y-auto overscroll-contain rounded-[1.125rem] bg-popover p-1.5',
+        floatAbove
+          ? 'shadow-float ring-1 ring-foreground/[0.06]'
+          : 'max-h-64 shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_18px_40px_-26px_oklch(var(--shadow-color)/0.45)]',
+        !floatAbove && (inToolbar ? 'order-last max-w-none basis-full' : 'mt-2'),
       )}
       /* Floating: as tall as the room above the control allows. */
       style={floatAbove && anchor ? { maxHeight: Math.max(160, anchor.top - 16) } : undefined}
@@ -467,7 +479,7 @@ export function QuickReplies({
              * the whole card rather than tinting a line of text.
              */
             className={cn(
-              'group block w-full rounded-lg px-3 py-2.5 text-start',
+              'group block w-full rounded-xl px-3 py-2.5 text-start',
               'border border-transparent',
               'transition-colors duration-fast ease-out',
               'hover:border-primary/25 hover:bg-primary/[0.05]',
@@ -500,8 +512,8 @@ export function QuickReplies({
   );
 
   return (
-    <div ref={wrap} className={cn('relative', className)}>
-      <div className="flex items-center gap-1.5">
+    <div ref={wrap} className={cn(inToolbar ? 'contents' : 'relative', className)}>
+      <div className={inToolbar ? 'contents' : 'flex items-center gap-1.5'}>
         <button
           type="button"
           onClick={() => {
@@ -514,13 +526,13 @@ export function QuickReplies({
           className={cn(
             // A usable secondary action is a soft brand fill, deeper while
             // its list is open (the owner's "colour, not outline" rule).
-            'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-primary transition-colors duration-fast ease-out',
+            'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full ps-3 pe-1.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
             listOpen ? 'bg-primary/[0.24]' : 'bg-primary/10 hover:bg-primary/[0.17]',
           )}
         >
           {openLabel}
-          <span className="rounded-full bg-foreground/[0.06] px-1.5 text-2xs tabular-nums">
+          <span className="grid h-5 min-w-5 place-items-center rounded-full bg-card/85 px-1.5 text-2xs tabular-nums">
             {ranked.length}
           </span>
         </button>
@@ -528,7 +540,7 @@ export function QuickReplies({
         {/* ARABIC / ENGLISH / BOTH. A segmented control rather than a dropdown:
             three options an agent flips between all day should cost one click,
             not two. */}
-        <div className="flex shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]">
+        <div className="flex h-8 shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]">
           {(['ar', 'en', 'all'] as const).map((opt) => (
             <button
               key={opt}
@@ -536,7 +548,7 @@ export function QuickReplies({
               onClick={() => setLang(opt)}
               aria-pressed={effectiveLang === opt}
               className={cn(
-                'inline-flex h-7 items-center rounded-full px-2.5 text-2xs font-semibold transition-[background-color,color,box-shadow] duration-fast',
+                'inline-flex h-7 items-center rounded-full px-2.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                 effectiveLang === opt
                   ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'

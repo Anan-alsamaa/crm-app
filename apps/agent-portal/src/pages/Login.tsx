@@ -155,7 +155,11 @@ export function Login() {
 
       {/* Top-end utilities */}
       <div className="absolute end-5 top-5 z-10">
-        <LanguageToggle />
+        {/* The shell's round header control, so the toggle reads the same
+            before and after sign-in. */}
+        <span className="agent-icon-btn">
+          <LanguageToggle />
+        </span>
       </div>
 
       {/* Top-start wordmark */}
@@ -167,14 +171,14 @@ export function Login() {
 
       {/* Centered board card — elevated surface, hairline ring, deep shadow. */}
       <div className="relative z-10 w-full max-w-[420px] animate-fade-in">
-        <div className="overflow-hidden rounded-2xl bg-card shadow-xl shadow-black/40 ring-1 ring-foreground/[0.06]">
-          <div className="overflow-hidden rounded-2xl bg-card">
+        <div className="overflow-hidden rounded-[1.625rem] bg-card/95 shadow-[var(--agent-card-shadow),0_40px_80px_-40px_oklch(var(--shadow-color)/0.5)] backdrop-blur-xl">
+          <div className="overflow-hidden rounded-[1.625rem]">
             {/* Top brand panel inside the card — the logo sits in a tinted tile
                 chip, the board's icon-chip move at welcome scale. */}
-            <div className="flex flex-col items-center gap-4 px-8 pb-2 pt-8 text-center">
+            <div className="flex flex-col items-center gap-5 px-8 pb-2 pt-9 text-center">
               <img src="/sara-crm-lockup.svg" alt="Sara CRM" className="h-12 w-auto" />
               <div className="space-y-1.5">
-                <h1 className="text-2xl font-bold text-display tracking-[-0.02em]">
+                <h1 className="text-[1.625rem] font-semibold leading-tight tracking-[-0.02em] text-foreground">
                   {view === 'signin'
                     ? t('login.title', { defaultValue: 'Sign in to Sara CRM' })
                     : t('login.forgotTitle', { defaultValue: 'Reset your password' })}
@@ -222,7 +226,7 @@ export function Login() {
                       <button
                         type="button"
                         onClick={openForgot}
-                        className="rounded-md text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="inline-flex items-center rounded-full bg-primary/10 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-7 px-2.5 text-xs normal-case tracking-normal"
                       >
                         {t('login.forgot', { defaultValue: 'Forgot password?' })}
                       </button>
@@ -256,7 +260,7 @@ export function Login() {
                           ? t('login.hidePassword', { defaultValue: 'Hide password' })
                           : t('login.showPassword', { defaultValue: 'Show password' })
                       }
-                      className="absolute end-2 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="absolute end-1.5 top-1/2 inline-flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors duration-fast ease-out hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <EyeIcon open={showPw} />
                     </button>
@@ -266,7 +270,7 @@ export function Login() {
                 {authError && (
                   <p
                     role="alert"
-                    className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 ring-1 ring-destructive/20 px-3.5 py-2.5 text-sm text-destructive"
+                    className="flex items-start gap-2.5 rounded-2xl bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive"
                   >
                     {authError}
                   </p>
@@ -314,7 +318,7 @@ export function Login() {
                 <button
                   type="button"
                   onClick={backToSignIn}
-                  className="mx-auto block rounded-md text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="inline-flex items-center rounded-full bg-primary/10 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 mx-auto flex h-9 px-4 text-xs"
                 >
                   {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
                 </button>
@@ -326,21 +330,25 @@ export function Login() {
               <div className="space-y-4 px-8 py-7">
                 <p
                   role="status"
-                  className="rounded-2xl bg-primary-subtle px-3.5 py-3 text-sm text-foreground ring-1 ring-primary/20"
+                  className="rounded-2xl bg-primary/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground"
                 >
                   {t('login.forgotSent', {
                     defaultValue:
                       'If that email matches an account, we just sent a reset link. It expires shortly — check your spam folder if it does not arrive.',
                   })}
                 </p>
-                <Button type="button" variant="outline" fullWidth size="lg" onClick={backToSignIn}>
+                <button
+                  type="button"
+                  onClick={backToSignIn}
+                  className="inline-flex items-center rounded-full bg-primary/10 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-12 w-full justify-center text-sm"
+                >
                   {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
-                </Button>
+                </button>
               </div>
             )}
 
             {/* Footer inside card */}
-            <div className="px-8 py-3 text-center text-2xs text-muted-foreground">
+            <div className="px-8 pb-5 pt-1 text-center text-xs text-muted-foreground">
               <div className="flex items-center justify-center gap-2">
                 <svg
                   viewBox="0 0 16 16"
@@ -366,7 +374,7 @@ export function Login() {
         </div>
 
         {/* Below-card help link */}
-        <p className="mt-4 text-center text-2xs text-muted-foreground">
+        <p className="mt-5 text-center text-xs text-muted-foreground">
           {t('login.help', {
             defaultValue: 'Trouble signing in? Talk to your administrator.',
           })}
@@ -374,7 +382,7 @@ export function Login() {
       </div>
 
       {/* Bottom-end footer */}
-      <p className="absolute bottom-4 inset-x-0 z-10 text-center text-2xs text-muted-foreground">
+      <p className="absolute bottom-4 inset-x-0 z-10 text-center text-xs text-muted-foreground">
         © Sara CRM
       </p>
 

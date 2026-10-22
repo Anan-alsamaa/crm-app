@@ -248,7 +248,7 @@ export function MyCouponsPage() {
                 onClick={() => setView(s)}
                 aria-pressed={view === s}
                 className={cn(
-                  'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
+                  'inline-flex h-8 items-center rounded-full px-3.5 text-xs font-semibold transition-colors duration-fast ease-out',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                   view === s
                     ? 'bg-ink text-ink-foreground'
@@ -263,9 +263,10 @@ export function MyCouponsPage() {
         </div>
       </div>
 
-      {/* Sparse content stays a readable column, on the page's gutter. */}
+      {/* The list runs the page's full width, like the filter card above it
+          (owner, 2026-10-22: these pages "use half the page"). */}
       <div className="agent-gutter min-h-0 flex-1 overflow-auto pb-8 pt-3">
-        <div className="w-full max-w-4xl">
+        <div className="w-full">
           {requests.isLoading ? (
             <div className="space-y-2.5">
               {Array.from({ length: 4 }).map((_, i) => (
@@ -299,7 +300,7 @@ export function MyCouponsPage() {
                     // Board card anatomy: code + status pill leading, the amount as
                     // the bold end-aligned numeral, meta underneath — hairline ring
                     // so the card holds its edge on the dark canvas.
-                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-2xl bg-card p-4 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-colors duration-fast hover:bg-secondary/40"
+                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-2xl bg-card p-4 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.03]"
                   >
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -400,7 +401,7 @@ export function MyCouponsPage() {
                             setEditing(r);
                           }
                         }}
-                        className="col-span-full mt-1 inline-flex w-fit cursor-pointer items-center rounded-full bg-secondary px-3 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast hover:bg-secondary/80 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                        className="col-span-full mt-1 inline-flex h-8 w-fit cursor-pointer items-center rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                       >
                         {t('coupons.correct', { defaultValue: 'Correct this request' })}
                       </span>
@@ -408,7 +409,7 @@ export function MyCouponsPage() {
                     {r.status === 'rejected' && (
                       // On the row, not behind a click: this is what the agent
                       // has to tell the customer.
-                      <p className="col-span-full mt-1 rounded-lg bg-destructive/10 px-3 py-1.5 text-xs leading-relaxed text-foreground">
+                      <p className="col-span-full mt-1 rounded-xl bg-destructive-tint px-3.5 py-2 text-xs leading-relaxed text-foreground">
                         {r.decision_note ??
                           t('coupons.noReason', { defaultValue: 'No reason was given.' })}
                       </p>

@@ -341,6 +341,7 @@ function Combobox({
         <ul
           id={listId}
           role="listbox"
+          data-menu-panel=""
           className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl bg-card p-1 shadow-float ring-1 ring-foreground/[0.08]"
         >
           {filtered.length === 0 ? (
@@ -540,6 +541,7 @@ export function StorePicker({
           <ul
             id={listId}
             role="listbox"
+            data-menu-panel=""
             className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl bg-card p-1 shadow-float ring-1 ring-foreground/[0.08]"
           >
             {stores.isLoading ? (
@@ -636,25 +638,25 @@ export function ComplaintSection({
         // half reads as a peer of every other dashboard card. This supersedes
         // the earlier flat-hairline treatment; the cards separate themselves
         // now, so `divider` survives only for callers that still pass it.
-        'rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft',
+        'rounded-2xl bg-card p-5 ring-1 ring-foreground/[0.06] shadow-soft sm:p-6',
         divider && 'border-t border-border',
       )}
     >
       {/* Not an uppercase eyebrow: the field labels below are already uppercase
           and tracked, so a second caps size stacked above them reads as noise
           rather than hierarchy. Weight plus the hue chip carry it. */}
-      <header className="mb-4 flex items-center gap-2.5">
+      <header className="mb-5 flex items-center gap-2.5">
         <span
           className={cn(
-            'grid h-6 w-6 shrink-0 place-items-center rounded-lg',
+            'grid h-7 w-7 shrink-0 place-items-center rounded-full',
             SECTION_DOT[tone].chip,
           )}
           aria-hidden
         >
           <span className={cn('h-1.5 w-1.5 rounded-full', SECTION_DOT[tone].dot)} />
         </span>
-        <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
-        {hint && <span className="ms-auto shrink-0 text-2xs text-muted-foreground">{hint}</span>}
+        <h2 className="text-md font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
+        {hint && <span className="ms-auto shrink-0 text-xs text-muted-foreground">{hint}</span>}
       </header>
       {/* Capped, not full-bleed. On a 1920 monitor a half-width column is
           ~800px, and an 800px-wide single-line input reads as a mistake: the

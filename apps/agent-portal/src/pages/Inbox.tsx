@@ -157,7 +157,7 @@ function InboxStat({
       >
         {value}
       </span>
-      <span className="flex items-center gap-1.5 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+      <span className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <span
           aria-hidden
           className={cn(
@@ -575,7 +575,7 @@ export function Inbox() {
               so. The `+` join is kept for the moment a filter is set from
               somewhere other than these tiles. */}
           {(filters.status === 'open' || filters.priority === 'urgent' || filters.unread) && (
-            <div className="mt-2 flex items-center gap-2 px-4 text-2xs text-muted-foreground">
+            <div className="mt-2 flex items-center gap-2 px-4 text-xs text-muted-foreground">
               <span>
                 {t('inbox.filtersApplied', {
                   defaultValue: 'Showing: {{list}}',
@@ -735,8 +735,8 @@ export function Inbox() {
               <alpha-value> expansion is invalid CSS and the fill paints NOTHING
               (the design-law token-alpha trap). Jade wash + jade hairline. */}
           {someChecked && canSelect && (
-            <div className="mx-4 mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/20 px-3 py-2 text-xs animate-fade-in">
-              <span className="font-semibold text-primary">
+            <div className="mx-4 mb-2 flex flex-wrap items-center gap-1.5 rounded-[1.25rem] bg-card px-3 py-2 text-xs shadow-[inset_0_0_0_1px_oklch(var(--primary)/0.18),0_12px_28px_-22px_oklch(var(--shadow-color)/0.5)] animate-fade-in">
+              <span className="me-1 inline-flex h-7 items-center rounded-full bg-primary/10 px-2.5 font-semibold text-primary">
                 {t('inbox.bulkSelected', { count: checked.size })}
               </span>
               {canBulkEdit && (
@@ -779,7 +779,7 @@ export function Inbox() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                  className="h-8 px-3 text-xs text-destructive"
                   onClick={() => setConfirmDelete(true)}
                 >
                   {t('inbox.bulkDelete', { defaultValue: 'Delete' })}
@@ -788,7 +788,7 @@ export function Inbox() {
               <Button
                 variant="ghost"
                 size="sm"
-                className="ms-auto h-7 px-2 text-xs"
+                className="ms-auto h-8 px-3 text-xs"
                 onClick={() => setChecked(new Set())}
               >
                 {t('inbox.bulkClear')}
@@ -835,7 +835,7 @@ export function Inbox() {
                     checkboxes below (ms-4) — one aligned select rail. Only
                     offered when there is a bulk action to apply. */}
                 {canSelect && (
-                  <label className="flex h-8 items-center gap-2 border-b border-b-foreground/[0.06] px-4 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  <label className="flex h-9 items-center gap-2 border-b border-b-foreground/[0.06] px-4 text-xs font-medium text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={allChecked}
@@ -843,7 +843,7 @@ export function Inbox() {
                         if (el) el.indeterminate = someChecked && !allChecked;
                       }}
                       onChange={toggleAll}
-                      className="h-3.5 w-3.5 rounded-md border-border-strong bg-input accent-primary"
+                      className="h-4 w-4 rounded border-border-strong bg-input accent-primary"
                     />
                     {t('inbox.selectAll')}
                   </label>
@@ -883,7 +883,7 @@ export function Inbox() {
                         {canSelect && (
                           <input
                             type="checkbox"
-                            className="ms-4 mt-4 h-3.5 w-3.5 rounded-md border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
+                            className="ms-4 mt-4 h-4 w-4 rounded border-border-strong bg-card accent-primary opacity-0 group-hover:opacity-100 checked:opacity-100 transition-opacity duration-fast"
                             checked={checked.has(c.id)}
                             onChange={() => toggleOne(c.id)}
                             aria-label={displayName}

@@ -57,7 +57,7 @@ export function TicketAttachments({
           {files.map((a) => (
             <span
               key={a.id}
-              className="group inline-flex max-w-[18rem] items-center gap-2 rounded-xl bg-secondary/40 px-2.5 py-2 ring-1 ring-foreground/[0.06]"
+              className="group inline-flex min-h-12 max-w-[18rem] items-center gap-2.5 rounded-2xl bg-foreground/[0.035] py-2 pe-2 ps-3"
             >
               <FileGlyph
                 type={a.file?.type ?? null}
@@ -83,7 +83,7 @@ export function TicketAttachments({
                   aria-label={t('conversation.removeAttachment', {
                     defaultValue: 'Remove attachment',
                   })}
-                  className="shrink-0 text-muted-foreground transition-colors duration-fast hover:text-destructive"
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors duration-fast hover:bg-destructive/10 hover:text-destructive"
                 >
                   <CloseIcon size={13} />
                 </button>
@@ -127,7 +127,7 @@ function TicketImageThumb({
       <button
         type="button"
         onClick={onFallbackDownload}
-        className="inline-flex items-center gap-2 rounded-xl bg-secondary/40 px-2.5 py-2 text-xs font-medium text-foreground ring-1 ring-foreground/[0.06] hover:underline"
+        className="inline-flex min-h-12 items-center gap-2.5 rounded-2xl bg-foreground/[0.035] px-3 py-2 text-xs font-medium text-foreground transition-colors duration-fast hover:bg-primary/[0.06]"
       >
         <FileGlyph type={a.file?.type ?? null} filename={a.file?.filename ?? null} size="sm" />
         {a.file?.filename ?? t('conversation.attachment', { defaultValue: 'Attachment' })}
@@ -145,7 +145,7 @@ function TicketImageThumb({
           name: a.file.filename ?? 'image',
         })}
         className={cn(
-          'relative block h-28 w-28 overflow-hidden rounded-xl bg-secondary',
+          'relative block h-28 w-28 overflow-hidden rounded-2xl bg-secondary',
           'ring-1 ring-foreground/[0.06] shadow-soft',
           'transition-[box-shadow,transform] duration-fast ease-out',
           'hover:shadow-float focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',

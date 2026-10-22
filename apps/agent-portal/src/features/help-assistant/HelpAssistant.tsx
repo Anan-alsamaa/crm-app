@@ -318,11 +318,11 @@ export function HelpAssistant(): JSX.Element {
         aria-label={launchLabel}
         title={launchLabel}
         className={cn(
-          'inline-flex h-9 items-center justify-center rounded-full px-3',
-          'text-2xs font-bold uppercase tracking-[0.1em]',
-          'transition-colors duration-fast ease-out',
+          // Fills the header's round wrapper (App.tsx `.agent-icon-btn`): a
+          // circle inside a circle, never a square hover inside a round chip.
+          'inline-flex h-9 min-w-9 items-center justify-center rounded-full px-2 text-xs font-semibold text-foreground',
+          'transition-colors duration-fast ease-out hover:bg-foreground/[0.06]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
-          'bg-ink-foreground/10 text-ink-foreground hover:bg-ink-foreground/20',
         )}
       >
         AI
@@ -360,7 +360,7 @@ export function HelpAssistant(): JSX.Element {
                 ref={composerRef}
                 aria-label={t('helpAssistant.label', { defaultValue: 'Your question' })}
                 className={cn(
-                  'max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-2xl border-0',
+                  'max-h-40 min-h-[2.75rem] flex-1 resize-none rounded-[1.375rem] border-0',
                   AI_SKIN.field,
                 )}
                 rows={1}
@@ -383,7 +383,7 @@ export function HelpAssistant(): JSX.Element {
               <Button
                 type="submit"
                 size="sm"
-                className={cn('h-10 w-10 shrink-0 rounded-2xl p-0', AI_SKIN.accentBtn)}
+                className={cn('h-11 w-11 shrink-0 rounded-full p-0', AI_SKIN.accentBtn)}
                 disabled={!canSend}
                 loading={ask.isPending}
                 aria-label={t('helpAssistant.send', { defaultValue: 'Ask' })}
@@ -395,14 +395,14 @@ export function HelpAssistant(): JSX.Element {
             <div className="flex items-center justify-between gap-3">
               {/* The caveat belongs under the box the answer comes from, not in
                   a help page nobody opens. */}
-              <span className={cn('text-2xs', AI_SKIN.accent)}>
+              <span className={cn('text-xs', AI_SKIN.dim)}>
                 {t('helpAssistant.caveat', {
                   defaultValue: 'Aura can be wrong — check anything that matters.',
                 })}
               </span>
               <span
                 aria-live="polite"
-                className={cn('shrink-0 text-2xs tabular-nums', AI_SKIN.dim)}
+                className={cn('shrink-0 text-xs tabular-nums', AI_SKIN.dim)}
                 data-testid="help-assistant-counter"
               >
                 {/* `chars`, not `count` — `count` is i18next's plural selector. */}
@@ -428,12 +428,11 @@ export function HelpAssistant(): JSX.Element {
             bar carrying identity and the two things you do to a conversation —
             start a fresh one, or leave. Deliberately NOT the product's header
             style; this surface is meant to look like somewhere else. */}
-          <div className={cn('z-10 flex shrink-0 items-center gap-3 px-5 py-3.5', AI_SKIN.head)}>
+          <div className="z-10 flex shrink-0 items-center gap-3 bg-card/80 px-5 pb-4 pt-5 shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.065)]">
             <span
               aria-hidden
               className={cn(
-                'grid h-9 w-9 shrink-0 place-items-center rounded-xl',
-                AI_SKIN.headChip,
+                'grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary/10 text-primary',
               )}
             >
               <svg viewBox="0 0 16 16" className="h-4 w-4" fill="currentColor" aria-hidden>
@@ -441,15 +440,10 @@ export function HelpAssistant(): JSX.Element {
               </svg>
             </span>
             <span className="min-w-0 flex-1">
-              <span className={cn('block text-sm font-bold tracking-tight', AI_SKIN.headText)}>
+              <span className="block text-lg font-semibold leading-tight tracking-[-0.01em] text-foreground">
                 Aura
               </span>
-              <span
-                className={cn(
-                  'block text-2xs font-medium uppercase tracking-[0.12em]',
-                  AI_SKIN.headDim,
-                )}
-              >
+              <span className={cn('mt-0.5 block text-xs font-medium text-muted-foreground')}>
                 {t('helpAssistant.role', { defaultValue: 'CRM assistant' })}
               </span>
             </span>
@@ -459,9 +453,8 @@ export function HelpAssistant(): JSX.Element {
               aria-label={t('helpAssistant.newChat', { defaultValue: 'Start a new chat' })}
               title={t('helpAssistant.newChat', { defaultValue: 'Start a new chat' })}
               className={cn(
-                'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast',
-                AI_SKIN.headHover,
-                AI_SKIN.dim,
+                'grid h-9 w-9 place-items-center rounded-full bg-foreground/[0.06] text-foreground/70 transition-colors duration-fast hover:bg-foreground/10 hover:text-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
               )}
             >
               <svg
@@ -481,9 +474,8 @@ export function HelpAssistant(): JSX.Element {
               onClick={close}
               aria-label={t('actions.close', { ns: 'common', defaultValue: 'Close' })}
               className={cn(
-                'grid h-8 w-8 place-items-center rounded-lg transition-colors duration-fast',
-                AI_SKIN.headHover,
-                AI_SKIN.dim,
+                'grid h-9 w-9 place-items-center rounded-full bg-foreground/[0.06] text-foreground/70 transition-colors duration-fast hover:bg-foreground/10 hover:text-foreground',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
               )}
             >
               <svg
@@ -578,9 +570,7 @@ export function HelpAssistant(): JSX.Element {
 
             {turns.length === 1 && turns[0]?.welcome && !ask.isPending && (
               <div className="pt-1">
-                <p
-                  className={cn('text-2xs font-semibold uppercase tracking-[0.12em]', AI_SKIN.dim)}
-                >
+                <p className={cn('text-xs font-semibold', AI_SKIN.dim)}>
                   {t('helpAssistant.tryAsking', { defaultValue: 'Try asking' })}
                 </p>
                 {/* Two a row: four full-width bars filled the panel with one
@@ -594,7 +584,7 @@ export function HelpAssistant(): JSX.Element {
                         send(t(`helpAssistant.starter.${s.key}`, { defaultValue: s.text }))
                       }
                       className={cn(
-                        'group flex h-full w-full flex-col justify-between gap-2 rounded-xl p-3',
+                        'group flex h-full w-full flex-col justify-between gap-2 rounded-[1.125rem] p-3.5',
                         'text-start text-xs font-medium leading-snug transition-all duration-fast ease-out',
                         'motion-safe:hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
                         AI_SKIN.glass,
@@ -661,7 +651,7 @@ export function HelpAssistant(): JSX.Element {
             {ask.isError && (
               <p
                 role="alert"
-                className="rounded-xl bg-destructive/10 px-3.5 py-2.5 text-xs leading-relaxed text-destructive ring-1 ring-destructive/20"
+                className="rounded-2xl bg-destructive/10 px-3.5 py-2.5 text-xs leading-relaxed text-destructive"
               >
                 {errorMessage()}
               </p>
