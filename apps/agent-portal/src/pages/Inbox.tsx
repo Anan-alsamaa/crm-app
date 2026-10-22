@@ -48,7 +48,7 @@ import {
 import { ConversationView } from '../features/conversation/ConversationView.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
 import { getSocket } from '../lib/socket.js';
-import { useVendorDirectory, VendorBadge } from '../lib/vendors.js';
+import { useVendorDirectory } from '../lib/vendors.js';
 
 const STATUSES: ConversationStatus[] = ['open', 'solved'];
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -928,8 +928,6 @@ export function Inbox() {
                                 >
                                   {displayName}
                                 </span>
-                                {/* Whose customer (MV-4) — only with 2+ vendors. */}
-                                <VendorBadge vendor={c.vendor} directory={vendors} />
                                 {/* Jade unread dot — glows on the dark canvas. */}
                                 {unread && (
                                   <span
