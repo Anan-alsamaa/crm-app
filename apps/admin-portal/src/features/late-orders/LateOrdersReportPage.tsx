@@ -69,6 +69,7 @@ import {
 } from './api.js';
 import { useVendorDirectory } from '../vendors/api.js';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
+import { PAGE_GUTTER, PageTitle, WIDE_TABLE } from '../../components/shell/Page.js';
 
 /**
  * Rows per page. The same ladder the ticket reports use, 1000 included — a
@@ -944,7 +945,8 @@ export function LateOrdersReportPage() {
 
   if (q.isError) {
     return (
-      <div className="p-4">
+      <div className={cn('pb-8', PAGE_GUTTER)}>
+        <PageTitle title={t('nav.lateOrdersReport', { defaultValue: 'Late orders' })} />
         <ErrorState
           title={t('lateOrdersReport.errorTitle', { defaultValue: 'Could not load late orders' })}
           message={t('lateOrdersReport.errorBody', {
@@ -958,9 +960,10 @@ export function LateOrdersReportPage() {
 
   if (q.isLoading) {
     return (
-      <div className="space-y-3 p-4">
-        <Skeleton className="h-24 w-full" />
-        <Skeleton className="h-64 w-full" />
+      <div className={cn('space-y-3', PAGE_GUTTER)}>
+        <PageTitle title={t('nav.lateOrdersReport', { defaultValue: 'Late orders' })} />
+        <Skeleton className="h-24 w-full rounded-2xl" />
+        <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
     );
   }
@@ -983,11 +986,10 @@ export function LateOrdersReportPage() {
         - and a `<Table>` with no surface had nothing establishing its width.
 
       Now the three-part split `AgentReportsPage` uses: this root owns the height
-      and clips; the scrollport below owns BOTH axes with no vertical padding; and
-      `w-max min-w-full` inside lets a wide table stretch the scrollport rather
-      than escape its card. `TableSurface flow` then has the page's own
-      scrollport directly above it, which is the one thing that makes its sticky
-      header work. See [[layout-height-budget]].
+      and clips; the scrollport below owns the page's vertical scroll with no
+      vertical padding; and each table scrolls sideways INSIDE its own card
+      (`WIDE_TABLE`, owner 2026-10-22), with its header sticky at the card's top.
+      See [[layout-height-budget]].
     */
     <div className="flex h-full flex-col overflow-hidden">
       {/* NO VERTICAL PADDING HERE — see above. The spacing lives on the child,
@@ -1001,9 +1003,13 @@ export function LateOrdersReportPage() {
           full width and the date fields sat off to the right. */}
       <div
         ref={pinRef}
-        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5"
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5 sm:px-7"
       >
-        <div className="w-max min-w-full space-y-6 py-5">
+        <div className="min-w-0 space-y-4 pb-8">
+          <PageTitle
+            className="sticky start-0 w-[var(--pin-w,100%)]"
+            title={t('nav.lateOrdersReport', { defaultValue: 'Late orders' })}
+          />
           <ReportFilterBar
             searchLabel={t('lateOrdersReport.filter.search', { defaultValue: 'Order or branch' })}
             searchPlaceholder={t('lateOrdersReport.filter.searchPlaceholder', {
@@ -1203,7 +1209,7 @@ export function LateOrdersReportPage() {
                     className={
                       tab === key
                         ? 'shrink-0 rounded-full px-4 py-2 text-sm font-semibold bg-ink text-ink-foreground'
-                        : 'shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-fast ease-out bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground'
+                        : 'shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-fast ease-out bg-glass/60 text-foreground/80 ring-1 ring-inset ring-glass/80 hover:bg-glass/90 hover:text-foreground'
                     }
                   >
                     {label}
@@ -1227,7 +1233,7 @@ export function LateOrdersReportPage() {
               {tab === 'summary' && (
                 <Card className="p-0">
                   <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-                    <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <h3 className="text-xs font-semibold text-muted-foreground">
                       {t('lateOrdersReport.summary', { defaultValue: 'Summary' })}
                     </h3>
                     {canExport && (
@@ -1279,7 +1285,7 @@ export function LateOrdersReportPage() {
               {tab === 'agents' && (
                 <Card className="p-0">
                   <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-                    <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <h3 className="text-xs font-semibold text-muted-foreground">
                       {t('lateOrdersReport.byAgent', { defaultValue: 'Agent statistics' })}
                     </h3>
                     {canExport && (
@@ -1309,7 +1315,7 @@ export function LateOrdersReportPage() {
               scrollbar is deliberately faint, which is right for a page and
               wrong for the one control that reaches half a report's columns.
             */}
-                  <TableSurface flow>
+                  <TableSurface {...WIDE_TABLE}>
                     <Table>
                       <thead>
                         <Tr>
@@ -1388,7 +1394,7 @@ export function LateOrdersReportPage() {
               {tab === 'decisions' && (
                 <Card className="p-0">
                   <div className="flex flex-wrap items-center gap-3 px-5 pb-3 pt-5">
-                    <h3 className="text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    <h3 className="text-xs font-semibold text-muted-foreground">
                       {t('lateOrdersReport.register', { defaultValue: 'Order decisions' })}
                     </h3>
                     {/* ARRANGE THE COLUMNS (ops, 2026-10-04). Beside Export,
@@ -1430,7 +1436,7 @@ export function LateOrdersReportPage() {
               scrollbar is deliberately faint, which is right for a page and
               wrong for the one control that reaches half a report's columns.
             */}
-                  <TableSurface flow>
+                  <TableSurface {...WIDE_TABLE}>
                     <Table>
                       <thead>
                         <Tr>
@@ -1593,8 +1599,8 @@ export function LateOrdersReportPage() {
         }
       >
         <div className="flex h-full flex-col">
-          <div className="flex items-center justify-between border-b border-border p-4">
-            <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+          <div className="flex items-center justify-between border-b border-foreground/[0.08] p-4">
+            <span className="text-xs font-semibold text-muted-foreground">
               {t('compensationAll.columnCount', {
                 defaultValue: '{{n}} columns',
                 n: registerColumns.length,

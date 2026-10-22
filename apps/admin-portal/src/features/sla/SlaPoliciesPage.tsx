@@ -20,8 +20,6 @@ import {
   Skeleton,
   Textarea,
   toast,
-  Toolbar,
-  ToolbarSpacer,
 } from '@yiji/ui';
 import {
   businessHoursSummary,
@@ -32,6 +30,7 @@ import {
   type SlaBusinessHours,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { optionsWith, useOptionLists } from '../../lib/option-lists.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -426,45 +425,24 @@ export function SlaPoliciesPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">{t('sla.title')}</h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
-          <span className="opacity-50">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{total}</strong> policies
-          </span>
-          <span className="opacity-30">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{activeCount}</strong> active
-          </span>
-          <span className="opacity-30">·</span>
-          <span className="tabular-nums">
-            avg first reply <strong className="font-semibold text-foreground">{avgFirst}m</strong>
-          </span>
-        </span>
-        <ToolbarSpacer />
-        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
-          {t('sla.create')}
-        </Button>
-      </Toolbar>
+      {/* The Rapport header (owner, 2026-10-22): title, what a policy is
+          under it, Create on the far side. The "2 policies · 2 active" strip
+          and the count pill are gone - the tiles below carry those numbers. */}
+      <PageHeader
+        title={t('sla.title')}
+        description={t('sla.heroSubtitle', {
+          defaultValue:
+            'A policy says which tickets it covers, how fast they must be answered and solved, and when the clock runs. The most specific policy covering a ticket is the one it is held to.',
+        })}
+        actions={
+          <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
+            {t('sla.create')}
+          </Button>
+        }
+      />
 
-      <div className="flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto max-w-5xl space-y-5">
-          {/* Clean editorial header — no gradient banner. */}
-          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-foreground/10 pb-5">
-            <div>
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('sla.heroSubtitle', {
-                  defaultValue:
-                    'A policy says which tickets it covers, how fast they must be answered and solved, and when the clock runs. The most specific policy covering a ticket is the one it is held to.',
-                })}
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full bg-secondary px-3.5 py-1.5 text-sm font-semibold tabular-nums text-muted-foreground ring-1 ring-foreground/10">
-              {t('sla.policyCount', { count: total, defaultValue: '{{count}} policies' })}
-            </span>
-          </div>
-
+      <div className={PAGE_BODY}>
+        <div className="space-y-4">
           {inertCount > 0 && (
             <p className="rounded-xl bg-warning-tint px-4 py-3 text-xs leading-relaxed text-foreground ring-1 ring-warning/25">
               {t('sla.inertWarning', {
@@ -509,7 +487,7 @@ export function SlaPoliciesPage() {
           ) : (
             <>
               {/* Headline KPIs */}
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <KpiTile
                   label={t('sla.kpiPolicies', { defaultValue: 'Policies' })}
                   value={total}
@@ -627,8 +605,8 @@ export function SlaPoliciesPage() {
                       {p.business_hours?.timezone ? ` · ${p.business_hours.timezone}` : ''}
                     </p>
 
-                    <div className="mt-4 flex items-center justify-between gap-3 border-t border-foreground/[0.07] pt-3">
-                      <label className="inline-flex cursor-pointer items-center gap-1.5 text-2xs text-muted-foreground">
+                    <div className="mt-4 flex items-center gap-1 border-t border-foreground/[0.07] pt-3">
+                      <label className="me-auto inline-flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
                         <input
                           type="checkbox"
                           checked={p.active}
@@ -1104,30 +1082,11 @@ function ClockIcon() {
   );
 }
 
-/* Board KPI tile — hue numeral + dot micro-label, the stat-tile anatomy of the
-   reference dashboards. */
+/* Board KPI tile - the Dashboard's tile language (Rapport skin, owner
+   2026-10-22): a frosted card, an INK numeral, and the tone carried by the
+   state dot alone. The tinted gradient surface and hue numeral it used to wear
+   were a different family from every other tile in the console. */
 type KpiTone = 'blue' | 'violet' | 'green' | 'amber';
-const NUM_TONE: Record<KpiTone, string> = {
-  // Literals, not tokens, for the same reason as the dashboard's KPI_NUMERALS:
-  // --sky and --success are tuned to fill a chip and miss 4.5:1 as a numeral.
-  // Same hue, darkened until it passes — keep the hue in step with the token.
-  blue: 'text-[oklch(0.48_0.16_264)]',
-  violet: 'text-[oklch(0.48_0.19_285)]',
-  green: 'text-[oklch(0.45_0.13_155)]',
-  // Warning is a light token — its ink flips per theme — so the amber numeral
-  // stays in foreground ink and the dot alone carries the hue.
-  amber: 'text-foreground',
-};
-
-/* The card surface carries the hue too, matching the KPI cards on the dashboard
-   and the report pages. Without this the SLA tiles were the only plain-white
-   stat tiles in the admin portal. */
-const SURFACE_TONE: Record<KpiTone, string> = {
-  blue: 'bg-gradient-to-br from-sky-tint/70 to-card ring-sky/15',
-  violet: 'bg-gradient-to-br from-violet-tint/70 to-card ring-violet/15',
-  green: 'bg-gradient-to-br from-success-tint/70 to-card ring-success/15',
-  amber: 'bg-gradient-to-br from-warning-tint/70 to-card ring-warning/15',
-};
 const DOT_TONE: Record<KpiTone, string> = {
   blue: 'bg-sky',
   violet: 'bg-violet',
@@ -1137,20 +1096,13 @@ const DOT_TONE: Record<KpiTone, string> = {
 
 function KpiTile({ label, value, tone }: { label: string; value: string | number; tone: KpiTone }) {
   return (
-    <div className={cn('rounded-2xl px-4 py-3.5 shadow-soft ring-1', SURFACE_TONE[tone])}>
-      <div
-        className={cn(
-          'text-3xl font-extrabold tabular-nums leading-none tracking-[-0.03em]',
-          NUM_TONE[tone],
-        )}
-      >
+    <div className="rounded-[1.375rem] bg-card px-[1.125rem] py-4 shadow-soft ring-1 ring-inset ring-glass/80">
+      <div className="text-[2rem] font-semibold tabular-nums leading-none tracking-[-0.03em] text-foreground">
         {value}
       </div>
       <div className="mt-2 flex items-center gap-1.5">
         <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', DOT_TONE[tone])} />
-        <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-          {label}
-        </span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
       </div>
     </div>
   );

@@ -174,7 +174,7 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
         {sections.map((sec, sIdx) => (
           <div key={sIdx}>
             {sec.heading && !isCollapsed && (
-              <h3 className="mb-1 px-2 text-2xs font-semibold uppercase tracking-[0.12em] text-rail-foreground/70 whitespace-nowrap">
+              <h3 className="mb-1 px-2 text-xs font-semibold text-rail-foreground/70 whitespace-nowrap">
                 {sec.heading}
               </h3>
             )}

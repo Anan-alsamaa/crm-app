@@ -338,6 +338,8 @@ export function SectionCard({
 }: SectionCardProps): JSX.Element {
   return (
     <section
+      /* A hook for a portal's own stylesheet; carries no styling itself. */
+      data-section-card=""
       style={{ animationDelay: `${Math.min(index, 8) * 60}ms` }}
       className={cn(
         // Matches the KPI cards above it: squarer corner, a hairline border

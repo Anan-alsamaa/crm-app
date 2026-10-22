@@ -261,7 +261,7 @@ export function NotificationBell(): JSX.Element {
                   .filter((g) => g.items.length > 0)
                   .map((g) => (
                     <div key={g.id}>
-                      <h3 className="px-5 pt-3 pb-1 text-2xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      <h3 className="px-5 pt-3 pb-1 text-xs font-semibold text-muted-foreground">
                         {g.heading}
                       </h3>
                       <ul>

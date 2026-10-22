@@ -64,7 +64,7 @@ export function ReportGroupTabs({ tabs }: { tabs: ReportTab[] }): JSX.Element {
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/60',
                 isActive
                   ? 'bg-ink text-ink-foreground'
-                  : 'bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground',
+                  : 'bg-glass/60 text-foreground/80 ring-1 ring-inset ring-glass/80 hover:bg-glass/90 hover:text-foreground',
               )
             }
           >

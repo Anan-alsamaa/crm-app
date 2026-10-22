@@ -63,6 +63,8 @@ export interface ReportKpiProps {
 export function ReportKpi({ label, value, tone, icon, hint }: ReportKpiProps): JSX.Element {
   return (
     <div
+      /* A hook for a portal's own stylesheet; carries no styling itself. */
+      data-report-kpi=""
       className={cn(
         // ONE LINE, not a stacked card.
         //
@@ -138,6 +140,8 @@ export function ReportKpiStrip({
        without this the summary rides off the screen with it. Only ever as wide
        as the viewport, so sticking it costs nothing vertically. */
     <div
+      /* A hook for a portal's own stylesheet; carries no styling itself. */
+      data-report-kpi-strip=""
       className={cn(
         'sticky start-0 grid w-[var(--pin-w,100%)] max-w-6xl grid-cols-2 gap-2 lg:grid-cols-4',
         className,

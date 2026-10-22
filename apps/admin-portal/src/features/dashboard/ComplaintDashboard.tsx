@@ -633,7 +633,7 @@ function DrillDown({
                 </span>
               </div>
               <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted-foreground">
-                <span className={cn(r.isOpen ? 'font-semibold text-warning-foreground' : '')}>
+                <span className={cn(r.isOpen ? 'font-semibold text-warning' : '')}>
                   {t(`status.${r.status}`, { ns: 'common', defaultValue: r.status })}
                 </span>
                 {[r.restaurantName, r.complaintType, r.serviceType, r.agentName]

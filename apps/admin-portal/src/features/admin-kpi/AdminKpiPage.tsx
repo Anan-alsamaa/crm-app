@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
+  cn,
   EmptyState,
   ErrorState,
   HBarChart,
@@ -34,6 +35,7 @@ import {
   RECENT_USAGE_LIMIT,
   type YijiUsageEventRow,
 } from './api.js';
+import { PAGE_GUTTER, PageTitle } from '../../components/shell/Page.js';
 
 /**
  * REPORTS -> ADMIN KPI (owner, 2026-10-21).
@@ -159,8 +161,11 @@ export function AdminKpiPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-auto px-5">
-        <div className="mx-auto max-w-6xl space-y-5 py-5">
+      {/* The Dashboard's gutter and full width (owner, 2026-10-22): the old
+          centred max-w-6xl column sat off-centre against the page. */}
+      <div className={cn('flex-1 overflow-auto', PAGE_GUTTER)}>
+        <div className="space-y-4 pb-8">
+          <PageTitle title={t('nav.adminKpiGroup', { defaultValue: 'Admin KPI' })} />
           <ReportFilterBar
             searchLabel={t('adminKpi.search', { defaultValue: 'Yiji calls' })}
             searchPlaceholder={t('adminKpi.searchPlaceholder', {
@@ -525,8 +530,8 @@ export function AdminKpiPage() {
 
               {y && (
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <section className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-                    <h3 className="mb-2 text-sm font-semibold tracking-tight">
+                  <section className="rounded-2xl bg-card p-[1.125rem] shadow-soft ring-1 ring-foreground/[0.06]">
+                    <h3 className="mb-3 text-[0.9375rem] font-semibold tracking-tight">
                       {t('adminKpi.yiji.trend', { defaultValue: 'Calls per day (UTC)' })}
                     </h3>
                     {y.trend ? (
@@ -558,8 +563,8 @@ export function AdminKpiPage() {
                       </p>
                     )}
                   </section>
-                  <section className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
-                    <h3 className="mb-2 text-sm font-semibold tracking-tight">
+                  <section className="rounded-2xl bg-card p-[1.125rem] shadow-soft ring-1 ring-foreground/[0.06]">
+                    <h3 className="mb-3 text-[0.9375rem] font-semibold tracking-tight">
                       {t('adminKpi.yiji.byOperation', { defaultValue: 'By operation' })}
                     </h3>
                     <HBarChart
@@ -589,7 +594,10 @@ export function AdminKpiPage() {
               )}
 
               <section aria-labelledby="admin-kpi-yiji-recent" className="space-y-2">
-                <h3 id="admin-kpi-yiji-recent" className="text-sm font-semibold tracking-tight">
+                <h3
+                  id="admin-kpi-yiji-recent"
+                  className="text-[0.9375rem] font-semibold tracking-tight"
+                >
                   {t('adminKpi.yiji.recent', {
                     defaultValue: 'Recent failures and backup uses (newest {{limit}})',
                     limit: RECENT_USAGE_LIMIT,

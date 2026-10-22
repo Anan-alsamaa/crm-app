@@ -17,6 +17,7 @@ import {
   Th,
   Tr,
   formatDateTime,
+  cn,
 } from '@yiji/ui';
 import { formatDuration } from '@yiji/reports';
 import { exportFileName } from '@yiji/shared-config';
@@ -27,6 +28,7 @@ import { busyReport } from '../../lib/job-producer.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useUsers } from '../users/api.js';
 import { summarize, toRows } from './busy.js';
+import { PAGE_GUTTER, PageTitle } from '../../components/shell/Page.js';
 
 /**
  * AGENT KPI → BUSY TIME (owner, 2026-10-11).
@@ -126,8 +128,11 @@ export function BusyReportPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <div className="flex-1 overflow-auto px-5">
-        <div className="mx-auto max-w-6xl space-y-5 py-5">
+      {/* The Dashboard's gutter and full width (owner, 2026-10-22): the old
+          centred max-w-6xl column sat off-centre under the tab strip. */}
+      <div className={cn('flex-1 overflow-auto', PAGE_GUTTER)}>
+        <div className="space-y-4 pb-8">
+          <PageTitle title={t('nav.busyReport', { defaultValue: 'Busy time' })} />
           <ReportFilterBar
             searchLabel={t('busyReport.search', { defaultValue: 'Agent' })}
             searchPlaceholder={t('busyReport.searchPlaceholder', { defaultValue: 'Agent name' })}

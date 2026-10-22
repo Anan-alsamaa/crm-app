@@ -2,22 +2,12 @@ import type { JSX, SVGProps } from 'react';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  Button,
-  ClockIcon,
-  cn,
-  FormField,
-  Input,
-  MeterBar,
-  Skeleton,
-  toast,
-  Toolbar,
-  ToolbarSpacer,
-} from '@yiji/ui';
+import { Button, ClockIcon, cn, FormField, Input, MeterBar, Skeleton, toast } from '@yiji/ui';
 import type { AiFeatureConfig } from '@yiji/shared-types';
 import { aiAdmin } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { KnowledgeBaseSection } from './KnowledgeBaseSection.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { runtimeConfig } from '@yiji/shared-config';
 
 /* AI auto-reply is parked (owner, 2026-10-14): its switch and knowledge base
@@ -193,89 +183,158 @@ export function AiConfigPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('aiConfig.title', { defaultValue: 'AI assistance' })}
-        </h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline">
-          <span className="opacity-50">·</span>{' '}
-          {t('aiConfig.subtitle', {
-            defaultValue: 'Toggle features and set a monthly call budget.',
-          })}
-        </span>
-        <ToolbarSpacer />
-        <Button
-          type="button"
-          size="sm"
-          disabled={!dirty}
-          loading={save.isPending}
-          onClick={() => draft && save.mutate(draft)}
-        >
-          {t('actions.save', { ns: 'common' })}
-        </Button>
-      </Toolbar>
+      {/* The Rapport header (owner, 2026-10-22): title, what the page does
+          under it (it was said twice - beside the title and again in the
+          body), Save on the far side. */}
+      <PageHeader
+        title={t('aiConfig.title', { defaultValue: 'AI assistance' })}
+        description={t('aiConfig.subtitle', {
+          defaultValue: 'Toggle features and set a monthly call budget.',
+        })}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            disabled={!dirty}
+            loading={save.isPending}
+            onClick={() => draft && save.mutate(draft)}
+          >
+            {t('actions.save', { ns: 'common' })}
+          </Button>
+        }
+      />
 
-      <div className="mx-auto w-full max-w-3xl flex-1 overflow-auto px-6 py-8 space-y-8 sm:px-10">
-        {/* Clean editorial header — no gradient banner. */}
-        <div className="border-b border-foreground/10 pb-5">
-          <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            {t('aiConfig.subtitle', {
-              defaultValue: 'Toggle features and set a monthly call budget.',
-            })}
-          </p>
-        </div>
-
-        {/* Usage card */}
-        <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
-          <div className="flex items-center gap-2">
-            <span
-              aria-hidden
-              className="flex h-6 w-6 items-center justify-center rounded-lg bg-secondary/60 text-muted-foreground ring-1 ring-foreground/[0.04]"
-            >
-              <ClockIcon size={13} />
-            </span>
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">
-              {t('aiConfig.usage', { defaultValue: 'This month' })}
-            </h2>
-          </div>
-          {usageQuery.isLoading ? (
-            <Skeleton className="mt-3 h-8 w-32" />
-          ) : (
-            <>
-              <div className="mt-2 flex items-baseline gap-3 tabular-nums">
-                {/* Board numeral — extrabold, tight-tracked, the cap raised
+      <div className={cn(PAGE_BODY, 'space-y-6')}>
+        {/* The three numbers that govern spend, side by side at desktop
+            width: this month's usage, the monthly cap, the daily allowance. */}
+        <div className="grid items-stretch gap-4 lg:grid-cols-3">
+          {/* Usage card */}
+          <section className="self-stretch rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] motion-safe:animate-rise-in">
+            <div className="flex items-center gap-2">
+              <span
+                aria-hidden
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-primary-tint text-primary"
+              >
+                <ClockIcon size={13} />
+              </span>
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                {t('aiConfig.usage', { defaultValue: 'This month' })}
+              </h2>
+            </div>
+            {usageQuery.isLoading ? (
+              <Skeleton className="mt-3 h-8 w-32" />
+            ) : (
+              <>
+                <div className="mt-4 flex items-baseline gap-3 tabular-nums">
+                  {/* Board numeral — extrabold, tight-tracked, the cap raised
                     beside it as the quiet unit. */}
-                <span className="text-3xl font-extrabold leading-none tracking-[-0.03em] text-foreground">
-                  {usageQuery.data?.used ?? 0}
-                </span>
-                <span className="text-sm text-muted-foreground">
-                  {usageQuery.data?.cap
-                    ? `/ ${usageQuery.data.cap.toLocaleString()} ${t('aiConfig.calls', { defaultValue: 'calls' })}`
-                    : t('aiConfig.unlimited', { defaultValue: 'unlimited' })}
-                </span>
-              </div>
-              {!!usageQuery.data?.cap && (
-                // The board's thin meter — how much of the month's budget is
-                // spent; flips to the alarm hue when the cap is nearly gone.
-                <MeterBar
-                  className="mt-3"
-                  value={(usageQuery.data.used / usageQuery.data.cap) * 100}
-                  tone={
-                    usageQuery.data.used / usageQuery.data.cap >= 0.9 ? 'destructive' : 'primary'
+                  <span className="text-[2.625rem] font-semibold leading-none tracking-[-0.03em] text-foreground">
+                    {usageQuery.data?.used ?? 0}
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {usageQuery.data?.cap
+                      ? `/ ${usageQuery.data.cap.toLocaleString()} ${t('aiConfig.calls', { defaultValue: 'calls' })}`
+                      : t('aiConfig.unlimited', { defaultValue: 'unlimited' })}
+                  </span>
+                </div>
+                {!!usageQuery.data?.cap && (
+                  // The board's thin meter — how much of the month's budget is
+                  // spent; flips to the alarm hue when the cap is nearly gone.
+                  <MeterBar
+                    className="mt-3"
+                    value={(usageQuery.data.used / usageQuery.data.cap) * 100}
+                    tone={
+                      usageQuery.data.used / usageQuery.data.cap >= 0.9 ? 'destructive' : 'primary'
+                    }
+                  />
+                )}
+              </>
+            )}
+          </section>
+
+          {/* Monthly cap */}
+          <section className="flex flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                {t('aiConfig.budget', { defaultValue: 'Monthly budget' })}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {t('aiConfig.budgetHint', {
+                  defaultValue:
+                    'Max provider calls per calendar month, across all features. 0 = unlimited.',
+                })}
+              </p>
+            </div>
+            {/* The field sits at the card's foot so the three cards line up. */}
+            <div className="mt-auto pt-4">
+              <FormField
+                label={t('aiConfig.cap', { defaultValue: 'Monthly cap' })}
+                htmlFor="monthlyCap"
+              >
+                <Input
+                  id="monthlyCap"
+                  type="number"
+                  min={0}
+                  step={100}
+                  value={draft?.monthlyCap ?? 0}
+                  onChange={(e) =>
+                    draft &&
+                    setDraft({
+                      ...draft,
+                      monthlyCap: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
+                    })
                   }
                 />
-              )}
-            </>
-          )}
-        </section>
+              </FormField>
+            </div>
+          </section>
+
+          {/* Help-assistant daily allowance — per user, separate from the global
+            monthly cap because this feature is asked for ad hoc by every agent. */}
+          <section className="flex flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
+            <div className="space-y-1">
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                {t('aiConfig.helpBudget', { defaultValue: 'Help assistant allowance' })}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {t('aiConfig.helpBudgetHint', {
+                  defaultValue:
+                    'Max help-assistant questions each staff member can ask per day. 0 = unlimited.',
+                })}
+              </p>
+            </div>
+            {/* The field sits at the card's foot so the three cards line up. */}
+            <div className="mt-auto pt-4">
+              <FormField
+                label={t('aiConfig.helpDailyPerUser', { defaultValue: 'Daily questions per user' })}
+                htmlFor="helpDailyPerUser"
+              >
+                <Input
+                  id="helpDailyPerUser"
+                  type="number"
+                  min={0}
+                  step={5}
+                  value={draft?.helpDailyPerUser ?? 0}
+                  onChange={(e) =>
+                    draft &&
+                    setDraft({
+                      ...draft,
+                      helpDailyPerUser: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
+                    })
+                  }
+                />
+              </FormField>
+            </div>
+          </section>
+        </div>
 
         {/* Features list */}
         <section className="space-y-3">
           <div className="space-y-1 px-1">
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
               {t('aiConfig.features', { defaultValue: 'Features' })}
             </h2>
-            <p className="text-sm text-foreground/80">
+            <p className="text-sm text-muted-foreground">
               {t('aiConfig.featuresHint', {
                 defaultValue:
                   'Disabled features return a clean error to the caller — no provider hit, no usage charge.',
@@ -284,11 +343,11 @@ export function AiConfigPage() {
           </div>
 
           {configQuery.isLoading || !draft ? (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: FEATURES.length }).map((_, i) => (
                 <li
                   key={i}
-                  className="rounded-2xl bg-card/60 ring-1 ring-foreground/[0.04] px-4 py-4"
+                  className="rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-foreground/[0.06]"
                 >
                   <div className="flex items-start gap-3">
                     <Skeleton className="h-9 w-9 shrink-0 rounded-xl" />
@@ -302,7 +361,7 @@ export function AiConfigPage() {
               ))}
             </ul>
           ) : (
-            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {FEATURES.filter((f) => f.key !== 'autoReply' || AUTO_REPLY_HERE).map((f) => {
                 const enabled = draft[f.key] as boolean;
                 const Glyph = f.glyph;
@@ -310,19 +369,20 @@ export function AiConfigPage() {
                   <li
                     key={f.key as string}
                     className={cn(
-                      'group flex items-start gap-3.5 rounded-2xl px-4 py-4 transition-colors duration-fast ease-out',
-                      enabled
-                        ? 'bg-primary-subtle/50 ring-1 ring-primary/25 shadow-soft'
-                        : 'bg-card/60 ring-1 ring-foreground/[0.04]',
+                      /* One frosted card either way (Rapport skin); the state
+                         lives in the switch and the icon chip, not in a tinted
+                         surface that read as a different kind of card. */
+                      'group flex items-start gap-3.5 rounded-2xl bg-card px-4 py-4 shadow-soft ring-1 ring-foreground/[0.06] transition-colors duration-fast ease-out',
+                      !enabled && 'bg-card/70',
                     )}
                   >
                     <span
                       aria-hidden
                       className={cn(
-                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-colors duration-fast ease-out',
+                        'flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-colors duration-fast ease-out',
                         enabled
-                          ? 'bg-primary/15 text-primary ring-1 ring-primary/20'
-                          : 'bg-secondary/60 text-muted-foreground ring-1 ring-foreground/[0.04]',
+                          ? 'bg-primary-tint text-primary'
+                          : 'bg-secondary text-muted-foreground',
                       )}
                     >
                       <Glyph width={18} height={18} className="shrink-0" />
@@ -350,79 +410,6 @@ export function AiConfigPage() {
           )}
         </section>
 
-        {/* Monthly cap */}
-        <section className="space-y-3">
-          <div className="space-y-1 px-1">
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">
-              {t('aiConfig.budget', { defaultValue: 'Monthly budget' })}
-            </h2>
-            <p className="text-sm text-foreground/80">
-              {t('aiConfig.budgetHint', {
-                defaultValue:
-                  'Max provider calls per calendar month, across all features. 0 = unlimited.',
-              })}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-            <FormField
-              label={t('aiConfig.cap', { defaultValue: 'Monthly cap' })}
-              htmlFor="monthlyCap"
-            >
-              <Input
-                id="monthlyCap"
-                type="number"
-                min={0}
-                step={100}
-                value={draft?.monthlyCap ?? 0}
-                onChange={(e) =>
-                  draft &&
-                  setDraft({
-                    ...draft,
-                    monthlyCap: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
-                  })
-                }
-              />
-            </FormField>
-          </div>
-        </section>
-
-        {/* Help-assistant daily allowance — per user, separate from the global
-            monthly cap because this feature is asked for ad hoc by every agent. */}
-        <section className="space-y-3">
-          <div className="space-y-1 px-1">
-            <h2 className="text-sm font-semibold tracking-tight text-foreground">
-              {t('aiConfig.helpBudget', { defaultValue: 'Help assistant allowance' })}
-            </h2>
-            <p className="text-sm text-foreground/80">
-              {t('aiConfig.helpBudgetHint', {
-                defaultValue:
-                  'Max help-assistant questions each staff member can ask per day. 0 = unlimited.',
-              })}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-            <FormField
-              label={t('aiConfig.helpDailyPerUser', { defaultValue: 'Daily questions per user' })}
-              htmlFor="helpDailyPerUser"
-            >
-              <Input
-                id="helpDailyPerUser"
-                type="number"
-                min={0}
-                step={5}
-                value={draft?.helpDailyPerUser ?? 0}
-                onChange={(e) =>
-                  draft &&
-                  setDraft({
-                    ...draft,
-                    helpDailyPerUser: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
-                  })
-                }
-              />
-            </FormField>
-          </div>
-        </section>
-
         {AUTO_REPLY_HERE && <KnowledgeBaseSection />}
       </div>
     </div>
@@ -448,16 +435,17 @@ function Toggle({
       className={cn(
         'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors duration-fast ease-out',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-        checked ? 'bg-primary' : 'bg-secondary',
+        checked ? 'bg-primary' : 'bg-foreground/20',
       )}
     >
       <span
         aria-hidden
         className={cn(
-          // Foreground ink, not raw white: the knob stays high-contrast against
-          // both track fills on BOTH themes (white on dark, near-black on light).
-          'inline-block h-5 w-5 transform rounded-full bg-foreground shadow ring-1 ring-foreground/10 transition-transform duration-fast ease-out',
-          checked ? 'translate-x-5' : 'translate-x-0.5',
+          // A white knob on both tracks (Rapport skin): the indigo track when
+          // on, a 20% ink track when off - which reads in both themes. It
+          // slides toward the END edge, so RTL mirrors the travel.
+          'inline-block h-5 w-5 transform rounded-full bg-white shadow ring-1 ring-black/10 transition-transform duration-fast ease-out',
+          checked ? 'translate-x-5 rtl:-translate-x-5' : 'translate-x-0.5 rtl:-translate-x-0.5',
         )}
       />
     </button>

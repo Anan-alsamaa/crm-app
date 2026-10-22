@@ -163,7 +163,7 @@ export function StatCard({
           'transition-[box-shadow,transform] duration-base ease-out',
           hero
             ? cn(HERO_SURFACE, 'text-white shadow-[0_24px_48px_-24px_oklch(0.2_0.05_278/0.8)]')
-            : 'bg-card text-foreground shadow-soft ring-1 ring-inset ring-white/80 hover:shadow-float',
+            : 'bg-card text-foreground shadow-soft ring-1 ring-inset ring-glass/80 hover:shadow-float',
           onOpen &&
             'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 motion-safe:hover:-translate-y-0.5',
         )}
@@ -198,7 +198,7 @@ export function StatCard({
                 'motion-safe:group-hover:rotate-45',
                 hero
                   ? 'bg-white/[0.12] text-white ring-white/25'
-                  : 'bg-white/70 text-foreground ring-white',
+                  : 'bg-glass/70 text-foreground ring-glass',
               )}
             >
               <ArrowGlyph />
@@ -669,8 +669,10 @@ export function BentoCard({
   return (
     <Rise index={index} className={className}>
       <section
+        /* Marks the pastel wash so the dark theme can drop it (index.css). */
+        data-tone-wash={t ? '' : undefined}
         className={cn(
-          'flex h-full flex-col rounded-[1.625rem] bg-card p-[1.125rem] shadow-soft ring-1 ring-inset ring-white/80',
+          'flex h-full flex-col rounded-[1.625rem] bg-card p-[1.125rem] shadow-soft ring-1 ring-inset ring-glass/80',
           t?.wash,
         )}
       >
@@ -724,7 +726,7 @@ export function HeaderStat({
     <div className="flex min-w-0 items-center gap-3">
       <span
         aria-hidden
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/70 text-foreground shadow-[inset_0_0_0_1px_rgb(255_255_255/0.85),0_10px_24px_-16px_oklch(var(--shadow-color)/0.5)]"
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-glass/70 text-foreground shadow-[inset_0_0_0_1px_oklch(var(--glass)/0.85),0_10px_24px_-16px_oklch(var(--shadow-color)/0.5)]"
       >
         {icon}
       </span>
@@ -757,7 +759,7 @@ export function HeaderBadge({
         'inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-bold',
         variant === 'ink' && 'bg-ink text-ink-foreground',
         variant === 'highlight' && 'bg-highlight text-highlight-foreground',
-        variant === 'plain' && 'bg-white/80 text-foreground ring-1 ring-inset ring-foreground/10',
+        variant === 'plain' && 'bg-glass/80 text-foreground ring-1 ring-inset ring-foreground/10',
       )}
     >
       {children}

@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { readItems } from '@directus/sdk';
 import { useTranslation } from 'react-i18next';
-import { Button, DownloadIcon, Toolbar, cn, toast } from '@yiji/ui';
+import { Button, DownloadIcon, cn, toast } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { exportFileName } from '@yiji/shared-config';
 
 /**
@@ -117,30 +118,26 @@ export function BackupPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('backup.title', { defaultValue: 'Backup' })}
-        </h1>
-      </Toolbar>
-      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto max-w-2xl space-y-5">
-          {/* Page hero — the boards' header anatomy, same as every sibling
-              page, so the suite reads as one product. */}
-          <div className="border-b border-foreground/10 pb-5">
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {t('backup.heroSubtitle', {
-                defaultValue:
-                  'A portable JSON export of the business data — the file an operator reaches for when a ticket was mangled or a list was emptied by mistake.',
-              })}
-            </p>
-          </div>
+      {/* The Rapport header (owner, 2026-10-22): the title, what the file is
+          for under it. */}
+      <PageHeader
+        title={t('backup.title', { defaultValue: 'Backup' })}
+        description={t('backup.heroSubtitle', {
+          defaultValue:
+            'A portable JSON export of the business data — the file an operator reaches for when a ticket was mangled or a list was emptied by mistake.',
+        })}
+      />
+      <div className={PAGE_BODY}>
+        {/* The action beside what the file carries, on the header's full
+            width - not one narrow centred column under a full-width title. */}
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)]">
           {/* The action card — tinted icon chip at the start, per the board
               language for operations a page offers. */}
           <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
             <div className="flex items-start gap-3.5">
               <span
                 aria-hidden
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-tint text-primary"
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary-tint text-primary"
               >
                 <DownloadIcon size={18} />
               </span>
@@ -179,7 +176,7 @@ export function BackupPage() {
                 {COLLECTIONS.length}
               </span>
             </div>
-            <ul className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-3">
+            <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-1.5 text-xs sm:grid-cols-2 xl:grid-cols-3">
               {COLLECTIONS.map((c) => (
                 <li key={c} className="flex items-baseline justify-between gap-2">
                   {/* Collection ids are code, so they read in mono. */}

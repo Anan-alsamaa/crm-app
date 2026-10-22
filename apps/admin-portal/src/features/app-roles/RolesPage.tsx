@@ -14,8 +14,6 @@ import {
   Skeleton,
   Textarea,
   TicketIcon,
-  Toolbar,
-  ToolbarSpacer,
   cn,
   toast,
 } from '@yiji/ui';
@@ -33,6 +31,7 @@ import {
   type Privilege,
 } from '../../lib/privileges.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 
 /**
  * Roles & privileges, the way the ops portal does it: a named role is a set of
@@ -484,71 +483,69 @@ export function RolesPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('roles.title', { defaultValue: 'Roles & privileges' })}
-        </h1>
-        <ToolbarSpacer />
-        {/* One primary action, always in this spot, named after what it does:
-            it opens a draft, becomes Create while that draft is unsaved, and
-            becomes Save once the role exists. A built-in role is code-defined,
-            so there is nothing to save and the button offers a new one. */}
-        {creating ? (
+      {/* The Rapport header (owner, 2026-10-22): title, what a role is under
+          it, the one primary action on the far side. */}
+      <PageHeader
+        title={t('roles.title', { defaultValue: 'Roles & privileges' })}
+        description={t('roles.heroSubtitle', {
+          defaultValue:
+            'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',
+        })}
+        actions={
           <>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setCreating(false);
-                setDraft(EMPTY);
-              }}
-            >
-              {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => save.mutate(draft)}
-              disabled={!draft.name.trim() || save.isPending}
-              loading={save.isPending}
-            >
-              {t('roles.create', { defaultValue: 'Create role' })}
-            </Button>
+            {/* One primary action, always in this spot, named after what it does:
+                it opens a draft, becomes Create while that draft is unsaved, and
+                becomes Save once the role exists. A built-in role is code-defined,
+                so there is nothing to save and the button offers a new one. */}
+            {creating ? (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setCreating(false);
+                    setDraft(EMPTY);
+                  }}
+                >
+                  {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => save.mutate(draft)}
+                  disabled={!draft.name.trim() || save.isPending}
+                  loading={save.isPending}
+                >
+                  {t('roles.create', { defaultValue: 'Create role' })}
+                </Button>
+              </>
+            ) : draft.id && !locked ? (
+              <>
+                <Button size="sm" variant="ghost" onClick={startNewRole} iconStart={<PlusIcon />}>
+                  {t('roles.new', { defaultValue: 'New role' })}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => save.mutate(draft)}
+                  disabled={!draft.name.trim() || save.isPending}
+                  loading={save.isPending}
+                >
+                  {t('roles.save', { defaultValue: 'Save role' })}
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={startNewRole} iconStart={<PlusIcon />}>
+                {t('roles.new', { defaultValue: 'New role' })}
+              </Button>
+            )}
           </>
-        ) : draft.id && !locked ? (
-          <>
-            <Button size="sm" variant="ghost" onClick={startNewRole} iconStart={<PlusIcon />}>
-              {t('roles.new', { defaultValue: 'New role' })}
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => save.mutate(draft)}
-              disabled={!draft.name.trim() || save.isPending}
-              loading={save.isPending}
-            >
-              {t('roles.save', { defaultValue: 'Save role' })}
-            </Button>
-          </>
-        ) : (
-          <Button size="sm" onClick={startNewRole} iconStart={<PlusIcon />}>
-            {t('roles.new', { defaultValue: 'New role' })}
-          </Button>
-        )}
-      </Toolbar>
+        }
+      />
 
-      {/* Scroll lives on the page wrapper; the grid inside is capped so the
-          editor doesn't stretch full-bleed across wide monitors. */}
-      <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto grid w-full max-w-[92rem] grid-cols-1 gap-5 lg:grid-cols-[20rem_1fr] lg:items-start">
-          {/* ── page hero — the boards' header anatomy ── */}
-          <div className="border-b border-foreground/10 pb-5 lg:col-span-2">
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {t('roles.heroSubtitle', {
-                defaultValue:
-                  'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',
-              })}
-            </p>
-          </div>
-
+      {/* Scroll lives on the page wrapper. The grid runs the header's full
+          width on its gutter (Rapport skin) - the list beside the editor at
+          desktop width, stacked on a phone. */}
+      <div className={PAGE_BODY}>
+        <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start">
           {/* ── the roles ── */}
           <div className="space-y-2">
             {roles.isLoading ? (

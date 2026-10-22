@@ -108,6 +108,8 @@ export function Drawer({
       {/* Panel — anchored to the end edge, floats with soft shadow */}
       <div
         ref={panelRef}
+        /* A hook for a portal's own stylesheet; carries no styling itself. */
+        data-drawer-panel=""
         className={cn(
           'absolute inset-y-3 end-3 flex max-w-[100vw] flex-col overflow-hidden rounded-2xl shadow-xl shadow-black/30 ring-1 ring-border',
           // A themed panel supplies its own ground; the default stays card.

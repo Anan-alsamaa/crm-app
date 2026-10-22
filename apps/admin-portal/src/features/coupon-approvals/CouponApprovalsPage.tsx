@@ -14,7 +14,6 @@ import {
   Skeleton,
   SparkleIcon,
   toast,
-  Toolbar,
 } from '@yiji/ui';
 import {
   isRestaurantOrderNumber,
@@ -29,6 +28,7 @@ import {
   normalizeOrderId,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { FIELD_LABEL, FILTER_CARD, PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import {
@@ -1685,110 +1685,113 @@ export function CouponApprovalsPage() {
     // scroll. This one didn't, so a queue longer than a screen was unreachable,
     // and with no header band the filter pills sat jammed under the navbar.
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('nav.couponApprovals', { defaultValue: 'Coupon approvals' })}
-        </h1>
-        {/* Only when there is something it would actually do. A permanently
-            visible bulk action on an empty queue invites a click that grants
-            nothing and teaches nothing. */}
-        {canDecide && approvable.length > 0 && (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            className="ms-auto"
-            disabled={bulkBusy}
-            onClick={() => setConfirmAll(true)}
-          >
-            {t('couponApprovals.approveAll', {
-              count: approvable.length,
-              defaultValue: 'Approve all ({{count}})',
-            })}
-          </Button>
-        )}
-      </Toolbar>
+      <PageHeader
+        title={t('nav.couponApprovals', { defaultValue: 'Coupon approvals' })}
+        actions={
+          /* Only when there is something it would actually do. A permanently
+             visible bulk action on an empty queue invites a click that grants
+             nothing and teaches nothing. */
+          canDecide && approvable.length > 0 ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={bulkBusy}
+              onClick={() => setConfirmAll(true)}
+            >
+              {t('couponApprovals.approveAll', {
+                count: approvable.length,
+                defaultValue: 'Approve all ({{count}})',
+              })}
+            </Button>
+          ) : undefined
+        }
+      />
 
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
-        <div className="mx-auto max-w-4xl space-y-4">
-          <div className="flex flex-wrap gap-1.5">
-            {(
-              [
-                'pending',
-                ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'),
-                'all',
-              ] as const
-            ).map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setView(s)}
-                aria-pressed={view === s}
-                className={cn(
-                  'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
-                  view === s
-                    ? // The selected filter is a solid ink chip (Rapport skin).
-                      'bg-ink text-ink-foreground'
-                    : 'bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground',
-                )}
-              >
-                {t(`couponApprovals.status.${s}`, { defaultValue: s })}
-              </button>
-            ))}
-          </div>
+      {/* Full width on the header's gutter (Rapport skin): the queue used to
+          sit in a centred 4xl column, visibly off-centre from its own title. */}
+      <div className={cn(PAGE_BODY, 'overflow-x-hidden')}>
+        <div className="space-y-4">
+          {/* Status, search and period in ONE frosted filter card - the
+              Dashboard's pattern. */}
+          <div className={cn(FILTER_CARD, 'space-y-3')}>
+            <div className="flex flex-wrap gap-1.5">
+              {(
+                [
+                  'pending',
+                  ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'),
+                  'all',
+                ] as const
+              ).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setView(s)}
+                  aria-pressed={view === s}
+                  className={cn(
+                    'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
+                    view === s
+                      ? // The selected filter is a solid ink chip (Rapport skin).
+                        'bg-ink text-ink-foreground'
+                      : 'bg-glass/60 text-foreground/80 ring-1 ring-inset ring-glass/80 hover:bg-glass/90 hover:text-foreground',
+                  )}
+                >
+                  {t(`couponApprovals.status.${s}`, { defaultValue: s })}
+                </button>
+              ))}
+            </div>
 
-          {/* Search and period. Both narrow the list the tabs above produced,
+            {/* Search and period. Both narrow the list the tabs above produced,
               so a supervisor can hold a status AND a date range at once. */}
-          <div className="flex flex-wrap items-end gap-2">
-            <Input
-              className="h-9 min-w-[16rem] flex-1"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              aria-label={t('couponApprovals.search', {
-                defaultValue: 'Order ID, phone, or coupon code',
-              })}
-              placeholder={t('couponApprovals.search', {
-                defaultValue: 'Order ID, phone, or coupon code',
-              })}
-            />
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('complaintDash.from', { defaultValue: 'From' })}
-              </span>
-              <DateField
-                size="md"
-                className="w-[9.5rem]"
-                value={from}
-                onChange={(v) => setFrom(v)}
+            <div className="flex flex-wrap items-end gap-2">
+              <Input
+                className="h-9 min-w-[min(16rem,100%)] flex-1"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                aria-label={t('couponApprovals.search', {
+                  defaultValue: 'Order ID, phone, or coupon code',
+                })}
+                placeholder={t('couponApprovals.search', {
+                  defaultValue: 'Order ID, phone, or coupon code',
+                })}
               />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('complaintDash.to', { defaultValue: 'To' })}
+              <label className="flex flex-col gap-1">
+                <span className={FIELD_LABEL}>
+                  {t('complaintDash.from', { defaultValue: 'From' })}
+                </span>
+                <DateField
+                  size="md"
+                  className="w-[9.5rem]"
+                  value={from}
+                  onChange={(v) => setFrom(v)}
+                />
+              </label>
+              <label className="flex flex-col gap-1">
+                <span className={FIELD_LABEL}>{t('complaintDash.to', { defaultValue: 'To' })}</span>
+                <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
+              </label>
+              {(query || from || to) && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    setQuery('');
+                    setFrom('');
+                    setTo('');
+                  }}
+                >
+                  {t('complaintDash.clear', { defaultValue: 'Clear' })}
+                </Button>
+              )}
+              <span className="ms-auto self-end pb-2.5 text-xs tabular-nums text-muted-foreground">
+                {t('couponApprovals.showing', {
+                  shown: rows.length,
+                  total: all.length,
+                  defaultValue: '{{shown}} of {{total}}',
+                })}
               </span>
-              <DateField size="md" className="w-[9.5rem]" value={to} onChange={(v) => setTo(v)} />
-            </label>
-            {(query || from || to) && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setQuery('');
-                  setFrom('');
-                  setTo('');
-                }}
-              >
-                {t('complaintDash.clear', { defaultValue: 'Clear' })}
-              </Button>
-            )}
-            <span className="ms-auto self-center text-xs tabular-nums text-muted-foreground">
-              {t('couponApprovals.showing', {
-                shown: rows.length,
-                total: all.length,
-                defaultValue: '{{shown}} of {{total}}',
-              })}
-            </span>
+            </div>
           </div>
 
           {approvals.isLoading ? (

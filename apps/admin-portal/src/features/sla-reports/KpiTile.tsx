@@ -35,18 +35,15 @@ export const pctKpiTone = (n: number | null): KpiTone =>
   n == null ? 'blue' : n >= 90 ? 'green' : n >= 75 ? 'amber' : 'crimson';
 /* Ring accents for the % tiles. MetricTone deliberately has no warning/amber
  * (a light token), so the amber band falls back to jade. */
-/* The SURFACE carries the hue, like every other report's tiles — this page
- * was the last one left showing four white boxes. */
-const KPI_SURFACE: Record<KpiTone, string> = {
-  blue: 'bg-gradient-to-br from-sky-tint/70 to-card',
-  green: 'bg-gradient-to-br from-success-tint/70 to-card',
-  amber: 'bg-gradient-to-br from-warning-tint/70 to-card',
-  crimson: 'bg-gradient-to-br from-destructive-tint/70 to-card',
-};
+/* Rapport skin (owner, 2026-10-22): the Dashboard's tile language - a
+ * frosted card and an INK numeral, the tone carried by the dot and the round
+ * chip. The pastel washes read as a different family from the Dashboard.
+ * Crimson keeps its red numeral: a breached deadline is the one figure here
+ * whose colour is the message (DESIGN.md: overdue is red AND bold). */
 const KPI_NUMERAL: Record<KpiTone, string> = {
-  blue: 'text-[oklch(0.48_0.16_264)]',
-  green: 'text-[oklch(0.45_0.13_155)]',
-  amber: 'text-[oklch(0.5_0.13_75)]',
+  blue: 'text-foreground',
+  green: 'text-foreground',
+  amber: 'text-foreground',
   crimson: 'text-destructive',
 };
 
@@ -84,16 +81,14 @@ export function Kpi({
         // tile rather than using the shared one because it needs a `crimson`
         // tone the shared vocabulary has no seat for, and red for a badly
         // missed SLA is the whole point of colouring these at all.
-        'flex items-center gap-3 rounded-xl px-3.5 py-2.5',
-        'shadow-[0_1px_2px_oklch(var(--shadow-color)/0.06),0_10px_26px_-14px_oklch(var(--shadow-color)/0.18)]',
-        'transition-[box-shadow] duration-base ease-out',
-        KPI_SURFACE[tone],
+        'flex items-center gap-3 rounded-[1.125rem] bg-card px-3.5 py-2.5',
+        'shadow-soft ring-1 ring-foreground/[0.06]',
       )}
     >
       {icon && (
         <span
           aria-hidden
-          className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-lg', KPI_CHIP[tone])}
+          className={cn('grid h-8 w-8 shrink-0 place-items-center rounded-full', KPI_CHIP[tone])}
         >
           {icon}
         </span>
@@ -101,7 +96,7 @@ export function Kpi({
       <div
         data-kpi-value
         className={cn(
-          'shrink-0 text-2xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
+          'shrink-0 text-2xl font-semibold leading-none tabular-nums tracking-[-0.03em]',
           KPI_NUMERAL[tone],
         )}
       >
@@ -109,7 +104,7 @@ export function Kpi({
       </div>
       <div
         data-kpi-label
-        className="flex min-w-0 items-center gap-1.5 text-2xs font-semibold uppercase leading-tight tracking-[0.1em] text-muted-foreground"
+        className="flex min-w-0 items-center gap-1.5 text-xs font-medium leading-tight text-muted-foreground"
       >
         <span aria-hidden className={cn('h-1.5 w-1.5 shrink-0 rounded-full', KPI_DOT[tone])} />
         <span className="min-w-0">{label}</span>
@@ -152,25 +147,32 @@ export function StatPanel({
   return (
     <section
       aria-labelledby={id}
-      className="flex flex-col rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]"
+      className="flex flex-col rounded-2xl bg-card p-[1.125rem] shadow-soft ring-1 ring-foreground/[0.06]"
     >
       <header className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
         <div className="min-w-0">
-          <h2 id={id} className="text-sm font-semibold tracking-tight text-foreground">
+          <h2 id={id} className="text-[0.9375rem] font-semibold tracking-tight text-foreground">
             {title}
           </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">{note}</p>
         </div>
         {aside && <div className="flex shrink-0 items-center gap-2">{aside}</div>}
       </header>
-      <div className="mt-4 grid grid-cols-2 gap-y-4 sm:grid-cols-4 sm:divide-x sm:divide-border rtl:sm:divide-x-reverse">
+      {/* A hairline BETWEEN cells of a row, never at the start of one: a
+          divide-x put a stray rule before the first cell of every wrapped
+          row (the Admin KPI coupon panel has three). Logical `border-s`, so
+          Arabic needs no reversal. */}
+      <div className="mt-4 grid grid-cols-2 gap-y-4 sm:grid-cols-4">
         {cells.map((c) => (
-          <div key={c.label} className="flex min-w-0 items-center gap-3 sm:px-4 sm:first:ps-0">
+          <div
+            key={c.label}
+            className="flex min-w-0 items-center gap-3 sm:border-s sm:border-foreground/[0.08] sm:px-4 sm:[&:nth-child(4n+1)]:border-s-0 sm:[&:nth-child(4n+1)]:ps-0"
+          >
             <div className="min-w-0">
               <div
                 data-kpi-value
                 className={cn(
-                  'text-2xl font-extrabold leading-none tabular-nums tracking-[-0.03em]',
+                  'text-[1.75rem] font-semibold leading-none tabular-nums tracking-[-0.03em]',
                   loading ? 'text-muted-foreground/40' : KPI_NUMERAL[c.tone ?? 'blue'],
                 )}
               >

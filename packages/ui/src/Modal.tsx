@@ -115,6 +115,8 @@ export function Modal({
       <div className="absolute inset-0 flex items-center justify-center overflow-y-auto p-4">
         <div
           ref={panelRef}
+          /* A hook for a portal's own stylesheet; carries no styling itself. */
+          data-modal-panel=""
           className={cn(
             // NO ring, NO divider lines: the elevation does the separating.
             // Boxed outlines around a panel that already floats read as a

@@ -76,7 +76,7 @@ export function DashboardPage() {
                   'transition-[background-color,color,box-shadow] duration-fast ease-out',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
                   active === key
-                    ? 'bg-white text-foreground shadow-[0_4px_12px_-6px_oklch(var(--shadow-color)/0.45)]'
+                    ? 'bg-glass text-foreground shadow-[0_4px_12px_-6px_oklch(var(--shadow-color)/0.45)]'
                     : 'text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -89,7 +89,7 @@ export function DashboardPage() {
           <div className="flex shrink-0 items-center gap-2">
             <Link
               to="/reports/operational-kpi/tickets"
-              className="rounded-full bg-white/60 px-4 py-2 text-sm font-semibold text-foreground ring-1 ring-inset ring-foreground/10 transition-colors duration-fast hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              className="rounded-full bg-glass/60 px-4 py-2 text-sm font-semibold text-foreground ring-1 ring-inset ring-foreground/10 transition-colors duration-fast hover:bg-glass focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
             >
               {t('dashboard.heroTickets', { defaultValue: 'Ticket breakdown' })}
             </Link>

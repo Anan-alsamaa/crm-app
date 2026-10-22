@@ -16,7 +16,6 @@ import {
   SelectMenu,
   Skeleton,
   toast,
-  Toolbar,
   ToolbarSpacer,
 } from '@yiji/ui';
 import {
@@ -29,6 +28,7 @@ import {
   type ReportType,
 } from './api.js';
 import { useUsers } from '../users/api.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { useTeams } from '../teams/api.js';
 import { jobProducer } from '../../lib/job-producer.js';
 
@@ -263,48 +263,34 @@ export function ReportsPage() {
     }
   };
 
-  const total = reports.data?.length ?? 0;
-
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        {/* Title only, as the sibling report pages do — the editorial header
-            below carries the subtitle and the saved count, so repeating them up
-            here made the two headers read as a collision. */}
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('reports.title', { defaultValue: 'Scheduled reports' })}
-        </h1>
-        <ToolbarSpacer />
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => {
-            setEditingId(null);
-            setDrawerOpen(true);
-          }}
-          iconStart={<PlusIcon />}
-        >
-          {t('reports.create', { defaultValue: 'New report' })}
-        </Button>
-      </Toolbar>
+      {/* The Rapport header (owner, 2026-10-22): the big title, what the page
+          is for under it, New report on the far side. The "0 saved" pill and
+          the rule under the intro are gone - the grid below is the count. */}
+      <PageHeader
+        title={t('reports.title', { defaultValue: 'Scheduled reports' })}
+        description={t('reports.heroSubtitle', {
+          defaultValue:
+            'Saved report definitions that run automatically on a schedule and email a CSV to their recipients. Set once, delivered on time.',
+        })}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setEditingId(null);
+              setDrawerOpen(true);
+            }}
+            iconStart={<PlusIcon />}
+          >
+            {t('reports.create', { defaultValue: 'New report' })}
+          </Button>
+        }
+      />
 
-      <div className="flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto max-w-5xl space-y-5">
-          {/* Clean editorial header — no gradient banner. */}
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-foreground/10 pb-5">
-            <div>
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('reports.heroSubtitle', {
-                  defaultValue:
-                    'Saved report definitions that run automatically on a schedule and email a CSV to their recipients. Set once, delivered on time.',
-                })}
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full bg-secondary px-3.5 py-1.5 text-sm font-semibold tabular-nums text-muted-foreground ring-1 ring-foreground/10">
-              {t('reports.savedCount', { count: total, defaultValue: '{{count}} saved' })}
-            </span>
-          </div>
-
+      <div className={PAGE_BODY}>
+        <div className="space-y-5">
           {reports.isError ? (
             <ErrorState
               title={t('reports.loadError', { defaultValue: 'Could not load reports' })}
@@ -371,7 +357,7 @@ export function ReportsPage() {
                 >
                   <span
                     aria-hidden
-                    className="grid h-9 w-9 place-items-center rounded-lg bg-secondary/80"
+                    className="grid h-9 w-9 place-items-center rounded-full bg-secondary/80"
                   >
                     <PlusIcon />
                   </span>
@@ -661,14 +647,14 @@ function ReportCard({
         <button
           type="button"
           onClick={onEdit}
-          className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/10"
+          className="rounded-full px-3 py-1.5 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/10"
         >
           {t('actions.edit', { ns: 'common', defaultValue: 'edit' })}
         </button>
         <button
           type="button"
           onClick={onDelete}
-          className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-destructive transition-colors duration-fast ease-out hover:bg-destructive/10"
+          className="rounded-full px-3 py-1.5 text-xs font-medium text-destructive transition-colors duration-fast ease-out hover:bg-destructive/10"
         >
           {t('actions.delete', { ns: 'common', defaultValue: 'delete' })}
         </button>

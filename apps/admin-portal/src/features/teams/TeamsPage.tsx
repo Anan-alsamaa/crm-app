@@ -19,13 +19,13 @@ import {
   TeamIcon,
   Textarea,
   toast,
-  Toolbar,
   ToolbarSpacer,
   UsersIcon,
   ZapIcon,
 } from '@yiji/ui';
 import { useTeams, useCreateTeam, useUpdateTeam, useDeleteTeam, type Team } from './api.js';
 import { useUsers } from '../users/api.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 
 const schema = z.object({ name: z.string().min(1), description: z.string().optional() });
 type FormValues = z.infer<typeof schema>;
@@ -121,51 +121,28 @@ export function TeamsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">{t('teams.title')}</h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
-          <span className="opacity-50">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{teamCount}</strong>{' '}
-            {t('teams.statTeamsCap', { defaultValue: 'teams' })}
-          </span>
-          <span className="opacity-30">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{assignedCount}</strong>{' '}
-            {t('teams.statAssignedCap', { defaultValue: 'assigned' })}
-          </span>
-          {unassignedCount > 0 && (
-            <>
-              <span className="opacity-30">·</span>
-              {/* Bare warning ink is near-invisible on the dark canvas — the
-                  tinted chip treatment stays readable on both themes. */}
-              <span className="rounded-full bg-warning/20 px-2 py-0.5 tabular-nums text-warning-foreground">
-                <strong className="font-semibold">{unassignedCount}</strong>{' '}
-                {t('teams.statUnassignedCap', { defaultValue: 'unassigned' })}
-              </span>
-            </>
-          )}
-        </span>
-        <ToolbarSpacer />
-        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
-          {t('teams.create')}
-        </Button>
-      </Toolbar>
+      {/* The Rapport header (owner, 2026-10-22): title, what the page is for
+          under it, Create on the far side. The "83 teams · 1 assigned" strip
+          beside the title is gone - the tiles below carry those numbers. */}
+      <PageHeader
+        title={t('teams.title')}
+        description={t('teams.heroSubtitle', {
+          defaultValue:
+            'Groups that decide where chats and tickets route. See each team, who belongs to it, and who still needs a home.',
+        })}
+        actions={
+          <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
+            {t('teams.create')}
+          </Button>
+        }
+      />
 
-      <div className="flex-1 overflow-auto px-5 py-4">
+      <div className={PAGE_BODY}>
         {!teams.isLoading && !teams.isError && teamCount > 0 && (
-          <div className="mx-auto mb-5 max-w-5xl space-y-5">
-            <div className="border-b border-foreground/10 pb-5">
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('teams.heroSubtitle', {
-                  defaultValue:
-                    'Groups that decide where chats and tickets route. See each team, who belongs to it, and who still needs a home.',
-                })}
-              </p>
-            </div>
+          <div className="mb-4">
             {/* Boxed board tiles — tinted icon chips, hero numerals; tone lives
                 in the chip / dot, never in a colored outline. */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               <StatCard
                 icon={<TeamIcon />}
                 tone="primary"
@@ -214,7 +191,7 @@ export function TeamsPage() {
             onRetry={() => void teams.refetch()}
           />
         ) : teams.isLoading ? (
-          <div className="mx-auto max-w-5xl divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <div className="divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-3">
                 <Skeleton className="h-9 w-9 rounded-lg" />
@@ -241,7 +218,7 @@ export function TeamsPage() {
           /* Dense list — one row per team, flush inside one board card:
              hairline separators, quiet hover, a footer aggregate band.
              Members shown as a small avatar stack with an overflow count. */
-          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             <ul className="divide-y divide-foreground/[0.06]">
               {teams.data.map((tm) => {
                 const members = (users.data ?? []).filter((u) => u.team?.id === tm.id);
@@ -261,7 +238,7 @@ export function TeamsPage() {
                       {/* Tinted initial chip — the boards' icon-chip anatomy. */}
                       <span
                         aria-hidden
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-primary-tint text-sm font-semibold text-primary"
+                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-tint text-sm font-semibold text-primary"
                       >
                         {tm.name.slice(0, 1).toUpperCase()}
                       </span>

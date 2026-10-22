@@ -66,11 +66,19 @@ module.exports = {
         base: ['0.875rem', { lineHeight: '1.375rem' }],
         md: ['0.9375rem', { lineHeight: '1.5rem' }],
       },
+      /* The frosted controls (round header buttons, chips, the search pill)
+         are white on the light page. A literal `bg-white/70` stayed white in
+         the dark theme too - a glowing slab on charcoal - so they take this
+         token instead, which is white in light and a lifted charcoal in dark. */
+      colors: {
+        glass: 'oklch(var(--glass) / <alpha-value>)',
+      },
       boxShadow: {
-        /* The frosted card: a lit top edge and one long, soft drop. */
-        soft: 'inset 0 1px 0 rgb(255 255 255 / 0.7), 0 1px 2px oklch(var(--shadow-color) / 0.05), 0 24px 48px -30px oklch(var(--shadow-color) / 0.32)',
-        float:
-          'inset 0 1px 0 rgb(255 255 255 / 0.7), 0 2px 6px oklch(var(--shadow-color) / 0.06), 0 30px 60px -32px oklch(var(--shadow-color) / 0.4)',
+        /* The frosted card: a lit top edge and one long, soft drop. Defined
+           as variables in src/index.css so the dark theme can swap the lit
+           white edge (a bright line on charcoal) for a faint one. */
+        soft: 'var(--admin-shadow-soft)',
+        float: 'var(--admin-shadow-float)',
       },
     },
   },

@@ -187,6 +187,20 @@
   --warning-tint: 0.965 0.03 42;
   --sky-tint: 0.93 0.055 195;
   --violet-tint: 0.93 0.055 320;
+
+  /* RAPPORT SKIN - surface recipes, as variables so the dark theme can swap
+     them wholesale (see the dark block). `--glass` is the frosted control
+     fill (white here); the shadows are the frosted card's lit edge + drop. */
+  --glass: 1 0 0;
+  --admin-card-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.78), inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 1px 2px oklch(var(--shadow-color) / 0.05), 0 24px 48px -30px oklch(var(--shadow-color) / 0.32);
+  --admin-shadow-soft:
+    inset 0 1px 0 rgb(255 255 255 / 0.7), 0 1px 2px oklch(var(--shadow-color) / 0.05),
+    0 24px 48px -30px oklch(var(--shadow-color) / 0.32);
+  --admin-shadow-float:
+    inset 0 1px 0 rgb(255 255 255 / 0.7), 0 2px 6px oklch(var(--shadow-color) / 0.06),
+    0 30px 60px -32px oklch(var(--shadow-color) / 0.4);
 }
 
 /* DEFAULT THEME — "midnight ink" (mirrors agent portal). Light via
@@ -206,7 +220,9 @@
   --sky-tint: 0.27 0.045 264;
   --violet-tint: 0.27 0.045 285;
 
-  --radius: 0.875rem;
+  /* The Rapport corner in both themes - a dark page with different radii
+     read as a different product. */
+  --radius: 1.125rem;
   /* Elevation ladder with real separation so surfaces read as distinct layers,
      not one flat wall of dark: base < card < secondary/popover. */
   --background: 0.155 0.012 260;
@@ -258,6 +274,28 @@
   --violet: 0.62 0.2 285;
   --sky: 0.7 0.16 264;
   --magenta: 0.62 0.19 20;
+
+  /* Ink is the SOLID chip/CTA colour (the active report tab, Approve all,
+     the selected filter). Near-black on a near-black page is no selection at
+     all, so in the dark theme ink inverts to a light pill with dark type.
+     The nav bar re-binds it back to dark below - it is a dark bar in both. */
+  --ink: 0.92 0.012 277;
+  --ink-foreground: 0.18 0.025 277;
+  --ink-muted: 0.45 0.02 277;
+
+  /* Rapport skin, dark: the frosted controls become a lifted charcoal and the
+     cards lose the lit WHITE edge (a bright hairline on charcoal) for a faint
+     one; the drops go deeper because a dark page needs more to read depth. */
+  --glass: 0.27 0.014 262;
+  --admin-card-shadow:
+    inset 0 0 0 1px oklch(1 0 0 / 0.06), 0 1px 2px oklch(0 0 0 / 0.3),
+    0 24px 48px -30px oklch(0 0 0 / 0.7);
+  --admin-shadow-soft:
+    inset 0 0 0 1px oklch(1 0 0 / 0.06), 0 1px 2px oklch(0 0 0 / 0.3),
+    0 24px 48px -30px oklch(0 0 0 / 0.7);
+  --admin-shadow-float:
+    inset 0 0 0 1px oklch(1 0 0 / 0.08), 0 2px 6px oklch(0 0 0 / 0.35),
+    0 30px 60px -32px oklch(0 0 0 / 0.8);
 }
 
 /* Aurora workspace wash (mirrors agent portal). */
@@ -429,11 +467,9 @@ body::after {
 }
 .admin-skin [data-toolbar] > h1 {
   font-size: 2.375rem;
-  line-height: 1.02;
+  line-height: 1.05;
   font-weight: 600;
   letter-spacing: -0.025em;
-  /* Two words become two lines, the reference's stacked title. */
-  max-width: 11ch;
   color: oklch(var(--foreground));
 }
 [dir='rtl'] .admin-skin [data-toolbar] > h1 {
@@ -451,11 +487,7 @@ body::after {
 .admin-skin main .rounded-\[1\.25rem\].bg-card,
 .admin-skin main .rounded-\[1\.4rem\].bg-card {
   border-radius: 1.625rem;
-  box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.78),
-    inset 0 1px 0 rgb(255 255 255 / 0.9),
-    0 1px 2px oklch(var(--shadow-color) / 0.05),
-    0 24px 48px -30px oklch(var(--shadow-color) / 0.32);
+  box-shadow: var(--admin-card-shadow);
 }
 
 /* ── Tables: the directory view ──────────────────────────────────────────
@@ -534,17 +566,17 @@ body::after {
   height: 2.5rem;
   min-width: 2.5rem;
   border-radius: 9999px;
-  background: rgb(255 255 255 / 0.64);
+  background: oklch(var(--glass) / 0.64);
   color: oklch(var(--foreground));
   box-shadow:
-    inset 0 0 0 1px rgb(255 255 255 / 0.8),
+    inset 0 0 0 1px oklch(var(--glass) / 0.8),
     0 8px 20px -14px oklch(var(--shadow-color) / 0.45);
   transition:
     background-color 120ms cubic-bezier(0.23, 1, 0.32, 1),
     transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .admin-icon-btn:hover {
-  background: rgb(255 255 255 / 0.95);
+  background: oklch(var(--glass) / 0.95);
 }
 
 /* The header's utility cluster sat on the dark masthead and is written in the
@@ -552,4 +584,175 @@ body::after {
    the dark ink, so the same components read correctly with no edits. */
 .admin-utilities {
   --ink-foreground: 0.22 0.02 277;
+}
+
+/* In the dark theme the masthead ink IS light again. */
+:root[data-theme='dark'] .admin-utilities {
+  --ink-foreground: 0.955 0.005 250;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * RAPPORT SKIN - every page (owner, 2026-10-22: "work on every page and
+ * component on the admin portal"). The Dashboard is the standard; the rules
+ * below carry its language to the shared primitives the other pages are built
+ * from. Visual only, as above.
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── The page title block (components/shell/Page.tsx) ───────────────────
+     Big title, the description UNDER it at a readable measure. One size for
+     every page, stepped down on a phone so a two-word title still fits. */
+.admin-page-title {
+  font-size: 2.375rem;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: oklch(var(--foreground));
+  overflow-wrap: anywhere;
+}
+.admin-page-desc {
+  margin-top: 0.5rem;
+  max-width: 46rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: oklch(var(--muted-foreground));
+  text-wrap: pretty;
+}
+@media (max-width: 639px) {
+  .admin-skin main h1,
+  .admin-skin [data-toolbar] > h1,
+  .admin-page-title {
+    font-size: 1.875rem;
+  }
+  [dir='rtl'] .admin-skin main h1 {
+    font-size: 1.75rem;
+  }
+}
+
+/* ── KPI tiles: the Dashboard's tile language ──────────────────────────
+     The shared StatCard (list pages) and ReportKpi (reports) wore pastel
+     gradient washes with the numeral in the tone's hue - a different family
+     from the Dashboard's frosted white tiles with an ink numeral. Here they
+     become the same card: frosted surface, ink numeral, the tone kept in the
+     round icon chip and the state dot (DESIGN.md: colour as accent, never as
+     surface). The data attributes are hooks on the primitives, nothing more. */
+.admin-skin [data-stat-card],
+.admin-skin [data-report-kpi] {
+  background: oklch(var(--card));
+  box-shadow: var(--admin-card-shadow);
+}
+.admin-skin [data-stat-card] {
+  align-items: center;
+  border-radius: 1.375rem;
+  padding: 1rem 1.125rem;
+}
+.admin-skin [data-report-kpi] {
+  border-radius: 1.125rem;
+}
+.admin-skin [data-stat-card] [data-stat-value],
+.admin-skin [data-report-kpi] [data-kpi-value] {
+  color: oklch(var(--foreground));
+  font-weight: 600;
+}
+.admin-skin [data-stat-card] [data-stat-value] {
+  font-size: 2rem;
+  letter-spacing: -0.03em;
+}
+.admin-skin [data-stat-card] > [aria-hidden]:first-child,
+.admin-skin [data-report-kpi] > [aria-hidden]:first-child {
+  border-radius: 9999px;
+}
+
+/* ── Dialogs and drawers (portalled to <body>, so not under .admin-skin) ─
+     This stylesheet only ever loads in the admin console, so the rules can
+     address the shared panels directly. The Rapport corner and the frosted
+     drop, the same as the cards they open from. */
+[data-modal-panel] {
+  border-radius: 1.625rem;
+  box-shadow:
+    var(--admin-shadow-float),
+    0 40px 80px -40px oklch(var(--shadow-color) / 0.55);
+}
+[data-drawer-panel] {
+  border-radius: 1.625rem;
+  box-shadow:
+    var(--admin-shadow-float),
+    0 40px 80px -40px oklch(var(--shadow-color) / 0.55);
+  --tw-ring-color: transparent;
+}
+
+/* ── Dark theme coherence ───────────────────────────────────────────────
+     The skin was built light-first. Nothing sets data-theme in this console
+     today, but the tokens exist and the theme must still read: the Dashboard
+     bento washes are light pastels that would put the light heading ink on a
+     near-white band, so the dark theme drops the wash and keeps the chip. */
+:root[data-theme='dark'] .admin-skin [data-tone-wash] {
+  background-image: none;
+}
+
+/* ── Warning chips: readable ink on the warning wash ──────────────────
+     `--warning-foreground` is WHITE here - it is the ink for a SOLID warning
+     fill. The shared Pill/Toast warning tones (and a few chips) put it on a
+     20% wash instead, which measured ~1.3:1: "No team" and the toast text were
+     practically invisible. On a wash the ink is the warning hue itself
+     (~5:1 on the tint). Scoped to the class pair, so solid fills keep white. */
+.bg-warning\/20.text-warning-foreground,
+.bg-warning\/15.text-warning-foreground {
+  color: oklch(var(--warning));
+}
+
+/* ── Section cards (the shared SectionCard) ─────────────────────────────
+     The Dashboard's bento corner and frosted drop, and no hue bar beside the
+     title: a thin coloured stripe at the start of a heading is the side-stripe
+     accent the design bans. The heading carries the section on its own. */
+.admin-skin [data-section-card] {
+  border-radius: 1.625rem;
+  box-shadow: var(--admin-card-shadow);
+}
+.admin-skin
+  [data-section-card]
+  > div:first-child
+  > div:first-child
+  > span[aria-hidden]:first-child {
+  display: none;
+}
+
+/* ── Labels in dialogs and drawers read as words too ───────────────────
+     The sentence-case rule above is scoped to `main`; dialogs and drawers
+     portal to <body>, so their field labels and section captions still came
+     out as small tracked capitals. */
+[data-drawer-panel] .uppercase[class*='tracking-'],
+[data-modal-panel] .uppercase[class*='tracking-'] {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* ── Date fields in Arabic ──────────────────────────────────────────────
+     The date text is forced LTR (the format is Latin order), but the calendar
+     button sits at the PAGE's end edge - the left, in Arabic - where the
+     input's own LTR padding left no room for it, so the icon sat on top of
+     "dd/mm/yyyy". The room moves to the side the icon is on. */
+[dir='rtl'] [data-date-field] > input[dir='ltr'] {
+  padding-left: 2.25rem;
+  padding-right: 0.875rem;
+}
+
+/* The report KPI strip runs the page's width like every other row on it.
+   Its 6xl cap left four tiles stopping short of the filter card under them. */
+.admin-skin [data-report-kpi-strip] {
+  max-width: none;
+}
+
+/* The active tab on the nav bar is a light pill in ink type. In the dark
+   theme the page colour it borrows is near-black, so the pill and its ink
+   label both vanished into the bar; it takes the lifted glass instead. */
+:root[data-theme='dark'] .admin-skin header nav {
+  --ink: 0.21 0.03 277;
+  --ink-foreground: 0.98 0.004 250;
+}
+:root[data-theme='dark'] .admin-skin header .bg-background.text-ink {
+  background-color: oklch(var(--glass));
+  color: oklch(var(--foreground));
+}
+:root[data-theme='dark'] .admin-skin header .text-ink\/60 {
+  color: oklch(var(--foreground) / 0.6);
 }

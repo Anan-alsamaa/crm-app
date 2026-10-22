@@ -18,11 +18,9 @@ import {
   Select,
   SelectMenu,
   Skeleton,
-  StatStrip,
+  StatCard,
   toast,
-  Toolbar,
   Pagination,
-  ToolbarSpacer,
   Ltr,
 } from '@yiji/ui';
 import {
@@ -38,6 +36,7 @@ import {
 import { useRecordVendorNames } from '../vendors/api.js';
 import { downloadCsv, parseStoresCsv, toCsv } from './csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { FILTER_CARD, PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { exportFileName } from '@yiji/shared-config';
 
 const schema = z.object({
@@ -415,89 +414,93 @@ export function StoresPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('stores.title', { defaultValue: 'Stores' })}
-        </h1>
-        <ToolbarSpacer />
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,.txt,.tsv,text/csv,text/plain"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void onFile(f);
-          }}
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          loading={importing}
-          onClick={() => fileRef.current?.click()}
-          iconStart={<UploadIcon />}
-        >
-          {t('stores.import', { defaultValue: 'Import CSV' })}
-        </Button>
-        {canExport && (
-          <ExportButtons
-            visibleCount={filtered.length}
-            totalCount={list.length}
-            onExportView={() => exportCsv('view')}
-            onExportAll={() => exportCsv('all')}
-            labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
-            labelView={t('stores.exportFiltered', {
-              count: filtered.length,
-              defaultValue: 'Export {{count}} shown',
-            })}
-            labelAll={t('stores.exportAll', {
-              count: list.length,
-              defaultValue: 'Export all {{count}}',
-            })}
-          />
-        )}
-        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
-          {t('stores.create', { defaultValue: 'Add store' })}
-        </Button>
-      </Toolbar>
-
-      <div className="flex-1 overflow-auto px-5 py-4">
-        {!stores.isLoading && !stores.isError && list.length > 0 && (
-          <div className="mx-auto mb-5 max-w-6xl space-y-5">
-            <div className=" pb-5">
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('stores.heroSubtitle', {
-                  defaultValue:
-                    'Every branch you operate, with its brand, city and managers. Ticket reports and dashboards join orders onto these rows.',
-                })}
-              </p>
-            </div>
-            <StatStrip
-              items={[
-                {
-                  label: t('stores.total', { defaultValue: 'stores' }),
-                  value: list.length,
-                  tone: 'blue',
-                },
-                {
-                  label: t('stores.cities', { defaultValue: 'cities' }),
-                  value: cities.size,
-                  tone: 'violet',
-                },
-                {
-                  label: t('stores.brandsUnit', { defaultValue: 'brands' }),
-                  value: brands.data?.length ?? 0,
-                  tone: 'green',
-                },
-                {
-                  label: t('stores.noBrand', { defaultValue: 'without a brand' }),
-                  value: unmapped,
-                  tone: unmapped > 0 ? 'amber' : 'neutral',
-                },
-              ]}
+      {/* The Rapport header (owner, 2026-10-22): title, what the page is for
+          under it, Import / Export / Add store on the far side as pills. */}
+      <PageHeader
+        title={t('stores.title', { defaultValue: 'Stores' })}
+        description={t('stores.heroSubtitle', {
+          defaultValue:
+            'Every branch you operate, with its brand, city and managers. Ticket reports and dashboards join orders onto these rows.',
+        })}
+        actions={
+          <>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv,.txt,.tsv,text/csv,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void onFile(f);
+              }}
             />
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,14rem)_auto]">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              loading={importing}
+              onClick={() => fileRef.current?.click()}
+              iconStart={<UploadIcon />}
+            >
+              {t('stores.import', { defaultValue: 'Import CSV' })}
+            </Button>
+            {canExport && (
+              <ExportButtons
+                visibleCount={filtered.length}
+                totalCount={list.length}
+                onExportView={() => exportCsv('view')}
+                onExportAll={() => exportCsv('all')}
+                labelPlain={t('stores.export', { defaultValue: 'Export CSV' })}
+                labelView={t('stores.exportFiltered', {
+                  count: filtered.length,
+                  defaultValue: 'Export {{count}} shown',
+                })}
+                labelAll={t('stores.exportAll', {
+                  count: list.length,
+                  defaultValue: 'Export all {{count}}',
+                })}
+              />
+            )}
+            <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
+              {t('stores.create', { defaultValue: 'Add store' })}
+            </Button>
+          </>
+        }
+      />
+
+      <div className={PAGE_BODY}>
+        {!stores.isLoading && !stores.isError && list.length > 0 && (
+          <div className="mb-4 space-y-4">
+            {/* The Dashboard's tile language - the same StatCard grid as Users. */}
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatCard
+                tone="primary"
+                label={t('stores.total', { defaultValue: 'stores' })}
+                value={list.length}
+              />
+              <StatCard
+                tone="pink"
+                label={t('stores.cities', { defaultValue: 'cities' })}
+                value={cities.size}
+              />
+              <StatCard
+                tone="success"
+                label={t('stores.brandsUnit', { defaultValue: 'brands' })}
+                value={brands.data?.length ?? 0}
+              />
+              <StatCard
+                tone={unmapped > 0 ? 'warning' : 'default'}
+                label={t('stores.noBrand', { defaultValue: 'without a brand' })}
+                value={unmapped}
+              />
+            </div>
+            {/* One frosted filter card, the Dashboard's. */}
+            <div
+              className={cn(
+                FILTER_CARD,
+                'grid items-center gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,12rem)_minmax(0,14rem)_auto]',
+              )}
+            >
               <Input
                 value={query}
                 onChange={(e) => {
@@ -602,35 +605,36 @@ export function StoresPage() {
           /* Board table — raised micro-label header band, hairline rows, a
              footer aggregate band. overflow-x-auto stays on the card so wide
              registers scroll inside it, never the page. */
-          <div className="mx-auto max-w-6xl overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <div className="overflow-x-auto rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             <table className="w-full min-w-[54rem] border-collapse text-sm">
               <thead>
-                <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                {/* A light label row on the card itself (Rapport), not a grey band. */}
+                <tr className="text-xs text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.07)]">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' })}
                   </th>
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colStore', { defaultValue: 'Store' })}
                   </th>
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colBrand', { defaultValue: 'Brand' })}
                   </th>
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colCity', { defaultValue: 'City' })}
                   </th>
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colArea', { defaultValue: 'Area manager' })}
                   </th>
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colChain', { defaultValue: 'Chain manager' })}
                   </th>
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colVendor', { defaultValue: 'Vendor' })}
                   </th>
-                  <th className="h-11 whitespace-nowrap px-4 text-start align-middle font-semibold">
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colStatus', { defaultValue: 'Status' })}
                   </th>
-                  <th className="h-11 px-4 text-end align-middle font-semibold" />
+                  <th className="h-12 px-4 pe-6 text-end align-middle font-semibold" />
                 </tr>
               </thead>
               <tbody>
@@ -643,7 +647,7 @@ export function StoresPage() {
                       'hover:bg-primary/[0.07]',
                     )}
                   >
-                    <td className="whitespace-nowrap px-4 py-3">
+                    <td className="h-[3.25rem] whitespace-nowrap px-4 ps-6 py-2">
                       {s.yiji_restaurant_id ? (
                         <Ltr className="font-mono text-xs tabular-nums text-foreground">
                           {s.yiji_restaurant_id}
@@ -654,7 +658,7 @@ export function StoresPage() {
                         <span className="font-mono text-xs text-muted-foreground/60">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-2">
                       <button
                         type="button"
                         onClick={() => openEdit(s)}
@@ -668,7 +672,7 @@ export function StoresPage() {
                         )}
                       </button>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-2">
                       {s.brand ? (
                         <span className="text-foreground">{s.brand.name}</span>
                       ) : (
@@ -677,13 +681,19 @@ export function StoresPage() {
                         </Pill>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">{s.city ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{s.area_manager ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{s.chain_manager ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
+                    <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
+                      {s.city ?? '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
+                      {s.area_manager ?? '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
+                      {s.chain_manager ?? '—'}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-muted-foreground">
                       {vendorNames.data?.get(s.id) ?? '—'}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-2">
                       {s.status === 'inactive' ? (
                         <Pill tone="muted" size="sm">
                           {t('stores.inactive', { defaultValue: 'Inactive' })}
@@ -694,7 +704,7 @@ export function StoresPage() {
                         </Pill>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-end">
+                    <td className="whitespace-nowrap px-4 pe-6 py-2 text-end">
                       <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(s)}>
                         {t('actions.edit', { ns: 'common', defaultValue: 'Edit' })}
                       </Button>
@@ -715,7 +725,7 @@ export function StoresPage() {
             </table>
             {/* Footer aggregate band — the board table's closing line. Counts
                 describe the rows on screen, so a search never mixes scopes. */}
-            <div className="flex h-11 items-center gap-6 border-t border-foreground/[0.08] bg-foreground/[0.02] px-4 text-xs text-muted-foreground">
+            <div className="flex h-11 items-center gap-6 border-t border-foreground/[0.06] px-6 text-xs text-muted-foreground">
               <span>
                 <span className="font-semibold tabular-nums text-foreground">
                   {filtered.length}

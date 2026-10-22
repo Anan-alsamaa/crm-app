@@ -19,11 +19,10 @@ import {
   StatCard,
   StoreIcon,
   toast,
-  Toolbar,
-  ToolbarSpacer,
   ZapIcon,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import {
   useVendors,
   useCreateVendor,
@@ -237,50 +236,36 @@ export function VendorsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('vendors.title', { defaultValue: 'Vendors' })}
-        </h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
-          <span className="opacity-50">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{total}</strong>{' '}
-            {t('vendors.total', { defaultValue: 'vendors' })}
-          </span>
-          <span className="opacity-30">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{activeCount}</strong>{' '}
-            {t('vendors.active', { defaultValue: 'active' })}
-          </span>
-        </span>
-        <ToolbarSpacer />
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => {
-            setEditing(null);
-            setDrawerOpen(true);
-          }}
-          iconStart={<PlusIcon />}
-        >
-          {t('vendors.create', { defaultValue: 'New vendor' })}
-        </Button>
-      </Toolbar>
+      {/* The Rapport header (owner, 2026-10-22): title, what the page is for
+          under it, New vendor on the far side. The "1 vendors · 1 active"
+          strip beside the title is gone - the tiles below carry it. */}
+      <PageHeader
+        title={t('vendors.title', { defaultValue: 'Vendors' })}
+        description={t('vendors.heroSubtitle', {
+          defaultValue:
+            'Every brand you support, with the colors and logo that drive its customer chat widget. Select a vendor to edit its branding or status.',
+        })}
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => {
+              setEditing(null);
+              setDrawerOpen(true);
+            }}
+            iconStart={<PlusIcon />}
+          >
+            {t('vendors.create', { defaultValue: 'New vendor' })}
+          </Button>
+        }
+      />
 
-      <div className="flex-1 overflow-auto px-5 py-4">
+      <div className={PAGE_BODY}>
         {!vendors.isLoading && total > 0 && (
-          <div className="mx-auto mb-5 max-w-5xl space-y-5">
-            <div className="border-b border-foreground/10 pb-5">
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('vendors.heroSubtitle', {
-                  defaultValue:
-                    'Every brand you support, with the colors and logo that drive its customer chat widget. Select a vendor to edit its branding or status.',
-                })}
-              </p>
-            </div>
+          <div className="mb-4">
             {/* Boxed board tiles — tinted icon chips, hero numerals; tone lives
                 in the chip / dot, never in a colored outline. */}
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
               <StatCard
                 icon={<StoreIcon />}
                 tone="primary"
@@ -314,7 +299,7 @@ export function VendorsPage() {
           </div>
         )}
         {vendors.isLoading ? (
-          <div className="mx-auto max-w-5xl divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <div className="divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-3">
                 <Skeleton className="h-8 w-8 rounded-lg" />
@@ -347,7 +332,7 @@ export function VendorsPage() {
         ) : (
           /* Rows flush inside one board card — hairline separators, quiet
              hover, a footer aggregate band. */
-          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             <ul className="divide-y divide-foreground/[0.06]">
               {vendors.data.map((v) => (
                 <li key={v.id}>

@@ -19,13 +19,12 @@ import {
   SelectMenu,
   SettingsIcon,
   Skeleton,
-  Toolbar,
-  ToolbarSpacer,
   cn,
   toast,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { QuickRepliesSection } from './QuickRepliesSection.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 
 /**
  * The dropdown lists, editable by the operations team.
@@ -396,58 +395,56 @@ export function OptionListsPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('lists.title', { defaultValue: 'Dropdown values' })}
-        </h1>
-        <ToolbarSpacer />
-        <SelectMenu
-          size="sm"
-          className="w-[14rem]"
-          value={page}
-          onChange={(v) => setPage(v as PageKey)}
-          aria-label={t('lists.pickList', { defaultValue: 'List' })}
-          options={[
-            ...LIST_KEYS.map((k) => ({ value: k, label: LIST_LABELS[k] })),
-            {
-              /* "Ready wordings", not "Inbox: ready replies" (ops, 2026-10-04).
-                 This one entry now opens three libraries — the inbox replies
-                 plus the late-order reasons and actions — and naming only the
-                 inbox would hide the two new ones from anyone scanning this
-                 picker for where to write them. The section itself names each
-                 library on its own tab. */
-              value: QUICK_REPLIES,
-              label: t('replies.pickerLabel', { defaultValue: 'Ready wordings' }),
-            },
-          ]}
-        />
-      </Toolbar>
+      {/* The Rapport header (owner, 2026-10-22): title, what the page is for
+          under it, the list picker on the far side. The sentence follows the
+          picker - the hero introduces the THREE libraries when the ready
+          wordings are open, the dropdowns otherwise. */}
+      <PageHeader
+        title={t('lists.title', { defaultValue: 'Dropdown values' })}
+        description={
+          page === QUICK_REPLIES
+            ? t('replies.heroSubtitle', {
+                defaultValue:
+                  'Wordings an agent inserts with one click. Three separate libraries: the ready replies above the inbox composer, and the ready reasons and actions on a late-order decision.',
+              })
+            : t('lists.heroSubtitle', {
+                defaultValue:
+                  'Every dropdown the ticket form offers, editable live. Pick a list, then add, reorder, retire, or restore its values.',
+              })
+        }
+        actions={
+          <SelectMenu
+            size="sm"
+            className="w-[14rem]"
+            value={page}
+            onChange={(v) => setPage(v as PageKey)}
+            aria-label={t('lists.pickList', { defaultValue: 'List' })}
+            options={[
+              ...LIST_KEYS.map((k) => ({ value: k, label: LIST_LABELS[k] })),
+              {
+                /* "Ready wordings", not "Inbox: ready replies" (ops, 2026-10-04).
+                     This one entry now opens three libraries — the inbox replies
+                     plus the late-order reasons and actions — and naming only the
+                     inbox would hide the two new ones from anyone scanning this
+                     picker for where to write them. The section itself names each
+                     library on its own tab. */
+                value: QUICK_REPLIES,
+                label: t('replies.pickerLabel', { defaultValue: 'Ready wordings' }),
+              },
+            ]}
+          />
+        }
+      />
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <div className="mx-auto max-w-3xl space-y-4">
-          {/* Page hero — the boards' header anatomy, same as every sibling
-              page, so the suite reads as one product. */}
-          <div className="border-b border-foreground/10 pb-5">
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {/* The hero now introduces the THREE libraries; the per-library
-                  sentence moved into the section, next to the tab that selects
-                  it, because it changes with the tab and a hero that contradicts
-                  the list under it is worse than no hero. */}
-              {page === QUICK_REPLIES
-                ? t('replies.heroSubtitle', {
-                    defaultValue:
-                      'Wordings an agent inserts with one click. Three separate libraries: the ready replies above the inbox composer, and the ready reasons and actions on a late-order decision.',
-                  })
-                : t('lists.heroSubtitle', {
-                    defaultValue:
-                      'Every dropdown the ticket form offers, editable live. Pick a list, then add, reorder, retire, or restore its values.',
-                  })}
-            </p>
-          </div>
+      <div className={PAGE_BODY}>
+        <div className="space-y-4">
           {page === QUICK_REPLIES ? (
             <QuickRepliesSection />
           ) : (
-            <>
+            /* Two columns at desktop width (Rapport skin): the add form and
+               the list's rule beside the values, rather than one narrow
+               centred column - the page runs the header's full width. */
+            <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
               {/* The board card header carries the list's name and the one rule an
               operator must know before touching it. */}
               {/* The count lives in the board card's footer band below — a bare
@@ -470,7 +467,7 @@ export function OptionListsPage() {
                       })
                 }
               >
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 [&>*:first-child]:min-w-[12rem] [&>*:first-child]:flex-1">
                   <Input
                     value={draft}
                     onChange={(e) => setDraft(e.target.value)}
@@ -711,7 +708,7 @@ export function OptionListsPage() {
                   )}
                   {/* Footer aggregate band — the boards' table anatomy. */}
                   <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-4 py-2.5">
-                    <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    <span className="text-xs font-medium text-muted-foreground">
                       {t('lists.valuesCap', { defaultValue: 'values' })}
                     </span>
                     <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
@@ -720,7 +717,7 @@ export function OptionListsPage() {
                   </div>
                 </div>
               )}
-            </>
+            </div>
           )}
         </div>
       </div>

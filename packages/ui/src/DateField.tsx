@@ -148,7 +148,8 @@ export function DateField({
   };
 
   return (
-    <div className={cn('relative', SIZE[size], className)}>
+    /* `data-date-field` is a hook for a portal's own stylesheet; no styling. */
+    <div data-date-field="" className={cn('relative', SIZE[size], className)}>
       <input
         id={inputId}
         name={name}

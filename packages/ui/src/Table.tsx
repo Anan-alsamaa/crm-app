@@ -267,6 +267,9 @@ export function TableSurface({
     >
       <div
         ref={ref}
+        /* A hook for a portal's own code (the admin column pager finds the
+           table's scroller by it); carries no styling itself. */
+        data-table-scroller=""
         // A scrollable region is only a tab stop when there is something to
         // scroll — otherwise every table on the page becomes a stop that does
         // nothing. When it IS scrollable, the arrow keys move it, which is the

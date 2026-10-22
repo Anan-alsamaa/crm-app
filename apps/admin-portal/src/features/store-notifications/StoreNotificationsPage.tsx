@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pill, SectionCard, Skeleton, cn, toast } from '@yiji/ui';
+import { Pill, Skeleton, cn, toast } from '@yiji/ui';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { ComplaintType, normalizeOrderId } from '@yiji/shared-types';
 import {
   useSetStoreNotifyRule,
@@ -127,123 +128,140 @@ export function StoreNotificationsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-5">
-      <SectionCard
-        title={t('storeNotify.rulesTitle', { defaultValue: 'Tickets the branch is told about' })}
-        hint={t('storeNotify.rulesHelp', {
-          defaultValue:
-            'A ticket is reported to its branch only when its ticket type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
-        })}
-        aside={
-          <span className="tabular-nums">
-            {t('storeNotify.enabledCount', {
-              defaultValue: '{{n}} of {{total}} selected',
-              n: enabledCount,
-              total: ComplaintType.options.length,
-            })}
-          </span>
-        }
-      >
-        {rules.isLoading ? (
-          <div className="flex flex-wrap gap-2">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <Skeleton key={i} className="h-8 w-32 rounded-full" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {ComplaintType.options.map((type) => (
-              <TypeToggle
-                key={type}
-                type={type}
-                enabled={!!byType.get(type)?.enabled}
-                busy={setRule.isPending}
-                onToggle={() => toggle(type)}
-              />
-            ))}
-          </div>
-        )}
-        {enabledCount === 0 && !rules.isLoading && (
-          // A proper notice card, not a bare paragraph — warning-foreground ink
-          // because the raw warning hue is a light token that fails on light.
-          <p className="mt-4 flex items-start gap-2 rounded-xl bg-warning/15 px-3.5 py-2.5 text-xs leading-relaxed text-warning-foreground ring-1 ring-warning/25">
-            <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning" />
-            <span>
-              {t('storeNotify.noneSelected', {
-                defaultValue:
-                  'Nothing is selected, so no branch is told about anything. Pick the ticket types a branch can act on.',
+    /* The Rapport page frame (owner, 2026-10-22): this page had no title at
+       all and sat in a centred 6xl column. It now opens like every other page
+       and runs the header's full width. */
+    <div className="flex h-full flex-col overflow-hidden">
+      <PageHeader title={t('nav.storeNotifications', { defaultValue: 'Branch notifications' })} />
+      <div className={cn(PAGE_BODY, 'space-y-4')}>
+        {/* A plain frosted section - no hue bar beside the title (side stripes
+          are banned in this skin). */}
+        <section className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
+          <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+            <div className="min-w-0">
+              <h2 className="text-base font-semibold tracking-tight text-foreground">
+                {t('storeNotify.rulesTitle', { defaultValue: 'Tickets the branch is told about' })}
+              </h2>
+              <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+                {t('storeNotify.rulesHelp', {
+                  defaultValue:
+                    'A ticket is reported to its branch only when its ticket type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
+                })}
+              </p>
+            </div>
+            <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+              {t('storeNotify.enabledCount', {
+                defaultValue: '{{n}} of {{total}} selected',
+                n: enabledCount,
+                total: ComplaintType.options.length,
               })}
             </span>
-          </p>
-        )}
-      </SectionCard>
-
-      <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-        <header className="flex items-baseline gap-2 border-b border-border px-5 py-4">
-          <h2 className="text-sm font-semibold tracking-tight text-foreground">
-            {t('storeNotify.queueTitle', { defaultValue: 'What has been queued' })}
-          </h2>
-          <span className="ms-auto shrink-0 text-2xs text-muted-foreground">
-            {/* Said plainly rather than implied by a row of "queued" pills that
-                an admin could read as "delivered". */}
-            {t('storeNotify.pendingTransport', {
-              defaultValue: 'Delivery to the stores is not connected yet',
-            })}
-          </span>
-        </header>
-        {queue.isLoading ? (
-          <div className="space-y-2 p-4">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-12 w-full rounded-xl" />
-            ))}
-          </div>
-        ) : (queue.data ?? []).length === 0 ? (
-          <p className="p-8 text-center text-sm text-muted-foreground">
-            {t('storeNotify.queueEmpty', {
-              defaultValue: 'Nothing queued yet.',
-            })}
-          </p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border tracking-[0.08em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                  <th className="px-4 py-2.5 text-start font-semibold">
-                    {t('storeNotify.branch', { defaultValue: 'Branch' })}
-                  </th>
-                  <th className="px-4 py-2.5 text-start font-semibold">
-                    {t('storeNotify.type', { defaultValue: 'Ticket type' })}
-                  </th>
-                  <th className="px-4 py-2.5 text-start font-semibold">
-                    {t('storeNotify.sends', { defaultValue: 'What the branch gets' })}
-                  </th>
-                  <th className="px-4 py-2.5 text-end font-semibold">
-                    {t('storeNotify.status', { defaultValue: 'Status' })}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(queue.data ?? []).map((row) => (
-                  <tr key={row.id} className="border-t border-border/60 align-top">
-                    <td className="px-4 py-3 font-medium text-foreground">
-                      {[row.store?.code, row.store?.name].filter(Boolean).join(' ') || '—'}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground">{row.complaint_type ?? '—'}</td>
-                    <td className="max-w-[32rem] px-4 py-3">
-                      <Preview row={row} />
-                    </td>
-                    <td className="px-4 py-3 text-end">
-                      <Pill tone={STATUS_TONE[row.status] ?? 'neutral'} size="sm">
-                        {row.status}
-                      </Pill>
-                    </td>
-                  </tr>
+          </header>
+          <div className="mt-4">
+            {rules.isLoading ? (
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <Skeleton key={i} className="h-8 w-32 rounded-full" />
                 ))}
-              </tbody>
-            </table>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {ComplaintType.options.map((type) => (
+                  <TypeToggle
+                    key={type}
+                    type={type}
+                    enabled={!!byType.get(type)?.enabled}
+                    busy={setRule.isPending}
+                    onToggle={() => toggle(type)}
+                  />
+                ))}
+              </div>
+            )}
+            {enabledCount === 0 && !rules.isLoading && (
+              // A proper notice card, not a bare paragraph — warning-foreground ink
+              // because the raw warning hue is a light token that fails on light.
+              <p className="mt-4 flex items-start gap-2 rounded-xl bg-warning-tint px-3.5 py-2.5 text-xs leading-relaxed text-warning ring-1 ring-warning/25">
+                <span aria-hidden className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-warning" />
+                <span>
+                  {t('storeNotify.noneSelected', {
+                    defaultValue:
+                      'Nothing is selected, so no branch is told about anything. Pick the ticket types a branch can act on.',
+                  })}
+                </span>
+              </p>
+            )}
           </div>
-        )}
-      </section>
+        </section>
+
+        <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+          <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 border-b border-foreground/[0.06] px-5 py-4">
+            <h2 className="text-base font-semibold tracking-tight text-foreground">
+              {t('storeNotify.queueTitle', { defaultValue: 'What has been queued' })}
+            </h2>
+            <span className="ms-auto text-xs text-muted-foreground">
+              {/* Said plainly rather than implied by a row of "queued" pills that
+                an admin could read as "delivered". */}
+              {t('storeNotify.pendingTransport', {
+                defaultValue: 'Delivery to the stores is not connected yet',
+              })}
+            </span>
+          </header>
+          {queue.isLoading ? (
+            <div className="space-y-2 p-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-12 w-full rounded-xl" />
+              ))}
+            </div>
+          ) : (queue.data ?? []).length === 0 ? (
+            <p className="p-8 text-center text-sm text-muted-foreground">
+              {t('storeNotify.queueEmpty', {
+                defaultValue: 'Nothing queued yet.',
+              })}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-xs text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.07)]">
+                    <th className="h-11 px-4 text-start font-semibold first:ps-5 last:pe-5">
+                      {t('storeNotify.branch', { defaultValue: 'Branch' })}
+                    </th>
+                    <th className="h-11 px-4 text-start font-semibold first:ps-5 last:pe-5">
+                      {t('storeNotify.type', { defaultValue: 'Ticket type' })}
+                    </th>
+                    <th className="h-11 px-4 text-start font-semibold first:ps-5 last:pe-5">
+                      {t('storeNotify.sends', { defaultValue: 'What the branch gets' })}
+                    </th>
+                    <th className="h-11 px-4 text-end font-semibold first:ps-5 last:pe-5">
+                      {t('storeNotify.status', { defaultValue: 'Status' })}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(queue.data ?? []).map((row) => (
+                    <tr key={row.id} className="border-t border-foreground/[0.06] align-top">
+                      <td className="px-4 py-3.5 ps-5 font-medium text-foreground">
+                        {[row.store?.code, row.store?.name].filter(Boolean).join(' ') || '—'}
+                      </td>
+                      <td className="px-4 py-3.5 text-muted-foreground">
+                        {row.complaint_type ?? '—'}
+                      </td>
+                      <td className="max-w-[32rem] px-4 py-3.5">
+                        <Preview row={row} />
+                      </td>
+                      <td className="px-4 py-3.5 pe-5 text-end">
+                        <Pill tone={STATUS_TONE[row.status] ?? 'neutral'} size="sm">
+                          {row.status}
+                        </Pill>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

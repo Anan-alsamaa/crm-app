@@ -103,6 +103,7 @@ import {
   type CsvColumn,
   type TicketFilterCriteria,
 } from '@yiji/reports';
+import { PageTitle, WIDE_TABLE } from '../../components/shell/Page.js';
 
 /** Which of the four exportable reports this page instance renders. */
 export type ReportKind = 'tickets' | 'agents' | 'conversations' | 'complaints';
@@ -492,7 +493,7 @@ function FilterChip({
         'inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
         active
           ? 'bg-primary text-primary-foreground'
-          : 'bg-secondary/60 text-muted-foreground ring-1 ring-border hover:text-foreground',
+          : 'bg-glass/60 text-muted-foreground ring-1 ring-inset ring-foreground/10 hover:text-foreground',
       )}
     >
       {label}
@@ -697,13 +698,13 @@ function TicketsReport({
             />
           ))}
         </div>
-        <div className="relative ms-auto flex items-center gap-2">
+        <div className="relative ms-auto flex flex-wrap items-center justify-end gap-2">
           {/* Column picker — which columns land in the .xlsx (all by default). */}
           <button
             type="button"
             onClick={() => setShowCols((v) => !v)}
             aria-expanded={showCols}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-glass/60 px-4 text-xs font-semibold text-foreground ring-1 ring-inset ring-foreground/10 transition-colors duration-fast hover:bg-glass"
           >
             {t('agentReports.columns', { defaultValue: 'Columns' })}
             <span className="tabular-nums opacity-70">
@@ -721,7 +722,7 @@ function TicketsReport({
               />
               <div className="absolute end-0 top-9 z-40 max-h-80 w-64 overflow-auto rounded-xl bg-card p-2 shadow-float ring-1 ring-foreground/10">
                 <div className="flex items-center justify-between px-1.5 pb-1.5">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     {t('agentReports.exportColumns', { defaultValue: 'Rearrange columns' })}
                   </span>
                   <button
@@ -760,7 +761,7 @@ function TicketsReport({
         </div>
       </div>
 
-      <TableSurface flow>
+      <TableSurface {...WIDE_TABLE}>
         <Table>
           <thead>
             <tr>
@@ -1298,9 +1299,7 @@ function ComplaintsReport({
   }) =>
     values.length === 0 ? null : (
       <label className="flex flex-col gap-1">
-        <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-          {label}
-        </span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <SelectMenu
           size="sm"
           className="w-[10rem]"
@@ -1363,10 +1362,9 @@ function ComplaintsReport({
 
       {/* The filter bar. Free text first because it answers most questions on
           its own; the dropdowns are for slicing rather than finding. */}
-      {/* Pinned, like the rest of the furniture — see usePinnedWidth. Without
-          the explicit width it would be laid out at the TABLE's width (the
-          stack is `w-max` so sticky has room to work), which is a filter card
-          five thousand pixels wide with its controls huddled at one end. */}
+      {/* Pinned, like the rest of the furniture — see usePinnedWidth. Harmless
+          now the table scrolls inside its own card (WIDE_TABLE): the stack is
+          the page's width, and so is --pin-w. */}
       <form
         // A real form, so Enter anywhere inside it applies — the reflex anybody
         // typing into a search box already has.
@@ -1378,7 +1376,7 @@ function ComplaintsReport({
       >
         <div className="flex flex-wrap items-end gap-2">
           <label className="flex flex-1 flex-col gap-1" style={{ minWidth: '18rem' }}>
-            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               {t('complaintReport.searchLabel', {
                 defaultValue: 'Search by phone, restaurant name or restaurant id',
               })}
@@ -1396,7 +1394,7 @@ function ComplaintsReport({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               {t('performance.from', { defaultValue: 'From' })}
             </span>
             <DateField
@@ -1407,7 +1405,7 @@ function ComplaintsReport({
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               {t('performance.to', { defaultValue: 'To' })}
             </span>
             <DateField
@@ -1422,7 +1420,7 @@ function ComplaintsReport({
               remembered window, which defaults to a month — and the operations
               history it exists to show goes back a year. */}
           <label className="flex flex-col gap-1">
-            <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               {t('agentReports.range', { defaultValue: 'Date range' })}
             </span>
             <div className="w-[10rem]">
@@ -1529,12 +1527,12 @@ function ComplaintsReport({
             })}
           </Pill>
         )}
-        <div className="relative ms-auto flex items-center gap-2">
+        <div className="relative ms-auto flex flex-wrap items-center justify-end gap-2">
           <button
             type="button"
             onClick={() => setShowCols((v) => !v)}
             aria-expanded={showCols}
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+            className="inline-flex h-9 items-center gap-1.5 rounded-full bg-glass/60 px-4 text-xs font-semibold text-foreground ring-1 ring-inset ring-foreground/10 transition-colors duration-fast hover:bg-glass"
           >
             {t('agentReports.columns', { defaultValue: 'Columns' })}
             <span className="tabular-nums opacity-70">
@@ -1561,9 +1559,9 @@ function ComplaintsReport({
             }
           >
             <div className="flex h-full flex-col">
-              <div className="space-y-2 border-b border-border p-4">
+              <div className="space-y-2 border-b border-foreground/[0.08] p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     {t('complaintReport.shownCount', {
                       defaultValue: '{{n}} of {{m}} shown',
                       n: cols.size,
@@ -1740,7 +1738,7 @@ function ComplaintsReport({
             <Button
               size="sm"
               variant="ghost"
-              className="ring-1 ring-border"
+              className="ring-1 ring-inset ring-foreground/10"
               disabled={!selectedId}
               onClick={() => {
                 const row = visible.find((v) => v.id === selectedId);
@@ -1760,7 +1758,7 @@ function ComplaintsReport({
               size="sm"
               variant="ghost"
               disabled={!selectedId || del.isPending}
-              className="text-destructive ring-1 ring-border hover:bg-destructive/10"
+              className="text-destructive ring-1 ring-inset ring-foreground/10 hover:bg-destructive/10"
               onClick={() => {
                 const row = visible.find((v) => v.id === selectedId);
                 if (!row) return;
@@ -1795,7 +1793,10 @@ function ComplaintsReport({
           are the same report, so showing a curated subset here just meant the
           screen and the file disagreed. Wide by nature, so it scrolls
           horizontally inside its own surface rather than stretching the page. */}
-      <TableSurface flow scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}>
+      <TableSurface
+        {...WIDE_TABLE}
+        scrollLabel={t('complaintReport.title', { defaultValue: 'Tickets' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -2348,7 +2349,10 @@ function AgentKpiReport({
         rangePreset={<RangePreset range={range} />}
       />
 
-      <TableSurface flow scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}>
+      <TableSurface
+        {...WIDE_TABLE}
+        scrollLabel={t('agentReports.agentsTitle', { defaultValue: 'Agent KPI' })}
+      >
         <Table>
           <thead>
             <tr>
@@ -2635,7 +2639,7 @@ function ConversationReport({
       {view === 'breakdown' && (
         <div className="grid gap-3 lg:grid-cols-2">
           <div className="rounded-2xl bg-card p-3 ring-1 ring-foreground/[0.06] shadow-soft">
-            <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
               {t('agentReports.byStatus', { defaultValue: 'By status' })}
             </h3>
             <ul className="space-y-2">
@@ -2701,7 +2705,7 @@ function ConversationReport({
             </ul>
           </div>
           <div className="rounded-2xl bg-card p-3 ring-1 ring-foreground/[0.06] shadow-soft">
-            <h3 className="mb-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <h3 className="mb-2 text-xs font-semibold text-muted-foreground">
               {t('agentReports.byPriority', { defaultValue: 'By priority' })}
             </h3>
             <ul className="space-y-1.5">
@@ -2823,7 +2827,7 @@ function ConversationReport({
       {view === 'chats' && (
         <>
           <TableSurface
-            flow
+            {...WIDE_TABLE}
             scrollLabel={t('agentReports.conversationsTitle', { defaultValue: 'Chat status' })}
           >
             <Table>
@@ -2909,7 +2913,10 @@ function ConversationReport({
           row per day, so capping it bought nothing and cost the reader the
           first half of their own date range. */}
       {view === 'byDay' && (
-        <TableSurface flow scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}>
+        <TableSurface
+          {...WIDE_TABLE}
+          scrollLabel={t('agentReports.byDay', { defaultValue: 'By day' })}
+        >
           <Table>
             <thead>
               <tr>
@@ -3074,7 +3081,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                  many columns are hidden and pages through them. */}
       <div
         ref={pinRef}
-        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4 sm:px-6 lg:px-8"
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5 sm:px-7"
       >
         {/* Every report gets the whole monitor.
             The summaries used to be capped at 5xl-6xl on the theory that a KPI
@@ -3083,25 +3090,16 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             it — the cap was the reason nine columns needed a sideways swipe on
             a screen with room for twenty. The strip stays capped on its own
             (see ReportKpiStrip usages); the table gets the width. */}
-        <div className="w-max min-w-full space-y-3 py-4 sm:py-5">
-          {/* Name and purpose on ONE line.
-              They used to be three bands: a 60px toolbar carrying the name, a
-              paragraph carrying the purpose, and the gaps between them — about
-              90px, on a page where the table was already starting 585px down a
-              screen that is often 620 CSS pixels tall.
-              The name stays, as a real h1: the tab strip above shows it as a
-              selected pill, but a pill is not a heading and a page with no
-              heading is a page a screen reader cannot summarise. The purpose
-              rides beside it and drops away on narrow screens, where there is
-              no room and the reader has the tab strip anyway. */}
-          <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-baseline gap-x-3 gap-y-1">
-            <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
-              {t(meta.titleKey, { defaultValue: meta.titleDefault })}
-            </h1>
-            <p className="min-w-0 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-              {t(meta.subKey, { defaultValue: meta.subDefault })}
-            </p>
-          </div>
+        <div className="min-w-0 space-y-4 pb-6 pt-1">
+          {/* The name stays a real h1: the tab strip above shows it as a
+              selected pill, but a pill is not a heading. Rapport title block
+              (owner, 2026-10-22): the purpose sits UNDER the big title rather
+              than squeezed beside it. */}
+          <PageTitle
+            className="sticky start-0 w-[var(--pin-w,100%)]"
+            title={t(meta.titleKey, { defaultValue: meta.titleDefault })}
+            description={t(meta.subKey, { defaultValue: meta.subDefault })}
+          />
 
           {report.isLoading ? (
             <div className="space-y-3">

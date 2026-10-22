@@ -23,8 +23,6 @@ import {
   StatCard,
   toast,
   Pagination,
-  Toolbar,
-  ToolbarSpacer,
   UsersIcon,
   ZapIcon,
 } from '@yiji/ui';
@@ -44,6 +42,7 @@ import {
   staffFullName,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 
 const schema = z.object({
   /**
@@ -307,79 +306,52 @@ export function UsersPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Dense toolbar — title + inline stat pills + search + create */}
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">{t('users.title')}</h1>
-        <span className="hidden text-xs text-muted-foreground sm:inline-flex items-center gap-2.5">
-          <span className="opacity-50">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{total}</strong>{' '}
-            {t('users.statTotalCap', { defaultValue: 'total' })}
-          </span>
-          <span className="opacity-30">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{activeCount}</strong>{' '}
-            {t('users.statActiveCap', { defaultValue: 'active' })}
-          </span>
-          <span className="opacity-30">·</span>
-          <span className="tabular-nums">
-            <strong className="font-semibold text-foreground">{adminCount}</strong>{' '}
-            {t('users.statAdminCap', { defaultValue: 'admin' })}
-          </span>
-          {teamlessCount > 0 && (
-            <>
-              <span className="opacity-30">·</span>
-              {/* Bare warning ink is near-invisible on the dark canvas — the
-                  tinted chip treatment stays readable on both themes. */}
-              <span className="rounded-full bg-warning/20 px-2 py-0.5 tabular-nums text-warning-foreground">
-                <strong className="font-semibold">{teamlessCount}</strong>{' '}
-                {t('users.statNoTeamCap', { defaultValue: 'no team' })}
-              </span>
-            </>
-          )}
-        </span>
-        <ToolbarSpacer />
-        <div className="relative w-56">
-          <svg
-            aria-hidden
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
-          >
-            <circle cx="7" cy="7" r="4.5" />
-            <path d="m10.5 10.5 3 3" />
-          </svg>
-          <input
-            type="search"
-            aria-label={t('users.searchPlaceholder', { defaultValue: 'Search…' })}
-            placeholder={t('users.searchPlaceholder', {
-              defaultValue: 'Search…',
-            })}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="block h-10 w-full rounded-full border-0 bg-white/70 ps-8 pe-3 text-sm text-foreground ring-1 ring-inset ring-white/80 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-start transition-shadow duration-fast ease-out"
-          />
-        </div>
-        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
-          {t('users.create')}
-        </Button>
-      </Toolbar>
-
-      <div className="flex-1 overflow-auto px-5 py-4">
-        {!users.isLoading && !users.isError && list.length > 0 && (
-          <div className="mx-auto mb-5 max-w-5xl space-y-5">
-            <div className="border-b border-foreground/10 pb-5">
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('users.heroSubtitle', {
-                  defaultValue:
-                    'Everyone who can sign in to the CRM — their role, team, and account status at a glance. Select anyone to edit access or reset a password.',
+      {/* The Rapport header: the big title, what the page is for under it,
+          search and Create on the far side. The "14 total · 14 active" strip
+          that sat beside the title is gone - the tiles below say it. */}
+      <PageHeader
+        title={t('users.title')}
+        description={t('users.heroSubtitle', {
+          defaultValue:
+            'Everyone who can sign in to the CRM — their role, team, and account status at a glance. Select anyone to edit access or reset a password.',
+        })}
+        actions={
+          <>
+            <div className="relative w-full sm:w-56">
+              <svg
+                aria-hidden
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="pointer-events-none absolute start-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
+              >
+                <circle cx="7" cy="7" r="4.5" />
+                <path d="m10.5 10.5 3 3" />
+              </svg>
+              <input
+                type="search"
+                aria-label={t('users.searchPlaceholder', { defaultValue: 'Search…' })}
+                placeholder={t('users.searchPlaceholder', {
+                  defaultValue: 'Search…',
                 })}
-              </p>
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="block h-10 w-full rounded-full border-0 bg-glass/70 ps-8 pe-3 text-sm text-foreground ring-1 ring-inset ring-glass/80 placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 text-start transition-shadow duration-fast ease-out"
+              />
             </div>
+            <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
+              {t('users.create')}
+            </Button>
+          </>
+        }
+      />
+
+      <div className={PAGE_BODY}>
+        {!users.isLoading && !users.isError && list.length > 0 && (
+          <div className="mb-4">
             {/* Boxed board tiles — tinted icon chips, hero numerals; tone lives
                 in the chip / dot, never in a colored outline. */}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -431,7 +403,7 @@ export function UsersPage() {
             onRetry={() => void users.refetch()}
           />
         ) : users.isLoading ? (
-          <div className="mx-auto max-w-5xl divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <div className="divide-y divide-foreground/[0.06] rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="flex min-h-14 items-center gap-3 px-4 py-3">
                 <Skeleton className="h-8 w-8 rounded-full" />
@@ -465,7 +437,7 @@ export function UsersPage() {
           /* Dense list — one row per account (density is a feature). Rows sit
              flush inside one board card: hairline separators, quiet hover,
              a footer aggregate band. Columns read like a table at sm+. */
-          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
+          <div className="overflow-hidden rounded-2xl bg-card ring-1 ring-foreground/[0.06] shadow-soft">
             {/* Micro-label column header band — anchors the pill columns so
                 they read as a table, not floating chips. Reuses the same
                 gap + fixed widths as the rows below. */}

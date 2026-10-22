@@ -35,32 +35,38 @@ export function Tile({
   visual?: ReactNode;
 }) {
   return (
-    <div className="rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+    /* The Dashboard tile language (Rapport skin): a frosted card, a round icon
+       chip, an INK numeral. The verdict (good/bad) is a state dot beside the
+       label, not the numeral's colour - colour as accent, never as the number. */
+    <div className="h-full rounded-2xl bg-card p-[1.125rem] shadow-soft ring-1 ring-foreground/[0.06]">
       <div className="flex items-start gap-3">
         {icon && (
           <span
             aria-hidden
-            className={cn('grid h-9 w-9 shrink-0 place-items-center rounded-xl', TILE_CHIPS[chip])}
+            className={cn(
+              'grid h-9 w-9 shrink-0 place-items-center rounded-full',
+              TILE_CHIPS[chip],
+            )}
           >
             {icon}
           </span>
         )}
         <div className="min-w-0 flex-1">
-          <div
-            className={cn(
-              'text-2xl font-extrabold leading-none tracking-[-0.03em] tabular-nums',
-              tone === 'bad'
-                ? 'text-destructive'
-                : tone === 'good'
-                  ? 'text-success'
-                  : 'text-foreground',
-            )}
-          >
+          <div className="text-[1.75rem] font-semibold leading-none tracking-[-0.03em] text-foreground tabular-nums">
             {value}
           </div>
           {/* Wraps rather than truncates: at six-up these labels used to shear
               to "ANSWERED W…", which is a label that names nothing. */}
-          <div className="mt-2 text-2xs font-semibold uppercase leading-snug tracking-[0.12em] text-muted-foreground">
+          <div className="mt-2 text-xs font-medium leading-snug text-muted-foreground">
+            {tone !== 'plain' && (
+              <span
+                aria-hidden
+                className={cn(
+                  'me-1.5 inline-block h-1.5 w-1.5 rounded-full align-middle',
+                  tone === 'bad' ? 'bg-destructive' : 'bg-success',
+                )}
+              />
+            )}
             {label}
             {hint && <span className="ms-1 font-normal normal-case tracking-normal">({hint})</span>}
           </div>

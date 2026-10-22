@@ -75,7 +75,7 @@ export function ViewSwitch<T extends string>({
               'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
               active
-                ? 'bg-white text-foreground shadow-[0_4px_12px_-6px_oklch(var(--shadow-color)/0.45)]'
+                ? 'bg-glass text-foreground shadow-[0_4px_12px_-6px_oklch(var(--shadow-color)/0.45)]'
                 : 'text-muted-foreground hover:text-foreground',
             )}
           >

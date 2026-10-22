@@ -91,7 +91,7 @@ export function OpenTicketsSection() {
               {/* By priority as counted pills: four numbers are a line to read,
                   not a table to scroll. */}
               <div className="flex flex-wrap items-center gap-2 text-xs">
-                <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                <span className="text-xs font-semibold text-muted-foreground">
                   {t('slaReports.open.byPriority', { defaultValue: 'By priority' })}
                 </span>
                 {d.byPriority.map((p) => (

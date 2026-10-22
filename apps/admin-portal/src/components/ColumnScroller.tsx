@@ -24,7 +24,29 @@ import { cn } from '@yiji/ui';
  *
  * Sticky to the bottom of the scrollport and to its start edge, so it holds
  * still on both axes while the table moves underneath.
+ *
+ * WHICH ELEMENT SCROLLS (Rapport skin, owner 2026-10-22). The wide reports
+ * used to let the PAGE scroll sideways, so the table ran out past its own
+ * card. They now scroll INSIDE the card, and the element that moves is the
+ * table's own scroller (`data-table-scroller`), found inside the port. A port
+ * with no such table - or one whose table does not overflow - falls back to
+ * the port itself, which is the old behaviour exactly. With more than one
+ * overflowing table on a page (Ticket deadlines has a small by-agent table
+ * above the main one) it takes the one with the most hidden - the report.
  */
+function scrollerIn(port: HTMLElement): HTMLElement {
+  let best: HTMLElement | null = null;
+  let most = 4;
+  for (const el of Array.from(port.querySelectorAll<HTMLElement>('[data-table-scroller]'))) {
+    const hidden = el.scrollWidth - el.clientWidth;
+    if (hidden > most) {
+      best = el;
+      most = hidden;
+    }
+  }
+  return best ?? port;
+}
+
 export function ColumnScroller({
   portRef,
   className,
@@ -37,21 +59,29 @@ export function ColumnScroller({
   const [state, setState] = useState({ max: 0, left: 0, hidden: 0 });
 
   useEffect(() => {
-    const port = portRef.current;
-    if (!port) return;
+    const root = portRef.current;
+    if (!root) return;
+    const port = scrollerIn(root);
 
     const measure = () => {
       const max = port.scrollWidth - port.clientWidth;
       // How many column headers are not fully on screen. Counted from the DOM
       // rather than divided out of the width, because columns are not equal
       // widths and "3 more columns" has to be true.
+      // Past the END edge - in Arabic the later columns are off the LEFT.
       const heads = Array.from(port.querySelectorAll('thead th'));
-      const right = port.getBoundingClientRect().right;
-      const hidden = heads.filter((th) => th.getBoundingClientRect().right > right + 1).length;
+      const box = port.getBoundingClientRect();
+      const rtl = getComputedStyle(port).direction === 'rtl';
+      const hidden = heads.filter((th) => {
+        const r = th.getBoundingClientRect();
+        return rtl ? r.left < box.left - 1 : r.right > box.right + 1;
+      }).length;
+      // scrollLeft runs negative in RTL; the distance travelled is what counts.
+      const left = Math.abs(port.scrollLeft);
       setState((prev) =>
-        prev.max === max && prev.left === port.scrollLeft && prev.hidden === hidden
+        prev.max === max && prev.left === left && prev.hidden === hidden
           ? prev
-          : { max, left: port.scrollLeft, hidden },
+          : { max, left, hidden },
       );
     };
 
@@ -77,9 +107,15 @@ export function ColumnScroller({
   // Nothing hidden, nothing to offer.
   if (state.max <= 4) return null;
 
-  const step = () => Math.max(160, (portRef.current?.clientWidth ?? 600) * 0.8);
-  const nudge = (dir: -1 | 1) =>
-    portRef.current?.scrollBy({ left: dir * step(), behavior: 'smooth' });
+  const target = () => (portRef.current ? scrollerIn(portRef.current) : null);
+  const step = () => Math.max(160, (target()?.clientWidth ?? 600) * 0.8);
+  const nudge = (dir: -1 | 1) => {
+    const el = target();
+    if (!el) return;
+    // "Later" is leftward in RTL, where scrollLeft counts down from 0.
+    const rtl = getComputedStyle(el).direction === 'rtl';
+    el.scrollBy({ left: (rtl ? -dir : dir) * step(), behavior: 'smooth' });
+  };
 
   const atStart = state.left <= 1;
   const atEnd = state.left >= state.max - 1;

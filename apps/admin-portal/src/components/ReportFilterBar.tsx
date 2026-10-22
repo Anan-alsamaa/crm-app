@@ -247,27 +247,25 @@ export function ReportFilterBar({
          out of the window behind you. These blocks are only ever as wide as
          the viewport, so sticking them to the start edge keeps them exactly
          where they were while the table alone moves. */
-      className="sticky start-0 z-[5] w-[var(--pin-w,100%)] shrink-0 space-y-2 rounded-2xl bg-card p-2.5 shadow-soft ring-1 ring-foreground/[0.06]"
+      className="sticky start-0 z-[5] w-[var(--pin-w,100%)] shrink-0 space-y-3 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06] sm:p-[1.125rem]"
     >
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="flex flex-1 flex-col gap-1" style={{ minWidth: '18rem' }}>
-          <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-            {searchLabel}
-          </span>
+      <div className="flex flex-wrap items-end gap-3">
+        <label className="flex min-w-0 flex-1 basis-[16rem] flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">{searchLabel}</span>
           <Input
             value={draftSearch}
             onChange={(e) => setDraftSearch(e.target.value)}
             placeholder={searchPlaceholder}
           />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
             {t('complaintDash.from', { defaultValue: 'From' })}
           </span>
           <DateField className="w-[9.5rem]" value={draftFrom} onChange={setDraftFrom} />
         </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium text-muted-foreground">
             {t('complaintDash.to', { defaultValue: 'To' })}
           </span>
           <DateField className="w-[9.5rem]" value={draftTo} onChange={setDraftTo} />
@@ -280,12 +278,10 @@ export function ReportFilterBar({
       </div>
 
       {hasSecondRow && (
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="flex flex-wrap items-end gap-3">
           {selects.map((s) => (
-            <label key={s.key} className="flex flex-col gap-1">
-              <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-                {s.label}
-              </span>
+            <label key={s.key} className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-muted-foreground">{s.label}</span>
               <SelectMenu
                 size="sm"
                 className="w-[10rem]"

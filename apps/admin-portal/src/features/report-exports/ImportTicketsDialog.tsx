@@ -200,7 +200,7 @@ export function ImportTicketsButton({ storeIndex, onImported, label }: Props): J
           }}
         />
         <span
-          className="ring-1 ring-border inline-flex h-8 cursor-pointer items-center rounded-md px-3 text-sm font-medium hover:bg-muted"
+          className="inline-flex h-9 cursor-pointer items-center rounded-full bg-glass/60 px-4 text-xs font-semibold text-foreground ring-1 ring-inset ring-foreground/10 transition-colors duration-fast hover:bg-glass"
           role="button"
           tabIndex={0}
         >

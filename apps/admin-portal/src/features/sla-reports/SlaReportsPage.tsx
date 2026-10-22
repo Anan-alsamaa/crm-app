@@ -30,6 +30,7 @@ import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { TicketStatus } from '@yiji/shared-types';
 import { OpenTicketsPanel, OpenTicketsSection } from './OpenTicketsSection.js';
 import { StatPanel, pctKpiTone } from './KpiTile.js';
+import { PageTitle, WIDE_TABLE } from '../../components/shell/Page.js';
 
 /* These reports open on the LAST 30 DAYS, not today's business day: one day of
    KPIs is not a measure of anything (owner, 2026-09-30). Declared once so the
@@ -298,7 +299,7 @@ export function SlaReportsPage() {
                  many columns are hidden and pages through them. */}
       <div
         ref={pinRef}
-        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4 py-0 sm:px-6 lg:px-8"
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5 py-0 sm:px-7"
       >
         {/* OUTSIDE the loading / empty / loaded branch, so the page identifies
             itself in all three states.
@@ -306,28 +307,22 @@ export function SlaReportsPage() {
             doing; folding the toolbar away put the name inside the loaded
             branch only, and a page that is still fetching became a spinner in
             an unnamed rectangle. */}
-        {/* Name and purpose on ONE line.
-            They were three bands — a 60px toolbar carrying the name, a
-            paragraph carrying the purpose, and the gaps — on a page whose
-            table already floored at its minimum on a 900px screen. The
-            name stays as a real h1: the tab strip above shows it as a
-            selected pill, but a pill is not a heading. */}
-        <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-baseline gap-x-3 gap-y-1 pt-4 sm:pt-5">
-          <h1 className="shrink-0 text-sm font-semibold tracking-tight text-foreground">
-            {t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
-          </h1>
-          <p className="min-w-0 max-w-3xl text-xs leading-relaxed text-muted-foreground">
-            {t('slaReports.subtitle', {
-              defaultValue: 'Which tickets were finished by the time they were promised.',
-            })}
-          </p>
-        </div>
+        {/* The name stays as a real h1: the tab strip above shows it as a
+            selected pill, but a pill is not a heading. Rapport title block
+            (owner, 2026-10-22): the purpose UNDER the big title. */}
+        <PageTitle
+          className="sticky start-0 w-[var(--pin-w,100%)]"
+          title={t('slaReports.title', { defaultValue: 'Ticket deadlines' })}
+          description={t('slaReports.subtitle', {
+            defaultValue: 'Which tickets were finished by the time they were promised.',
+          })}
+        />
 
         {/* TWO PANELS SIDE BY SIDE (owner, 2026-10-15: the two stacked rows of
             tiles, each under its own paragraph, "look very weird"). Left: what
             is pending right now, from any date. Right: the date range's
             deadline figures. The long explanation is behind the info mark. */}
-        <div className="sticky start-0 mt-3 grid w-[var(--pin-w,100%)] gap-3 lg:grid-cols-2">
+        <div className="sticky start-0 mt-4 grid w-[var(--pin-w,100%)] gap-3 lg:grid-cols-2">
           <OpenTicketsPanel />
           <StatPanel
             id="sla-window"
@@ -400,7 +395,7 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mt-3 w-max min-w-full space-y-3 pb-4 sm:pb-5">
+          <div className="mt-3 min-w-0 space-y-3 pb-4 sm:pb-5">
             {/* ONE table. This page used to toggle between a per-agent view and a
                 per-ticket view, and the per-agent one duplicated the Agent KPI
                 report. SLA performance is about which TICKETS met their promise,
@@ -527,7 +522,7 @@ function OutcomeChip({
         'inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium transition-colors duration-fast',
         active
           ? 'bg-ink text-ink-foreground'
-          : 'bg-white/60 text-foreground/80 ring-1 ring-inset ring-white/80 hover:bg-white/90 hover:text-foreground',
+          : 'bg-glass/60 text-foreground/80 ring-1 ring-inset ring-glass/80 hover:bg-glass/90 hover:text-foreground',
       )}
     >
       {label}
@@ -762,7 +757,7 @@ function TicketTable({
       )}
 
       <TableSurface
-        flow
+        {...WIDE_TABLE}
         scrollLabel={String(t('slaReports.title', { defaultValue: 'Ticket deadlines' }))}
       >
         <Table>

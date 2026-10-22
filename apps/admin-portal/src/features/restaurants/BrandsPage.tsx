@@ -15,15 +15,13 @@ import {
   Pill,
   Select,
   Skeleton,
-  StatStrip,
+  StatCard,
   Table,
   TableFooterBar,
   TableSurface,
   Td,
   Th,
   toast,
-  Toolbar,
-  ToolbarSpacer,
   Tr,
 } from '@yiji/ui';
 import {
@@ -36,6 +34,7 @@ import {
 } from './api.js';
 import { useRecordVendorNames } from '../vendors/api.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 
 const schema = z.object({
   code: z.string().min(1),
@@ -143,45 +142,39 @@ export function BrandsPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('brands.title', { defaultValue: 'Brands' })}
-        </h1>
-        <ToolbarSpacer />
-        <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
-          {t('brands.create', { defaultValue: 'Add brand' })}
-        </Button>
-      </Toolbar>
+      {/* The Rapport header (owner, 2026-10-22): title, what the page is for
+          under it, Add brand on the far side. */}
+      <PageHeader
+        title={t('brands.title', { defaultValue: 'Brands' })}
+        description={t('brands.heroSubtitle', {
+          defaultValue:
+            'The restaurant brands you operate. Each store belongs to a brand, and ticket reports break down by both.',
+        })}
+        actions={
+          <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
+            {t('brands.create', { defaultValue: 'Add brand' })}
+          </Button>
+        }
+      />
 
-      <div className="flex-1 overflow-auto px-5 py-4">
+      <div className={PAGE_BODY}>
         {!brands.isLoading && !brands.isError && list.length > 0 && (
-          <div className="mx-auto mb-5 max-w-5xl space-y-5">
-            <div className="border-b border-foreground/10 pb-5">
-              <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                {t('brands.heroSubtitle', {
-                  defaultValue:
-                    'The restaurant brands you operate. Each store belongs to a brand, and ticket reports break down by both.',
-                })}
-              </p>
-            </div>
-            <StatStrip
-              items={[
-                {
-                  label: t('brands.total', { defaultValue: 'brands' }),
-                  value: list.length,
-                  tone: 'blue',
-                },
-                {
-                  label: t('brands.active', { defaultValue: 'active' }),
-                  value: activeCount,
-                  tone: 'green',
-                },
-                {
-                  label: t('brands.storesLinked', { defaultValue: 'stores linked' }),
-                  value: brandedStores,
-                  tone: 'violet',
-                },
-              ]}
+          /* The Dashboard's tile language - the same StatCard grid as Users. */
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <StatCard
+              tone="primary"
+              label={t('brands.total', { defaultValue: 'brands' })}
+              value={list.length}
+            />
+            <StatCard
+              tone="success"
+              label={t('brands.active', { defaultValue: 'active' })}
+              value={activeCount}
+            />
+            <StatCard
+              tone="pink"
+              label={t('brands.storesLinked', { defaultValue: 'stores linked' })}
+              value={brandedStores}
             />
           </div>
         )}
@@ -224,7 +217,7 @@ export function BrandsPage() {
           /* A real table: brands are records with comparable attributes
              (code, what Yiji calls them, how many stores, status), and a
              column grid lets them be scanned down rather than read across. */
-          <div className="mx-auto max-w-6xl">
+          <div>
             <TableSurface>
               <Table>
                 <thead>
@@ -252,7 +245,7 @@ export function BrandsPage() {
                           onClick={() => openEdit(b)}
                           className="flex min-w-0 items-center gap-3 text-start focus-visible:outline-none"
                         >
-                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-subtle text-2xs font-bold uppercase text-primary">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary-tint text-2xs font-bold uppercase text-primary">
                             {b.code.slice(0, 3)}
                           </span>
                           <span className="min-w-0">
@@ -320,7 +313,7 @@ export function BrandsPage() {
               <TableFooterBar>
                 <span className="flex items-baseline gap-1.5">
                   <span className="font-semibold tabular-nums text-foreground">{list.length}</span>
-                  <span className="text-2xs font-semibold uppercase tracking-[0.12em]">
+                  <span className="text-xs font-medium">
                     {t('brands.title', { defaultValue: 'Brands' })}
                   </span>
                 </span>

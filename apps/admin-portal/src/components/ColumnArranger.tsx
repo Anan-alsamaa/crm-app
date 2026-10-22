@@ -60,9 +60,9 @@ export function ColumnArranger<K extends string>({
       }
     >
       <div className="flex h-full flex-col">
-        <div className="space-y-2 border-b border-border p-4">
+        <div className="space-y-2 border-b border-foreground/[0.08] p-4">
           <div className="flex items-center justify-between">
-            <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+            <span className="text-xs font-semibold text-muted-foreground">
               {t('complaintReport.shownCount', {
                 defaultValue: '{{n}} of {{m}} shown',
                 n: order.filter((k) => visible.has(k)).length,

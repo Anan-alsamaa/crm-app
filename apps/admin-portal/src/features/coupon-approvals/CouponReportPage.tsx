@@ -2,19 +2,7 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
-import {
-  Button,
-  Card,
-  MeterBar,
-  Skeleton,
-  Table,
-  TableSurface,
-  Td,
-  Th,
-  Toolbar,
-  ToolbarSpacer,
-  Tr,
-} from '@yiji/ui';
+import { Button, MeterBar, Skeleton, Table, TableSurface, Td, Th, Tr } from '@yiji/ui';
 import {
   couponOutcomes,
   couponOutcomesByAgent,
@@ -25,6 +13,7 @@ import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { ReportVendorFilter, useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 
 /**
@@ -82,11 +71,11 @@ function Rate({
 }) {
   const { t } = useTranslation();
   return (
-    <Card>
-      <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </p>
-      <p className="mt-2 text-[2.25rem] font-extrabold leading-none tracking-[-0.03em] tabular-nums">
+    /* The Dashboard tile: a frosted card, the title as a word (not a tracked
+       caption), a big INK numeral; the tone lives only in the thin meter. */
+    <div className="h-full rounded-2xl bg-card p-[1.125rem] shadow-soft ring-1 ring-foreground/[0.06]">
+      <p className="text-[0.9375rem] font-semibold text-foreground">{label}</p>
+      <p className="mt-4 text-[2.625rem] font-semibold leading-none tracking-[-0.03em] text-foreground tabular-nums">
         {value === null ? (
           // Not 0% — nothing has been decided, which is a different statement.
           <span className="text-base font-semibold text-muted-foreground">
@@ -99,8 +88,8 @@ function Rate({
       <div className="mt-3">
         <MeterBar value={value ?? 0} tone={tone} />
       </div>
-      <p className="mt-2 text-2xs leading-relaxed text-muted-foreground">{hint}</p>
-    </Card>
+      <p className="mt-3 text-xs leading-relaxed text-muted-foreground">{hint}</p>
+    </div>
   );
 }
 
@@ -165,37 +154,33 @@ export function CouponReportPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('couponReport.title', { defaultValue: 'Coupon approvals' })}
-        </h1>
-        <ToolbarSpacer />
-        {/* Renders nothing unless 2+ vendors are active. */}
-        <ReportVendorFilter className="flex items-center gap-2" />
-        {canExport && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={exportCsv}
-            disabled={total.requested === 0}
-          >
-            {t('stores.export', { defaultValue: 'Export CSV' })}
-          </Button>
-        )}
-      </Toolbar>
+      <PageHeader
+        title={t('couponReport.title', { defaultValue: 'Coupon approvals' })}
+        description={t('couponReport.hint', {
+          defaultValue:
+            'Every coupon an agent asked for, and what a supervisor did with it. Rates are a share of the requests that have been DECIDED — a queued request is not a refusal.',
+        })}
+        actions={
+          <>
+            {/* Renders nothing unless 2+ vendors are active. */}
+            <ReportVendorFilter className="flex items-center gap-2" />
+            {canExport && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={exportCsv}
+                disabled={total.requested === 0}
+              >
+                {t('stores.export', { defaultValue: 'Export CSV' })}
+              </Button>
+            )}
+          </>
+        }
+      />
 
-      <div className="flex-1 overflow-auto px-5 py-4">
-        <div className="mx-auto max-w-6xl space-y-5">
-          <div className="border-b border-foreground/10 pb-5">
-            <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {t('couponReport.hint', {
-                defaultValue:
-                  'Every coupon an agent asked for, and what a supervisor did with it. Rates are a share of the requests that have been DECIDED — a queued request is not a refusal.',
-              })}
-            </p>
-          </div>
-
+      <div className={PAGE_BODY}>
+        <div className="space-y-4">
           {facts.isLoading ? (
             <div className="grid gap-4 sm:grid-cols-3">
               <Skeleton className="h-40 w-full rounded-2xl" />
@@ -232,7 +217,7 @@ export function CouponReportPage() {
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-2xl bg-card px-4 py-3 text-sm shadow-soft ring-1 ring-foreground/[0.06]">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-2xl bg-card px-[1.125rem] py-3.5 text-sm shadow-soft ring-1 ring-foreground/[0.06]">
                 <Count
                   label={t('couponReport.requested', { defaultValue: 'Requested' })}
                   n={total.requested}
@@ -325,8 +310,8 @@ export function CouponReportPage() {
 function Count({ label, n }: { label: string; n: number }) {
   return (
     <span className="flex items-baseline gap-1.5">
-      <span className="text-base font-bold tabular-nums text-foreground">{n}</span>
-      <span className="text-2xs uppercase tracking-[0.12em] text-muted-foreground">{label}</span>
+      <span className="text-lg font-semibold tabular-nums text-foreground">{n}</span>
+      <span className="text-xs text-muted-foreground">{label}</span>
     </span>
   );
 }

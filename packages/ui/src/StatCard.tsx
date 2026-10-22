@@ -89,6 +89,9 @@ export function StatCard({
 }: StatCardProps): JSX.Element {
   return (
     <div
+      /* Hooks for a portal's own stylesheet (the admin console restyles its
+         tiles from here). They carry no styling themselves. */
+      data-stat-card=""
       className={cn(
         'flex items-start gap-3 rounded-2xl p-4 ring-1 shadow-soft',
         surface[tone],
@@ -107,6 +110,7 @@ export function StatCard({
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
           <span
+            data-stat-value=""
             className={cn(
               'text-3xl font-extrabold tabular-nums tracking-[-0.03em] leading-none',
               // The numeral takes the card's hue — that, more than the tint

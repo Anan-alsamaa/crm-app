@@ -20,11 +20,8 @@ import {
   Pill,
   ProgressRing,
   SearchIcon,
-  SectionCard,
   SelectMenu,
   Skeleton,
-  Toolbar,
-  ToolbarSpacer,
   TrendChart,
   type ChartSeries,
   UsersIcon,
@@ -49,6 +46,7 @@ import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { exportFileName } from '@yiji/shared-config';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
+import { FIELD_LABEL, FILTER_CARD, PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import {
   useChatTimings,
   useCsatByConversation,
@@ -394,36 +392,37 @@ export function AgentPerformancePage() {
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header band, same anatomy as every other console page — without it the
           filter card sat colliding with the navbar. */}
-      <Toolbar>
-        <h1 className="text-sm font-semibold tracking-tight text-foreground">
-          {t('performance.title', { defaultValue: 'Agent performance' })}
-        </h1>
-        <ToolbarSpacer />
-        {/* Exports the per-agent CHAT totals, so it sits with the Chats tab. */}
-        {canExport && onChats && (
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={exportCsv}
-            disabled={rows.length === 0}
-          >
-            {t('stores.export', { defaultValue: 'Export CSV' })}
-          </Button>
-        )}
-      </Toolbar>
+      <PageHeader
+        title={t('performance.title', { defaultValue: 'Agent performance' })}
+        actions={
+          /* Exports the per-agent CHAT totals, so it sits with the Chats tab. */
+          canExport && onChats ? (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={exportCsv}
+              disabled={rows.length === 0}
+            >
+              {t('stores.export', { defaultValue: 'Export CSV' })}
+            </Button>
+          ) : undefined
+        }
+      />
 
       {/* The shell's <main> is overflow-hidden by design — every page owns its
           scroll. This one didn't, so everything below the first screenful was
           simply unreachable. */}
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
-        <div className="mx-auto max-w-6xl space-y-4">
-          <div className="flex flex-wrap items-end gap-3 rounded-2xl bg-card p-4 shadow-soft ring-1 ring-foreground/[0.06]">
+      <div className={cn(PAGE_BODY, 'overflow-x-hidden')}>
+        {/* Full width on the header's gutter (Rapport skin) - the centred 6xl
+            column sat off-centre from the title above it. */}
+        <div className="space-y-4">
+          <div className={cn(FILTER_CARD, 'flex flex-wrap items-end gap-3')}>
             {/* In the filter card with the agent and the dates, not up beside
                 Export CSV (owner, 2026-10-13). Sized on the wrapper: Input's
                 base carries w-full. */}
             <Field label={t('performance.search', { defaultValue: 'Search' })}>
-              <span className="relative block w-[16rem]">
+              <span className="relative block w-[min(16rem,calc(100vw-5rem))]">
                 <SearchIcon
                   size={14}
                   aria-hidden
@@ -795,31 +794,31 @@ export function AgentPerformancePage() {
                         })}
                       >
                         <thead>
-                          <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                            <th className="h-10 px-5 text-start font-semibold">
+                          <tr className="text-xs text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.07)]">
+                            <th className="h-11 px-5 text-start font-semibold">
                               {t('performance.agent', { defaultValue: 'Agent' })}
                             </th>
-                            <th className="h-10 px-5 text-start font-semibold">
+                            <th className="h-11 px-5 text-start font-semibold">
                               {t('performance.chats', { defaultValue: 'Chats' })}
                             </th>
-                            <th className="h-10 px-5 text-end font-semibold">
+                            <th className="h-11 px-5 text-end font-semibold">
                               {t('performance.noReplyYet', { defaultValue: 'No reply yet' })}
                             </th>
-                            <th className="h-10 px-5 text-end font-semibold">
+                            <th className="h-11 px-5 text-end font-semibold">
                               {t('performance.commonChats', { defaultValue: 'Common chats taken' })}
                             </th>
-                            <th className="h-10 px-5 text-end font-semibold">
+                            <th className="h-11 px-5 text-end font-semibold">
                               {t('performance.avgFirstCol', { defaultValue: 'First response' })}
                             </th>
-                            <th className="h-10 px-5 text-end font-semibold">
+                            <th className="h-11 px-5 text-end font-semibold">
                               {t('performance.solved', { defaultValue: 'Solved' })}
                             </th>
-                            <th className="h-10 px-5 text-end font-semibold">
+                            <th className="h-11 px-5 text-end font-semibold">
                               {t('performance.avgSolveCol', {
                                 defaultValue: 'Time to solve (avg)',
                               })}
                             </th>
-                            <th className="h-10 px-5 text-end font-semibold">
+                            <th className="h-11 px-5 text-end font-semibold">
                               {t('performance.csat', { defaultValue: 'Customer rating' })}
                             </th>
                           </tr>
@@ -934,31 +933,31 @@ export function AgentPerformancePage() {
                             })}
                           >
                             <thead className="sticky top-0 z-10 bg-card">
-                              <tr className="tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]">
-                                <th className="h-10 px-5 text-start font-semibold">
+                              <tr className="text-xs text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.07)]">
+                                <th className="h-11 px-5 text-start font-semibold">
                                   {t('performance.subject', { defaultValue: 'Ticket / chat' })}
                                 </th>
-                                <th className="h-10 px-5 text-start font-semibold">
+                                <th className="h-11 px-5 text-start font-semibold">
                                   {t('performance.customer', { defaultValue: 'Customer' })}
                                 </th>
-                                <th className="h-10 px-5 text-start font-semibold">
+                                <th className="h-11 px-5 text-start font-semibold">
                                   {t('performance.agent', { defaultValue: 'Agent' })}
                                 </th>
-                                <th className="h-10 px-5 text-start font-semibold">
+                                <th className="h-11 px-5 text-start font-semibold">
                                   {t('performance.started', { defaultValue: 'Started' })}
                                 </th>
-                                <th className="h-10 px-5 text-start font-semibold">
+                                <th className="h-11 px-5 text-start font-semibold">
                                   {t('performance.startedBy', { defaultValue: 'Started by' })}
                                 </th>
-                                <th className="h-10 px-5 text-end font-semibold">
+                                <th className="h-11 px-5 text-end font-semibold">
                                   {t('performance.firstResponse', {
                                     defaultValue: 'First response',
                                   })}
                                 </th>
-                                <th className="h-10 px-5 text-end font-semibold">
+                                <th className="h-11 px-5 text-end font-semibold">
                                   {t('performance.timeToSolve', { defaultValue: 'Time to solve' })}
                                 </th>
-                                <th className="h-10 px-5 text-end font-semibold">
+                                <th className="h-11 px-5 text-end font-semibold">
                                   {t('performance.csat', { defaultValue: 'Customer rating' })}
                                 </th>
                               </tr>
@@ -1102,9 +1101,7 @@ export function AgentPerformancePage() {
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1">
-      <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-        {label}
-      </span>
+      <span className={FIELD_LABEL}>{label}</span>
       {children}
     </label>
   );
@@ -1122,11 +1119,15 @@ function Card({
   className?: string;
   children: ReactNode;
 }) {
-  // Delegates to the shared board surface so every section carries the same
-  // header anatomy as the rest of the console.
+  // The frosted section of the Rapport skin: the question as a heading, the
+  // explanation under it, and no hue bar beside it (side stripes are banned).
   return (
-    <SectionCard title={title} hint={help} className={className}>
-      {children}
-    </SectionCard>
+    <section
+      className={cn('rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]', className)}
+    >
+      <h3 className="text-base font-semibold tracking-tight text-foreground">{title}</h3>
+      <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{help}</p>
+      <div className="mt-4">{children}</div>
+    </section>
   );
 }

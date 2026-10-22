@@ -50,6 +50,7 @@ import {
   noteCell,
   type SnapshotItems,
 } from './compensation-cells.js';
+import { PageTitle, WIDE_TABLE } from '../../components/shell/Page.js';
 
 /**
  * The master record of every coupon the business has ever issued.
@@ -763,10 +764,9 @@ export function AllCompensationPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* No Toolbar. It carried the report's NAME, which the tab strip directly
-          above already shows as a selected pill, plus an export that belongs
-          with the filters it exports. Two bands, one fact, 60px of a screen
-          the table needs. */}
+      {/* No Toolbar band: the export belongs with the filters it exports. The
+          name is the Rapport title block at the top of the scroll body (owner,
+          2026-10-22: every report opens with the same big title). */}
       {/* NO VERTICAL PADDING ON THE SCROLLPORT.
                  `position: sticky; top: 0` pins to the scrollport's CONTENT
                  box, so 20px of padding here left a 20px band above the pinned
@@ -782,9 +782,13 @@ export function AllCompensationPage() {
                  many columns are hidden and pages through them. */}
       <div
         ref={pinRef}
-        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4 sm:px-6 lg:px-8"
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5 sm:px-7"
       >
-        <div className="w-max min-w-full space-y-3 py-4 sm:py-5">
+        <div className="min-w-0 space-y-4 pb-6">
+          <PageTitle
+            className="sticky start-0 w-[var(--pin-w,100%)]"
+            title={t('nav.compensationAll', { defaultValue: 'Compensation' })}
+          />
           <ReportKpiStrip>
             <ReportKpi
               label={t('compensationAll.kpiRequests', { defaultValue: 'Coupons' })}
@@ -894,7 +898,7 @@ export function AllCompensationPage() {
                   type="button"
                   onClick={() => setShowCols(true)}
                   aria-expanded={showCols}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors duration-fast hover:bg-secondary hover:text-foreground"
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full bg-glass/60 px-4 text-xs font-semibold text-foreground ring-1 ring-inset ring-foreground/10 transition-colors duration-fast hover:bg-glass"
                 >
                   {t('agentReports.columns', { defaultValue: 'Columns' })}
                   <span className="tabular-nums opacity-70">{columns.length}</span>
@@ -920,7 +924,7 @@ export function AllCompensationPage() {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="ring-1 ring-border"
+                    className="ring-1 ring-inset ring-foreground/10"
                     disabled={!selectedId}
                     onClick={() => {
                       const row = filtered.find((r) => r.id === selectedId);
@@ -939,7 +943,7 @@ export function AllCompensationPage() {
                     size="sm"
                     variant="ghost"
                     disabled={!selectedId || del.isPending}
-                    className="text-destructive ring-1 ring-border hover:bg-destructive/10"
+                    className="text-destructive ring-1 ring-inset ring-foreground/10 hover:bg-destructive/10"
                     onClick={() => {
                       const row = filtered.find((r) => r.id === selectedId);
                       if (!row) return;
@@ -965,7 +969,7 @@ export function AllCompensationPage() {
                thirty rows down had to scroll back up to learn which column
                they were looking at. */
             <TableSurface
-              flow
+              {...WIDE_TABLE}
               scrollLabel={String(t('compensationAll.title', { defaultValue: 'Compensation' }))}
             >
               <Table className="min-w-[80rem]">
@@ -1148,9 +1152,9 @@ export function AllCompensationPage() {
             }
           >
             <div className="flex h-full flex-col">
-              <div className="space-y-2 border-b border-border p-4">
+              <div className="space-y-2 border-b border-foreground/[0.08] p-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                  <span className="text-xs font-semibold text-muted-foreground">
                     {t('compensationAll.columnCount', {
                       defaultValue: '{{n}} columns',
                       n: columns.length,

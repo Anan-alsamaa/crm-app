@@ -367,9 +367,9 @@ export function QuickRepliesSection() {
 
   return (
     <section className="space-y-4">
-      <div className="flex items-center justify-between gap-3 border-b border-foreground/10 pb-4">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold tracking-tight text-foreground">
+          <h2 className="text-base font-semibold tracking-tight text-foreground">
             {kindLabel(kind)}
           </h2>
           <p className="mt-1 max-w-2xl text-sm leading-relaxed text-muted-foreground">{kindHint}</p>
@@ -397,10 +397,13 @@ export function QuickRepliesSection() {
             onClick={() => setKind(k)}
             aria-pressed={kind === k}
             className={cn(
-              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
+              /* The Rapport filter chips (the report tab strip's): the open
+                 library a solid ink chip, the rest frosted. */
+              'rounded-full px-4 py-2 text-sm font-semibold transition-colors duration-fast ease-out',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
               kind === k
-                ? 'bg-primary/15 text-primary ring-1 ring-inset ring-primary/25'
-                : 'bg-secondary/60 text-muted-foreground hover:text-foreground',
+                ? 'bg-ink text-ink-foreground'
+                : 'bg-glass/60 text-foreground/80 ring-1 ring-inset ring-glass/80 hover:bg-glass/90 hover:text-foreground',
             )}
           >
             {kindLabel(k)}

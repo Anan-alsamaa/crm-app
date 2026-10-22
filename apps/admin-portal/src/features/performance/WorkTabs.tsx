@@ -55,9 +55,11 @@ import { Tile } from './Tile.js';
  * only, so a search never quietly rewrites the headline numbers.
  */
 
-const TH = 'px-4 py-2.5 text-start font-semibold';
+/* Rapport table: a light header row on the card itself (words, not tracked
+   capitals), ~50px rows, hairline separators. */
+const TH = 'h-11 px-4 text-start font-semibold first:ps-5 last:pe-5';
 const HEAD_ROW =
-  'tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]';
+  'text-xs text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.07)]';
 const BODY_ROW =
   'border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.06]';
 
@@ -363,7 +365,7 @@ export function TicketsTab({
             {visible.length === 0 && <NoMatchRow colSpan={oneAgent ? 6 : 7} search={search} />}
             {visible.map((r) => (
               <tr key={r.id} className={BODY_ROW}>
-                <td className="max-w-[18rem] px-4 py-2.5 text-foreground">
+                <td className="max-w-[18rem] px-4 py-3 text-foreground">
                   <span
                     className="block truncate font-medium"
                     title={r.complaintType ?? r.subject ?? ''}
@@ -379,13 +381,13 @@ export function TicketsTab({
                     {normalizeOrderId(r.orderId) ? ` · #${r.orderId}` : ''}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">
+                <td className="px-4 py-3 text-muted-foreground">
                   <span className="block max-w-[12rem] truncate">
                     {r.customer ?? t('performance.unknownCustomer', { defaultValue: 'Customer' })}
                   </span>
                 </td>
                 {!oneAgent && (
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td className="px-4 py-3 text-muted-foreground">
                     <span className="block">{nameOf(r.assignedAgent)}</span>
                     {/* Raised by somebody other than its owner — the reason the
                         row is on this agent's list at all. */}
@@ -399,17 +401,17 @@ export function TicketsTab({
                     )}
                   </td>
                 )}
-                <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
+                <td className="px-4 py-3 tabular-nums text-muted-foreground">
                   {r.createdAt ? formatDateTime(r.createdAt) : '—'}
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3">
                   <Pill tone={r.status === 'solved' ? 'success' : 'highlight'} size="sm">
                     {r.status === 'solved'
                       ? t('performance.ticketSolved', { defaultValue: 'Solved' })
                       : t('performance.ticketPending', { defaultValue: 'Pending' })}
                   </Pill>
                 </td>
-                <td className="px-4 py-2.5 text-end tabular-nums text-foreground">
+                <td className="px-4 py-3 text-end tabular-nums text-foreground">
                   {r.solveSec == null ? (
                     <span className="text-muted-foreground">
                       {t('performance.ticketPending', { defaultValue: 'Pending' })}
@@ -418,7 +420,7 @@ export function TicketsTab({
                     formatDuration(r.solveSec)
                   )}
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3">
                   {r.coupon ? (
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="font-mono text-xs font-semibold text-foreground">
@@ -574,18 +576,18 @@ export function CouponsTab({ filters, search }: { filters: PerformanceFilters; s
             {visible.length === 0 && <NoMatchRow colSpan={oneAgent ? 7 : 8} search={search} />}
             {visible.map((r) => (
               <tr key={r.id} className={BODY_ROW}>
-                <td className="px-4 py-2.5 font-mono text-sm font-semibold text-foreground">
+                <td className="px-4 py-3 font-mono text-sm font-semibold text-foreground">
                   {r.coupon_code ?? t('performance.noCode', { defaultValue: 'no code' })}
                 </td>
-                <td className="px-4 py-2.5 text-end font-semibold tabular-nums text-foreground">
+                <td className="px-4 py-3 text-end font-semibold tabular-nums text-foreground">
                   {couponValue(r)}
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">
+                <td className="px-4 py-3 text-muted-foreground">
                   <span className="block max-w-[12rem] truncate">
                     {r.customer ?? t('performance.unknownCustomer', { defaultValue: 'Customer' })}
                   </span>
                 </td>
-                <td className="max-w-[16rem] px-4 py-2.5 text-foreground">
+                <td className="max-w-[16rem] px-4 py-3 text-foreground">
                   {r.ticket || r.ticketId ? (
                     <span className="block truncate" title={r.ticket?.subject ?? ''}>
                       {r.ticket?.complaint_type?.trim() ||
@@ -609,19 +611,19 @@ export function CouponsTab({ filters, search }: { filters: PerformanceFilters; s
                   )}
                 </td>
                 {!oneAgent && (
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {r.requested_by?.first_name?.trim() || r.requested_by?.email || '—'}
                   </td>
                 )}
-                <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
+                <td className="px-4 py-3 tabular-nums text-muted-foreground">
                   {r.date_created ? formatDateTime(r.date_created) : '—'}
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-4 py-3">
                   <Pill tone={STAGE_TONE[r.stage]} size="sm">
                     {stageLabel(r.stage)}
                   </Pill>
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">
+                <td className="px-4 py-3 text-muted-foreground">
                   {/* Undefined = the field could not be read on this env. */}
                   {r.delivery_excluded === undefined
                     ? '—'
