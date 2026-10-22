@@ -78,6 +78,11 @@ function MediaThumb({ a, onOpen }: { a: MessageAttachment; onOpen: (url: string)
   );
 }
 
+/* One frosted card per panel; the skin gives `rounded-2xl bg-card` the 26px
+   corner and the lit edge. */
+const SIDE_CARD = 'rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]';
+const SECTION_CLASS = cn(SIDE_CARD, 'px-5 py-4 empty:hidden');
+
 function SectionLabel({ children, count }: { children: React.ReactNode; count?: number }) {
   // Board micro-label: uppercase, tracked-out, quiet — matching the tags
   // section header so every sidebar section carries one heading grammar.
@@ -243,65 +248,66 @@ export function ConversationSidebar({
 
   return (
     <aside
+      /* Stacked frosted section cards on the page (owner, 2026-10-22), not
+         stripes inside one tall card: each panel - who, latest order,
+         tickets, tags, notes - is its own object the eye can land on. */
+      data-convo-sidebar=""
       className={cn(
-        // One floating profile panel (reference composition): sections are
-        // separated by spacing inside a single rounded surface, with a hairline
-        // top rule per <section> so the boundaries hold when several quiet
-        // sections stack (spacing alone let CONTACT/ORDER/TICKETS blur together).
-        'relative shrink-0 overflow-auto rounded-2xl bg-card pb-6 text-foreground shadow-soft ring-1 ring-foreground/[0.06]',
-        '[&>section]:border-t [&>section]:border-foreground/[0.06]',
+        'relative flex shrink-0 flex-col gap-3 overflow-y-auto overflow-x-hidden pb-1 text-foreground [&>*]:shrink-0',
         widthClass,
         className,
       )}
       {...sizeProps}
     >
       {handle}
-      {/* Identity hero — avatar in a subtle accent ring. */}
-      {/* Compact identity header. The tall centred hero looked good empty but
+      <div className={SIDE_CARD}>
+        {/* Identity hero — avatar in a subtle accent ring. */}
+        {/* Compact identity header. The tall centred hero looked good empty but
           pushed the order panel — the thing an agent actually needs mid-call —
           below the fold on a laptop. Horizontal layout reclaims ~90px. */}
-      <div className="relative overflow-hidden px-5 pb-4 pt-5">
-        <div className="relative flex items-center gap-3 text-start">
-          <span className="rounded-full bg-primary/30 p-[2px]">
-            <span className="block rounded-full bg-background p-[3px]">
-              <Avatar
-                name={c.contact?.name}
-                email={c.contact?.email}
-                phone={c.contact?.phone}
-                size="md"
-              />
+        <div className="relative overflow-hidden px-5 pb-3 pt-5">
+          <div className="relative flex items-center gap-3 text-start">
+            <span className="rounded-full bg-primary/30 p-[2px]">
+              <span className="block rounded-full bg-background p-[3px]">
+                <Avatar
+                  name={c.contact?.name}
+                  email={c.contact?.email}
+                  phone={c.contact?.phone}
+                  size="md"
+                />
+              </span>
             </span>
-          </span>
-          <div className="min-w-0 space-y-0.5">
-            <h3 className="truncate text-base font-bold tracking-tight text-foreground">
-              {contactName}
-            </h3>
+            <div className="min-w-0 space-y-0.5">
+              <h3 className="truncate text-base font-bold tracking-tight text-foreground">
+                {contactName}
+              </h3>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Stat tiles — the shared boxed StatCard, two up (the reference
+        {/* Stat tiles — the shared boxed StatCard, two up (the reference
           profile-panel move: Age/Blood, Files/Links). Tickets carries the jade
           accent; media stays neutral. The labels are wrapped in a
           whitespace-normal span: StatCard truncates its label, and at the rail's
           half-width "LINKED TICKETS" became "LINKED TIC…" — wrapping to a second
           line beats amputating the word. */}
-      <div className="grid grid-cols-2 gap-2 px-5 pb-2">
-        <StatCard
-          label={
-            <span className="whitespace-normal leading-normal">{t('sidebar.linkedTickets')}</span>
-          }
-          value={tickets.data?.length ?? 0}
-          tone="primary"
-        />
-        <StatCard
-          label={
-            <span className="whitespace-normal leading-normal">
-              {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
-            </span>
-          }
-          value={media?.length ?? 0}
-        />
+        <div className="grid grid-cols-2 gap-2 px-5 pb-5">
+          <StatCard
+            label={
+              <span className="whitespace-normal leading-normal">{t('sidebar.linkedTickets')}</span>
+            }
+            value={tickets.data?.length ?? 0}
+            tone="primary"
+          />
+          <StatCard
+            label={
+              <span className="whitespace-normal leading-normal">
+                {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
+              </span>
+            }
+            value={media?.length ?? 0}
+          />
+        </div>
       </div>
 
       {/* Contact details — name and email are editable so an agent can correct
@@ -312,7 +318,7 @@ export function ConversationSidebar({
           this conversation's history at a different person and leaves the real
           customer's next message to create a fresh contact. Shown read-only
           below instead, because an agent still needs to read it out. */}
-      <section className="px-5 py-4">
+      <section className={SECTION_CLASS}>
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             {t('sidebar.contact')}
@@ -410,7 +416,7 @@ export function ConversationSidebar({
           order number by hand, so hiding the panel there removed the tool at the
           moment it was needed. */}
       {contact.data?.vendor?.yiji_vendor_id && (
-        <section className="px-5 py-4">
+        <section className={SECTION_CLASS}>
           <LatestOrder
             vendorId={contact.data.vendor.yiji_vendor_id}
             customerId={contact.data.external_customer_id ?? undefined}
@@ -439,7 +445,7 @@ export function ConversationSidebar({
           profile merges chats AND tickets into one timeline. Nothing was lost
           except a panel that was pretending to be it. */}
       {/* Linked tickets — hairline-ruled rows with hover lift, not stacked cards. */}
-      <section className="px-5 py-4">
+      <section className={SECTION_CLASS}>
         <SectionLabel count={tickets.data?.length}>{t('sidebar.linkedTickets')}</SectionLabel>
         {tickets.isLoading ? (
           <Spinner />
@@ -476,13 +482,13 @@ export function ConversationSidebar({
       </section>
 
       {/* Tags — the single, interactive home for conversation tags. */}
-      <section className="px-5 py-4">
+      <section className={SECTION_CLASS}>
         <ConversationTags conversation={c} />
       </section>
 
       {/* Shared media — images from the thread, messenger-style grid. */}
       {media && media.length > 0 && (
-        <section className="px-5 py-4">
+        <section className={SECTION_CLASS}>
           <SectionLabel count={media.length}>
             {t('sidebar.sharedMedia', { defaultValue: 'Shared media' })}
           </SectionLabel>
@@ -508,7 +514,7 @@ export function ConversationSidebar({
       )}
 
       {/* Custom fields (per-conversation) — card hides when nothing renders. */}
-      <section className="px-5 py-4 empty:hidden">
+      <section className={SECTION_CLASS}>
         <CustomFieldsSection entityType="conversation" entityId={conversationId} />
       </section>
 
@@ -516,7 +522,7 @@ export function ConversationSidebar({
           rendered out of the customer thread so they can't bleed in visually.
           Kept last with custom fields: both are agent-side bookkeeping, below
           the customer-facing panels the operations team asked to lead with. */}
-      <section className="px-5 py-4">
+      <section className={SECTION_CLASS}>
         <SectionLabel count={notes?.length}>
           {t('sidebar.internalNotes', { defaultValue: 'Internal notes' })}
         </SectionLabel>
@@ -525,7 +531,7 @@ export function ConversationSidebar({
             {notes.map((n) => (
               <li
                 key={n.id}
-                className="group relative rounded-xl bg-warning/10 px-3 py-2.5 ring-1 ring-warning/20"
+                className="group relative rounded-xl bg-note-tint px-3 py-2.5 ring-1 ring-inset ring-note/60"
               >
                 <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">
                   {n.content}

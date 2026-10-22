@@ -510,16 +510,25 @@ export function QuickReplies({
           }}
           aria-expanded={listOpen}
           aria-haspopup="listbox"
-          className="shrink-0 rounded-full border border-dashed border-border px-2.5 py-1 text-2xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:border-solid hover:border-primary/40 hover:bg-primary/[0.06] hover:text-foreground"
+          data-press=""
+          className={cn(
+            // A usable secondary action is a soft brand fill, deeper while
+            // its list is open (the owner's "colour, not outline" rule).
+            'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-primary transition-colors duration-fast ease-out',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            listOpen ? 'bg-primary/[0.24]' : 'bg-primary/10 hover:bg-primary/[0.17]',
+          )}
         >
           {openLabel}
-          <span className="ms-1 opacity-60">{ranked.length}</span>
+          <span className="rounded-full bg-foreground/[0.06] px-1.5 text-2xs tabular-nums">
+            {ranked.length}
+          </span>
         </button>
 
         {/* ARABIC / ENGLISH / BOTH. A segmented control rather than a dropdown:
             three options an agent flips between all day should cost one click,
             not two. */}
-        <div className="flex shrink-0 items-center rounded-full border border-border p-0.5">
+        <div className="flex shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]">
           {(['ar', 'en', 'all'] as const).map((opt) => (
             <button
               key={opt}
@@ -527,9 +536,10 @@ export function QuickReplies({
               onClick={() => setLang(opt)}
               aria-pressed={effectiveLang === opt}
               className={cn(
-                'rounded-full px-2 py-0.5 text-2xs font-medium transition-colors duration-fast',
+                'inline-flex h-7 items-center rounded-full px-2.5 text-2xs font-semibold transition-[background-color,color,box-shadow] duration-fast',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                 effectiveLang === opt
-                  ? 'bg-secondary text-foreground'
+                  ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >

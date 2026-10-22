@@ -4,7 +4,6 @@ import { staffDisplayName } from '@yiji/shared-types';
 import { useTranslation } from 'react-i18next';
 import {
   AddTicketIcon,
-  AppShell,
   Avatar,
   ClockIcon,
   ErrorBoundary,
@@ -20,6 +19,7 @@ import {
   type AppShellRailContext,
 } from '@yiji/ui';
 import { RouteError } from './components/RouteError.js';
+import { AgentShell } from './components/shell/AgentShell.js';
 import { AuthProvider, useAuth } from './lib/auth/AuthContext.js';
 import type { Privilege } from '@yiji/shared-types';
 import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
@@ -249,6 +249,18 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
   );
 }
 
+/* RAPPORT PILL TABS (owner, 2026-10-22 - the admin console's tab, on the
+ * agent's dark nav bar): the current destination is a LIGHT pill in ink type,
+ * everything else light text on the bar. High contrast where you are, nothing
+ * where you are not. */
+const NAV_PILL =
+  'relative flex h-10 items-center rounded-full px-3 text-[0.84375rem] font-semibold whitespace-nowrap 2xl:px-[17px] ' +
+  'transition-[background-color,color,box-shadow] duration-fast ease-out ' +
+  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background';
+const NAV_PILL_ACTIVE = 'bg-background text-ink shadow-[0_8px_20px_-12px_oklch(0_0_0/0.6)]';
+const NAV_PILL_IDLE =
+  'text-ink-foreground/75 hover:bg-ink-foreground/[0.12] hover:text-ink-foreground';
+
 /*
  * Horizontal primary nav — text pills in the floating top bar (the owner's
  * reference dashboards: rounded pills on a dark bar, no per-pill icon).
@@ -263,26 +275,16 @@ function TopNav({ sections }: { sections: NavSection[] }) {
     sec.items.map((it, iIdx) => ({ ...it, startsSection: sIdx > 0 && iIdx === 0 })),
   );
   return (
-    <ul className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <ul className="flex min-w-0 items-center gap-0.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       {items.map((it) => (
         <li key={it.to} className="flex items-center">
-          {it.startsSection && <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-border" />}
+          {it.startsSection && (
+            <span aria-hidden className="mx-1.5 h-5 w-px shrink-0 bg-ink-foreground/15" />
+          )}
           <NavLink
             to={it.to}
             end={it.end}
-            className={({ isActive }) =>
-              cn(
-                // Solid dark pill for the current destination — see the admin
-                // portal's TopNav for the reasoning.
-                'relative flex h-10 items-center rounded-full px-4 text-sm whitespace-nowrap',
-                'transition-[background-color,color,box-shadow,font-weight] duration-fast ease-out',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                'motion-safe:active:scale-[0.97]',
-                isActive
-                  ? 'bg-primary font-semibold text-primary-foreground shadow-[0_6px_18px_-8px_oklch(var(--primary)/0.7)] ring-1 ring-inset ring-primary-foreground/20'
-                  : 'font-medium text-ink-foreground/60 hover:bg-ink-foreground/[0.12] hover:font-semibold hover:text-ink-foreground',
-              )
-            }
+            className={({ isActive }) => cn(NAV_PILL, isActive ? NAV_PILL_ACTIVE : NAV_PILL_IDLE)}
           >
             {it.label}
           </NavLink>
@@ -318,8 +320,10 @@ function MobileBrand() {
       src="/sara-crm-icon.svg"
       alt="Sara CRM"
       /* No `rounded-*`: the artwork's corners are already cut and its radius is
-         transparent, so rounding the element clips them a second time. */
-      className="h-16 w-16 shrink-0"
+         transparent, so rounding the element clips them a second time.
+         44px (2026-10-22): the phone header is 56px, and the 64px tile hung
+         out of the bottom of it. */
+      className="h-11 w-11 shrink-0"
     />
   );
 }
@@ -405,11 +409,54 @@ function Shell({ children }: { children: React.ReactNode }) {
   // rail still exists but only as the mobile drawer.
   return (
     <>
-      <AppShell
-        rail={(ctx) => <Rail ctx={ctx} sections={sections} />}
-        topBarBrand={<MobileBrand />}
-        topBarActions={
-          <div className="flex items-center gap-1.5 text-muted-foreground">
+      <AgentShell
+        nav={<TopNav sections={sections} />}
+        /* Count the headline numerals up on every page but the inbox, whose
+           counters change on each poll and each chat switch. */
+        animateMetrics={location.pathname !== '/'}
+        utilities={
+          <>
+            {/* Desktop. Ready / Busy keeps its own coloured pill - it is a
+                state the agent must read at a glance, not one more icon. */}
+            <BusyToggle />
+            <span className="agent-icon-btn px-1">
+              <PageRefresh />
+            </span>
+            <span className="agent-icon-btn">
+              <NotificationBell />
+            </span>
+            <span className="agent-icon-btn">
+              <HelpAssistant />
+            </span>
+            <span className="agent-icon-btn">
+              <SoundToggle />
+            </span>
+            <span className="agent-icon-btn">
+              <LanguageToggle />
+            </span>
+            <span className="agent-icon-btn hidden gap-2 py-1 pe-1 ps-1 sm:inline-flex">
+              <Avatar name={displayName} email={user?.email} size="sm" />
+              <span className="hidden max-w-[8rem] truncate text-xs font-semibold text-foreground min-[1600px]:inline">
+                {displayName}
+              </span>
+              {/* Sign out lived in the rail footer, which desktop does not
+                  render - without this there is no way out on desktop. */}
+              <button
+                type="button"
+                onClick={() => void logout()}
+                aria-label={t('auth.signOut', { ns: 'common' })}
+                title={t('auth.signOut', { ns: 'common' })}
+                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[background-color,color] duration-fast ease-out hover:bg-secondary hover:text-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <SignOutIcon size={14} />
+              </button>
+            </span>
+          </>
+        }
+        mobileRail={(ctx) => <Rail ctx={ctx} sections={sections} />}
+        mobileBrand={<MobileBrand />}
+        mobileActions={
+          <div className="agent-utilities flex items-center gap-1.5 text-muted-foreground">
             {/* In the masthead, so it is on every page without thirty copies
                 of it — thirty chances for one to be wired to the wrong
                 thing. */}
@@ -421,43 +468,6 @@ function Shell({ children }: { children: React.ReactNode }) {
             <LanguageToggle />
           </div>
         }
-        navBar={<TopNav sections={sections} />}
-        topBar={
-          <>
-            {/* No search box in the masthead: every page that has something
-                to search already has its own field, and a second one competed
-                with them. The command palette is still one Cmd/Ctrl+K away. */}
-            <div className="flex items-center gap-0.5 rounded-full bg-ink-foreground/10 p-1 ring-1 ring-ink-foreground/15">
-              {/* Desktop lives in `topBar`; `topBarActions` above is the MOBILE
-                  header only, so a control placed there alone is invisible to
-                  everyone on a laptop. */}
-              <BusyToggle />
-              <PageRefresh />
-              <NotificationBell />
-              <HelpAssistant />
-              <SoundToggle />
-              <LanguageToggle />
-            </div>
-            <span className="hidden items-center gap-2 rounded-full bg-ink-foreground/10 py-1 pe-1 ps-1 ring-1 ring-ink-foreground/15 sm:flex">
-              <Avatar name={displayName} email={user?.email} size="sm" />
-              <span className="hidden max-w-[8rem] truncate text-xs font-semibold text-foreground min-[1600px]:inline">
-                {displayName}
-              </span>
-              {/* Sign out lived in the rail footer, which desktop no longer
-                  renders — without this there is no way out on desktop. */}
-              <button
-                type="button"
-                onClick={() => void logout()}
-                aria-label={t('auth.signOut', { ns: 'common' })}
-                title={t('auth.signOut', { ns: 'common' })}
-                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-[background-color,color] duration-fast ease-out hover:bg-secondary hover:text-foreground motion-safe:active:scale-[0.94] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-              >
-                <SignOutIcon size={14} />
-              </button>
-            </span>
-          </>
-        }
-        resizeStorageKey="yiji.agent.sidebarWidth"
         navLabel={t('nav.primary', { defaultValue: 'Primary navigation' })}
         menuLabel={t('nav.openMenu', { defaultValue: 'Open menu' })}
         closeLabel={t('nav.closeMenu', { defaultValue: 'Close menu' })}
@@ -482,7 +492,7 @@ function Shell({ children }: { children: React.ReactNode }) {
             </div>
           </Suspense>
         </ErrorBoundary>
-      </AppShell>
+      </AgentShell>
       <AppCommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
       {/* Says so when this tab is running a build the server has replaced. */}
       <NewVersionBanner />

@@ -193,13 +193,14 @@ export function EnhanceButton({
             : undefined
         }
         aria-label={String(t('ai.enhance', { defaultValue: 'Enhance' }))}
+        data-press=""
         className={cn(
-          'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-2xs font-semibold',
-          'ring-1 ring-inset transition-colors duration-fast ease-out',
+          'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold',
+          'transition-colors duration-fast ease-out',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
           empty || busy
-            ? 'cursor-not-allowed bg-secondary/40 text-muted-foreground/60 ring-border/60'
-            : 'bg-secondary/50 text-muted-foreground ring-border hover:bg-primary/[0.08] hover:text-primary hover:ring-primary/25',
+            ? 'cursor-not-allowed bg-transparent text-muted-foreground opacity-50'
+            : 'bg-primary/10 text-primary hover:bg-primary/[0.17] active:bg-primary/[0.24]',
         )}
       >
         {busy ? <Spinner size={13} /> : <SparkleIcon size={13} />}

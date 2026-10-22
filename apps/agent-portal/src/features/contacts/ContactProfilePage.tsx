@@ -180,7 +180,7 @@ export function ContactProfilePage() {
       </Toolbar>
 
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 p-6 sm:p-10 lg:grid-cols-[1fr_360px]">
+        <div className="agent-gutter grid grid-cols-1 gap-5 pb-8 pt-2 lg:grid-cols-[minmax(0,1fr)_380px]">
           {/* Left column: identity + timeline */}
           <div className="space-y-6">
             {IdentityCard()}

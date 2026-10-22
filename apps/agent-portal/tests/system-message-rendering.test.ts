@@ -62,7 +62,7 @@ describe('a system message in the agent thread', () => {
 
   /* And it must not borrow either side's colour. */
   it('uses a neutral bubble, not the customer bubble', () => {
-    expect(VIEW).toMatch(/isSystem\s*\?[\s\S]{0,400}bg-secondary\/60/);
+    expect(VIEW).toMatch(/isSystem\s*\?[\s\S]{0,400}bg-foreground\/\[0\.04\]/);
   });
 
   /* A tail points at a sender; a system message has none. */

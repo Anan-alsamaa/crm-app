@@ -1803,7 +1803,7 @@ export function LateOrdersPage() {
       {/* PINNED, outside the sideways scroll (owner, 2026-10-11): the Live
           button sat at the far right of a table wider than the screen. */}
       <PageHeader
-        className="px-4 pt-4"
+        className="agent-page-header agent-gutter pt-4"
         title={t('lateOrders.title', { defaultValue: 'Late orders' })}
         subtitle={t('lateOrders.subtitle', {
           minutes: threshold,
@@ -1824,7 +1824,7 @@ export function LateOrdersPage() {
       */}
       <div
         ref={pinRef}
-        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-4"
+        className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] agent-gutter flex-1 overflow-auto"
       >
         {/* `w-max min-w-full` is the part that fixes "records outside the
             table": it lets the content be as wide as the table needs while
@@ -1835,7 +1835,7 @@ export function LateOrdersPage() {
         Order id, then dates, then brand/branch — the owner's order (2026-09-21),
         which is also the order an agent narrows in: they usually have a number.
       */}
-          <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-end gap-2">
+          <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-end gap-2 rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06] sm:p-4">
             <label className="flex flex-col gap-1">
               <span className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
                 {t('lateOrders.filter.order', { defaultValue: 'Order number' })}

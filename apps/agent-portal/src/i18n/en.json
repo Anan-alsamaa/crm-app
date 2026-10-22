@@ -184,6 +184,11 @@
     "forgotSentSubtitle": "Check your inbox.",
     "resetDone": "Password updated. Sign in with your new password."
   },
+  "shell": {
+    "metricEmpty": "No data in range",
+    "tableEmptyTitle": "Nothing to show",
+    "tableEmptyHint": "Try a wider date range or clear the filters."
+  },
   "nav": {
     "inbox": "Inbox",
     "tickets": "Tickets",

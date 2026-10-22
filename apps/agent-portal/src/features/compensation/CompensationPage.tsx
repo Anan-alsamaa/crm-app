@@ -91,7 +91,7 @@ function RequestQueue() {
   );
 
   return (
-    <div className="mx-auto h-full w-full max-w-4xl overflow-y-auto px-4 py-6 sm:px-6">
+    <div className="agent-gutter h-full w-full max-w-5xl overflow-y-auto pb-8 pt-4">
       <header className="mb-4">
         <h1 className="text-2xl font-bold tracking-tight text-foreground">
           {t('compensation.title', { defaultValue: 'Compensation' })}
@@ -111,10 +111,13 @@ function RequestQueue() {
             type="button"
             onClick={() => setFilter(s)}
             className={cn(
-              'rounded-full px-3 py-1 text-xs font-medium transition-colors duration-fast',
+              'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+              // The current view is the solid ink chip; the others are usable
+              // secondary actions in the soft brand fill.
               filter === s
-                ? 'bg-primary text-primary-foreground'
-                : 'bg-secondary text-muted-foreground hover:text-foreground',
+                ? 'bg-ink text-ink-foreground'
+                : 'bg-primary/10 text-primary hover:bg-primary/[0.17]',
             )}
           >
             {s === 'all' ? t('compensation.all', { defaultValue: 'All' }) : s}
@@ -254,7 +257,7 @@ function RequestDetail({ id }: { id: string }) {
 
   if (isLoading) {
     return (
-      <div className="mx-auto h-full w-full max-w-3xl space-y-3 overflow-y-auto px-4 py-6 sm:px-6">
+      <div className="agent-gutter h-full w-full max-w-5xl space-y-3 overflow-y-auto pb-8 pt-4">
         <Skeleton className="h-8 w-40" />
         <Skeleton className="h-40 w-full rounded-2xl" />
         <Skeleton className="h-40 w-full rounded-2xl" />
@@ -263,7 +266,7 @@ function RequestDetail({ id }: { id: string }) {
   }
   if (!r) {
     return (
-      <div className="mx-auto h-full w-full max-w-3xl overflow-y-auto px-4 py-6 sm:px-6">
+      <div className="agent-gutter h-full w-full max-w-5xl overflow-y-auto pb-8 pt-4">
         <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
           <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
           {t('compensation.back', { defaultValue: 'Back' })}
@@ -278,7 +281,7 @@ function RequestDetail({ id }: { id: string }) {
   }
 
   return (
-    <div className="mx-auto h-full w-full max-w-6xl space-y-5 overflow-y-auto px-4 py-6 sm:px-6">
+    <div className="agent-gutter h-full w-full space-y-4 overflow-y-auto pb-8 pt-4">
       <Button variant="ghost" size="sm" onClick={() => navigate('/compensation')}>
         <ArrowLeftIcon size={16} className="rtl:-scale-x-100" />{' '}
         {t('compensation.back', { defaultValue: 'Back' })}

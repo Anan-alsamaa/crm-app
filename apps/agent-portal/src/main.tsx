@@ -1,8 +1,9 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import '@fontsource-variable/inter';
-import '@fontsource-variable/outfit';
+// Urbanist is the portal's one face (the admin console's Rapport skin, carried
+// across 2026-10-22). Self-hosted: the portals' CSP is `font-src 'self'`.
+import '@fontsource-variable/urbanist';
 import './i18n/index.js';
 import './index.css';
 import { App } from './App.js';

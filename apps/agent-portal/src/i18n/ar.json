@@ -100,6 +100,11 @@
     "loginName": "اسم الدخول",
     "loginNamePlaceholder": "الرقم الوظيفي"
   },
+  "shell": {
+    "metricEmpty": "لا توجد بيانات في هذه الفترة",
+    "tableEmptyTitle": "لا يوجد ما يُعرض",
+    "tableEmptyHint": "جرّب فترة أوسع أو امسح عوامل التصفية."
+  },
   "nav": {
     "inbox": "صندوق الوارد",
     "tickets": "التذاكر",

@@ -62,26 +62,32 @@
    * uses the deeper `--primary` or dark ink, because OKLCH L is perceptual and
    * a bright fill with white text fails AA every time.
    */
-  --radius: 1.25rem;
+  /* AGENT SKIN (owner, 2026-10-22): the admin console's Rapport tokens, so
+     the two portals read as one product. 18px base radius - `rounded-2xl`
+     (radius + 8px) lands on the 26px frosted-card corner. */
+  --radius: 1.125rem;
 
-  /* Surfaces: a cool near-white page, white content on top of it. */
-  --background: 0.98 0.003 250;
-  --canvas: 0.972 0.004 252;
-  --foreground: 0.25 0.02 260;
-  --card: 1 0 0;
-  --card-foreground: 0.25 0.02 260;
+  /* Surfaces: a soft warm-neutral page under a faint indigo/peach wash (see
+     `body`), softly-white cards floating on it - the admin console's ladder. */
+  --background: 0.94 0.007 75;
+  --canvas: 0.925 0.008 75;
+  --foreground: 0.22 0.02 277;
+  --card: 0.985 0.003 80;
+  --card-foreground: 0.22 0.02 277;
   --popover: 1 0 0;
-  --popover-foreground: 0.25 0.02 260;
+  --popover-foreground: 0.22 0.02 277;
 
   /* THE BRAND INDIGO — taken from the SARA CRM logo (#4338CA).
      Every accent in both themes derives from this one hue, so the mark and the
      interface cannot drift apart. Deep enough to carry white text at 7.3:1,
      which is AA with room to spare. */
-  --primary: 0.457 0.215 277;
-  --primary-strong: 0.4 0.215 277;
+  /* #4B3BD5 - the Sara CRM indigo (DESIGN.md), the admin console's value.
+     7.28:1 with white, so agent bubbles carry white text with room to spare. */
+  --primary: 0.477 0.223 278;
+  --primary-strong: 0.42 0.223 278;
   --primary-foreground: 1 0 0;
-  --primary-subtle: 0.457 0.215 277 / 0.1;
-  --brand: 0.457 0.215 277;
+  --primary-subtle: 0.477 0.223 278 / 0.1;
+  --brand: 0.477 0.223 278;
 
   /*
    * A LINK THAT READS AS A LINK (owner, 2026-10-01).
@@ -101,14 +107,18 @@
   /* Ink: the dark counterweight in a light app — masthead, table headers, the
      nav rail. Sits on the brand hue rather than a neighbouring navy, so the
      masthead reads as the same family as the mark on it. */
-  --ink: 0.23 0.035 277;
+  --ink: 0.21 0.03 277;
   --ink-foreground: 0.98 0.004 250;
   --ink-muted: 0.7 0.02 277;
 
-  --secondary: 0.955 0.006 252;
-  --secondary-foreground: 0.25 0.02 260;
-  --muted: 0.955 0.006 252;
-  --muted-foreground: 0.55 0.02 262;
+  /* Wells, hovers and inactive chips: a step BELOW the card, on the page's
+     own warm neutral. */
+  --secondary: 0.948 0.006 75;
+  --secondary-foreground: 0.22 0.02 277;
+  --muted: 0.948 0.006 75;
+  /* 0.5: muted text sits on the darker warm page as well as on cards and has
+     to clear 4.5:1 on both (~5.0 on the page, ~5.7 on a card). */
+  --muted-foreground: 0.5 0.018 277;
 
   --accent: 0.55 0.2 277;
   --accent-foreground: 1 0 0;
@@ -157,11 +167,13 @@
 
   /* Hairlines: barely there. Hierarchy comes from space, weight and surface —
      a border is the last resort, not the first. */
-  --border: 0.25 0.02 260 / 0.08;
-  --border-strong: 0.25 0.02 260 / 0.14;
-  --input: 0.968 0.005 252;
-  --ring: 0.457 0.215 277;
-  --shadow-color: 0.4 0.06 277;
+  --border: 0.22 0.02 277 / 0.08;
+  --border-strong: 0.22 0.02 277 / 0.14;
+  --input: 0.993 0.002 80;
+  --ring: 0.477 0.223 278;
+  /* A warm-indigo shadow, so the long drops do not read as dirt on the warm
+     page. */
+  --shadow-color: 0.32 0.045 290;
 
   /* Rail (mobile drawer in the top-nav layout) — the same ink as the masthead. */
   --rail: 0.23 0.035 277;
@@ -174,8 +186,9 @@
   --secondary-brand: 0.6 0.19 20;
   --secondary-brand-foreground: 1 0 0;
 
-  /* Display ink — the reference's #292A2F, used for hero type and solid CTAs. */
-  --display: 0.457 0.215 277;
+  /* The solid CTA and the active nav pill's ink: near-black on the brand hue,
+     as in the admin console. Default buttons are `bg-display`. */
+  --display: 0.21 0.03 277;
   --violet: 0.55 0.17 285;
   /* The blue that carries the brand indigo toward daylight — same family,
      not a separate cyan. Its tint below must stay on this hue. */
@@ -202,6 +215,28 @@
   --warning-tint: 0.965 0.03 42;
   --sky-tint: 0.93 0.055 195;
   --violet-tint: 0.93 0.055 320;
+
+  /* INTERNAL NOTES - amber, on purpose OUTSIDE the warning/error red family:
+     a note is not a problem, it is the team talking among itself, and it
+     must never be mistaken for a reply the customer can read. The ink is
+     measured on the tint (6.9:1); the accent carries dark ink, never white. */
+  --note: 0.78 0.14 75;
+  --note-tint: 0.965 0.045 88;
+  --note-foreground: 0.38 0.08 60;
+
+  /* AGENT SKIN - surface recipes, as variables so the dark theme can swap
+     them wholesale. `--glass` is the frosted control fill; the shadows are the
+     frosted card's lit edge + one long soft drop (the admin console's). */
+  --glass: 1 0 0;
+  --agent-card-shadow:
+    inset 0 0 0 1px rgb(255 255 255 / 0.78), inset 0 1px 0 rgb(255 255 255 / 0.9),
+    0 1px 2px oklch(var(--shadow-color) / 0.05), 0 24px 48px -30px oklch(var(--shadow-color) / 0.32);
+  --agent-shadow-soft:
+    inset 0 1px 0 rgb(255 255 255 / 0.7), 0 1px 2px oklch(var(--shadow-color) / 0.05),
+    0 24px 48px -30px oklch(var(--shadow-color) / 0.32);
+  --agent-shadow-float:
+    inset 0 1px 0 rgb(255 255 255 / 0.7), 0 2px 6px oklch(var(--shadow-color) / 0.06),
+    0 30px 60px -32px oklch(var(--shadow-color) / 0.4);
 }
 
 /*
@@ -224,7 +259,8 @@
   --sky-tint: 0.27 0.045 264;
   --violet-tint: 0.27 0.045 285;
 
-  --radius: 0.875rem;
+  /* The Rapport corner in both themes. */
+  --radius: 1.125rem;
   /* Elevation ladder with real separation so surfaces read as distinct layers,
      not one flat wall of dark: base < card < secondary/popover. */
   --background: 0.155 0.012 260;
@@ -282,6 +318,27 @@
   --violet: 0.62 0.2 285;
   --sky: 0.7 0.16 264;
   --magenta: 0.62 0.19 20;
+
+  /* Ink is the SOLID chip/CTA colour; on a near-black page it inverts to a
+     light pill with dark type (the nav bar re-binds it back, below). */
+  --ink: 0.92 0.012 277;
+  --ink-foreground: 0.18 0.025 277;
+  --ink-muted: 0.45 0.02 277;
+
+  --note: 0.8 0.13 78;
+  --note-tint: 0.3 0.05 75;
+  --note-foreground: 0.9 0.09 85;
+
+  --glass: 0.27 0.014 262;
+  --agent-card-shadow:
+    inset 0 0 0 1px oklch(1 0 0 / 0.06), 0 1px 2px oklch(0 0 0 / 0.3),
+    0 24px 48px -30px oklch(0 0 0 / 0.7);
+  --agent-shadow-soft:
+    inset 0 0 0 1px oklch(1 0 0 / 0.06), 0 1px 2px oklch(0 0 0 / 0.3),
+    0 24px 48px -30px oklch(0 0 0 / 0.7);
+  --agent-shadow-float:
+    inset 0 0 0 1px oklch(1 0 0 / 0.08), 0 2px 6px oklch(0 0 0 / 0.35),
+    0 30px 60px -32px oklch(0 0 0 / 0.8);
 }
 
 /*
@@ -316,18 +373,22 @@ body {
   /* One quiet lift at the top-left so white surfaces read as floating rather
      than flush. Fixed, so it stays still while content scrolls over it — and
      restrained, because a page background is not where personality belongs. */
+  /* THE WASH (the admin console's). A warm-neutral page with three very soft
+     blooms in OUR hues. Fixed, so it stays put while content scrolls; low
+     alpha, because the page is where the work sits. */
   background:
-    radial-gradient(ellipse 85% 50% at 6% 0%, oklch(var(--primary) / 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 55% 45% at 0% 0%, oklch(0.86 0.07 292 / 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 45% 40% at 55% -8%, oklch(0.92 0.05 55 / 0.55) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 50% at 100% 100%, oklch(0.88 0.055 268 / 0.5) 0%, transparent 70%),
     oklch(var(--background));
   background-attachment: fixed;
   color: oklch(var(--foreground));
-  /* Outfit is the geometric, slightly rounded face the reference uses (Lufga);
-     it now sets the WHOLE interface, not just headings. Body type in a
-     geometric sans is the single biggest reason the reference reads friendly
-     where a grotesque reads administrative. */
+  /* Urbanist at 500 is the body weight; 400 reads thin on the warm page.
+     Arabic falls through per glyph (Urbanist has none). */
   font-family:
-    'Outfit Variable',
-    'Inter Variable',
+    'Urbanist Variable',
+    'Noto Sans Arabic',
+    Tahoma,
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -337,7 +398,8 @@ body {
     'Helvetica Neue',
     Arial,
     sans-serif;
-  font-feature-settings: 'cv11', 'ss01';
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
@@ -406,7 +468,8 @@ body {
  */
 h1,
 h2 {
-  font-family: 'Outfit Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    'Urbanist Variable', 'Noto Sans Arabic', Tahoma, ui-sans-serif, system-ui, sans-serif;
   text-wrap: balance;
 }
 body::after {
@@ -417,4 +480,808 @@ body::after {
   z-index: 1;
   opacity: 0.014;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * AGENT SKIN — component layer (owner, 2026-10-22)
+ *
+ * The admin console's "Rapport" look, carried to the agent portal in Sara
+ * CRM's own colours: frosted cards, roomy-but-workable tables, readable
+ * badges, actions that look like actions, light motion. The tokens above
+ * carry the palette; this section reshapes the shared primitives WHERE THEY
+ * RENDER INSIDE THE AGENT SHELL (`.agent-skin`) plus the panels that portal
+ * to <body>. It is this portal's stylesheet, so nothing here can reach the
+ * admin console or the chat widget.
+ *
+ * Every rule is visual only - no display:none on content, no pointer-events
+ * changes on anything that can be clicked - so behaviour cannot move with it.
+ *
+ * Agents live in this tool all day, so it is the admin skin held a notch
+ * calmer: page titles a step smaller, table rows 52px rather than 56px, no
+ * row choreography, and press feedback only on real buttons (never on an
+ * inbox row - DESIGN.md: 100+ times a day means no animation).
+ * ═════════════════════════════════════════════════════════════════════════ */
+
+.agent-skin,
+[data-modal-panel],
+[data-drawer-panel] {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --agent-row-line: oklch(var(--foreground) / 0.065);
+}
+
+/* The desktop shell is exactly the window's height and scrolls inside <main>,
+   so the DOCUMENT has nothing to scroll; saying so stops a stray scroll-into-
+   view from sliding the nav bar off the top. Desktop shell only. */
+:root:has(.agent-skin > header[data-app-topbar]) {
+  overflow: clip;
+}
+:root:has(.agent-skin > header[data-app-topbar]) body {
+  overflow: clip;
+}
+
+/* ── One gutter for every page ────────────────────────────────────────────
+     The title, the filters and the content all start at the SAME edge (the
+     admin console's rule: a body on its own centred column under a full-width
+     title read as off-centre). Pages put `agent-gutter` on their body. */
+.agent-skin {
+  --gutter: 0.75rem;
+}
+@media (min-width: 640px) {
+  .agent-skin {
+    --gutter: 1rem;
+  }
+}
+@media (min-width: 1280px) {
+  .agent-skin {
+    --gutter: 1.25rem;
+  }
+}
+.agent-gutter {
+  padding-inline: var(--gutter, 1rem);
+}
+
+/* ── Page header: the title sits on the page, large ────────────────────── */
+.agent-skin [data-toolbar] {
+  padding-inline: var(--gutter);
+  position: relative;
+  height: auto;
+  min-height: 4.75rem;
+  padding-block: 1rem 0.625rem;
+  flex-wrap: wrap;
+  row-gap: 0.625rem;
+  background: transparent;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.agent-skin [data-toolbar]::after {
+  content: none;
+}
+.agent-skin main h1 {
+  font-size: 2rem;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: oklch(var(--foreground));
+}
+/* The shared PageHeader (late orders) titles with an h2; same size. */
+.agent-skin .agent-page-header h2 {
+  font-size: 2rem;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: oklch(var(--foreground));
+}
+[dir='rtl'] .agent-skin main h1 {
+  font-size: 1.875rem;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+@media (max-width: 639px) {
+  .agent-skin main h1 {
+    font-size: 1.625rem;
+  }
+  [dir='rtl'] .agent-skin main h1 {
+    font-size: 1.5rem;
+  }
+}
+
+/* ── Frosted cards ─────────────────────────────────────────────────────────
+     The large content panels take one corner, one lit edge, one long soft
+     drop. Floating panels (absolute / fixed / popovers) keep their own. */
+.agent-skin main .rounded-2xl.bg-card:not(.absolute):not(.fixed),
+.agent-skin main .rounded-\[1\.25rem\].bg-card,
+.agent-skin main .rounded-\[1\.4rem\].bg-card {
+  border-radius: 1.625rem;
+  box-shadow: var(--agent-card-shadow);
+}
+
+/* Column headings and labels read as words, not tracked capitals. The
+   source strings are sentence case, so dropping the transform shows them as
+   written. */
+.agent-skin main th {
+  text-transform: none;
+  letter-spacing: 0;
+}
+.agent-skin .uppercase[class*='tracking-'],
+[data-drawer-panel] .uppercase[class*='tracking-'],
+[data-modal-panel] .uppercase[class*='tracking-'] {
+  text-transform: none;
+  letter-spacing: normal;
+}
+.agent-skin main .text-2xs.uppercase[class*='tracking-'] {
+  font-size: 0.75rem;
+}
+
+/* `--border` carries its own alpha, so `border-border` expands to invalid CSS
+   and falls back to a black outline. Restated in valid form. */
+/* Global, not scoped: dialogs, drawers and menus portal to <body>, and
+   this stylesheet only ever loads in the agent portal. */
+.border-border {
+  border-color: oklch(var(--border));
+}
+.divide-border > :not([hidden]) ~ :not([hidden]) {
+  border-color: oklch(var(--border));
+}
+.agent-skin .bg-input {
+  background-color: oklch(var(--input));
+}
+
+/* ── Round header controls (AgentShell) ───────────────────────────────────── */
+.agent-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5rem;
+  min-width: 2.5rem;
+  border-radius: 9999px;
+  background: oklch(var(--glass) / 0.64);
+  color: oklch(var(--foreground));
+  box-shadow:
+    inset 0 0 0 1px oklch(var(--glass) / 0.8),
+    0 8px 20px -14px oklch(var(--shadow-color) / 0.45);
+  transition: background-color 120ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.agent-icon-btn:hover {
+  background: oklch(var(--glass) / 0.95);
+}
+/* The utility cluster was written in the dark masthead's `ink-foreground`;
+   on the light page that token is re-bound to the dark ink, so the same
+   components read correctly with no edits. */
+.agent-utilities {
+  --ink-foreground: 0.22 0.02 277;
+}
+:root[data-theme='dark'] .agent-utilities {
+  --ink-foreground: 0.955 0.005 250;
+}
+/* The dark nav bar stays dark in both themes. */
+:root[data-theme='dark'] .agent-skin header nav {
+  --ink: 0.21 0.03 277;
+  --ink-foreground: 0.98 0.004 250;
+}
+:root[data-theme='dark'] .agent-skin header .bg-background.text-ink {
+  background-color: oklch(var(--glass));
+  color: oklch(var(--foreground));
+}
+
+/* ── KPI tiles: frosted card, ink numeral, the tone kept in the chip ─────── */
+.agent-skin [data-stat-card],
+.agent-skin [data-report-kpi] {
+  background: oklch(var(--card));
+  box-shadow: var(--agent-card-shadow);
+}
+.agent-skin [data-stat-card] > [aria-hidden]:first-child {
+  border-radius: 9999px;
+}
+.agent-skin main [data-stat-card] {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto 1fr;
+  align-items: start;
+  column-gap: 0.75rem;
+  min-height: 7.5rem;
+  padding: 1.125rem 1.25rem;
+  border-radius: 1.375rem;
+}
+.agent-skin main [data-stat-card] > [data-stat-chip] {
+  grid-column: 2;
+  grid-row: 1;
+  width: 2.5rem;
+  height: 2.5rem;
+}
+.agent-skin main [data-stat-card] > [data-stat-body] {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+.agent-skin main [data-stat-card] [data-stat-label],
+.agent-skin main [data-stat-card] [data-stat-label].uppercase {
+  order: -1;
+  margin: 0 0 auto;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-transform: none;
+  letter-spacing: 0;
+  color: oklch(var(--foreground) / 0.8);
+}
+.agent-skin main [data-stat-card] [data-stat-label] > span:last-child {
+  display: block;
+}
+.agent-skin main [data-stat-card] [data-stat-label] > span:last-child::first-letter {
+  text-transform: uppercase;
+}
+.agent-skin main [data-stat-card] [data-stat-figure] {
+  margin-top: 0.625rem;
+}
+.agent-skin main [data-stat-card] [data-stat-value] {
+  font-size: 2.125rem;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  color: oklch(var(--foreground));
+}
+.agent-skin main [data-stat-card] > [data-stat-visual] {
+  grid-column: 2;
+  grid-row: 2;
+  align-self: end;
+}
+.agent-skin [data-report-kpi] {
+  border-radius: 1.375rem;
+}
+
+/* ── Dialogs and drawers (portalled to <body>) ───────────────────────────── */
+[data-modal-panel] {
+  border-radius: 1.625rem;
+  box-shadow:
+    var(--agent-shadow-float),
+    0 40px 80px -40px oklch(var(--shadow-color) / 0.55);
+  animation-duration: 220ms;
+}
+[data-drawer-panel] {
+  border-radius: 1.625rem;
+  box-shadow:
+    var(--agent-shadow-float),
+    0 40px 80px -40px oklch(var(--shadow-color) / 0.55);
+  --tw-ring-color: transparent;
+  animation-duration: 280ms;
+}
+/* Menus grow from their trigger edge rather than from their own middle. */
+.fixed.animate-scale-in {
+  transform-origin: top center;
+}
+
+/* Warning chips: `--warning-foreground` is WHITE (the ink for a SOLID
+   warning fill). On a 15-20% wash it measured ~1.3:1, so on a wash the ink
+   is the warning hue itself (~5:1). Solid fills keep white. */
+.bg-warning\/20.text-warning-foreground,
+.bg-warning\/15.text-warning-foreground {
+  color: oklch(var(--warning));
+}
+
+/* Section cards: the bento corner and frosted drop, and no hue bar beside
+   the title (a side-stripe accent, which the design bans). */
+.agent-skin [data-section-card] {
+  border-radius: 1.625rem;
+  box-shadow: var(--agent-card-shadow);
+}
+.agent-skin
+  [data-section-card]
+  > div:first-child
+  > div:first-child
+  > span[aria-hidden]:first-child {
+  display: none;
+}
+
+/* Date fields in Arabic: the calendar button sits at the page's end edge
+   (the left, in Arabic), so the room moves to that side. */
+[dir='rtl'] [data-date-field] > input[dir='ltr'] {
+  padding-left: 2.25rem;
+  padding-right: 0.875rem;
+}
+
+/* ── Tables: air, a light header, thin lines ─────────────────────────────────
+     The admin console's table, a notch tighter for an all-day queue: 52px
+     rows, 18px between columns, 24px at each end of the row. */
+.agent-skin main table {
+  font-size: 0.875rem;
+}
+.agent-skin main thead th {
+  height: 2.875rem;
+  padding-block: 0;
+  padding-inline: 1.125rem;
+  background-color: oklch(var(--card));
+  font-size: 0.78125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: oklch(var(--muted-foreground));
+  white-space: nowrap;
+  vertical-align: middle;
+  backdrop-filter: none;
+  box-shadow: inset 0 -1px 0 var(--agent-row-line);
+}
+.agent-skin main tbody td {
+  height: 3.25rem;
+  padding-block: 0.625rem;
+  padding-inline: 1.125rem;
+  vertical-align: middle;
+}
+.agent-skin main :is(thead th, tbody td):first-child {
+  padding-inline-start: 1.5rem;
+}
+.agent-skin main :is(thead th, tbody td):last-child {
+  padding-inline-end: 1.5rem;
+}
+.agent-skin main thead th[aria-sort] {
+  padding: 0;
+}
+.agent-skin main thead th[aria-sort] > button {
+  height: 2.875rem;
+  padding-inline: 1.125rem;
+  font-size: 0.78125rem;
+  letter-spacing: 0.01em;
+}
+.agent-skin main thead th[aria-sort]:first-child > button {
+  padding-inline-start: 1.5rem;
+}
+.agent-skin main thead th[aria-sort]:last-child > button {
+  padding-inline-end: 1.5rem;
+}
+/* The separator is drawn on the CELLS (a row border only renders in the
+   collapsed model); row borders are cleared so no line is ever doubled. */
+.agent-skin main tbody > tr {
+  border-width: 0;
+  transition: background-color 150ms ease;
+}
+.agent-skin main tbody > tr:not(:last-child) > td {
+  border-bottom: 1px solid var(--agent-row-line);
+}
+.agent-skin main tbody > tr:hover {
+  background-color: oklch(var(--primary) / 0.035);
+}
+.agent-skin main tbody > tr[aria-selected='true'] {
+  background-color: oklch(var(--primary) / 0.08);
+}
+/* Phone numbers, order ids and dates in the table's own face, tabular. */
+.agent-skin main :is(table, [data-table-surface]) .font-mono {
+  font-family: inherit;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0;
+}
+.agent-skin [data-table-scroller] {
+  min-height: 0 !important;
+}
+.agent-skin [data-table-footer-slot] {
+  border-top: 1px solid var(--agent-row-line);
+}
+.agent-skin [data-table-footer] {
+  position: static;
+  height: auto;
+  min-height: 3.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.5rem;
+  padding: 0.5rem 1.5rem;
+  border-top-width: 0;
+  background: transparent;
+  font-size: 0.78125rem;
+  color: oklch(var(--muted-foreground));
+}
+.agent-skin [data-table-footer] [data-table-pager] {
+  position: static;
+  width: auto;
+  flex: 0 1 auto;
+  margin-inline-start: auto;
+}
+.agent-skin [data-table-scroller] [data-table-footer] {
+  border-top: 1px solid var(--agent-row-line);
+}
+/* A table whose body has no rows says so in the space the rows would use.
+   Strings come from the shell (AgentShell sets --agent-empty-*). */
+.agent-skin [data-table-scroller]:has(tbody:empty)::after {
+  content: var(--agent-empty-title) '\A' var(--agent-empty-hint);
+  display: block;
+  white-space: pre-line;
+  padding: 4.25rem 1.5rem 2.75rem;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: oklch(var(--muted-foreground));
+  background: no-repeat center 1.5rem / 1.75rem
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237c7f99' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M22 12h-6l-2 3h-4l-2-3H2'/%3E%3Cpath d='M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z'/%3E%3C/svg%3E");
+}
+
+/* ── Badges: one palette, readable everywhere ──────────────────────────────
+     Soft tint behind, the SAME hue deepened for the text, every pair >= 4.5:1
+     measured on the tint. The Excel-yellow highlight keeps its own look. */
+[data-pill] {
+  font-weight: 600;
+  letter-spacing: 0.005em;
+  box-shadow: none;
+  --tw-ring-shadow: 0 0 #0000;
+}
+[data-pill] > span[aria-hidden] {
+  background-color: currentColor;
+}
+:root:not([data-theme='dark']) [data-pill='neutral'],
+:root:not([data-theme='dark']) [data-pill='muted'] {
+  background-color: oklch(0.935 0.008 277);
+  color: oklch(0.4 0.02 277);
+}
+:root:not([data-theme='dark']) [data-pill='primary'],
+:root:not([data-theme='dark']) [data-pill='cyan'] {
+  background-color: oklch(0.94 0.035 278);
+  color: oklch(0.45 0.2 278);
+}
+:root:not([data-theme='dark']) [data-pill='blue'] {
+  background-color: oklch(0.94 0.035 245);
+  color: oklch(0.45 0.14 250);
+}
+:root:not([data-theme='dark']) [data-pill='purple'] {
+  background-color: oklch(0.94 0.04 305);
+  color: oklch(0.45 0.17 305);
+}
+:root:not([data-theme='dark']) [data-pill='success'] {
+  background-color: oklch(0.94 0.05 155);
+  color: oklch(0.42 0.11 155);
+}
+:root:not([data-theme='dark']) [data-pill='warning'],
+:root:not([data-theme='dark']) [data-pill='orange'] {
+  background-color: oklch(0.95 0.035 55);
+  color: oklch(0.47 0.15 42);
+}
+:root:not([data-theme='dark']) [data-pill='destructive'] {
+  background-color: oklch(0.945 0.035 22);
+  color: oklch(0.47 0.19 27);
+}
+:root:not([data-theme='dark']) [data-pill='pink'] {
+  background-color: oklch(0.945 0.035 350);
+  color: oklch(0.47 0.18 355);
+}
+
+/* ── Motion: light, transform/opacity only, once on mount ──────────────────
+     KPI cards settle up 40ms apart and lift 2px under a pointer. A card that
+     is already on screen never replays: a poll re-renders, it does not
+     remount. No row choreography - a queue that refreshes all day must not
+     dance. */
+@keyframes agent-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes agent-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.agent-skin main :is([data-report-kpi], [data-stat-card]) {
+  animation: agent-rise 280ms var(--ease-out) backwards;
+  transition: transform 220ms var(--ease-out);
+}
+.agent-skin main :is([data-report-kpi], [data-stat-card]):nth-child(2) {
+  animation-delay: 40ms;
+}
+.agent-skin main :is([data-report-kpi], [data-stat-card]):nth-child(3) {
+  animation-delay: 80ms;
+}
+.agent-skin main :is([data-report-kpi], [data-stat-card]):nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+.agent-skin main :is([data-report-kpi], [data-stat-card])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: 0 22px 44px -26px oklch(var(--shadow-color) / 0.5);
+  opacity: 0;
+  transition: opacity 220ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .agent-skin main :is([data-report-kpi], [data-stat-card]):hover {
+    transform: translateY(-2px);
+  }
+  .agent-skin main :is([data-report-kpi], [data-stat-card]):hover::after {
+    opacity: 1;
+  }
+}
+
+/* Press: real buttons give under the finger (scale 0.97, 160ms). Opt-in by
+   hook, NOT every <button>: an inbox row or a table heading shrinking under
+   the pointer reads as a glitch, and a row is pressed 100+ times a day. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant], [data-icon-button], [data-press]),
+.agent-skin header nav a {
+  transition-property: transform, color, background-color, border-color, box-shadow, opacity;
+  transition-duration: 160ms;
+  transition-timing-function: var(--ease-out);
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant], [data-icon-button], [data-press]):not(:disabled):active,
+.agent-skin header nav a:active {
+  transform: scale(0.97);
+}
+
+/* Loading skeletons: a light sweep crossing on transform, instead of a
+   background-position animation that repaints the block every frame. */
+.agent-skin .animate-shimmer {
+  position: relative;
+  overflow: hidden;
+  animation: none;
+  background: oklch(var(--foreground) / 0.055);
+}
+.agent-skin .animate-shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, oklch(1 0 0 / 0.6), transparent);
+  animation: agent-sweep 1.3s ease-in-out infinite;
+}
+@keyframes agent-sweep {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * ACTIONS LOOK LIKE ACTIONS (owner, 2026-10-22 - the admin console's rule,
+ * carried across exactly)
+ *
+ * A control that can be used LOOKS clickable and one that cannot LOOKS
+ * disabled - never plain text that might be either. FILLED, NOT OUTLINED
+ * (owner: "by highlighting I meant a different colour... not a fan of the
+ * outline"): a usable secondary action is a soft BRAND-tinted pill with brand
+ * text, a step deeper on hover; a destructive one keeps its red and gets a
+ * soft red fill; the primary action stays solid ink. Disabled is flat muted
+ * grey at half opacity with the not-allowed cursor. The hooks are data
+ * attributes on the shared primitives; dialogs and drawers portal to <body>,
+ * so they are named beside `.agent-skin`.
+ * ═════════════════════════════════════════════════════════════════════════ */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled) {
+  color: oklch(var(--primary));
+  border: 1px solid transparent;
+  background-color: oklch(var(--primary) / 0.1);
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled):hover {
+  background-color: oklch(var(--primary) / 0.17);
+  text-decoration: none;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-text-action]):not(:disabled):active {
+  background-color: oklch(var(--primary) / 0.24);
+}
+/* Destructive text actions ("Delete", "Remove") keep their red. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is(
+    [data-variant='ghost'],
+    [data-variant='link'],
+    [data-text-action]
+  )[class*='text-destructive']:not(:disabled) {
+  color: oklch(var(--destructive));
+  background-color: oklch(var(--destructive) / 0.1);
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is(
+    [data-variant='ghost'],
+    [data-variant='link'],
+    [data-text-action]
+  )[class*='text-destructive']:not(:disabled):hover {
+  background-color: oklch(var(--destructive) / 0.17);
+}
+/* The link variant had no box at all (px-0, square): it takes the pill's. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='link'] {
+  min-height: 2rem;
+  padding-inline: 0.875rem;
+  border-radius: 9999px;
+}
+/* Hand-built text buttons opted in with `data-text-action` get the shape too. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-text-action] {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-height: 1.75rem;
+  padding-inline: 0.625rem;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  text-decoration: none;
+}
+
+/* Small hand-built icon buttons (the column arrangers' move arrows): a
+   circle with a faint edge while usable, faded and edgeless when not. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action] {
+  border-radius: 9999px;
+  border: 1px solid transparent;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:not(:disabled) {
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:not(:disabled):hover {
+  background-color: oklch(var(--primary) / 0.17);
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-action]:disabled {
+  opacity: 0.35;
+}
+
+/* Every disabled button in the console shows the not-allowed cursor where
+   the pointer can reach it. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) button:disabled {
+  cursor: not-allowed;
+}
+
+/* Icon-only buttons: a round hit area with the same faint edge. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-icon-button] {
+  border-radius: 9999px;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  [data-icon-button][data-variant='ghost']:not(:disabled) {
+  border: 1px solid transparent;
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
+}
+
+/* Pager Previous / Next (the shared Pagination's chevron buttons). */
+.agent-skin [data-pager-edge]:not(:disabled) {
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
+}
+.agent-skin [data-pager-edge]:not(:disabled):hover {
+  background-color: oklch(var(--primary) / 0.17);
+}
+
+/* ── Disabled: one look for every button primitive ─────────────────────────
+     Faded to 45%, no edge, no glow, and the not-allowed cursor - which needs
+     pointer events back (the primitive switches them off). A disabled button
+     never fires its click, so this changes the cursor and nothing else; it is
+     kept out of table bodies, where a click passing through to the row is
+     the behaviour people have. Hover is pinned to the resting look so a dead
+     control does not light up under the pointer. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant], [data-pager-edge], [data-text-action], [data-icon-action]):disabled {
+  color: oklch(var(--muted-foreground));
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant], [data-pager-edge]):disabled:not(tbody *) {
+  pointer-events: auto;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-pager-edge]):disabled,
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-variant='ghost'], [data-variant='link'], [data-pager-edge]):disabled:hover {
+  border-color: transparent;
+  background-color: transparent;
+  text-decoration: none;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='default']:disabled:hover {
+  background-color: oklch(var(--display));
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='brand']:disabled:hover {
+  background-color: oklch(var(--primary));
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='outline']:disabled:hover {
+  background-color: oklch(var(--card) / 0.4);
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  [data-variant='destructive']:disabled:hover {
+  background-color: oklch(var(--destructive));
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-variant='success']:disabled:hover {
+  background-color: oklch(var(--success));
+}
+
+/* ── Export: the secondary pill reads as a button, not a grey chip ────────
+     A firmer edge than the stock secondary hairline, and the glyph in the
+     brand ink, so "Export CSV (12)" is findable in every report's actions. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled) {
+  color: oklch(var(--primary));
+  background-color: oklch(var(--primary) / 0.1);
+  --tw-ring-color: transparent;
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled):hover {
+  background-color: oklch(var(--primary) / 0.17);
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:not(:disabled) > svg {
+  color: oklch(var(--primary));
+}
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel]) [data-export]:focus-visible {
+  --tw-ring-color: oklch(var(--ring) / 0.6);
+}
+
+/* Focus for the hand-built controls above, which carry no ring of their own. */
+:is(.agent-skin, [data-modal-panel], [data-drawer-panel])
+  :is([data-pager-edge], [data-text-action]):focus-visible {
+  outline: 2px solid oklch(var(--ring) / 0.6);
+  outline-offset: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * THE INBOX (owner, 2026-10-22: "the chat interface to be proper and good")
+ *
+ * Most of the chat's look lives in its components; what lives here is what a
+ * class cannot say. The one piece of motion: a CUSTOMER's message fades in
+ * (opacity only, 180ms) when it mounts. Agent bubbles do not - an optimistic
+ * reply is swapped for the confirmed one under a new key, and fading it again
+ * would flicker the line the agent just sent. Nothing here runs on a
+ * re-render, so typing and scrolling cost what they did.
+ * ═════════════════════════════════════════════════════════════════════════ */
+[data-msg-in] {
+  animation: agent-fade 180ms ease-out backwards;
+}
+/* The composer well: the primary surface, lit by focus; amber in note mode
+   so a note can never be typed believing it is a reply. */
+[data-composer] {
+  box-shadow:
+    inset 0 0 0 1px oklch(var(--foreground) / 0.1),
+    0 10px 28px -22px oklch(var(--shadow-color) / 0.55);
+}
+[data-composer]:focus-within {
+  box-shadow:
+    inset 0 0 0 2px oklch(var(--primary) / 0.45),
+    0 14px 32px -22px oklch(var(--primary) / 0.45);
+}
+[data-composer][data-mode='note'] {
+  box-shadow:
+    inset 0 0 0 1px oklch(var(--note) / 0.75),
+    0 10px 28px -22px oklch(var(--note) / 0.7);
+}
+[data-composer][data-mode='note']:focus-within {
+  box-shadow:
+    inset 0 0 0 2px oklch(var(--note)),
+    0 14px 32px -22px oklch(var(--note) / 0.8);
+}
+/* The details panel's two counters are small wells, not headline tiles. */
+.agent-skin main [data-convo-sidebar] [data-stat-card] {
+  min-height: 0;
+  padding: 0.75rem 0.875rem;
+  border-radius: 1rem;
+  animation: none;
+  box-shadow: inset 0 0 0 1px oklch(var(--foreground) / 0.06);
+  background: oklch(var(--secondary) / 0.7);
+}
+.agent-skin main [data-convo-sidebar] [data-stat-card] [data-stat-value] {
+  font-size: 1.5rem;
+}
+.agent-skin main [data-convo-sidebar] [data-stat-card] [data-stat-label] {
+  min-height: 0;
+  font-size: 0.78125rem;
+}
+.agent-skin main [data-convo-sidebar] [data-stat-card]:hover {
+  transform: none;
+}
+.agent-skin main [data-convo-sidebar] [data-stat-card]::after {
+  content: none;
+}
+
+/* ── Reduced motion: none of the above moves ─────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .agent-skin main :is(*:not(.animate-spin)),
+  [data-modal-panel],
+  [data-drawer-panel],
+  [data-msg-in] {
+    animation: none !important;
+  }
+  .agent-skin main :is([data-report-kpi], [data-stat-card]):hover,
+  .agent-skin :is(button, a):active,
+  [data-modal-panel] button:active,
+  [data-drawer-panel] button:active {
+    transform: none !important;
+  }
+  .agent-skin .animate-shimmer::after {
+    animation: none;
+  }
 }

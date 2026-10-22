@@ -247,7 +247,7 @@ export function ConversationToolbar({
     <>
       {/* Board header strip: card surface closed off by a hairline rule, the
           same separator grammar as the list rows below it. */}
-      <div className="flex min-h-16 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b border-foreground/[0.06] bg-card px-3 py-2.5 sm:px-5">
+      <div className="flex min-h-[4.25rem] shrink-0 flex-wrap items-center gap-x-3 gap-y-2.5 border-b border-foreground/[0.06] bg-card px-3 py-3 sm:px-5">
         {/* Back to inbox list — mobile single-column only. */}
         {onBack && (
           <button
@@ -262,7 +262,10 @@ export function ConversationToolbar({
 
         {/* Identity — clean: a status-dotted avatar + name + email. The status &
           priority live in the controls on the right, so no duplicate pills. */}
-        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+        {/* A floor under the identity, so on a laptop the properties wrap to
+            their own line instead of squeezing the customer's name to nothing
+            - the name is what the agent reads first. */}
+        <div className="flex min-w-[12rem] flex-1 basis-[12rem] items-center gap-3">
           <span className="relative shrink-0">
             <span className="block rounded-full bg-primary/30 p-[2px]">
               <span className="block rounded-full bg-background p-[2px]">
@@ -287,7 +290,9 @@ export function ConversationToolbar({
           </span>
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1.5">
-              <span className="truncate text-sm font-semibold text-foreground">{primaryLabel}</span>
+              <span className="truncate text-[0.9375rem] font-semibold text-foreground">
+                {primaryLabel}
+              </span>
               <VendorBadge vendor={conversation.vendor} directory={vendors} />
             </div>
             {statusLine && (
@@ -321,65 +326,71 @@ export function ConversationToolbar({
           grows with it — `min-h-14`, not a fixed height — so it never overlaps
           the thread below). Selects are grouped into one subtle cluster so they
           read as conversation properties rather than scattered controls. */}
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <div className="flex flex-wrap items-center gap-0.5 rounded-xl bg-secondary/40 p-1 ring-1 ring-inset ring-foreground/[0.06]">
-            <GhostSelect
-              size="sm"
-              label={t('conversation.priority')}
-              aria-label={t('conversation.priority')}
-              value={conversation.priority}
-              display={t(`priority.${conversation.priority}`, { ns: 'common' })}
-              onChange={(v) => void patch({ priority: v as Priority })}
-              options={PRIORITIES.map((p) => ({
-                value: p,
-                label: t(`priority.${p}`, { ns: 'common' }),
-              }))}
-            />
-            {/* `assign_chats` (owner, 2026-10-06): without it the owner and
+        {/* `contents`: the properties and the actions are items of the bar
+            itself, so below 2xl the properties take their own second line
+            (order-last, full width) while the name and the actions share the
+            first. On a wide screen it is all one row again. */}
+        <div className="contents">
+          <div className="order-last flex basis-full 2xl:order-none 2xl:basis-auto">
+            <div className="flex flex-wrap items-center gap-0.5 rounded-full bg-secondary/70 p-1 ring-1 ring-inset ring-foreground/[0.06]">
+              <GhostSelect
+                size="sm"
+                label={t('conversation.priority')}
+                aria-label={t('conversation.priority')}
+                value={conversation.priority}
+                display={t(`priority.${conversation.priority}`, { ns: 'common' })}
+                onChange={(v) => void patch({ priority: v as Priority })}
+                options={PRIORITIES.map((p) => ({
+                  value: p,
+                  label: t(`priority.${p}`, { ns: 'common' }),
+                }))}
+              />
+              {/* `assign_chats` (owner, 2026-10-06): without it the owner and
                 team still SHOW, as plain text — who has the chat is worth
                 knowing even when you may not move it. */}
-            {canAssign ? (
-              <>
-                <GhostSelect
-                  size="sm"
-                  label={t('conversation.agent')}
-                  aria-label={t('conversation.agent')}
-                  value={conversation.assigned_agent ?? ''}
-                  display={agentLabel}
-                  onChange={(v) => void patch({ assigned_agent: v || null })}
-                  options={[
-                    { value: '', label: t('conversation.unassigned') },
-                    ...(assignable.data ?? agents.data ?? []).map((a) => ({
-                      value: a.id,
-                      label: a.first_name ?? a.email ?? '',
-                    })),
-                  ]}
-                />
-                <GhostSelect
-                  size="sm"
-                  label={t('conversation.team')}
-                  aria-label={t('conversation.team')}
-                  value={conversation.assigned_team ?? ''}
-                  display={teamLabel}
-                  onChange={(v) => void handoverToTeam(v || null)}
-                  options={[
-                    { value: '', label: t('conversation.noTeam') },
-                    ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
-                  ]}
-                />
-              </>
-            ) : (
-              <>
-                <span className="px-2 text-xs text-muted-foreground">
-                  {t('conversation.agent')}:{' '}
-                  <span className="font-medium text-foreground">{agentLabel}</span>
-                </span>
-                <span className="px-2 text-xs text-muted-foreground">
-                  {t('conversation.team')}:{' '}
-                  <span className="font-medium text-foreground">{teamLabel}</span>
-                </span>
-              </>
-            )}
+              {canAssign ? (
+                <>
+                  <GhostSelect
+                    size="sm"
+                    label={t('conversation.agent')}
+                    aria-label={t('conversation.agent')}
+                    value={conversation.assigned_agent ?? ''}
+                    display={agentLabel}
+                    onChange={(v) => void patch({ assigned_agent: v || null })}
+                    options={[
+                      { value: '', label: t('conversation.unassigned') },
+                      ...(assignable.data ?? agents.data ?? []).map((a) => ({
+                        value: a.id,
+                        label: a.first_name ?? a.email ?? '',
+                      })),
+                    ]}
+                  />
+                  <GhostSelect
+                    size="sm"
+                    label={t('conversation.team')}
+                    aria-label={t('conversation.team')}
+                    value={conversation.assigned_team ?? ''}
+                    display={teamLabel}
+                    onChange={(v) => void handoverToTeam(v || null)}
+                    options={[
+                      { value: '', label: t('conversation.noTeam') },
+                      ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
+                    ]}
+                  />
+                </>
+              ) : (
+                <>
+                  <span className="px-2 text-xs text-muted-foreground">
+                    {t('conversation.agent')}:{' '}
+                    <span className="font-medium text-foreground">{agentLabel}</span>
+                  </span>
+                  <span className="px-2 text-xs text-muted-foreground">
+                    {t('conversation.team')}:{' '}
+                    <span className="font-medium text-foreground">{teamLabel}</span>
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Product change (2026-07-26): a conversation may carry MULTIPLE
@@ -491,7 +502,16 @@ export function ConversationToolbar({
           its own alpha, so any expansion of it is invalid CSS and the strip's
           wash silently painted nothing (design-law token-alpha trap). */}
       {showTicketPrompt && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-primary/20 bg-primary/10 px-3 py-2.5 sm:px-5 motion-safe:animate-fade-in">
+        <div
+          role="status"
+          className="mx-3 mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl bg-primary/[0.06] px-4 py-3 ring-1 ring-inset ring-primary/15 sm:mx-5 motion-safe:animate-fade-in"
+        >
+          <span
+            aria-hidden
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/[0.12] text-primary"
+          >
+            <CheckIcon />
+          </span>
           <p className="min-w-0 flex-1 text-xs leading-relaxed text-foreground">
             <span className="font-medium">
               {t('tickets.chatEndedPromptTitle', { defaultValue: 'This chat is wrapped up.' })}

@@ -163,10 +163,10 @@ export function ContactsPage() {
         )}
       </Toolbar>
 
-      <div className="flex-1 overflow-auto px-5 py-4">
+      <div className="agent-gutter flex-1 overflow-auto pb-8 pt-2">
         {!contacts.isLoading && total > 0 && (
           <div
-            className="mx-auto mb-5 grid max-w-5xl grid-cols-2 gap-3 lg:grid-cols-4"
+            className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4"
             role="list"
             aria-label={t('contacts.title', { defaultValue: 'Contacts' })}
           >
@@ -197,7 +197,7 @@ export function ContactsPage() {
           </div>
         )}
         {contacts.isLoading ? (
-          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+          <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
             <ul className="divide-y divide-foreground/[0.06]">
               {Array.from({ length: 8 }).map((_, i) => (
                 <li key={i} className="flex items-center gap-3 px-4 py-3">
@@ -225,7 +225,7 @@ export function ContactsPage() {
         ) : filtered.length === 0 ? (
           // Composed empty state, not a bare line adrift on the canvas — the
           // same card surface the list uses, so the page keeps its shape.
-          <div className="mx-auto max-w-5xl rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+          <div className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
             <EmptyState
               icon={<SearchIcon size={24} />}
               title={t('contacts.noMatch', { defaultValue: 'No contacts match your search.' })}
@@ -235,7 +235,7 @@ export function ContactsPage() {
           // The board list surface: one elevated card, micro-label column
           // headers, hairline row separators, and a footer aggregate band —
           // not loose hover rows on the canvas.
-          <div className="mx-auto max-w-5xl overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
+          <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
             <div className="hidden border-b border-foreground/[0.08] bg-foreground/[0.02] px-4 py-2 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground sm:grid sm:grid-cols-[auto_minmax(0,1fr)_8.5rem_9rem] sm:items-center sm:gap-3">
               <span aria-hidden className="w-9" />
               <span>{t('contacts.name', { defaultValue: 'Name' })}</span>

@@ -187,8 +187,9 @@ export function MyCouponsPage() {
       {/* The filter band keeps its full-bleed hairline, but the pills sit in
           the same centered column as the cards below — at 1920px a cluster of
           pills pinned to the far edge belonged to nothing. */}
-      <div className="border-b border-border bg-card px-4 py-2.5">
-        {/*
+      <div className="agent-gutter pb-1 pt-1">
+        <div className="rounded-2xl bg-card p-3 shadow-soft ring-1 ring-foreground/[0.06] sm:p-4">
+          {/*
           SEARCH AND AGENT ON ONE LINE (owner, 2026-09-29).
           
           The dropdown had a row to itself, which put one short control on a
@@ -199,66 +200,72 @@ export function MyCouponsPage() {
           width, so without it the input refuses to shrink and pushes the
           dropdown off the row on a narrow screen. They stack below `sm`.
         */}
-        <div className="mx-auto mb-2 flex w-full max-w-3xl flex-col gap-2 sm:flex-row sm:items-center">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.currentTarget.value)}
-            placeholder={t('coupons.searchPlaceholder', {
-              defaultValue: 'Search by coupon type, code, order ID or customer phone…',
-            })}
-            aria-label={t('coupons.search', { defaultValue: 'Search compensation requests' })}
-            className="h-9 min-w-0 flex-1 rounded-xl bg-secondary/60 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-          />
-          {/* A SELECT, not a row of pills: this lists every agent, and a pill
+          <div className="mb-3 flex w-full flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.currentTarget.value)}
+              placeholder={t('coupons.searchPlaceholder', {
+                defaultValue: 'Search by coupon type, code, order ID or customer phone…',
+              })}
+              aria-label={t('coupons.search', { defaultValue: 'Search compensation requests' })}
+              className="h-10 min-w-0 flex-1 rounded-full bg-input px-4 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.14] placeholder:text-muted-foreground hover:ring-foreground/25 focus:outline-none focus:ring-2 focus:ring-primary/50"
+            />
+            {/* A SELECT, not a row of pills: this lists every agent, and a pill
               per person becomes a wall as the team grows. `SelectMenu` is what
               the rest of the portal uses, so it carries the keyboard and ARIA
               behaviour a bare <select> does not. */}
-          <div className="shrink-0">
-            <SelectMenu
-              value={agentId}
-              size="sm"
-              onChange={setAgentId}
-              aria-label={t('coupons.filterByAgent', { defaultValue: 'Filter by agent' })}
-              options={[
-                { value: '', label: t('coupons.allAgents', { defaultValue: 'All agents' }) },
-                ...(agents.data ?? []).map((a) => ({
-                  value: a.id,
-                  /* The name people know, falling back to the sign-in address —
+            <div className="shrink-0">
+              <SelectMenu
+                value={agentId}
+                size="sm"
+                onChange={setAgentId}
+                aria-label={t('coupons.filterByAgent', { defaultValue: 'Filter by agent' })}
+                options={[
+                  { value: '', label: t('coupons.allAgents', { defaultValue: 'All agents' }) },
+                  ...(agents.data ?? []).map((a) => ({
+                    value: a.id,
+                    /* The name people know, falling back to the sign-in address —
                      a staff account has no display name until it is filled in. */
-                  label:
-                    [a.first_name, a.last_name].filter(Boolean).join(' ').trim() ||
-                    (a.email ?? a.id),
-                })),
-              ]}
-            />
+                    label:
+                      [a.first_name, a.last_name].filter(Boolean).join(' ').trim() ||
+                      (a.email ?? a.id),
+                  })),
+                ]}
+              />
+            </div>
           </div>
-        </div>
-        <div className="mx-auto flex w-full max-w-3xl flex-wrap gap-1.5">
-          {(
-            ['pending', ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'), 'all'] as const
-          ).map((s) => (
-            <button
-              key={s}
-              type="button"
-              onClick={() => setView(s)}
-              aria-pressed={view === s}
-              className={cn(
-                'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast ease-out',
-                view === s
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {t(`coupons.status.${s}`, { defaultValue: s })}
-              <span className="ms-1.5 tabular-nums opacity-70">{count(s)}</span>
-            </button>
-          ))}
+          <div className="flex w-full flex-wrap gap-1.5">
+            {(
+              [
+                'pending',
+                ...COUPON_APPROVAL_STATUSES.filter((s) => s !== 'pending'),
+                'all',
+              ] as const
+            ).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setView(s)}
+                aria-pressed={view === s}
+                className={cn(
+                  'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors duration-fast ease-out',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                  view === s
+                    ? 'bg-ink text-ink-foreground'
+                    : 'bg-primary/10 text-primary hover:bg-primary/[0.17]',
+                )}
+              >
+                {t(`coupons.status.${s}`, { defaultValue: s })}
+                <span className="ms-1.5 tabular-nums opacity-70">{count(s)}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Sparse content stays a readable column, not a full-bleed sprawl. */}
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-5">
-        <div className="mx-auto w-full max-w-3xl">
+      {/* Sparse content stays a readable column, on the page's gutter. */}
+      <div className="agent-gutter min-h-0 flex-1 overflow-auto pb-8 pt-3">
+        <div className="w-full max-w-4xl">
           {requests.isLoading ? (
             <div className="space-y-2.5">
               {Array.from({ length: 4 }).map((_, i) => (

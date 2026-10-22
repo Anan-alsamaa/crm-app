@@ -286,7 +286,7 @@ export function PreferencesPage() {
         </div>
       ) : (
         <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-          <div className="mx-auto w-full max-w-4xl space-y-5 px-5 py-8 sm:px-8">
+          <div className="agent-gutter w-full max-w-5xl space-y-4 pb-8 pt-2">
             {/* New-message sound — a per-browser toggle, kept visually distinct
               from the server-saved channel rows below. Same SectionCard surface
               as the groups so the page reads as one board. */}

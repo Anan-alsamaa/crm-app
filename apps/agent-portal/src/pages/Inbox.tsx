@@ -125,12 +125,11 @@ function InboxStat({
       onClick={selectable ? onClick : undefined}
       disabled={!selectable}
       className={cn(
-        'flex flex-1 flex-col gap-0.5 rounded-xl bg-card px-2.5 py-2 text-start ring-1 ring-foreground/[0.06]',
-        'transition-[background-color,box-shadow] duration-fast ease-out',
-        selectable
-          ? 'hover:bg-secondary/60 active:scale-[0.98]'
-          : 'cursor-default opacity-55 hover:bg-card',
-        active && 'bg-primary/[0.08] ring-primary/40',
+        'flex flex-1 flex-col gap-0.5 rounded-2xl bg-secondary/60 px-3 py-2.5 text-start ring-1 ring-inset ring-foreground/[0.06]',
+        'transition-[background-color,box-shadow,transform] duration-fast ease-out',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        selectable ? 'hover:bg-secondary active:scale-[0.98]' : 'cursor-not-allowed opacity-55',
+        active && 'bg-primary/[0.09] ring-primary/40 hover:bg-primary/[0.12]',
       )}
       aria-pressed={onClick && selectable ? active : undefined}
       title={
@@ -499,7 +498,7 @@ export function Inbox() {
   const showConversation = isDesktop || selected !== null;
 
   return (
-    <div className="flex h-full gap-3 p-3">
+    <div className="agent-gutter flex h-full gap-3 pb-3 pt-1">
       {showList && (
         <aside
           className={cn(
@@ -509,11 +508,11 @@ export function Inbox() {
           style={isDesktop ? { width: list.width } : undefined}
         >
           {/* Header */}
-          <div className="flex shrink-0 items-baseline gap-2 px-5 pt-5">
-            <h2 className="text-2xl font-bold tracking-tight text-foreground">
+          <div className="flex shrink-0 items-center gap-2 px-5 pt-5">
+            <h2 className="text-[1.625rem] font-semibold leading-tight tracking-[-0.025em] text-foreground rtl:text-[1.375rem] rtl:tracking-normal">
               {t('inbox.title')}
             </h2>
-            <span className="rounded-md bg-secondary px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
+            <span className="rounded-full bg-secondary px-2 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
               {conversations.data?.length ?? 0}
             </span>
           </div>
@@ -592,7 +591,8 @@ export function Inbox() {
               </span>
               <button
                 type="button"
-                className="font-semibold text-primary underline-offset-2 hover:underline"
+                data-text-action=""
+                className="font-semibold text-primary"
                 onClick={() =>
                   setFilters((f) => ({ ...f, status: 'all', priority: 'all', unread: false }))
                 }
@@ -624,7 +624,7 @@ export function Inbox() {
                   type="search"
                   aria-label={t('inbox.search')}
                   placeholder={t('inbox.search')}
-                  className="block h-9 w-full rounded-full border-none bg-secondary/50 ps-9 pe-3 text-sm text-foreground ring-1 ring-inset ring-foreground/10 placeholder:text-muted-foreground focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/40 text-start transition-[background-color,box-shadow] duration-fast ease-out"
+                  className="block h-10 w-full rounded-full border-none bg-input ps-9 pe-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.14] placeholder:text-muted-foreground hover:ring-foreground/25 focus:outline-none focus:ring-2 focus:ring-primary/50 text-start transition-[box-shadow] duration-fast ease-out"
                   value={filters.search ?? ''}
                   onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
                 />
@@ -648,7 +648,8 @@ export function Inbox() {
                   onClick={() => setComposing(true)}
                   aria-label={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
                   title={t('inbox.startChat.title', { defaultValue: 'Start a chat' })}
-                  className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground ring-1 ring-inset ring-primary/20 transition-colors duration-fast ease-out hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  data-press=""
+                  className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground shadow-[0_8px_18px_-10px_oklch(var(--primary))] transition-colors duration-fast ease-out hover:bg-primary-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2"
                 >
                   <svg
                     aria-hidden
@@ -666,7 +667,7 @@ export function Inbox() {
             </div>
             {/* One quiet cluster, same anatomy as the conversation toolbar's
                 property group, so the selects read as one filter control. */}
-            <div className="flex flex-wrap items-center gap-0.5 rounded-xl bg-secondary/40 p-1 ring-1 ring-inset ring-foreground/[0.06]">
+            <div className="flex flex-wrap items-center gap-0.5 rounded-[1.25rem] bg-secondary/70 p-1 ring-1 ring-inset ring-foreground/[0.06]">
               {/* The Mine/All control is GONE, for every role. It had one
                   honest position — your own queue — and the other showed
                   chats the API will not return anyway. */}
@@ -734,7 +735,7 @@ export function Inbox() {
               <alpha-value> expansion is invalid CSS and the fill paints NOTHING
               (the design-law token-alpha trap). Jade wash + jade hairline. */}
           {someChecked && canSelect && (
-            <div className="mx-4 mb-2 flex flex-wrap items-center gap-1.5 rounded-xl bg-primary/10 ring-1 ring-inset ring-primary/20 px-3 py-2 text-xs animate-fade-in">
+            <div className="mx-4 mb-2 flex flex-wrap items-center gap-1.5 rounded-2xl bg-primary/10 ring-1 ring-inset ring-primary/20 px-3 py-2 text-xs animate-fade-in">
               <span className="font-semibold text-primary">
                 {t('inbox.bulkSelected', { count: checked.size })}
               </span>
@@ -847,7 +848,7 @@ export function Inbox() {
                     {t('inbox.selectAll')}
                   </label>
                 )}
-                <ul className="space-y-1.5 p-2">
+                <ul className="space-y-1 px-2 pb-2 pt-1.5">
                   {conversations.data.map((c) => {
                     const active = selected === c.id;
                     const unread = c.unread_count_agent > 0;
@@ -869,13 +870,14 @@ export function Inbox() {
                         // colors (border-b-* / border-s-*) so the two edges
                         // never fight — cn() is a plain joiner, not a merger.
                         className={cn(
-                          // Cards, not ruled rows — see TicketsPage for why.
-                          'group relative flex min-h-14 items-stretch rounded-2xl transition-[background-color,box-shadow] duration-base ease-out',
+                          /* Cards, not ruled rows. Selected = an indigo-tinted
+                             card; unread = bold name, darker preview, the dot
+                             and the count. No motion on select: an agent does
+                             it hundreds of times a day (DESIGN.md). */
+                          'group relative flex min-h-14 items-stretch rounded-[1.125rem] transition-colors duration-fast ease-out',
                           active
-                            ? 'bg-primary/10 shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.5)] ring-1 ring-inset ring-primary/25'
-                            : unread
-                              ? 'bg-card shadow-[0_2px_10px_-8px_oklch(var(--shadow-color)/0.4)] hover:shadow-[0_6px_18px_-10px_oklch(var(--shadow-color)/0.45)]'
-                              : 'hover:bg-card hover:shadow-[0_4px_14px_-10px_oklch(var(--shadow-color)/0.45)]',
+                            ? 'bg-primary/[0.09] ring-1 ring-inset ring-primary/25'
+                            : 'hover:bg-foreground/[0.035]',
                         )}
                       >
                         {canSelect && (
@@ -896,14 +898,14 @@ export function Inbox() {
                           // the time it mounts. Focus too, for the keyboard.
                           onMouseEnter={() => prefetchOrders(c)}
                           onFocus={() => prefetchOrders(c)}
-                          className="flex flex-1 items-center gap-3 px-3 py-3 text-start"
+                          className="flex min-w-0 flex-1 items-center gap-3 rounded-[1.125rem] px-3 py-2.5 text-start focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
                         >
                           {/* Messenger row: hairline-ringed avatar, name + last
                               message line, accent time and an unread bubble. */}
                           <span
                             className={cn(
-                              'shrink-0 rounded-full ring-1',
-                              unread ? 'ring-primary/40' : 'ring-foreground/10',
+                              'shrink-0 rounded-full ring-2 ring-offset-1 ring-offset-card',
+                              unread ? 'ring-primary/45' : 'ring-transparent',
                             )}
                           >
                             <Avatar
@@ -932,7 +934,7 @@ export function Inbox() {
                                 {unread && (
                                   <span
                                     aria-hidden
-                                    className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_8px] shadow-primary/60"
+                                    className="h-2 w-2 shrink-0 rounded-full bg-primary"
                                   />
                                 )}
                               </span>
@@ -950,7 +952,7 @@ export function Inbox() {
                                 className={cn(
                                   'min-w-0 flex-1 truncate text-xs',
                                   unread
-                                    ? 'font-medium text-foreground/85'
+                                    ? 'font-semibold text-foreground/85'
                                     : 'text-muted-foreground',
                                 )}
                               >
@@ -963,7 +965,7 @@ export function Inbox() {
                               )}
                               {unread && (
                                 <span
-                                  className="inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-bold text-primary-foreground tabular-nums"
+                                  className="inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full bg-primary px-1.5 text-2xs font-bold text-primary-foreground tabular-nums"
                                   aria-label={`${c.unread_count_agent} unread`}
                                 >
                                   {c.unread_count_agent}
@@ -1091,15 +1093,15 @@ export function Inbox() {
                  */
                 <div className="h-full overflow-y-auto">
                   <div className="mx-auto flex min-h-full max-w-3xl flex-col gap-5 p-6 [&>*:first-child]:mt-auto [&>*:last-child]:mb-auto">
-                    {/* The agent's morning glance, on the brand sweep the admin
-                      Overview opens with — the same welcome language in both
-                      portals. White ink: the fill is saturated in both themes. */}
-                    <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-violet to-brand-glow p-6 shadow-float motion-safe:animate-rise-in">
+                    {/* The agent's morning glance, on the admin Dashboard's HERO
+                      surface (deep indigo, Dash.tsx) - the same welcome language
+                      in both portals. White ink: the fill is dark in both themes. */}
+                    <div className="relative overflow-hidden rounded-[1.625rem] bg-[radial-gradient(90%_80%_at_100%_0%,oklch(0.477_0.223_278/0.55),transparent_60%),linear-gradient(160deg,oklch(0.25_0.04_278),oklch(0.19_0.03_278))] p-7 shadow-float motion-safe:animate-rise-in">
                       <div
                         aria-hidden
-                        className="absolute inset-0 bg-[radial-gradient(ellipse_60%_120%_at_85%_-20%,rgb(255_255_255/0.25),transparent_60%)]"
+                        className="absolute -bottom-24 -end-16 h-64 w-64 rounded-full border-[28px] border-white/[0.04]"
                       />
-                      <h2 className="relative font-display text-3xl font-extrabold leading-[1.25] tracking-[-0.03em] text-balance text-white">
+                      <h2 className="relative font-display text-[1.875rem] font-semibold leading-[1.2] tracking-[-0.025em] text-balance text-white">
                         {openCount === 0
                           ? `${t('inbox.welcome.zeroTitle')} ${t('inbox.welcome.zeroAccent')}`
                           : `${t('inbox.welcome.waiting', { count: openCount })} ${
@@ -1108,7 +1110,7 @@ export function Inbox() {
                                 : t('inbox.welcome.pace')
                             }`}
                       </h2>
-                      <p className="relative mt-2 max-w-prose text-sm text-white/85">
+                      <p className="relative mt-2.5 max-w-prose text-sm text-white/80">
                         {t('inbox.welcomeHint', {
                           defaultValue:
                             'Pick the next thread on the left, or filter by what needs attention first.',
@@ -1121,7 +1123,7 @@ export function Inbox() {
                       to match the list strip's urgent numeral (one number, one
                       hue everywhere); unread is jade to match the list's unread
                       dot. Colour stays an accent, never a surface fill. */}
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="grid grid-cols-3 gap-3" data-inbox-stats="">
                       <StatCard
                         label={t('inbox.stats.open', { defaultValue: 'open' })}
                         value={openCount}
@@ -1209,7 +1211,7 @@ export function Inbox() {
                                 <button
                                   type="button"
                                   onClick={() => setSelected(c.id)}
-                                  className="group flex w-full items-center gap-3 rounded-lg px-1 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04]"
+                                  className="group flex w-full items-center gap-3 rounded-xl px-2 py-2.5 text-start transition-colors duration-fast ease-out hover:bg-foreground/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                                 >
                                   <Avatar
                                     name={c.contact?.name}

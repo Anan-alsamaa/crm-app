@@ -403,7 +403,7 @@ export function TicketsPage() {
           does not give them. The branch join, the import and the deep links
           from 1dc649d and after all stay — only the presentation goes back.
           Single-column on mobile: list and detail swap places. */}
-      <div className="flex min-h-0 flex-1 gap-3 p-3">
+      <div className="agent-gutter flex min-h-0 flex-1 gap-3 pb-3 pt-1">
         {(isDesktop || selected === null) && (
           <aside
             className={cn(

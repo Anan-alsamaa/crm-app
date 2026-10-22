@@ -8,8 +8,10 @@ import {
   Linkify,
   Avatar,
   ChevronDownIcon,
+  ClockIcon,
   CloseIcon,
   ConfirmDialog,
+  LockIcon,
   cn,
   formatDateTime,
   Skeleton,
@@ -1141,12 +1143,14 @@ export function ConversationView({
         )}
 
         {/* Thread — clean solid surface; no gradient behind reading text. */}
-        <div ref={listRef} className="relative flex-1 overflow-auto bg-secondary/25">
+        {/* A quiet well a step below the card, so the white customer bubbles
+            and the indigo agent bubbles both read as objects on it. */}
+        <div ref={listRef} className="relative flex-1 overflow-auto bg-secondary/45">
           {/* min-h-full + justify-end bottom-anchors the thread: a short
               conversation sits just above the composer instead of floating at
               the top with an empty void below. Long threads overflow + scroll
               normally. */}
-          <div className="mx-auto flex min-h-full max-w-3xl flex-col justify-end gap-5 px-5 py-6">
+          <div className="mx-auto flex min-h-full max-w-[52rem] flex-col justify-end gap-6 px-4 py-6 sm:px-6">
             {/* Conversation-start header — the Instagram move: the contact's
                 profile opens the scrollback instead of an empty void. Also the
                 zero-message state: the same composed profile block with a
@@ -1311,10 +1315,14 @@ export function ConversationView({
               return (
                 <Fragment key={runIdx}>
                   {showDay && (
-                    <div className="flex items-center justify-center py-1">
-                      <span className="rounded-full bg-secondary/70 px-2.5 py-0.5 text-2xs font-medium text-muted-foreground ring-1 ring-foreground/[0.04] backdrop-blur-sm">
+                    /* The day as a centred pill between two hairlines, so a
+                       long thread reads in days at a glance. */
+                    <div className="flex items-center gap-3 py-1" role="separator">
+                      <span aria-hidden className="h-px flex-1 bg-foreground/[0.07]" />
+                      <span className="rounded-full bg-card px-3 py-1 text-2xs font-semibold text-muted-foreground shadow-[0_4px_12px_-8px_oklch(var(--shadow-color)/0.5)] ring-1 ring-foreground/[0.06]">
                         {dayLabel(head.date_created)}
                       </span>
+                      <span aria-hidden className="h-px flex-1 bg-foreground/[0.07]" />
                     </div>
                   )}
                   <div
@@ -1343,22 +1351,61 @@ export function ConversationView({
                         email={isAgent ? undefined : c?.contact?.email}
                         phone={isAgent ? undefined : c?.contact?.phone}
                         size="sm"
-                        className={cn(isAgent && isNote && 'ring-2 ring-warning/40 ring-offset-1')}
+                        className={cn(
+                          'mt-5',
+                          isAgent && isNote && 'ring-2 ring-note ring-offset-1',
+                        )}
                       />
                     )}
                     <div
                       className={cn(
-                        'flex max-w-[78%] min-w-0 flex-col gap-1',
+                        /* ~65ch: a bubble wider than that is a paragraph to
+                           read, not a line in a conversation. */
+                        'flex min-w-0 max-w-[min(78%,40rem)] flex-col gap-1.5',
                         isAgent && 'items-end',
-                        isSystem && 'max-w-[90%] items-center text-center',
+                        isSystem && 'max-w-[min(90%,40rem)] items-center text-center',
                       )}
                     >
-                      <div className="flex items-baseline gap-2 text-2xs">
-                        <span className="font-medium text-foreground">{senderLabel}</span>
+                      <div
+                        className={cn(
+                          'flex items-center gap-1.5 px-1 text-xs',
+                          isAgent && 'flex-row-reverse',
+                        )}
+                      >
+                        {isNote ? (
+                          /* A note says whose it is AND that the customer
+                             cannot see it - the amber pill is the second
+                             half, the name the first (EMA-77). */
+                          <>
+                            {agentName && (
+                              <span className="font-semibold text-foreground/85">
+                                {agentLabel?.kind === 'self'
+                                  ? t('conversation.youNamed', {
+                                      defaultValue: '{{name}} (You)',
+                                      name: agentName,
+                                    })
+                                  : agentName}
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 rounded-full bg-note-tint px-2 py-0.5 text-2xs font-semibold text-note-foreground ring-1 ring-inset ring-note/60">
+                              <LockIcon size={11} aria-hidden />
+                              {senderLabel}
+                            </span>
+                          </>
+                        ) : (
+                          <span
+                            className={cn(
+                              'font-semibold',
+                              isSystem ? 'text-muted-foreground' : 'text-foreground/85',
+                            )}
+                          >
+                            {senderLabel}
+                          </span>
+                        )}
                       </div>
                       <div
                         className={cn(
-                          'flex flex-col gap-0.5',
+                          'flex flex-col gap-1',
                           isAgent && 'items-end',
                           isSystem && 'items-center',
                         )}
@@ -1375,6 +1422,9 @@ export function ConversationView({
                           return (
                             <div
                               key={m.id}
+                              /* A customer's line fades in as it arrives (CSS,
+                                 once, on mount); see index.css "THE INBOX". */
+                              data-msg-in={!isAgent && !isSystem ? '' : undefined}
                               className={cn(
                                 'flex flex-col gap-1',
                                 isSystem ? 'items-center' : isAgent ? 'items-end' : 'items-start',
@@ -1382,7 +1432,7 @@ export function ConversationView({
                             >
                               {/* A withdrawn reply (EMA-33): a placeholder, never its words or files. */}
                               {isDeleted && (
-                                <div className="rounded-2xl px-4 py-2 text-sm italic text-muted-foreground ring-1 ring-foreground/[0.06]">
+                                <div className="rounded-2xl border border-dashed border-foreground/15 px-4 py-2 text-sm italic text-muted-foreground">
                                   {t('conversation.messageDeleted', {
                                     defaultValue: 'This message was deleted',
                                   })}
@@ -1426,21 +1476,22 @@ export function ConversationView({
                                       // Selected (owner, 2026-10-07): ringed like WhatsApp's highlight.
                                       selectedId === m.id &&
                                         'ring-2 ring-primary/40 ring-offset-2 ring-offset-card',
-                                      // Board bubbles: outgoing = solid jade,
-                                      // incoming = token bubble surface with a
-                                      // hairline ring. One rounding everywhere.
+                                      // Agent = solid indigo with white ink
+                                      // (7.3:1); customer = a white card on the
+                                      // thread's well; a note = amber, never
+                                      // either side's colour.
                                       isNote
-                                        ? 'bg-warning/15 text-warning-foreground ring-1 ring-warning/20'
+                                        ? 'bg-note-tint text-note-foreground ring-1 ring-inset ring-note/60'
                                         : isSystem
                                           ? /* Quiet and neutral: this is the app
                                                speaking, not a person, so it must
                                                not borrow either side's colour. */
-                                            'bg-secondary/60 text-muted-foreground ring-1 ring-foreground/[0.04] text-center text-sm'
+                                            'bg-foreground/[0.04] text-muted-foreground text-center text-sm'
                                           : isAgent
-                                            ? 'bg-primary text-primary-foreground'
-                                            : 'bg-bubble text-foreground ring-1 ring-foreground/[0.06]',
+                                            ? 'bg-primary text-primary-foreground shadow-[0_10px_22px_-16px_oklch(var(--primary)/0.9)]'
+                                            : 'bg-card text-foreground shadow-[0_6px_16px_-14px_oklch(var(--shadow-color)/0.7)] ring-1 ring-foreground/[0.07]',
                                       // rounded-2xl consistency, tail only on the LAST bubble of a run.
-                                      'rounded-2xl',
+                                      'rounded-[1.25rem]',
                                       // No tail on a system bubble — a tail points at a sender.
                                       isLast && isAgent && !isSystem && 'rounded-ee-md',
                                       isLast && !isAgent && !isSystem && 'rounded-es-md',
@@ -1457,7 +1508,7 @@ export function ConversationView({
                                       <Linkify text={m.content} />
                                     </p>
                                     {m.edited_at && (
-                                      <span className="mt-0.5 block text-2xs opacity-70">
+                                      <span className="mt-0.5 block text-2xs italic opacity-75">
                                         {t('conversation.messageEdited', {
                                           defaultValue: 'edited',
                                         })}
@@ -1519,8 +1570,14 @@ export function ConversationView({
                                 <time
                                   dateTime={m.date_created ?? undefined}
                                   title={formatDateTime(m.date_created)}
-                                  className="px-1 text-2xs text-muted-foreground tabular-nums"
+                                  className={cn(
+                                    'inline-flex items-center gap-1 px-1.5 text-2xs tabular-nums',
+                                    m.pending
+                                      ? 'font-medium text-primary'
+                                      : 'text-muted-foreground',
+                                  )}
                                 >
+                                  {m.pending && <ClockIcon size={11} aria-hidden />}
                                   {m.pending
                                     ? t('conversation.sending', { defaultValue: 'Sending…' })
                                     : clockTime(m.date_created)}
@@ -1544,7 +1601,7 @@ export function ConversationView({
                   phone={c?.contact?.phone}
                   size="sm"
                 />
-                <div className="rounded-2xl rounded-es-md bg-bubble px-3.5 py-2.5 ring-1 ring-foreground/[0.06]">
+                <div className="rounded-[1.25rem] rounded-es-md bg-card px-3.5 py-2.5 ring-1 ring-foreground/[0.07]">
                   <span className="flex items-center gap-1" aria-hidden>
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse" />
                     <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground motion-safe:animate-pulse [animation-delay:120ms]" />
@@ -1562,7 +1619,7 @@ export function ConversationView({
           {/* max-w-3xl matches the thread column above — the composer, tabs and
               quick replies share the bubbles' start/end edges instead of
               overhanging them. */}
-          <div className="mx-auto max-w-3xl px-5 pb-5 pt-3">
+          <div className="mx-auto max-w-[52rem] px-4 pb-4 pt-3 sm:px-6">
             {/* AI assistance sits directly above the reply box: an agent
                 reaches for it WHILE writing, so it belongs beside the box
                 rather than in a side panel they have to look away to find.
@@ -1604,9 +1661,12 @@ export function ConversationView({
               />
             )}
             {!internalNote && (
-              <div className="mb-1 flex items-start gap-2">
+              /* Wraps rather than overlaps: on a phone the replies control
+                 and the AI tools take two lines instead of sliding under
+                 each other. */
+              <div className="mb-2 flex flex-wrap items-center gap-2">
                 <QuickReplies
-                  className="min-w-0 flex-1"
+                  className="min-w-[15.5rem] flex-1"
                   customerText={customerText}
                   query={replyFilter}
                   searching={replySearching}
@@ -1638,13 +1698,13 @@ export function ConversationView({
                     type="button"
                     onClick={() => setAiOpen((v) => !v)}
                     aria-expanded={aiOpen}
+                    title={t('ai.title', { defaultValue: 'AI' })}
+                    data-press=""
                     className={cn(
-                      'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-2xs font-semibold',
-                      'ring-1 ring-inset transition-colors duration-fast ease-out',
+                      'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold text-primary',
+                      'transition-colors duration-fast ease-out',
                       'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                      aiOpen
-                        ? 'bg-primary/15 text-primary ring-primary/25'
-                        : 'bg-secondary/50 text-muted-foreground ring-border hover:text-foreground',
+                      aiOpen ? 'bg-primary/[0.24]' : 'bg-primary/10 hover:bg-primary/[0.17]',
                     )}
                   >
                     <SparkleIcon size={13} />
@@ -1670,56 +1730,59 @@ export function ConversationView({
               />
             )}
 
-            {/* Tabs: reply / internal note (text-button style, no chip chrome) */}
-            <div className="mb-1 flex items-center gap-4 text-xs">
-              <button
-                type="button"
-                aria-pressed={!internalNote}
-                onClick={() => {
-                  setInternalNote(false);
-                  setMentionMenu(null);
-                }}
-                className={cn(
-                  'relative h-8 font-medium transition-colors duration-fast ease-out',
-                  !internalNote
-                    ? 'text-foreground after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-primary'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {t('conversation.tab.reply', { defaultValue: 'Reply' })}
-              </button>
-              <button
-                type="button"
-                aria-pressed={internalNote}
-                onClick={() => setInternalNote(true)}
-                className={cn(
-                  'relative inline-flex h-8 items-center gap-1.5 font-medium transition-colors duration-fast ease-out',
-                  internalNote
-                    ? 'text-warning after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-warning'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden />
-                {t('conversation.tab.note', { defaultValue: 'Internal note' })}
-              </button>
+            {/* Reply / internal note: one segmented control, so the mode is
+                a state you can SEE before typing - the note side lights amber,
+                like the box below it. */}
+            <div className="mb-2 flex items-center gap-3 text-xs">
+              <div className="inline-flex items-center rounded-full bg-secondary/80 p-1 ring-1 ring-inset ring-foreground/[0.06]">
+                <button
+                  type="button"
+                  aria-pressed={!internalNote}
+                  onClick={() => {
+                    setInternalNote(false);
+                    setMentionMenu(null);
+                  }}
+                  className={cn(
+                    'inline-flex h-7 items-center rounded-full px-3.5 font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                    !internalNote
+                      ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {t('conversation.tab.reply', { defaultValue: 'Reply' })}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={internalNote}
+                  onClick={() => setInternalNote(true)}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1.5 rounded-full px-3.5 font-semibold transition-[background-color,color,box-shadow] duration-fast ease-out',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                    internalNote
+                      ? 'bg-note-tint text-note-foreground shadow-[0_2px_8px_-4px_oklch(var(--note)/0.8)] ring-1 ring-inset ring-note/70'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <LockIcon size={12} aria-hidden />
+                  {t('conversation.tab.note', { defaultValue: 'Internal note' })}
+                </button>
+              </div>
               {internalNote && (
-                <span className="ms-auto text-warning text-2xs">
+                <span className="ms-auto truncate text-2xs font-medium text-note-foreground">
                   {t('conversation.mentionHint')}
                 </span>
               )}
             </div>
 
             <div
+              /* The primary surface: a roomy white well lit indigo on focus,
+                 amber in note mode (index.css, `[data-composer]`). */
+              data-composer=""
+              data-mode={internalNote ? 'note' : 'reply'}
               className={cn(
-                'group relative rounded-2xl transition-[box-shadow,background-color] duration-fast ease-out',
-                // The input-well look: recessed secondary surface with an inset
-                // hairline at rest, lifting to the card surface + a 2px jade
-                // ring on focus. The note mode swaps the hue wholesale — the
-                // two focus rings are mutually exclusive branches because cn()
-                // is a plain joiner and conflicting rings are unpredictable.
-                internalNote
-                  ? 'bg-warning/10 focus-within:ring-2 focus-within:ring-warning/50'
-                  : 'bg-secondary/50 ring-1 ring-inset ring-foreground/10 focus-within:bg-card focus-within:ring-2 focus-within:ring-primary/40',
+                'group relative rounded-[1.375rem] transition-[box-shadow,background-color] duration-fast ease-out',
+                internalNote ? 'bg-note-tint/70' : 'bg-card',
               )}
             >
               {/* Pending attachments (uploaded, not yet sent) — image thumbnails
@@ -1787,7 +1850,7 @@ export function ConversationView({
               {/* Attach · textarea · send sit in one flex row so the buttons stay
                   aligned to the textarea and bottom-anchor as it grows, instead
                   of floating absolutely over the text. */}
-              <div className="flex items-end gap-1 px-1.5 py-1.5">
+              <div className="flex items-end gap-1 px-2 py-2">
                 {/* Attach — reply mode only (internal notes are text-only) */}
                 {!internalNote && (
                   <button
@@ -1795,10 +1858,12 @@ export function ConversationView({
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploading}
                     aria-label={t('conversation.attach', { defaultValue: 'Attach file' })}
+                    title={t('conversation.attach', { defaultValue: 'Attach file' })}
                     className={cn(
-                      'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
-                      'text-muted-foreground transition-colors duration-fast ease-out',
+                      'inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
+                      'text-muted-foreground transition-[background-color,color,transform] duration-fast ease-out',
                       'hover:bg-secondary hover:text-foreground active:enabled:scale-95',
+                      'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
                       'disabled:opacity-40 disabled:cursor-not-allowed',
                     )}
                   >
@@ -1835,8 +1900,8 @@ export function ConversationView({
                   ref={draftRef}
                   rows={1}
                   className={cn(
-                    'block min-w-0 flex-1 resize-none bg-transparent py-2 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground',
-                    internalNote ? 'px-2' : 'px-1',
+                    'block min-h-10 min-w-0 flex-1 resize-none bg-transparent py-2 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground',
+                    internalNote ? 'px-2.5 placeholder:text-note-foreground/70' : 'px-1.5',
                     'border-none outline-none focus:ring-0',
                   )}
                   value={draft}
@@ -1871,14 +1936,16 @@ export function ConversationView({
                   onClick={send}
                   disabled={draft.trim().length === 0 && (internalNote || pending.length === 0)}
                   aria-label={t('actions.send', { ns: 'common' })}
+                  title={t('actions.send', { ns: 'common' })}
                   className={cn(
-                    'group/send inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full',
+                    'group/send inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
                     'transition-[transform,background-color,box-shadow,opacity] duration-fast ease-out',
-                    'hover:enabled:scale-105 hover:enabled:shadow-md active:enabled:scale-90',
-                    'disabled:opacity-40 disabled:cursor-not-allowed',
+                    'active:enabled:scale-95',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2',
+                    'disabled:opacity-35 disabled:cursor-not-allowed disabled:shadow-none',
                     internalNote
-                      ? 'bg-warning text-warning-foreground'
-                      : 'bg-primary text-primary-foreground hover:brightness-110',
+                      ? 'bg-note text-note-foreground shadow-[0_8px_18px_-10px_oklch(var(--note))]'
+                      : 'bg-primary text-primary-foreground shadow-[0_8px_18px_-10px_oklch(var(--primary))] hover:enabled:bg-primary-strong',
                   )}
                 >
                   <svg
@@ -1893,13 +1960,13 @@ export function ConversationView({
               </div>
 
               {mentionMenu && filteredAgents.length > 0 && (
-                <div className="absolute bottom-full start-1 mb-2 max-h-56 w-72 overflow-auto rounded-xl border border-border bg-popover text-popover-foreground shadow-lg animate-scale-in origin-bottom">
+                <div className="absolute bottom-full start-1 mb-2 max-h-56 w-72 overflow-auto rounded-2xl bg-popover p-1 text-popover-foreground shadow-float ring-1 ring-foreground/[0.08] animate-scale-in origin-bottom">
                   {filteredAgents.map((a) => (
                     <button
                       type="button"
                       key={a.id}
                       onClick={() => a.email && insertMention(a.email)}
-                      className="block w-full px-3 py-2 text-start text-sm hover:bg-secondary"
+                      className="block w-full rounded-xl px-3 py-2 text-start text-sm hover:bg-secondary"
                     >
                       <span className="font-medium text-foreground">{a.first_name ?? a.email}</span>{' '}
                       <span className="text-xs text-muted-foreground">{a.email}</span>
@@ -1909,13 +1976,13 @@ export function ConversationView({
               )}
             </div>
 
-            <p className="mt-2 text-2xs text-muted-foreground">
-              <kbd className="rounded bg-secondary px-1 py-0.5 font-mono text-[10px] ring-1 ring-inset ring-foreground/[0.06]">
+            <p className="mt-2 hidden px-1 text-2xs text-muted-foreground/90 sm:block">
+              <kbd className="rounded-md bg-secondary px-1.5 py-0.5 font-sans text-[10px] font-semibold ring-1 ring-inset ring-foreground/[0.06]">
                 Enter
               </kbd>{' '}
               {t('conversation.sendHint', { defaultValue: 'to send' })}
               {' · '}
-              <kbd className="rounded bg-secondary px-1 py-0.5 font-mono text-[10px] ring-1 ring-inset ring-foreground/[0.06]">
+              <kbd className="rounded-md bg-secondary px-1.5 py-0.5 font-sans text-[10px] font-semibold ring-1 ring-inset ring-foreground/[0.06]">
                 Shift+Enter
               </kbd>{' '}
               {t('conversation.newlineHint', { defaultValue: 'for newline' })}
@@ -1944,7 +2011,7 @@ export function ConversationView({
             {/* Plain shadow-2xl: a foreground-based shadow inverts on the dark
                 theme (near-white bloom instead of depth) — the design-law
                 foreground-scrim/shadow trap. */}
-            <div className="absolute inset-y-0 end-0 flex bg-card shadow-2xl motion-safe:animate-slide-in-drawer">
+            <div className="absolute inset-y-0 end-0 flex overflow-y-auto bg-background p-3 pt-14 shadow-2xl motion-safe:animate-slide-in-drawer">
               <button
                 type="button"
                 onClick={() => setDetailsOpen(false)}

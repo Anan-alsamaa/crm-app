@@ -16,7 +16,7 @@ const page = readFileSync(
 describe('Late orders: live mode', () => {
   it('pins the header (and its Live button) above the scrolling table', () => {
     const header = page.indexOf("title={t('lateOrders.title'");
-    const scrollport = page.indexOf('flex-1 overflow-auto px-4');
+    const scrollport = page.indexOf('agent-gutter flex-1 overflow-auto');
     expect(header).toBeGreaterThan(0);
     expect(header).toBeLessThan(scrollport);
   });

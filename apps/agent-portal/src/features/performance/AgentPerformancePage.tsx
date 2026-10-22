@@ -507,8 +507,8 @@ export function AgentPerformancePage() {
         )}
       </Toolbar>
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <div className="mx-auto max-w-6xl space-y-4">
+      <div className="agent-gutter min-h-0 flex-1 overflow-auto pb-8 pt-2">
+        <div className="space-y-4">
           <ViewSwitch
             value={tab}
             onChange={setTab}
