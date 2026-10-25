@@ -91,7 +91,9 @@ export function LateBy({
         dir="ltr"
         className={cn(
           'inline-flex items-center rounded-2xl px-3 py-1 font-bold leading-none tabular-nums tracking-[-0.02em]',
-          'text-[1.625rem] 2xl:px-3.5 2xl:text-[2.25rem]',
+          /* One step down with the rest of the board (owner, 2026-10-25),
+             still the largest figure on it. */
+          'text-[1.375rem] 2xl:px-3.5 2xl:text-[1.875rem]',
           SEVERITY_CLASS[sev],
         )}
       >

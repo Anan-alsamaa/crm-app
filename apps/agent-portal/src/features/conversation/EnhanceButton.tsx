@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { cn, SparkleIcon, Spinner } from '@yiji/ui';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useDismissOnOutside } from '../../lib/useDismissOnOutside.js';
 import { enhanceLocale } from './enhance-locale.js';
 
 /**
@@ -61,6 +62,14 @@ export function EnhanceButton({
   const { user } = useAuth();
   /** The AI's proposal, held here rather than written into the composer. */
   const [suggestion, setSuggestion] = useState<string | null>(null);
+  /*
+   * A PRESS ANYWHERE ELSE, OR ESCAPE, PUTS THE SUGGESTION AWAY (owner,
+   * 2026-10-25) - the composer included: the draft is untouched, so nothing is
+   * lost. The wrapper holds the card AND the Enhance button, so pressing the
+   * button asks again instead of closing first.
+   */
+  const wrap = useRef<HTMLDivElement>(null);
+  useDismissOnOutside(!!suggestion, () => setSuggestion(null), [wrap]);
 
   /*
    * THE DRAFT'S LANGUAGE, STATED (owner, 2026-10-25).
@@ -115,7 +124,7 @@ export function EnhanceButton({
   const busy = enhance.isPending;
 
   return (
-    <div className={cn('relative', className)}>
+    <div ref={wrap} className={cn('relative', className)}>
       {/*
         THE SUGGESTION, ABOVE THE COMPOSER.
         Positioned like the quick-replies panel, for the same reason: the

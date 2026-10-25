@@ -158,7 +158,7 @@ describe('the quick-reply chooser', () => {
    */
   it('floats upward in a portal when asked, without losing clicks', () => {
     expect(SRC).toMatch(/createPortal\(/);
-    expect(SRC).toMatch(/!floating\.current\?\.contains\(target\)/);
+    expect(SRC).toMatch(/\[wrap, floating\],/);
     expect(SRC).toMatch(/bottom: window\.innerHeight - anchor\.top \+ 8/);
   });
 
@@ -258,20 +258,28 @@ describe('opening on a bare slash', () => {
 });
 
 describe('closing when the agent clicks away', () => {
+  /* Since 2026-10-25 through the shared hook (behaviour tested in
+     composer-panels-dismiss.test.tsx); the rules below are the hook's. */
+  const HOOK = readFileSync(
+    resolve(import.meta.dirname, '../src/lib/useDismissOnOutside.ts'),
+    'utf8',
+  );
   it('dismisses on a press outside the control', () => {
-    expect(SRC).toMatch(/addEventListener\('pointerdown', onDown\)/);
-    expect(SRC).toMatch(/!wrap\.current\?\.contains\(target\)/);
+    expect(SRC).toMatch(/useDismissOnOutside\(/);
+    expect(SRC).toMatch(/\[wrap, floating\],/);
+    expect(HOOK).toMatch(/addEventListener\('pointerdown', onDown\)/);
+    expect(HOOK).toMatch(/r\.current\?\.contains\(target\)/);
   });
 
   /* The listener is removed again, or every chat ever opened leaves one behind
      — the leak shape this codebase has already been bitten by. */
   it('removes the listener again', () => {
-    expect(SRC).toMatch(/removeEventListener\('pointerdown', onDown\)/);
+    expect(HOOK).toMatch(/removeEventListener\('pointerdown', onDown\)/);
   });
 
   /* Escape is what a listbox is expected to answer to. */
   it('also dismisses on Escape', () => {
-    expect(SRC).toMatch(/e\.key === 'Escape'/);
+    expect(HOOK).toMatch(/e\.key === 'Escape'/);
   });
 
   /*
@@ -291,8 +299,8 @@ describe('closing when the agent clicks away', () => {
   /* Only while open: a document-wide listener armed on every conversation for
      a panel nobody opened is pure cost. */
   it('arms the listener only while open', () => {
-    const fx = SRC.slice(SRC.indexOf('useEffect(() => {'), SRC.indexOf('const total ='));
-    expect(fx).toMatch(/if \(!dismissable\) return;/);
+    expect(SRC).toMatch(/useDismissOnOutside\(\s+dismissable,/);
+    expect(HOOK).toMatch(/if \(!open\) return;/);
   });
 
   /* The late-order box: a "/" search is dismissable too, and the list marks

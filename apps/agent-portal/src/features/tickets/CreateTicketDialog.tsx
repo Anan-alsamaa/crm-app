@@ -731,12 +731,16 @@ function CreateTicketForm({
       onSubmit={onSubmit}
       // The near-black canvas, not a full-bleed sheet: the two form halves are
       // elevated cards now, and cards need ground to float off.
-      className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background"
+      /* ONE SCROLL, THE PAGE'S (owner, 2026-10-25): no card scrolls inside
+         itself any more - the form is as tall as its content and the page
+         around it (NewTicketPage) scrolls. */
+      className="flex min-h-full flex-col bg-background"
       noValidate
     >
       {/* One header, not a back-strip stacked on a title bar. Save stays
-          reachable from anywhere without scrolling to find it. */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3 px-5 pb-2 pt-5 sm:px-7">
+          reachable from anywhere without scrolling to find it: the header
+          sticks to the top of the page scroll. */}
+      <div className="sticky top-0 z-20 flex flex-wrap items-center gap-x-5 gap-y-3 bg-background px-5 pb-2 pt-5 sm:px-7">
         {backLabel && (
           <button
             type="button"
@@ -797,6 +801,13 @@ function CreateTicketForm({
               {blockedReason}
             </span>
           )}
+          {/* A restored draft is restored SILENTLY (owner, 2026-10-25: no
+              "Draft restored" strip); starting clean stays one press away. */}
+          {draftRestored && (
+            <Button type="button" variant="ghost" size="md" onClick={onDiscardDraft}>
+              {t('tickets.draftClear', { defaultValue: 'Clear draft' })}
+            </Button>
+          )}
           <Button type="button" variant="ghost" size="md" onClick={cancel}>
             {t('actions.cancel', { ns: 'common' })}
           </Button>
@@ -811,39 +822,20 @@ function CreateTicketForm({
         </div>
       </div>
 
-      {/* Said once, quietly, so a form that opens half-filled is not mistaken
-          for somebody else's ticket — and so the agent can start clean. */}
-      {draftRestored && (
-        <div
-          role="status"
-          className="mx-5 mt-3 flex items-center gap-2.5 rounded-2xl bg-primary/[0.07] py-1.5 pe-1.5 ps-4 text-xs text-foreground sm:mx-7"
-        >
-          <span aria-hidden className="h-1 w-1 shrink-0 rounded-full bg-primary" />
-          <span className="min-w-0 flex-1">
-            {t('tickets.draftRestored', {
-              defaultValue: 'Draft restored — the ticket you started here was kept.',
-            })}
-          </span>
-          <Button type="button" variant="ghost" size="sm" onClick={onDiscardDraft}>
-            {t('tickets.draftClear', { defaultValue: 'Clear draft' })}
-          </Button>
-        </div>
-      )}
-
       {/* Two sections now, not three: Subject is gone and the rest of what was
           the Ticket card lives at the foot of "What happened", so the agent
           fills one story in one pass instead of crossing the page to answer
           half of it. Still columns rather than one tall stack — thirteen fields
           in a single column is two screens of scrolling. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+      <div className="flex flex-1 flex-col lg:flex-row lg:items-start">
         {/* Columns sized to the fields rather than to the monitor, and centred
             in whatever is left. Two 50% columns on a 1920 screen put 640px of
             inputs against a 300px empty gutter each, which reads as a layout
             that failed rather than one that chose. 42.5rem exactly: the
             sections cap their fields at 40rem and pad 1.25rem a side, so a
             wider column just re-opens a ragged gutter inside the card. */}
-        <div className="mx-auto grid min-h-0 w-full max-w-[85rem] flex-1 grid-cols-1 gap-5 overflow-y-auto p-5 sm:p-6 lg:grid-cols-2 lg:overflow-hidden">
-          <div className="min-h-0 lg:overflow-y-auto">
+        <div className="mx-auto grid w-full max-w-[85rem] flex-1 grid-cols-1 items-start gap-5 p-5 sm:p-6 lg:grid-cols-2">
+          <div>
             <ComplaintSection
               tone="violet"
               title={t('complaint.whatHappened', { defaultValue: 'What happened' })}
@@ -991,7 +983,7 @@ function CreateTicketForm({
 
           {/* No rule between the columns any more — the cards' own edges do
               the separating, and the grid gap is logical so RTL is free. */}
-          <div className="min-h-0 lg:overflow-y-auto">
+          <div>
             <ComplaintSection
               tone="success"
               title={t('complaint.resolution', { defaultValue: 'Resolution' })}
@@ -1197,7 +1189,7 @@ function OrderRail({
   if (!order && !matched) return null;
 
   return (
-    <aside className="w-full shrink-0 overflow-y-auto border-t border-border bg-card px-6 py-5 lg:my-5 lg:me-5 lg:w-[20rem] lg:rounded-[1.625rem] lg:border-t-0 lg:shadow-[var(--agent-card-shadow)]">
+    <aside className="w-full shrink-0 border-t border-border bg-card px-6 py-5 lg:my-5 lg:me-5 lg:w-[20rem] lg:rounded-[1.625rem] lg:border-t-0 lg:shadow-[var(--agent-card-shadow)]">
       {/* Same head as the form sections, in the fourth hue — the tinted chip
           with the sky dot — so the rail reads as a peer of the columns rather
           than a stray panel. */}

@@ -313,7 +313,10 @@ describe('CreateTicketForm', () => {
       renderDialog();
       expect(screen.getByLabelText('tickets.description')).toHaveValue('Cold fries');
       expect(screen.getAllByText('Missing item').length).toBeGreaterThan(0);
-      expect(screen.getByText(/Draft restored/)).toBeInTheDocument();
+      /* Restored SILENTLY (owner, 2026-10-25): no "Draft restored" strip,
+         only the quiet way to start clean. */
+      expect(screen.queryByText(/Draft restored/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Clear draft' })).toBeInTheDocument();
     });
 
     it('does not claim a draft for a form nobody touched', () => {
@@ -321,7 +324,7 @@ describe('CreateTicketForm', () => {
       first.unmount();
       expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
       renderDialog();
-      expect(screen.queryByText(/Draft restored/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Clear draft' })).not.toBeInTheDocument();
     });
 
     it('Clear draft empties the form and forgets it', async () => {
@@ -332,7 +335,7 @@ describe('CreateTicketForm', () => {
       renderDialog();
       await userEvent.click(screen.getByRole('button', { name: 'Clear draft' }));
       expect(screen.getByLabelText('tickets.description')).toHaveValue('');
-      expect(screen.queryByText(/Draft restored/)).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Clear draft' })).not.toBeInTheDocument();
       expect(sessionStorage.getItem(DRAFT_KEY)).toBeNull();
     });
 

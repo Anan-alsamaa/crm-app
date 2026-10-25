@@ -458,7 +458,6 @@
     "fixFieldsFirst": "Check the highlighted fields",
     "backToTickets": "Back to tickets",
     "backToChat": "Back to the chat",
-    "draftRestored": "Draft restored — the ticket you started here was kept.",
     "draftClear": "Clear draft",
     "noOrderContext": "No order attached. Pick a branch on the left so the ticket still reports against one.",
     "pickComplaintType": "Choose a ticket type — it names the ticket",

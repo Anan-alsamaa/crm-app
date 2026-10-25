@@ -6,6 +6,7 @@ import { readItems } from '@directus/sdk';
 import { cn, DISMISS_FIRST_ATTR } from '@yiji/ui';
 import { vendorScopeMatches, type VendorRef } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
+import { useDismissOnOutside } from '../../lib/useDismissOnOutside.js';
 
 /**
  * Ready-made replies, one click above the composer.
@@ -246,6 +247,7 @@ export function QuickReplies({
   floatAbove = false,
   vendorId,
   inToolbar = false,
+  searchOwner,
 }: {
   /** What the customer has written, for language ranking. */
   customerText: string;
@@ -277,8 +279,9 @@ export function QuickReplies({
   /**
    * Let an outside press close the list EVEN WHILE a "/" search holds it open.
    *
-   * Off in the inbox, where the composer owns a search and the list must stay
-   * up as the agent types beside it. On in the late-order decision box (owner,
+   * On in the inbox too since 2026-10-25 (owner: a click anywhere outside
+   * closes it), with `searchOwner` keeping the search open while the agent
+   * types in the composer. On in the late-order decision box (owner,
    * 2026-10-05): the first press anywhere but the list puts the list away, and
    * the dialog around it closes only on a second — see `DISMISS_FIRST_ATTR`.
    * Typing again reopens it.
@@ -306,6 +309,12 @@ export function QuickReplies({
    * it. Layout only: the same elements, refs and handlers either way.
    */
   inToolbar?: boolean;
+  /**
+   * A CSS selector for the box that owns the "/" search (the inbox passes the
+   * composer). A press inside it closes a list opened from the button but
+   * keeps a search open, so typing beside the list never loses it.
+   */
+  searchOwner?: string;
 }) {
   const { t, i18n } = useTranslation();
   const replies = useQuickReplies(kind, vendorId);
@@ -362,31 +371,25 @@ export function QuickReplies({
    * starts outside should dismiss even if the pointer travels before release,
    * which is how a real mis-click behaves.
    *
-   * A `/` search is NOT dismissed this way — the composer owns that, and the
-   * list must stay up while the agent types into the box next to it.
+   * A `/` search is dismissed this way only with `dismissSearchOnOutside`, and
+   * never by a press into `searchOwner` - the list must stay up while the agent
+   * types into the box that holds the search.
    */
   const dismissable = open || (dismissSearchOnOutside && searchOpen);
-  useEffect(() => {
-    if (!dismissable) return;
-    const close = () => {
+  useDismissOnOutside(
+    dismissable,
+    (e) => {
       setOpen(false);
-      if (dismissSearchOnOutside) setDismissedSearch(searchKey);
-    };
-    const onDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      if (!wrap.current?.contains(target) && !floating.current?.contains(target)) close();
-    };
-    /* Escape too — the panel is a listbox and that is the expected key. */
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('pointerdown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('pointerdown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [dismissable, dismissSearchOnOutside, searchKey]);
+      /* A press back INTO the box that owns the search (`searchOwner`, the
+         inbox composer) keeps the search: the agent is still typing it. */
+      const intoOwner =
+        e.type === 'pointerdown' &&
+        !!searchOwner &&
+        !!(e.target as Element | null)?.closest?.(searchOwner);
+      if (dismissSearchOnOutside && !intoOwner) setDismissedSearch(searchKey);
+    },
+    [wrap, floating],
+  );
 
   /* FLOATING: track where the control is, so the list sits just above it and
      follows a scroll or resize instead of drifting away. */

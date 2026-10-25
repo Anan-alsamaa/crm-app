@@ -44,7 +44,7 @@ describe('the late-orders board', () => {
   it("fills the cells in the same order, from the table's own values", () => {
     const order = [
       '<LateBy minutes={row.minutesElapsed}',
-      'tabular-nums text-foreground 2xl:text-xl"',
+      'tabular-nums text-foreground 2xl:text-lg"',
       'boardLeg(times.serviceMinutes',
       'boardLeg(times.driverArrivalMinutes)',
       'boardLeg(times.deliveryMinutes)',
@@ -75,5 +75,44 @@ describe('the Total time chip', () => {
     expect(BOARD).toMatch(/const wordEl = <span className="sr-only">\{word\}<\/span>;/);
     expect(BOARD).not.toMatch(/text-xs font-semibold text-foreground\/70[^"]*">\{word\}/);
     expect(BOARD).toMatch(/critical: 'bg-destructive text-destructive-foreground'/);
+  });
+});
+
+describe('brand and restaurant are read in full (owner, 2026-10-25)', () => {
+  it('wrap on the board instead of truncating', () => {
+    expect(SRC).toMatch(/const boardName =\s+'block whitespace-normal break-words /);
+    const names = row.slice(
+      row.indexOf('{row.brandName ||') - 200,
+      row.indexOf("cn(boardText, 'tabular-nums')"),
+    );
+    expect(names).toMatch(/className=\{cn\(boardName, 'font-semibold'\)\}/);
+    expect(names).toMatch(/className=\{boardName\}/);
+    expect(names).not.toMatch(/boardText/);
+    expect(names).not.toMatch(/truncate/);
+  });
+
+  it('get a guaranteed width on the board at both TV sizes', () => {
+    expect(SRC).toMatch(/grid-cols-\[[^\]]*_minmax\(8rem,1\.25fr\)_minmax\(9rem,1\.45fr\)_/);
+    expect(SRC).toMatch(/2xl:grid-cols-\[[^\]]*_minmax\(10rem,1\.25fr\)_minmax\(11rem,1\.45fr\)_/);
+  });
+
+  it('wrap in the table view too', () => {
+    const brand = SRC.slice(SRC.indexOf('    brand: {'), SRC.indexOf('    customer: {'));
+    expect(brand).not.toMatch(/truncate/);
+    expect(brand.match(/whitespace-normal break-words/g)?.length).toBe(2);
+  });
+});
+
+describe('the board type is one step smaller (owner, 2026-10-25)', () => {
+  it('legs, row text and headers step down', () => {
+    expect(SRC).toMatch(/whitespace-nowrap text-sm font-semibold tabular-nums 2xl:text-lg/);
+    expect(SRC).toMatch(
+      /const boardText = 'block truncate text-sm text-foreground 2xl:text-base';/,
+    );
+    expect(SRC).toMatch(/text-2xs font-semibold text-muted-foreground 2xl:min-h-12 2xl:text-xs/);
+  });
+
+  it('Total time stays the largest figure, one step down too', () => {
+    expect(BOARD).toMatch(/'text-\[1\.375rem\] 2xl:px-3\.5 2xl:text-\[1\.875rem\]'/);
   });
 });

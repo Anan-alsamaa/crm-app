@@ -91,7 +91,9 @@ export function NewTicketPage() {
     // h-full, not flex-1: the shell's <main> has a definite height but is not
     // itself a flex container, so flex-1 here resolved to nothing and the form
     // collapsed to content height, leaving dead canvas under it.
-    <div className="flex h-full min-h-0 flex-col">
+    // THE PAGE SCROLLS, not the cards inside it (owner, 2026-10-25): this is
+    // the one scroll container; the form grows to its content.
+    <div className="h-full min-h-0 overflow-y-auto">
       <CreateTicketDialog
         contactId={contactId}
         vendorId={vendorId}

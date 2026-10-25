@@ -1580,11 +1580,20 @@ export function LateOrdersPage() {
           <Th>{t('lateOrders.col.brandOnly', { defaultValue: 'Brand' })}</Th>
         </>
       ),
-      td: (row) => <Td className="max-w-[12rem] truncate">{row.brandName || '-'}</Td>,
+      /* Read in full, wrapping rather than cut (owner, 2026-10-25). */
+      td: (row) => (
+        <Td className=" max-w-[16rem] whitespace-normal break-words leading-snug">
+          {row.brandName || '-'}
+        </Td>
+      ),
     },
     restaurant: {
       th: <Th>{t('lateOrders.col.restaurant', { defaultValue: 'Restaurant' })}</Th>,
-      td: (row) => <Td className="max-w-[14rem] truncate">{row.restaurantName || '-'}</Td>,
+      td: (row) => (
+        <Td className=" max-w-[18rem] whitespace-normal break-words leading-snug">
+          {row.restaurantName || '-'}
+        </Td>
+      ),
     },
     customer: {
       th: <Th>{t('lateOrders.col.customer', { defaultValue: 'Customer mobile' })}</Th>,
@@ -1854,12 +1863,18 @@ export function LateOrdersPage() {
    * still read from across a room. The actions (cart, comment, coupon) are
    * the table's own handlers, compact icon buttons at the row end - named for
    * assistive tech and on hover - so the eleven columns fit at 1440 and 1920.
+   *
+   * BRAND AND RESTAURANT ARE READ IN FULL (owner, 2026-10-25): they were the
+   * only flexible columns and got what the fixed ones left - a few letters and
+   * an ellipsis. Now the whole board is one type step smaller, the fixed
+   * columns are sized to that smaller type, and the two names take most of
+   * the room left, wrapping onto a second line instead of being cut.
    */
   const boardCols = cn(
-    'grid items-center gap-x-3 px-5',
-    'grid-cols-[7.75rem_5.5rem_repeat(4,5rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_7.25rem_minmax(0,0.9fr)_6.5rem_9rem_6.75rem]',
-    '2xl:gap-x-5 2xl:px-8',
-    '2xl:grid-cols-[10.5rem_7rem_repeat(4,6.75rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_9.5rem_minmax(0,0.9fr)_9.5rem_11rem_7.5rem]',
+    'grid items-center gap-x-2.5 px-5',
+    'grid-cols-[6.75rem_4.75rem_repeat(4,4.25rem)_minmax(8rem,1.25fr)_minmax(9rem,1.45fr)_6.25rem_minmax(0,0.75fr)_5.75rem_8rem_6.5rem]',
+    '2xl:gap-x-4 2xl:px-7',
+    '2xl:grid-cols-[9.25rem_6rem_repeat(4,5.5rem)_minmax(10rem,1.25fr)_minmax(11rem,1.45fr)_8rem_minmax(0,0.75fr)_7.75rem_10rem_7rem]',
   );
   const stateTone: Record<LateOrderState, { dot: string; label: string }> = {
     pending: {
@@ -1885,7 +1900,7 @@ export function LateOrdersPage() {
       <span
         dir="ltr"
         className={cn(
-          'inline-flex items-center gap-1.5 whitespace-nowrap text-base font-semibold tabular-nums 2xl:text-xl',
+          'inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-semibold tabular-nums 2xl:text-lg',
           live ? 'text-[oklch(0.5_0.13_75)]' : 'text-foreground/80',
         )}
       >
@@ -1905,7 +1920,10 @@ export function LateOrdersPage() {
       </span>
     );
   };
-  const boardText = 'block truncate text-base text-foreground 2xl:text-lg';
+  const boardText = 'block truncate text-sm text-foreground 2xl:text-base';
+  /* Brand and restaurant: never cut - they wrap (owner, 2026-10-25). */
+  const boardName =
+    'block whitespace-normal break-words text-sm leading-snug text-foreground 2xl:text-base';
   const boardRow = (row: (typeof paged)[number]) => {
     const state = stateOf(row.orderId);
     const agentName = decisionMap.get(row.orderId)?.decided_by?.first_name;
@@ -1926,7 +1944,7 @@ export function LateOrdersPage() {
         role="row"
         className={cn(
           boardCols,
-          'min-h-[4.25rem] py-2.5 2xl:min-h-[5.25rem]',
+          'min-h-[4rem] py-2.5 2xl:min-h-[4.75rem]',
           '[&:not(:last-child)]:border-b [&:not(:last-child)]:border-foreground/[0.07]',
           'transition-colors duration-fast hover:bg-primary/[0.03]',
         )}
@@ -1942,7 +1960,7 @@ export function LateOrdersPage() {
         <div role="cell">
           <span
             dir="ltr"
-            className="text-base font-semibold tabular-nums text-foreground 2xl:text-xl"
+            className="text-sm font-semibold tabular-nums text-foreground 2xl:text-lg"
           >
             {row.orderId}
           </span>
@@ -1952,33 +1970,29 @@ export function LateOrdersPage() {
         <div role="cell">{boardLeg(times.deliveryMinutes)}</div>
         <div role="cell">{boardLeg(times.preparationMinutes)}</div>
         <div role="cell" className="min-w-0">
-          <span className={cn(boardText, 'font-semibold')} title={row.brandName || undefined}>
-            {row.brandName || '-'}
-          </span>
+          <span className={cn(boardName, 'font-semibold')}>{row.brandName || '-'}</span>
         </div>
         <div role="cell" className="min-w-0">
-          <span className={boardText} title={row.restaurantName || undefined}>
-            {row.restaurantName || '-'}
-          </span>
+          <span className={boardName}>{row.restaurantName || '-'}</span>
         </div>
         <div role="cell" className="min-w-0">
           <span dir="ltr" className={cn(boardText, 'tabular-nums')} title={customer}>
             {customer}
           </span>
         </div>
-        <div role="cell" className="min-w-0 text-sm leading-snug text-foreground/80 2xl:text-base">
+        <div role="cell" className="min-w-0 text-xs leading-snug text-foreground/80 2xl:text-sm">
           {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
         </div>
         <div role="cell" className="min-w-0">
-          <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground 2xl:text-base">
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground 2xl:text-sm">
             <span
               aria-hidden
-              className={cn('h-2.5 w-2.5 shrink-0 rounded-full', stateTone[state].dot)}
+              className={cn('h-2 w-2 shrink-0 rounded-full', stateTone[state].dot)}
             />
             {stateTone[state].label}
           </span>
           {agentName && (
-            <span className="block truncate text-xs text-muted-foreground 2xl:text-sm">
+            <span className="block truncate text-2xs text-muted-foreground 2xl:text-xs">
               {t('lateOrders.board.byAgent', { name: agentName, defaultValue: 'by {{name}}' })}
             </span>
           )}
@@ -2492,7 +2506,7 @@ export function LateOrdersPage() {
                   role="row"
                   className={cn(
                     boardCols,
-                    'min-h-12 border-b border-foreground/[0.07] py-2 text-xs font-semibold text-muted-foreground 2xl:min-h-14 2xl:text-sm',
+                    'min-h-11 border-b border-foreground/[0.07] py-2 text-2xs font-semibold text-muted-foreground 2xl:min-h-12 2xl:text-xs',
                   )}
                 >
                   {(

@@ -49,6 +49,7 @@ import { ConversationToolbar } from './ConversationToolbar.js';
 import { ConversationSidebar } from './ConversationSidebar.js';
 import { QuickReplies } from './QuickReplies.js';
 import { EnhanceButton } from './EnhanceButton.js';
+import { useDismissOnOutside } from '../../lib/useDismissOnOutside.js';
 import { PushUnreachableNotice } from './PushUnreachableNotice.js';
 import { AiDraftCard } from './AiDraftCard.js';
 import { runtimeConfig } from '@yiji/shared-config';
@@ -125,6 +126,16 @@ export function ConversationView({
   const aiVendorId = conversationVendorId(conversation.data);
   /** AI assistance is opt-in per session — see the trigger by the composer. */
   const [aiOpen, setAiOpen] = useState(false);
+  /*
+   * THE AI PANEL CLOSES ON A PRESS ANYWHERE ELSE, OR ESCAPE (owner,
+   * 2026-10-25). It only closed from its own button, so it stayed over the
+   * composer after the agent went back to the chat. A press into the composer
+   * counts as outside - the draft lives here, not in the panel, so it survives.
+   * Its button is inside, so the button still toggles it.
+   */
+  const aiPanelRef = useRef<HTMLDivElement>(null);
+  const aiButtonRef = useRef<HTMLButtonElement>(null);
+  useDismissOnOutside(aiOpen, () => setAiOpen(false), [aiPanelRef, aiButtonRef]);
   const agents = useAgents();
   const [live, setLive] = useState<ConversationMessage[]>([]);
   /*
@@ -1740,6 +1751,11 @@ export function ConversationView({
                     restaurant: c?.last_order_snapshot?.restaurantName ?? null,
                   }}
                   onPick={insertQuickReply}
+                  /* A press outside closes the list, a "/" search included -
+                     except a press into the composer, where the search is
+                     being typed (owner, 2026-10-25). */
+                  dismissSearchOnOutside
+                  searchOwner="[data-composer]"
                   /* Only this chat's vendor's replies, plus the shared ones
                      (MV-4). A chat with no vendor recorded is not narrowed. */
                   vendorId={aiVendorId || undefined}
@@ -1759,6 +1775,7 @@ export function ConversationView({
                   />
                   {aiVendorId && (
                     <button
+                      ref={aiButtonRef}
                       type="button"
                       onClick={() => setAiOpen((v) => !v)}
                       aria-expanded={aiOpen}
@@ -1791,16 +1808,18 @@ export function ConversationView({
               )}
             </div>
             {!internalNote && aiVendorId && aiOpen && (
-              <AiPanel
-                className="mb-2"
-                conversationId={conversationId}
-                vendorId={aiVendorId}
-                draft={draft}
-                /* Through `applyEnhanced`, not `setDraft`: the panel's
-                   suggestion lands in the same one-line composer and had the
-                   same invisible-growth bug as the emoji button. */
-                onReplySuggested={(text) => applyEnhanced(text, 'ai_suggestion')}
-              />
+              <div ref={aiPanelRef}>
+                <AiPanel
+                  className="mb-2"
+                  conversationId={conversationId}
+                  vendorId={aiVendorId}
+                  draft={draft}
+                  /* Through `applyEnhanced`, not `setDraft`: the panel's
+                     suggestion lands in the same one-line composer and had the
+                     same invisible-growth bug as the emoji button. */
+                  onReplySuggested={(text) => applyEnhanced(text, 'ai_suggestion')}
+                />
+              </div>
             )}
 
             <div

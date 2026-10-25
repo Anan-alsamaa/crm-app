@@ -22,8 +22,8 @@ import type { ComplaintValues } from './ComplaintFields.js';
  *
  * Two writers share one record: the page owns the chosen CONTACT (standalone
  * only) and the form owns everything else. `writeTicketDraft` merges, and the
- * record disappears once both halves are empty — so a blank form never shows
- * "Draft restored".
+ * record disappears once both halves are empty — so a blank form never offers
+ * "Clear draft".
  *
  * Only what the agent typed or chose is kept. Files cannot be stored here, and
  * this form never uploads its own — chat files are attached by reference from
