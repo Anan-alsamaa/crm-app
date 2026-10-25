@@ -118,6 +118,18 @@ describe('admin AgentPerformancePage', () => {
     expect(tile('Answered in time')).toBe('33%');
   });
 
+  it('has no "Answer within" filter, and scores against the default 5 minutes', async () => {
+    // Owner, 2026-10-25: the filter is gone, as in the agent portal.
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole('region', { name: 'Summary' })).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(screen.queryByLabelText('Answer within (minutes)')).toBeNull();
+    expect(screen.getByText(/Within 5 min/)).toBeInTheDocument();
+    expect(tile('Answered in time')).toBe('33%');
+  });
+
   it('charts the work by volume and by speed, never on one shared axis', async () => {
     renderPage();
     await waitFor(() => expect(screen.getByText('Where the chats sat')).toBeInTheDocument());

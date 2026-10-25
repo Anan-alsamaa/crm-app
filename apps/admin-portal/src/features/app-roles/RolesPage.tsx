@@ -5,11 +5,10 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   ChartIcon,
+  EmptyState,
   InboxIcon,
   Input,
-  MeterBar,
   Pill,
-  SectionCard,
   ShieldIcon,
   Skeleton,
   Textarea,
@@ -33,6 +32,7 @@ import {
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { FIELD_LABEL, PAGE_BODY, PageHeader, SECTION_CARD } from '../../components/shell/Page.js';
 import { ClearFiltersButton } from '../../components/ClearFiltersButton.js';
+import { ViewSwitch } from '../../components/ViewSwitch.js';
 
 /**
  * Roles & privileges, the way the ops portal does it: a named role is a set of
@@ -204,6 +204,9 @@ export function RolesPage() {
    * place, saying what it will do.
    */
   const [creating, setCreating] = useState(false);
+  /* Which portal and which area the privilege editor has open. */
+  const [portalPick, setPortalPick] = useState<'agent' | 'admin'>('agent');
+  const [areaPick, setAreaPick] = useState<string>('chat');
   const startNewRole = () => {
     setDraft(EMPTY);
     setCreating(true);
@@ -482,78 +485,91 @@ export function RolesPage() {
     }),
   };
 
+  /*
+   * WHAT IS UNSAVED. Compared on what the switches SHOW, not what is stored:
+   * flipping a default-on permission off and back on again leaves an explicit
+   * `true` where the row had nothing, and that is not a change anybody made.
+   */
+  const dirty = useMemo(() => {
+    if (creating) return true;
+    if (!selected) return false;
+    if (draft.name !== selected.name) return true;
+    if (draft.description !== (selected.description ?? '')) return true;
+    const sameSet = (a: string[], b: string[] | null) =>
+      a.length === (b ?? []).length && a.every((x) => (b ?? []).includes(x));
+    if (!sameSet(draft.brands, selected.brands) || !sameSet(draft.stores, selected.stores))
+      return true;
+    const before = effectivePrivileges(selected.privileges ?? {}, selected.name);
+    return ALL_PRIVILEGES.some((k) => !!shown[k] !== !!before[k]);
+  }, [creating, selected, draft, shown]);
+
+  /*
+   * THE PRIVILEGE EDITOR'S NAVIGATION (owner, 2026-10-25: a settings page, not
+   * a wall of switches). The portal is a two-way switch, the areas under it a
+   * vertical tab list, and the main pane shows ONE area at a time. Areas with
+   * nothing in them for this editor (the Administrator-only ones, for anyone
+   * else) are left out, exactly as before.
+   */
+  const portals = (['agent', 'admin'] as const)
+    .map((portal) => ({
+      portal,
+      areas: Object.entries(GROUPS)
+        .map(([group, label]) => {
+          const privs = PRIVS.filter(
+            (p) => p.group === group && PRIVILEGE_PORTAL[p.key] === portal,
+          );
+          return { group, label, privs, on: privs.filter((p) => !!shown[p.key]).length };
+        })
+        .filter((a) => a.privs.length > 0),
+    }))
+    .filter((p) => p.areas.length > 0);
+  const portal = portals.find((p) => p.portal === portalPick) ?? portals[0];
+  const areaKeys = [...(portal?.areas.map((a) => a.group) ?? []), ACCESS_AREA];
+  const activeArea = areaKeys.includes(areaPick) ? areaPick : (areaKeys[0] ?? ACCESS_AREA);
+  const area = portal?.areas.find((a) => a.group === activeArea) ?? null;
+  const fenceCount = draft.brands.length + draft.stores.length;
+
+  const toggleArea = (privs: { key: Privilege }[], on: boolean) =>
+    setDraft((d) => {
+      const next = { ...d.privileges };
+      // Only what this editor may grant; the rest stay as they are.
+      for (const p of privs) if (grantable(p.key)) next[p.key] = on;
+      return { ...d, privileges: next };
+    });
+
+  /* Arrow keys move along the area list, Home/End jump to its ends. The
+     selection follows the focus, so the pane changes as you move. */
+  const onAreaKey = (e: React.KeyboardEvent) => {
+    let i = areaKeys.indexOf(activeArea);
+    if (e.key === 'ArrowDown') i = (i + 1) % areaKeys.length;
+    else if (e.key === 'ArrowUp') i = (i - 1 + areaKeys.length) % areaKeys.length;
+    else if (e.key === 'Home') i = 0;
+    else if (e.key === 'End') i = areaKeys.length - 1;
+    else return;
+    e.preventDefault();
+    const next = areaKeys[i]!;
+    setAreaPick(next);
+    requestAnimationFrame(() => document.getElementById(`role-area-${next}`)?.focus());
+  };
+
+  const editing = creating || !!draft.id;
+
   return (
     <div className="flex h-full flex-col">
-      {/* The Rapport header (owner, 2026-10-22): title, what a role is under
-          it, the one primary action on the far side. */}
+      {/* The Rapport header (owner, 2026-10-22): title and what a role is.
+          The actions live with what they act on now - New role on the list,
+          Save on the role. */}
       <PageHeader
         title={t('roles.title', { defaultValue: 'Roles & privileges' })}
         description={t('roles.heroSubtitle', {
           defaultValue:
             'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',
         })}
-        actions={
-          <>
-            {/* One primary action, always in this spot, named after what it does:
-                it opens a draft, becomes Create while that draft is unsaved, and
-                becomes Save once the role exists. A built-in role is code-defined,
-                so there is nothing to save and the button offers a new one. */}
-            {creating ? (
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setCreating(false);
-                    setDraft(EMPTY);
-                  }}
-                >
-                  {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => save.mutate(draft)}
-                  disabled={!draft.name.trim() || save.isPending}
-                  loading={save.isPending}
-                >
-                  {t('roles.create', { defaultValue: 'Create role' })}
-                </Button>
-              </>
-            ) : draft.id && !locked ? (
-              <>
-                <Button size="sm" variant="ghost" onClick={startNewRole} iconStart={<PlusIcon />}>
-                  {t('roles.new', { defaultValue: 'New role' })}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => save.mutate(draft)}
-                  disabled={!draft.name.trim() || save.isPending}
-                  loading={save.isPending}
-                >
-                  {t('roles.save', { defaultValue: 'Save role' })}
-                </Button>
-              </>
-            ) : (
-              <Button size="sm" onClick={startNewRole} iconStart={<PlusIcon />}>
-                {t('roles.new', { defaultValue: 'New role' })}
-              </Button>
-            )}
-          </>
-        }
       />
 
-      {/* Scroll lives on the page wrapper. The grid runs the header's full
-          width on its gutter (Rapport skin) - the list beside the editor at
-          desktop width, stacked on a phone.
-
-          ONE GRID, ONE RHYTHM (owner, 2026-10-25: "the boxes and cards are not
-          positioned uniformly"). The privilege areas used to be separate cards
-          in a 2- or 4-column grid, so a twelve-switch area sat beside a
-          four-switch one and each row of cards ended at a different height.
-          Now every area is a full-width band inside ONE card per portal: the
-          area's name and meter on the start side, its switches in even columns
-          on the other. Every band is the same width, every switch row the same
-          width, and the gaps between blocks are the same 1.25rem everywhere. */}
+      {/* A SETTINGS PAGE (owner, 2026-10-25): the roles on the start side, the
+          open role on the other - its details card first, then a two-pane
+          privilege editor that shows one area at a time. */}
       <div className={PAGE_BODY}>
         <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start">
           {/* ── the roles ── */}
@@ -565,11 +581,9 @@ export function RolesPage() {
                 ))}
               </div>
             ) : (
-              /* Clean board list — rows flush inside one card, hairline
-               separators, quiet hover; the selected row is tinted. */
               <div className={cn(SECTION_CARD, 'overflow-hidden')}>
-                <div className="flex min-h-12 items-center justify-between gap-2 border-b border-foreground/[0.07] px-4 py-2.5">
-                  <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                <div className="flex min-h-14 items-center gap-2 border-b border-foreground/[0.07] py-2.5 pe-2.5 ps-4">
+                  <h2 className="min-w-0 flex-1 text-sm font-semibold tracking-tight text-foreground">
                     {t('roles.listTitle', { defaultValue: 'Roles' })}
                     <span className="ms-2 text-xs font-medium tabular-nums text-muted-foreground">
                       {(roles.data ?? []).length}
@@ -577,8 +591,7 @@ export function RolesPage() {
                   </h2>
                   {/* Nothing could clear a selection once made, so a built-in
                       role's read-only panel became a dead end. Always shown;
-                      usable only while a role is selected (owner, 2026-10-22:
-                      a usable Clear must look usable). */}
+                      usable only while a role is selected (owner, 2026-10-22). */}
                   <ClearFiltersButton
                     active={!!draft.id}
                     onClear={() => {
@@ -587,8 +600,31 @@ export function RolesPage() {
                     }}
                     label={t('roles.clearSelection', { defaultValue: 'Clear' })}
                   />
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={startNewRole}
+                    disabled={creating}
+                    iconStart={<PlusIcon />}
+                  >
+                    {t('roles.new', { defaultValue: 'New role' })}
+                  </Button>
                 </div>
                 <ul className="divide-y divide-foreground/[0.06]">
+                  {creating && (
+                    /* The draft has a row of its own while it is being made. */
+                    <li>
+                      <div
+                        aria-current="true"
+                        className="flex min-h-14 w-full items-center gap-3 bg-primary/10 px-4 py-2.5 ring-1 ring-inset ring-primary/30"
+                      >
+                        <RoleMonogram name={draft.name.trim() || '+'} builtin={false} />
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                          {draft.name.trim() || t('roles.new', { defaultValue: 'New role' })}
+                        </span>
+                      </div>
+                    </li>
+                  )}
                   {(roles.data ?? []).map((r) => (
                     <li key={r.id}>
                       <button
@@ -596,9 +632,7 @@ export function RolesPage() {
                         data-role-row=""
                         aria-current={draft.id === r.id ? 'true' : undefined}
                         onClick={() => {
-                          // Opening an existing role ends the draft — otherwise
-                          // the toolbar keeps offering to "Create" a role that
-                          // already exists.
+                          // Opening an existing role ends the draft.
                           setCreating(false);
                           setDraft((d) => ({ ...d, id: r.id }));
                         }}
@@ -615,7 +649,6 @@ export function RolesPage() {
                           <span className="block truncate text-sm font-semibold text-foreground">
                             {r.name}
                           </span>
-                          {/* Permission count under the name, as quiet text. */}
                           <span className="mt-0.5 block text-2xs leading-snug tabular-nums text-muted-foreground">
                             {t('roles.privCount', {
                               n: Object.values(r.privileges ?? {}).filter(Boolean).length,
@@ -641,9 +674,20 @@ export function RolesPage() {
             )}
           </div>
 
-          {/* ── the editor ── */}
+          {/* ── the open role ── */}
           <div className="min-w-0 space-y-5">
-            {locked ? (
+            {!editing ? (
+              <div className={SECTION_CARD}>
+                <EmptyState
+                  icon={<ShieldIcon size={22} />}
+                  title={t('roles.pickTitle', { defaultValue: 'No role open' })}
+                  description={t('roles.pickHint', {
+                    defaultValue:
+                      'Pick a role from the list to see or change what it can do, or start a new one.',
+                  })}
+                />
+              </div>
+            ) : locked ? (
               <div className={cn(SECTION_CARD, 'p-5 sm:p-6')}>
                 <div className="flex items-center gap-3">
                   {selected && <RoleMonogram name={selected.name} builtin={selected.builtin} />}
@@ -652,8 +696,7 @@ export function RolesPage() {
                   </h2>
                   {selected && <RoleStatus role={selected} />}
                 </div>
-                {/* The WHOLE description, line breaks kept (owner, 2026-10-25:
-                    a multi-line description showed one line). */}
+                {/* The WHOLE description, line breaks kept. */}
                 {selected?.description?.trim() && (
                   <p
                     dir="auto"
@@ -671,13 +714,15 @@ export function RolesPage() {
               </div>
             ) : (
               <>
-                {/* Role details: name and description side by side, tops
-                    aligned. The description GROWS with its text - it was a
-                    one-row box, so a multi-line description showed one line
-                    (owner, 2026-10-25). */}
-                <div className={cn(SECTION_CARD, 'p-5 sm:p-6')}>
-                  <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-                    <label className="flex flex-col gap-1.5">
+                {/* THE ROLE CARD. Sticky at desktop width, so Save - and whether
+                    there is anything to save - stays in view while the switches
+                    below scroll. */}
+                <section
+                  aria-label={t('roles.details', { defaultValue: 'Role details' })}
+                  className={cn(SECTION_CARD, 'z-10 p-5 sm:p-6 lg:sticky lg:top-0')}
+                >
+                  <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+                    <label className="flex min-w-[14rem] flex-1 flex-col gap-1.5">
                       <span className={FIELD_LABEL}>
                         {t('roles.name', { defaultValue: 'Role name' })}
                       </span>
@@ -690,288 +735,322 @@ export function RolesPage() {
                         })}
                       />
                     </label>
-                    <label className="flex flex-col gap-1.5">
-                      <span className={FIELD_LABEL}>
-                        {t('roles.description', { defaultValue: 'Description' })}
+                    {/* Status, whether anything is unsaved, the one primary action. */}
+                    <div className="flex min-h-10 flex-wrap items-center gap-2">
+                      {selected && !creating && <RoleStatus role={selected} />}
+                      <span
+                        aria-live="polite"
+                        className={cn(
+                          'inline-flex items-center gap-1.5 px-1 text-xs font-medium',
+                          dirty ? 'text-foreground' : 'text-muted-foreground',
+                        )}
+                      >
+                        <span
+                          aria-hidden
+                          className={cn(
+                            'h-2 w-2 rounded-full',
+                            dirty ? 'bg-warning' : 'bg-success',
+                          )}
+                        />
+                        {dirty
+                          ? t('roles.unsaved', { defaultValue: 'Unsaved changes' })
+                          : t('roles.upToDate', { defaultValue: 'All changes saved' })}
                       </span>
-                      <Textarea
-                        rows={3}
-                        dir="auto"
-                        value={draft.description}
-                        onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-                        className="min-h-[4.75rem] max-h-80 resize-y [field-sizing:content]"
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* TWO PARTS (owner, 2026-10-15): what this role may do in the
-                    AGENT portal, then in the ADMIN portal. */}
-                {(['agent', 'admin'] as const).map((portal) => {
-                  const areas = Object.entries(GROUPS)
-                    .map(([group, label]) => ({
-                      group,
-                      label,
-                      privs: PRIVS.filter(
-                        (p) => p.group === group && PRIVILEGE_PORTAL[p.key] === portal,
-                      ),
-                    }))
-                    // Customers, late orders and coupons hold only the
-                    // Administrator's switches; nobody else sees those areas.
-                    .filter((a) => a.privs.length > 0);
-                  if (areas.length === 0) return null;
-                  const portalTotal = areas.reduce((n, a) => n + a.privs.length, 0);
-                  const portalOn = areas.reduce(
-                    (n, a) => n + a.privs.filter((p) => !!shown[p.key]).length,
-                    0,
-                  );
-                  return (
-                    <section key={portal} className={cn(SECTION_CARD, 'overflow-hidden')}>
-                      <header className="flex min-h-12 items-center justify-between gap-3 border-b border-foreground/[0.07] px-5 py-3 sm:px-6">
-                        <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                          {portal === 'agent'
-                            ? t('roles.portalAgent', { defaultValue: 'Agent portal' })
-                            : t('roles.portalAdmin', { defaultValue: 'Admin portal' })}
-                        </h3>
-                        <span className="text-xs font-medium tabular-nums text-muted-foreground">
-                          {portalOn}/{portalTotal}
-                        </span>
-                      </header>
-                      <div className="divide-y divide-foreground/[0.06]">
-                        {areas.map(({ group, label, privs: groupPrivs }) => {
-                          const ticked = groupPrivs.filter((p) => !!shown[p.key]).length;
-                          return (
-                            <fieldset
-                              key={`${portal}-${group}`}
-                              className="grid gap-x-6 gap-y-3 px-5 py-4 sm:px-6 xl:grid-cols-[13rem_minmax(0,1fr)]"
-                            >
-                              <legend className="sr-only">{label}</legend>
-                              {/* The area: tinted glyph, name, how much of it
-                                  this role holds, and the all/none shortcut. */}
-                              <div className="min-w-0 xl:pt-1.5">
-                                <div className="flex items-center gap-2.5">
-                                  <span
-                                    aria-hidden
-                                    className={cn(
-                                      'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
-                                      GROUP_CHIPS[group] ?? 'bg-secondary text-muted-foreground',
-                                    )}
-                                  >
-                                    {GROUP_ICONS[group]}
-                                  </span>
-                                  <span className="min-w-0 flex-1 text-sm font-semibold leading-snug tracking-tight text-foreground">
-                                    {label}
-                                  </span>
-                                  <span
-                                    className={cn(
-                                      'shrink-0 text-2xs font-semibold tabular-nums',
-                                      ticked > 0 ? 'text-primary' : 'text-muted-foreground',
-                                    )}
-                                  >
-                                    {ticked}/{groupPrivs.length}
-                                  </span>
-                                </div>
-                                <div className="mt-2.5 flex items-center gap-3">
-                                  <MeterBar
-                                    value={(ticked / groupPrivs.length) * 100}
-                                    tone="primary"
-                                    className="flex-1"
-                                  />
-                                  {/* Granting a whole area is the common case;
-                                      ticking seven switches one at a time was
-                                      busywork. */}
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setDraft((d) => {
-                                        const all = ticked === groupPrivs.length;
-                                        const next = { ...d.privileges };
-                                        for (const gp of groupPrivs) next[gp.key] = !all;
-                                        return { ...d, privileges: next };
-                                      })
-                                    }
-                                    className="shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                                  >
-                                    {ticked === groupPrivs.length
-                                      ? t('roles.clearGroup', { defaultValue: 'None' })
-                                      : t('roles.allGroup', { defaultValue: 'All' })}
-                                  </button>
-                                </div>
-                              </div>
-                              {/* Even columns of identical switch rows. */}
-                              <ul className="grid gap-x-4 gap-y-0.5 md:grid-cols-2 2xl:grid-cols-3">
-                                {groupPrivs.map((p) => (
-                                  <li key={p.key} className="min-w-0">
-                                    {/*
-                                  A privilege you cannot grant is DISABLED, and a
-                                  disabled switch is silent: clicking it does
-                                  nothing and says nothing, which reads as a bug
-                                  rather than a rule. Only `Operations` held
-                                  `view_ops_dashboard`, so every role editor in
-                                  the system found that one switch inert and had
-                                  no way to learn why (owner, 2026-09-24).
-
-                                  The ceiling stays exactly as it was — this only
-                                  makes it legible: the row dims, the reason is
-                                  printed beside the label instead of hidden in a
-                                  hover title, and the cursor stops promising a
-                                  click. The thumb moves via the logical inset so
-                                  RTL slides the right way.
-                                */}
-                                    <label
-                                      className={cn(
-                                        'flex h-full min-h-11 items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors duration-fast',
-                                        locked || !grantable(p.key)
-                                          ? 'cursor-not-allowed opacity-60'
-                                          : 'cursor-pointer hover:bg-foreground/[0.03]',
-                                      )}
-                                    >
-                                      <span className="min-w-0 flex-1 leading-snug">
-                                        {PRIV_LABELS[p.key]}
-                                        {isOwnerPrivilege(p.key) && (
-                                          <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
-                                            {t('roles.ownerOnlyHint', {
-                                              defaultValue:
-                                                'Only the Administrator sees this switch.',
-                                            })}
-                                          </span>
-                                        )}
-                                        {!locked && !grantable(p.key) && (
-                                          <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
-                                            {t('roles.ceilingHint', {
-                                              defaultValue:
-                                                'You cannot grant a privilege your own role does not hold.',
-                                            })}
-                                          </span>
-                                        )}
-                                      </span>
-                                      <span className="relative inline-flex shrink-0">
-                                        <input
-                                          type="checkbox"
-                                          className="peer sr-only"
-                                          checked={!!shown[p.key]}
-                                          disabled={locked || !grantable(p.key)}
-                                          title={
-                                            !grantable(p.key)
-                                              ? t('roles.ceilingHint', {
-                                                  defaultValue:
-                                                    'You cannot grant a privilege your own role does not hold.',
-                                                })
-                                              : undefined
-                                          }
-                                          onChange={(e) =>
-                                            setDraft((d) => ({
-                                              ...d,
-                                              privileges: {
-                                                ...d.privileges,
-                                                [p.key]: e.target.checked,
-                                              },
-                                            }))
-                                          }
-                                        />
-                                        <span
-                                          aria-hidden
-                                          className="block h-6 w-11 rounded-full bg-foreground/15 transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
-                                        />
-                                        <span
-                                          aria-hidden
-                                          className="pointer-events-none absolute top-0.5 start-0.5 h-5 w-5 rounded-full bg-card shadow-md transition-all duration-fast peer-checked:start-[1.375rem]"
-                                        />
-                                      </span>
-                                    </label>
-                                  </li>
-                                ))}
-                              </ul>
-                            </fieldset>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  );
-                })}
-
-                {/* Brand and branch fences, side by side at desktop width and
-                    stretched to the same height, so the pair ends on one line. */}
-                <div className="grid items-stretch gap-5 xl:grid-cols-2">
-                  {/* brand restriction — the shared SectionCard surface */}
-                  <SectionCard
-                    className="h-full"
-                    title={t('roles.brands', { defaultValue: 'Brand access' })}
-                    hint={t('roles.brandsHelp', {
-                      defaultValue:
-                        'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
-                    })}
-                  >
-                    <div className="flex flex-wrap gap-2">
-                      {(brands.data ?? []).map((b) => {
-                        const on = draft.brands.includes(b.id);
-                        return (
-                          <button
-                            key={b.id}
-                            type="button"
-                            aria-pressed={on}
-                            onClick={() =>
-                              setDraft((d) => ({
-                                ...d,
-                                brands: on
-                                  ? d.brands.filter((x) => x !== b.id)
-                                  : [...d.brands, b.id],
-                              }))
-                            }
-                            className={cn(
-                              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
-                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                              // Tinted chip with hue text — the boards' tag-pill
-                              // treatment for the ticked state.
-                              on
-                                ? 'bg-primary-tint text-primary ring-1 ring-inset ring-primary/30'
-                                : 'bg-secondary text-muted-foreground hover:text-foreground',
-                            )}
-                          >
-                            {b.name}
-                          </button>
-                        );
-                      })}
+                      {creating && (
+                        <Button
+                          size="sm"
+                          variant="secondary"
+                          onClick={() => {
+                            setCreating(false);
+                            setDraft(EMPTY);
+                          }}
+                        >
+                          {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        onClick={() => save.mutate(draft)}
+                        disabled={!draft.name.trim() || save.isPending}
+                        loading={save.isPending}
+                      >
+                        {creating
+                          ? t('roles.create', { defaultValue: 'Create role' })
+                          : t('roles.save', { defaultValue: 'Save role' })}
+                      </Button>
                     </div>
-                  </SectionCard>
+                  </div>
+                  {/* The description GROWS with its text, line breaks kept. */}
+                  <label className="mt-4 flex flex-col gap-1.5">
+                    <span className={FIELD_LABEL}>
+                      {t('roles.description', { defaultValue: 'Description' })}
+                    </span>
+                    <Textarea
+                      rows={2}
+                      dir="auto"
+                      value={draft.description}
+                      onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                      className="min-h-[3.25rem] max-h-56 resize-y leading-relaxed [field-sizing:content]"
+                    />
+                  </label>
+                </section>
 
-                  {/* Branch restriction — one level below brand, for the manager
-                      who owns specific restaurants rather than a whole chain. */}
-                  <SectionCard
-                    className="h-full"
-                    title={t('roles.branches', { defaultValue: 'Branch access' })}
-                    hint={t('roles.branchesHelp', {
-                      defaultValue:
-                        'For a role that owns particular restaurants rather than a whole brand — an area manager. Nothing ticked means every branch the brands above allow. Ticking both narrows to the intersection, and a ticket not yet linked to a branch stays visible either way.',
-                    })}
-                  >
-                    {branchChoices.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        {t('roles.branchesPickBrand', {
-                          defaultValue: 'No branches to choose from yet.',
-                        })}
-                      </p>
-                    ) : (
-                      /* A SEARCH, not 122 chips. See BranchPicker for why the
-                         chosen set and the searchable set are separated. */
-                      <BranchPicker
-                        options={branchChoices}
-                        selected={draft.stores}
-                        onChange={(stores) => setDraft((d) => ({ ...d, stores }))}
+                {/* THE PRIVILEGES: areas on the start side, one area's
+                    switches on the other. */}
+                <section
+                  aria-label={t('roles.privileges', { defaultValue: 'Privileges' })}
+                  className={cn(
+                    SECTION_CARD,
+                    'grid overflow-hidden md:grid-cols-[16.5rem_minmax(0,1fr)]',
+                  )}
+                >
+                  <div className="border-b border-foreground/[0.07] p-3 md:border-b-0 md:border-e">
+                    {portals.length > 1 && (
+                      <ViewSwitch
+                        value={portal?.portal ?? 'agent'}
+                        onChange={setPortalPick}
+                        label={t('roles.portal', { defaultValue: 'Portal' })}
+                        className="mb-3 flex w-full [&>button]:flex-1 [&>button]:justify-center [&>button]:px-2"
+                        options={portals.map((p) => ({
+                          value: p.portal,
+                          label:
+                            p.portal === 'agent'
+                              ? t('roles.portalAgent', { defaultValue: 'Agent portal' })
+                              : t('roles.portalAdmin', { defaultValue: 'Admin portal' }),
+                        }))}
                       />
                     )}
-                  </SectionCard>
-                </div>
+                    <div
+                      role="tablist"
+                      aria-orientation="vertical"
+                      aria-label={t('roles.areas', { defaultValue: 'Privilege areas' })}
+                      onKeyDown={onAreaKey}
+                      className="flex flex-col gap-0.5"
+                    >
+                      {portal?.areas.map((a) => (
+                        <AreaTab
+                          key={a.group}
+                          id={a.group}
+                          active={activeArea === a.group}
+                          onSelect={() => setAreaPick(a.group)}
+                          icon={GROUP_ICONS[a.group]}
+                          chip={GROUP_CHIPS[a.group]}
+                          label={a.label}
+                          count={`${a.on}/${a.privs.length}`}
+                          ratio={a.on / a.privs.length}
+                        />
+                      ))}
+                      {/* The fence is not a privilege, but it is part of what
+                          the role can reach, so it sits in the same list. */}
+                      <div aria-hidden className="mx-2 my-1.5 h-px bg-foreground/[0.07]" />
+                      <AreaTab
+                        id={ACCESS_AREA}
+                        active={activeArea === ACCESS_AREA}
+                        onSelect={() => setAreaPick(ACCESS_AREA)}
+                        icon={<ShieldIcon size={15} />}
+                        chip="bg-secondary text-foreground"
+                        label={t('roles.access', { defaultValue: 'Brand & branch access' })}
+                        count=""
+                        sub={
+                          fenceCount === 0
+                            ? t('roles.accessEvery', { defaultValue: 'Every brand and branch' })
+                            : t('roles.accessFenced', {
+                                b: draft.brands.length,
+                                s: draft.stores.length,
+                                defaultValue: '{{b}} brands · {{s}} branches',
+                              })
+                        }
+                      />
+                    </div>
+                  </div>
 
-                {/* Only the DESTRUCTIVE action lives down here. Save/Create moved
-                    to the toolbar: two buttons that both created a role, one of
-                    them below a fifteen-row privilege matrix, is how an admin
-                    ends up unsure whether their work was kept. Delete stays far
-                    from the primary action on purpose. */}
+                  <div
+                    role="tabpanel"
+                    id={`role-area-panel-${activeArea}`}
+                    aria-labelledby={`role-area-${activeArea}`}
+                    className="min-w-0"
+                  >
+                    {area ? (
+                      <>
+                        <header className="flex min-h-16 flex-wrap items-center gap-x-3 gap-y-2 border-b border-foreground/[0.07] px-5 py-3 sm:px-6">
+                          <h3 className="min-w-0 flex-1 text-base font-semibold tracking-tight text-foreground">
+                            {area.label}
+                            <span className="ms-2 text-sm font-medium tabular-nums text-muted-foreground">
+                              {area.on}/{area.privs.length}
+                            </span>
+                          </h3>
+                          {/* Granting a whole area is the common case. */}
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={area.privs.every((p) => !grantable(p.key) || shown[p.key])}
+                              onClick={() => toggleArea(area.privs, true)}
+                            >
+                              {t('roles.allGroup', { defaultValue: 'All' })}
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              disabled={area.privs.every((p) => !grantable(p.key) || !shown[p.key])}
+                              onClick={() => toggleArea(area.privs, false)}
+                            >
+                              {t('roles.clearGroup', { defaultValue: 'None' })}
+                            </Button>
+                          </div>
+                        </header>
+                        <ul className="divide-y divide-foreground/[0.06]">
+                          {area.privs.map((p) => {
+                            const [label, help] = splitLabel(PRIV_LABELS[p.key] ?? p.key);
+                            const canGrant = grantable(p.key);
+                            /*
+                             * A privilege you cannot grant is DISABLED, and a
+                             * disabled switch is silent - so the reason is
+                             * printed under the label instead of hidden in a
+                             * hover title (owner, 2026-09-24).
+                             */
+                            return (
+                              <li key={p.key}>
+                                <label
+                                  className={cn(
+                                    'flex min-h-16 items-center gap-4 px-5 py-3 transition-colors duration-fast sm:px-6',
+                                    canGrant
+                                      ? 'cursor-pointer hover:bg-foreground/[0.025]'
+                                      : 'cursor-not-allowed',
+                                  )}
+                                >
+                                  <span className={cn('min-w-0 flex-1', !canGrant && 'opacity-60')}>
+                                    <span className="block text-sm font-medium leading-snug text-foreground">
+                                      {label}
+                                    </span>
+                                    {help && (
+                                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                                        {help}
+                                      </span>
+                                    )}
+                                    {isOwnerPrivilege(p.key) && (
+                                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                                        {t('roles.ownerOnlyHint', {
+                                          defaultValue: 'Only the Administrator sees this switch.',
+                                        })}
+                                      </span>
+                                    )}
+                                    {!canGrant && (
+                                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
+                                        {t('roles.ceilingHint', {
+                                          defaultValue:
+                                            'You cannot grant a privilege your own role does not hold.',
+                                        })}
+                                      </span>
+                                    )}
+                                  </span>
+                                  <PrivSwitch
+                                    checked={!!shown[p.key]}
+                                    disabled={!canGrant}
+                                    title={
+                                      !canGrant
+                                        ? t('roles.ceilingHint', {
+                                            defaultValue:
+                                              'You cannot grant a privilege your own role does not hold.',
+                                          })
+                                        : undefined
+                                    }
+                                    onChange={(on) =>
+                                      setDraft((d) => ({
+                                        ...d,
+                                        privileges: { ...d.privileges, [p.key]: on },
+                                      }))
+                                    }
+                                  />
+                                </label>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </>
+                    ) : (
+                      /* Brand and branch fences. */
+                      <div className="divide-y divide-foreground/[0.06]">
+                        <div className="px-5 py-5 sm:px-6">
+                          <h3 className="text-base font-semibold tracking-tight text-foreground">
+                            {t('roles.brands', { defaultValue: 'Brand access' })}
+                          </h3>
+                          <p className="mt-1 max-w-[70ch] text-xs leading-relaxed text-muted-foreground">
+                            {t('roles.brandsHelp', {
+                              defaultValue:
+                                'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
+                            })}
+                          </p>
+                          <div className="mt-4 flex flex-wrap gap-2">
+                            {(brands.data ?? []).map((b) => {
+                              const on = draft.brands.includes(b.id);
+                              return (
+                                <button
+                                  key={b.id}
+                                  type="button"
+                                  aria-pressed={on}
+                                  onClick={() =>
+                                    setDraft((d) => ({
+                                      ...d,
+                                      brands: on
+                                        ? d.brands.filter((x) => x !== b.id)
+                                        : [...d.brands, b.id],
+                                    }))
+                                  }
+                                  className={cn(
+                                    'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
+                                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                                    on
+                                      ? 'bg-primary-tint text-primary ring-1 ring-inset ring-primary/30'
+                                      : 'bg-secondary text-muted-foreground hover:text-foreground',
+                                  )}
+                                >
+                                  {b.name}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                        {/* One level below brand, for the manager who owns
+                            specific restaurants rather than a whole chain. */}
+                        <div className="px-5 py-5 sm:px-6">
+                          <h3 className="text-base font-semibold tracking-tight text-foreground">
+                            {t('roles.branches', { defaultValue: 'Branch access' })}
+                          </h3>
+                          <p className="mt-1 max-w-[70ch] text-xs leading-relaxed text-muted-foreground">
+                            {t('roles.branchesHelp', {
+                              defaultValue:
+                                'For a role that owns particular restaurants rather than a whole brand — an area manager. Nothing ticked means every branch the brands above allow. Ticking both narrows to the intersection, and a ticket not yet linked to a branch stays visible either way.',
+                            })}
+                          </p>
+                          <div className="mt-4">
+                            {branchChoices.length === 0 ? (
+                              <p className="text-xs text-muted-foreground">
+                                {t('roles.branchesPickBrand', {
+                                  defaultValue: 'No branches to choose from yet.',
+                                })}
+                              </p>
+                            ) : (
+                              /* A SEARCH, not 122 chips - see BranchPicker. */
+                              <BranchPicker
+                                options={branchChoices}
+                                selected={draft.stores}
+                                onChange={(stores) => setDraft((d) => ({ ...d, stores }))}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                {/* Only the DESTRUCTIVE action lives down here, far from Save. */}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  {draft.id && (
+                  {draft.id && !creating && (
                     <Button
                       variant="ghost"
+                      size="sm"
                       onClick={() => {
                         if (
                           window.confirm(
@@ -1001,6 +1080,140 @@ export function RolesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The brand/branch fence's key in the area list - not a privilege group. */
+const ACCESS_AREA = 'access';
+
+/**
+ * Label and help from ONE translated string: a trailing parenthetical is the
+ * help line ("Edit or delete own messages (15 min)"). Both languages already
+ * write their qualifiers that way, so there is no second set of strings to
+ * drift from the first.
+ */
+export function splitLabel(text: string): [string, string | null] {
+  const m = /^(.+?)\s*\(([^()]+)\)\s*$/.exec(text);
+  return m ? [m[1]!, m[2]!] : [text, null];
+}
+
+/** One entry in the area list: glyph, name, how much of it is on. */
+function AreaTab({
+  id,
+  active,
+  onSelect,
+  icon,
+  chip,
+  label,
+  count,
+  ratio,
+  sub,
+}: {
+  id: string;
+  active: boolean;
+  onSelect: () => void;
+  icon: React.ReactNode;
+  chip: string | undefined;
+  label: string;
+  count: string;
+  ratio?: number;
+  sub?: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      id={`role-area-${id}`}
+      aria-selected={active}
+      aria-controls={active ? `role-area-panel-${id}` : undefined}
+      tabIndex={active ? 0 : -1}
+      onClick={onSelect}
+      className={cn(
+        'flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-start transition-colors duration-fast',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        active ? 'bg-primary/10 ring-1 ring-inset ring-primary/25' : 'hover:bg-foreground/[0.04]',
+      )}
+    >
+      <span
+        aria-hidden
+        className={cn(
+          'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
+          chip ?? 'bg-secondary text-muted-foreground',
+        )}
+      >
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span
+            className={cn(
+              'min-w-0 flex-1 text-sm leading-snug text-foreground',
+              active ? 'font-semibold' : 'font-medium',
+            )}
+          >
+            {label}
+          </span>
+          {count && (
+            <span
+              className={cn(
+                'shrink-0 text-2xs font-semibold tabular-nums',
+                ratio !== undefined && ratio > 0 ? 'text-primary' : 'text-muted-foreground',
+              )}
+            >
+              {count}
+            </span>
+          )}
+        </span>
+        {ratio !== undefined ? (
+          <span
+            aria-hidden
+            className="mt-1.5 block h-1 overflow-hidden rounded-full bg-foreground/[0.08]"
+          >
+            <span
+              className="block h-full rounded-full bg-primary transition-[width] duration-base ease-out motion-reduce:transition-none"
+              style={{ width: `${Math.round(ratio * 100)}%` }}
+            />
+          </span>
+        ) : (
+          sub && <span className="mt-0.5 block truncate text-2xs text-muted-foreground">{sub}</span>
+        )}
+      </span>
+    </button>
+  );
+}
+
+/** The switch: a real checkbox under a track and thumb. The thumb moves on the
+    logical inset, so RTL slides the right way. */
+function PrivSwitch({
+  checked,
+  disabled,
+  title,
+  onChange,
+}: {
+  checked: boolean;
+  disabled: boolean;
+  title?: string;
+  onChange: (on: boolean) => void;
+}) {
+  return (
+    <span className={cn('relative inline-flex shrink-0', disabled && 'opacity-60')}>
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        disabled={disabled}
+        title={title}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span
+        aria-hidden
+        className="block h-6 w-11 rounded-full bg-foreground/15 transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-card"
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none absolute start-0.5 top-0.5 h-5 w-5 rounded-full bg-card shadow-md transition-all duration-fast peer-checked:start-[1.375rem] motion-reduce:transition-none"
+      />
+    </span>
   );
 }
 

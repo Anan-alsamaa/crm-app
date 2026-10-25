@@ -14,7 +14,6 @@ import {
   formatDateTime,
   HBarChart,
   InboxIcon,
-  Input,
   MeterBar,
   Pill,
   ProgressRing,
@@ -146,7 +145,10 @@ export function AgentPerformancePage() {
   const [filters, setFilters] = useState<Filters>(
     () => saved?.filters ?? { ...defaultPerformanceRange() },
   );
-  const [targetMin, setTargetMin] = useState(DEFAULT_TARGET_MIN);
+  /* THE RESPONSE TARGET IS FIXED (owner, 2026-10-25: remove "Answer within
+     (minutes)" from the filters, as the agent portal did). Chats are scored
+     against the default five minutes, and the tile says so. */
+  const targetMin = DEFAULT_TARGET_MIN;
 
   /* THE TAB LIVES IN THE URL (`?tab=tickets`), so a link opens that sub-page;
      with none it is Chats (owner, 2026-10-15). The remembered tab is NOT
@@ -471,23 +473,6 @@ export function AgentPerformancePage() {
                 />
               </span>
             </Field>
-            {/* The response target only means something for chats. */}
-            {onChats && (
-              <Field label={t('performance.target', { defaultValue: 'Answer within (minutes)' })}>
-                <span className="block w-[7rem]">
-                  <Input
-                    type="number"
-                    min={1}
-                    className="h-8"
-                    aria-label={t('performance.target', {
-                      defaultValue: 'Answer within (minutes)',
-                    })}
-                    value={targetMin}
-                    onChange={(e) => setTargetMin(Math.max(1, Number(e.target.value) || 1))}
-                  />
-                </span>
-              </Field>
-            )}
           </div>
 
           <ViewSwitch
@@ -554,6 +539,14 @@ export function AgentPerformancePage() {
                       }
                       label={t('performance.metPct', { defaultValue: 'Answered in time' })}
                       value={summary.metPct == null ? '—' : `${summary.metPct}%`}
+                      hint={
+                        summary.metPct == null
+                          ? undefined
+                          : t('performance.withinMinutes', {
+                              defaultValue: 'Within {{n}} min',
+                              n: targetMin,
+                            })
+                      }
                       tone={
                         summary.metPct == null ? 'plain' : summary.metPct >= 80 ? 'good' : 'bad'
                       }
