@@ -813,10 +813,21 @@ function Row({
             when an agent left it empty, the ticket's description fills it so
             the supervisor still reads what the customer reported.
           */}
+          {/* LABELLED like every term above it (owner, 2026-10-25): an
+              unlabelled box read as stray text. "Description" is the same word
+              the Edit form uses for this field (`reason`). */}
           {(row.reason?.trim() || row.ticket?.description?.trim()) && (
-            <p className="mt-2.5 rounded-lg bg-secondary/60 px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-foreground/[0.04]">
-              {row.reason?.trim() || row.ticket?.description?.trim()}
-            </p>
+            <div className="mt-2.5 rounded-lg bg-secondary/60 px-3 py-2 ring-1 ring-inset ring-foreground/[0.04]">
+              <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {t('couponApprovals.description', { defaultValue: 'Description' })}
+              </p>
+              <p
+                dir="auto"
+                className="mt-0.5 whitespace-pre-line text-xs leading-relaxed text-foreground"
+              >
+                {row.reason?.trim() || row.ticket?.description?.trim()}
+              </p>
+            </div>
           )}
 
           {/*

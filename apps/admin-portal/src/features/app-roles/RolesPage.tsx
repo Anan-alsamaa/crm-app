@@ -31,7 +31,7 @@ import {
   type Privilege,
 } from '../../lib/privileges.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
+import { FIELD_LABEL, PAGE_BODY, PageHeader, SECTION_CARD } from '../../components/shell/Page.js';
 import { ClearFiltersButton } from '../../components/ClearFiltersButton.js';
 
 /**
@@ -544,27 +544,41 @@ export function RolesPage() {
 
       {/* Scroll lives on the page wrapper. The grid runs the header's full
           width on its gutter (Rapport skin) - the list beside the editor at
-          desktop width, stacked on a phone. */}
+          desktop width, stacked on a phone.
+
+          ONE GRID, ONE RHYTHM (owner, 2026-10-25: "the boxes and cards are not
+          positioned uniformly"). The privilege areas used to be separate cards
+          in a 2- or 4-column grid, so a twelve-switch area sat beside a
+          four-switch one and each row of cards ended at a different height.
+          Now every area is a full-width band inside ONE card per portal: the
+          area's name and meter on the start side, its switches in even columns
+          on the other. Every band is the same width, every switch row the same
+          width, and the gaps between blocks are the same 1.25rem everywhere. */}
       <div className={PAGE_BODY}>
-        <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[20rem_minmax(0,1fr)] lg:items-start">
+        <div className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[19rem_minmax(0,1fr)] lg:items-start">
           {/* ── the roles ── */}
-          <div className="space-y-2">
+          <div className="lg:sticky lg:top-0">
             {roles.isLoading ? (
-              Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-12 rounded-xl" />
-              ))
+              <div className="space-y-2">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 rounded-xl" />
+                ))}
+              </div>
             ) : (
               /* Clean board list — rows flush inside one card, hairline
-               separators, quiet hover; the selected row is jade-tinted. */
-              <div className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] lg:sticky lg:top-4">
-                <div className="flex items-center justify-between gap-2 border-b border-foreground/[0.07] px-3.5 py-2.5">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+               separators, quiet hover; the selected row is tinted. */
+              <div className={cn(SECTION_CARD, 'overflow-hidden')}>
+                <div className="flex min-h-12 items-center justify-between gap-2 border-b border-foreground/[0.07] px-4 py-2.5">
+                  <h2 className="text-sm font-semibold tracking-tight text-foreground">
                     {t('roles.listTitle', { defaultValue: 'Roles' })}
-                  </span>
+                    <span className="ms-2 text-xs font-medium tabular-nums text-muted-foreground">
+                      {(roles.data ?? []).length}
+                    </span>
+                  </h2>
                   {/* Nothing could clear a selection once made, so a built-in
-                      role's read-only panel became a dead end. */}
-                  {/* Always shown; usable only while a role is selected
-                      (owner, 2026-10-22: a usable Clear must look usable). */}
+                      role's read-only panel became a dead end. Always shown;
+                      usable only while a role is selected (owner, 2026-10-22:
+                      a usable Clear must look usable). */}
                   <ClearFiltersButton
                     active={!!draft.id}
                     onClear={() => {
@@ -579,6 +593,8 @@ export function RolesPage() {
                     <li key={r.id}>
                       <button
                         type="button"
+                        data-role-row=""
+                        aria-current={draft.id === r.id ? 'true' : undefined}
                         onClick={() => {
                           // Opening an existing role ends the draft — otherwise
                           // the toolbar keeps offering to "Create" a role that
@@ -587,88 +603,66 @@ export function RolesPage() {
                           setDraft((d) => ({ ...d, id: r.id }));
                         }}
                         className={cn(
-                          'min-h-12 w-full px-3.5 py-2.5 text-start transition-colors duration-fast',
+                          'flex min-h-14 w-full items-center gap-3 px-4 py-2.5 text-start transition-colors duration-fast',
                           'focus-visible:outline-none focus-visible:bg-foreground/[0.05]',
                           draft.id === r.id
                             ? 'bg-primary/10 ring-1 ring-inset ring-primary/30'
                             : 'hover:bg-foreground/[0.03]',
                         )}
                       >
-                        <span className="flex items-center gap-2.5">
-                          <span
-                            aria-hidden
-                            className={cn(
-                              'grid h-8 w-8 shrink-0 place-items-center rounded-xl text-2xs font-bold uppercase',
-                              r.builtin
-                                ? 'bg-secondary text-muted-foreground'
-                                : 'bg-primary-tint text-primary',
-                            )}
-                          >
-                            {r.name.slice(0, 2)}
-                          </span>
-                          <span className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">
+                        <RoleMonogram name={r.name} builtin={r.builtin} />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold text-foreground">
                             {r.name}
                           </span>
-                          {r.builtin ? (
-                            <Pill tone="neutral" size="sm">
-                              {t('roles.builtin', { defaultValue: 'Built-in' })}
-                            </Pill>
-                          ) : r.directus_role ? (
-                            <Pill tone="success" size="sm">
-                              {t('roles.active', { defaultValue: 'Active' })}
-                            </Pill>
-                          ) : (
-                            <Pill tone="warning" size="sm">
-                              {t('roles.pending', { defaultValue: 'Applying…' })}
-                            </Pill>
-                          )}
+                          {/* Permission count under the name, as quiet text. */}
+                          <span className="mt-0.5 block text-2xs leading-snug tabular-nums text-muted-foreground">
+                            {t('roles.privCount', {
+                              n: Object.values(r.privileges ?? {}).filter(Boolean).length,
+                              defaultValue: '{{n}} privileges',
+                            })}
+                            {r.brands && r.brands.length > 0 && (
+                              <>
+                                {' · '}
+                                {t('roles.brandLimited', {
+                                  n: r.brands.length,
+                                  defaultValue: 'Limited to {{n}} brand(s)',
+                                })}
+                              </>
+                            )}
+                          </span>
                         </span>
-                        {/* Permission count under the name — the reference
-                            boards' "12 permissions" chip, as quiet text. */}
-                        <span className="mt-0.5 block text-2xs tabular-nums text-muted-foreground">
-                          {t('roles.privCount', {
-                            n: Object.values(r.privileges ?? {}).filter(Boolean).length,
-                            defaultValue: '{{n}} privileges',
-                          })}
-                          {r.brands && r.brands.length > 0 && (
-                            <>
-                              {' · '}
-                              {t('roles.brandLimited', {
-                                n: r.brands.length,
-                                defaultValue: 'Limited to {{n}} brand(s)',
-                              })}
-                            </>
-                          )}
-                        </span>
+                        <RoleStatus role={r} />
                       </button>
                     </li>
                   ))}
                 </ul>
-                {/* Footer aggregate band — the boards' table anatomy, matching
-                every other board list in the portal. */}
-                <div className="flex items-center justify-between gap-3 border-t border-foreground/[0.06] bg-secondary/30 px-3.5 py-2.5">
-                  <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    {t('roles.total', { defaultValue: 'roles' })}
-                  </span>
-                  <span className="text-sm font-extrabold tabular-nums tracking-[-0.03em] text-foreground">
-                    {(roles.data ?? []).length}
-                  </span>
-                </div>
               </div>
             )}
           </div>
 
           {/* ── the editor ── */}
-          <div className="space-y-4">
+          <div className="min-w-0 space-y-5">
             {locked ? (
-              <div className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]">
-                <h2 className="text-sm font-semibold tracking-tight text-foreground">
-                  {selected?.name}
-                </h2>
-                <p className="mt-2 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-                  {selected?.description}
-                </p>
-                <p className="mt-3 max-w-2xl rounded-xl bg-secondary/50 px-3 py-2 text-2xs leading-relaxed text-muted-foreground">
+              <div className={cn(SECTION_CARD, 'p-5 sm:p-6')}>
+                <div className="flex items-center gap-3">
+                  {selected && <RoleMonogram name={selected.name} builtin={selected.builtin} />}
+                  <h2 className="min-w-0 flex-1 truncate text-base font-semibold tracking-tight text-foreground">
+                    {selected?.name}
+                  </h2>
+                  {selected && <RoleStatus role={selected} />}
+                </div>
+                {/* The WHOLE description, line breaks kept (owner, 2026-10-25:
+                    a multi-line description showed one line). */}
+                {selected?.description?.trim() && (
+                  <p
+                    dir="auto"
+                    className="mt-3 max-w-[70ch] whitespace-pre-line text-sm leading-relaxed text-muted-foreground"
+                  >
+                    {selected.description}
+                  </p>
+                )}
+                <p className="mt-4 max-w-[70ch] rounded-xl bg-secondary/50 px-3.5 py-2.5 text-xs leading-relaxed text-muted-foreground">
                   {t('roles.builtinHelp', {
                     defaultValue:
                       'Built-in roles are defined in code, where their security hardening lives, and cannot be edited here. Create a new role for anything these two do not cover.',
@@ -677,277 +671,304 @@ export function RolesPage() {
               </div>
             ) : (
               <>
-                <div className="grid gap-3 rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] sm:grid-cols-2">
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('roles.name', { defaultValue: 'Role name' })}
-                    </span>
-                    <Input
-                      ref={nameRef}
-                      value={draft.name}
-                      onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
-                      placeholder={t('roles.namePlaceholder', {
-                        defaultValue: 'e.g. Brand Supervisor',
-                      })}
-                    />
-                  </label>
-                  <label className="flex flex-col gap-1.5">
-                    <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('roles.description', { defaultValue: 'Description' })}
-                    </span>
-                    <Textarea
-                      rows={1}
-                      value={draft.description}
-                      onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
-                    />
-                  </label>
+                {/* Role details: name and description side by side, tops
+                    aligned. The description GROWS with its text - it was a
+                    one-row box, so a multi-line description showed one line
+                    (owner, 2026-10-25). */}
+                <div className={cn(SECTION_CARD, 'p-5 sm:p-6')}>
+                  <div className="grid items-start gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+                    <label className="flex flex-col gap-1.5">
+                      <span className={FIELD_LABEL}>
+                        {t('roles.name', { defaultValue: 'Role name' })}
+                      </span>
+                      <Input
+                        ref={nameRef}
+                        value={draft.name}
+                        onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+                        placeholder={t('roles.namePlaceholder', {
+                          defaultValue: 'e.g. Brand Supervisor',
+                        })}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className={FIELD_LABEL}>
+                        {t('roles.description', { defaultValue: 'Description' })}
+                      </span>
+                      <Textarea
+                        rows={3}
+                        dir="auto"
+                        value={draft.description}
+                        onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
+                        className="min-h-[4.75rem] max-h-80 resize-y [field-sizing:content]"
+                      />
+                    </label>
+                  </div>
                 </div>
 
-                {/* privilege matrix — SectionCard-like group cards: compact
-                  title header, hairline-separated tick rows, jade ticks.
-                  items-start keeps a two-item card from stretching to its
-                  seven-item neighbour's height and hoarding dead space. */}
                 {/* TWO PARTS (owner, 2026-10-15): what this role may do in the
                     AGENT portal, then in the ADMIN portal. */}
-                {(['agent', 'admin'] as const).map((portal) => (
-                  <section key={portal} className="space-y-3">
-                    <h3 className="px-1 text-sm font-semibold tracking-tight text-foreground">
-                      {portal === 'agent'
-                        ? t('roles.portalAgent', { defaultValue: 'Agent portal' })
-                        : t('roles.portalAdmin', { defaultValue: 'Admin portal' })}
-                    </h3>
-                    <div className="grid items-start gap-4 sm:grid-cols-2 2xl:grid-cols-4">
-                      {Object.entries(GROUPS).map(([group, label]) => {
-                        const groupPrivs = PRIVS.filter(
-                          (p) => p.group === group && PRIVILEGE_PORTAL[p.key] === portal,
-                        );
-                        // Customers, late orders and coupons hold only the
-                        // Administrator's switches; nobody else sees those cards.
-                        if (groupPrivs.length === 0) return null;
-                        const ticked = groupPrivs.filter((p) => !!shown[p.key]).length;
-                        return (
-                          <fieldset
-                            key={`${portal}-${group}`}
-                            className="rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06]"
-                          >
-                            <legend className="sr-only">{label}</legend>
-                            {/* Each capability area is identified by a tinted glyph
-                            and shows how much of it this role has been given —
-                            four identical grey cards told an admin nothing at a
-                            glance about where a role's power actually sits. */}
-                            <div className="border-b border-foreground/[0.06] pb-3">
-                              <div className="flex items-center gap-2.5">
-                                <span
-                                  aria-hidden
-                                  className={cn(
-                                    'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
-                                    GROUP_CHIPS[group] ?? 'bg-secondary text-muted-foreground',
-                                  )}
-                                >
-                                  {GROUP_ICONS[group]}
-                                </span>
-                                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight text-foreground">
-                                  {label}
-                                </h3>
-                                <span
-                                  className={cn(
-                                    'shrink-0 text-2xs font-semibold tabular-nums',
-                                    ticked > 0 ? 'text-primary' : 'text-muted-foreground',
-                                  )}
-                                >
-                                  {ticked}/{groupPrivs.length}
-                                </span>
-                              </div>
-                              <div className="mt-2.5 flex items-center gap-3">
-                                <MeterBar
-                                  value={(ticked / groupPrivs.length) * 100}
-                                  tone="primary"
-                                  className="flex-1"
-                                />
-                                {/* Granting a whole area is the common case; ticking
-                                seven switches one at a time was busywork. */}
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setDraft((d) => {
-                                      const all = ticked === groupPrivs.length;
-                                      const next = { ...d.privileges };
-                                      for (const gp of groupPrivs) next[gp.key] = !all;
-                                      return { ...d, privileges: next };
-                                    })
-                                  }
-                                  className="shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10"
-                                >
-                                  {ticked === groupPrivs.length
-                                    ? t('roles.clearGroup', { defaultValue: 'None' })
-                                    : t('roles.allGroup', { defaultValue: 'All' })}
-                                </button>
-                              </div>
-                            </div>
-                            <ul className="mt-1 divide-y divide-foreground/[0.06]">
-                              {groupPrivs.map((p) => (
-                                <li key={p.key}>
-                                  {/* Toggle switch, label first — the permission
-                                  rows of the reference console. The thumb
-                                  moves via the logical inset so RTL slides the
-                                  right way. */}
-                                  {/*
-                                A privilege you cannot grant is DISABLED, and a
-                                disabled switch is silent: clicking it does
-                                nothing and says nothing, which reads as a bug
-                                rather than a rule. Only `Operations` held
-                                `view_ops_dashboard`, so every role editor in
-                                the system found that one switch inert and had
-                                no way to learn why (owner, 2026-09-24).
-
-                                The ceiling stays exactly as it was — this only
-                                makes it legible: the row dims, the reason is
-                                printed beside the label instead of hidden in a
-                                hover title, and the cursor stops promising a
-                                click.
-                              */}
-                                  <label
+                {(['agent', 'admin'] as const).map((portal) => {
+                  const areas = Object.entries(GROUPS)
+                    .map(([group, label]) => ({
+                      group,
+                      label,
+                      privs: PRIVS.filter(
+                        (p) => p.group === group && PRIVILEGE_PORTAL[p.key] === portal,
+                      ),
+                    }))
+                    // Customers, late orders and coupons hold only the
+                    // Administrator's switches; nobody else sees those areas.
+                    .filter((a) => a.privs.length > 0);
+                  if (areas.length === 0) return null;
+                  const portalTotal = areas.reduce((n, a) => n + a.privs.length, 0);
+                  const portalOn = areas.reduce(
+                    (n, a) => n + a.privs.filter((p) => !!shown[p.key]).length,
+                    0,
+                  );
+                  return (
+                    <section key={portal} className={cn(SECTION_CARD, 'overflow-hidden')}>
+                      <header className="flex min-h-12 items-center justify-between gap-3 border-b border-foreground/[0.07] px-5 py-3 sm:px-6">
+                        <h3 className="text-sm font-semibold tracking-tight text-foreground">
+                          {portal === 'agent'
+                            ? t('roles.portalAgent', { defaultValue: 'Agent portal' })
+                            : t('roles.portalAdmin', { defaultValue: 'Admin portal' })}
+                        </h3>
+                        <span className="text-xs font-medium tabular-nums text-muted-foreground">
+                          {portalOn}/{portalTotal}
+                        </span>
+                      </header>
+                      <div className="divide-y divide-foreground/[0.06]">
+                        {areas.map(({ group, label, privs: groupPrivs }) => {
+                          const ticked = groupPrivs.filter((p) => !!shown[p.key]).length;
+                          return (
+                            <fieldset
+                              key={`${portal}-${group}`}
+                              className="grid gap-x-6 gap-y-3 px-5 py-4 sm:px-6 xl:grid-cols-[13rem_minmax(0,1fr)]"
+                            >
+                              <legend className="sr-only">{label}</legend>
+                              {/* The area: tinted glyph, name, how much of it
+                                  this role holds, and the all/none shortcut. */}
+                              <div className="min-w-0 xl:pt-1.5">
+                                <div className="flex items-center gap-2.5">
+                                  <span
+                                    aria-hidden
                                     className={cn(
-                                      'flex min-h-9 items-center justify-between gap-2.5 rounded-md px-1.5 py-1.5 text-sm text-foreground transition-colors duration-fast',
-                                      locked || !grantable(p.key)
-                                        ? 'cursor-not-allowed opacity-60'
-                                        : 'cursor-pointer hover:bg-foreground/[0.03]',
+                                      'grid h-8 w-8 shrink-0 place-items-center rounded-xl',
+                                      GROUP_CHIPS[group] ?? 'bg-secondary text-muted-foreground',
                                     )}
                                   >
-                                    <span className="min-w-0 flex-1">
-                                      {PRIV_LABELS[p.key]}
-                                      {isOwnerPrivilege(p.key) && (
-                                        <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
-                                          {t('roles.ownerOnlyHint', {
-                                            defaultValue:
-                                              'Only the Administrator sees this switch.',
-                                          })}
-                                        </span>
+                                    {GROUP_ICONS[group]}
+                                  </span>
+                                  <span className="min-w-0 flex-1 text-sm font-semibold leading-snug tracking-tight text-foreground">
+                                    {label}
+                                  </span>
+                                  <span
+                                    className={cn(
+                                      'shrink-0 text-2xs font-semibold tabular-nums',
+                                      ticked > 0 ? 'text-primary' : 'text-muted-foreground',
+                                    )}
+                                  >
+                                    {ticked}/{groupPrivs.length}
+                                  </span>
+                                </div>
+                                <div className="mt-2.5 flex items-center gap-3">
+                                  <MeterBar
+                                    value={(ticked / groupPrivs.length) * 100}
+                                    tone="primary"
+                                    className="flex-1"
+                                  />
+                                  {/* Granting a whole area is the common case;
+                                      ticking seven switches one at a time was
+                                      busywork. */}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDraft((d) => {
+                                        const all = ticked === groupPrivs.length;
+                                        const next = { ...d.privileges };
+                                        for (const gp of groupPrivs) next[gp.key] = !all;
+                                        return { ...d, privileges: next };
+                                      })
+                                    }
+                                    className="shrink-0 rounded-md px-1.5 py-0.5 text-2xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                  >
+                                    {ticked === groupPrivs.length
+                                      ? t('roles.clearGroup', { defaultValue: 'None' })
+                                      : t('roles.allGroup', { defaultValue: 'All' })}
+                                  </button>
+                                </div>
+                              </div>
+                              {/* Even columns of identical switch rows. */}
+                              <ul className="grid gap-x-4 gap-y-0.5 md:grid-cols-2 2xl:grid-cols-3">
+                                {groupPrivs.map((p) => (
+                                  <li key={p.key} className="min-w-0">
+                                    {/*
+                                  A privilege you cannot grant is DISABLED, and a
+                                  disabled switch is silent: clicking it does
+                                  nothing and says nothing, which reads as a bug
+                                  rather than a rule. Only `Operations` held
+                                  `view_ops_dashboard`, so every role editor in
+                                  the system found that one switch inert and had
+                                  no way to learn why (owner, 2026-09-24).
+
+                                  The ceiling stays exactly as it was — this only
+                                  makes it legible: the row dims, the reason is
+                                  printed beside the label instead of hidden in a
+                                  hover title, and the cursor stops promising a
+                                  click. The thumb moves via the logical inset so
+                                  RTL slides the right way.
+                                */}
+                                    <label
+                                      className={cn(
+                                        'flex h-full min-h-11 items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors duration-fast',
+                                        locked || !grantable(p.key)
+                                          ? 'cursor-not-allowed opacity-60'
+                                          : 'cursor-pointer hover:bg-foreground/[0.03]',
                                       )}
-                                      {!locked && !grantable(p.key) && (
-                                        <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
-                                          {t('roles.ceilingHint', {
-                                            defaultValue:
-                                              'You cannot grant a privilege your own role does not hold.',
-                                          })}
-                                        </span>
-                                      )}
-                                    </span>
-                                    <span className="relative inline-flex shrink-0">
-                                      <input
-                                        type="checkbox"
-                                        className="peer sr-only"
-                                        checked={!!shown[p.key]}
-                                        disabled={locked || !grantable(p.key)}
-                                        title={
-                                          !grantable(p.key)
-                                            ? t('roles.ceilingHint', {
-                                                defaultValue:
-                                                  'You cannot grant a privilege your own role does not hold.',
-                                              })
-                                            : undefined
-                                        }
-                                        onChange={(e) =>
-                                          setDraft((d) => ({
-                                            ...d,
-                                            privileges: {
-                                              ...d.privileges,
-                                              [p.key]: e.target.checked,
-                                            },
-                                          }))
-                                        }
-                                      />
-                                      <span
-                                        aria-hidden
-                                        className="block h-6 w-11 rounded-full bg-foreground/15 transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
-                                      />
-                                      <span
-                                        aria-hidden
-                                        className="pointer-events-none absolute top-0.5 start-0.5 h-5 w-5 rounded-full bg-card shadow-md transition-all duration-fast peer-checked:start-[1.375rem]"
-                                      />
-                                    </span>
-                                  </label>
-                                </li>
-                              ))}
-                            </ul>
-                          </fieldset>
+                                    >
+                                      <span className="min-w-0 flex-1 leading-snug">
+                                        {PRIV_LABELS[p.key]}
+                                        {isOwnerPrivilege(p.key) && (
+                                          <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
+                                            {t('roles.ownerOnlyHint', {
+                                              defaultValue:
+                                                'Only the Administrator sees this switch.',
+                                            })}
+                                          </span>
+                                        )}
+                                        {!locked && !grantable(p.key) && (
+                                          <span className="mt-0.5 block text-2xs leading-snug text-muted-foreground">
+                                            {t('roles.ceilingHint', {
+                                              defaultValue:
+                                                'You cannot grant a privilege your own role does not hold.',
+                                            })}
+                                          </span>
+                                        )}
+                                      </span>
+                                      <span className="relative inline-flex shrink-0">
+                                        <input
+                                          type="checkbox"
+                                          className="peer sr-only"
+                                          checked={!!shown[p.key]}
+                                          disabled={locked || !grantable(p.key)}
+                                          title={
+                                            !grantable(p.key)
+                                              ? t('roles.ceilingHint', {
+                                                  defaultValue:
+                                                    'You cannot grant a privilege your own role does not hold.',
+                                                })
+                                              : undefined
+                                          }
+                                          onChange={(e) =>
+                                            setDraft((d) => ({
+                                              ...d,
+                                              privileges: {
+                                                ...d.privileges,
+                                                [p.key]: e.target.checked,
+                                              },
+                                            }))
+                                          }
+                                        />
+                                        <span
+                                          aria-hidden
+                                          className="block h-6 w-11 rounded-full bg-foreground/15 transition-colors duration-fast peer-checked:bg-primary peer-focus-visible:ring-2 peer-focus-visible:ring-ring/50"
+                                        />
+                                        <span
+                                          aria-hidden
+                                          className="pointer-events-none absolute top-0.5 start-0.5 h-5 w-5 rounded-full bg-card shadow-md transition-all duration-fast peer-checked:start-[1.375rem]"
+                                        />
+                                      </span>
+                                    </label>
+                                  </li>
+                                ))}
+                              </ul>
+                            </fieldset>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  );
+                })}
+
+                {/* Brand and branch fences, side by side at desktop width and
+                    stretched to the same height, so the pair ends on one line. */}
+                <div className="grid items-stretch gap-5 xl:grid-cols-2">
+                  {/* brand restriction — the shared SectionCard surface */}
+                  <SectionCard
+                    className="h-full"
+                    title={t('roles.brands', { defaultValue: 'Brand access' })}
+                    hint={t('roles.brandsHelp', {
+                      defaultValue:
+                        'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
+                    })}
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      {(brands.data ?? []).map((b) => {
+                        const on = draft.brands.includes(b.id);
+                        return (
+                          <button
+                            key={b.id}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() =>
+                              setDraft((d) => ({
+                                ...d,
+                                brands: on
+                                  ? d.brands.filter((x) => x !== b.id)
+                                  : [...d.brands, b.id],
+                              }))
+                            }
+                            className={cn(
+                              'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
+                              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
+                              // Tinted chip with hue text — the boards' tag-pill
+                              // treatment for the ticked state.
+                              on
+                                ? 'bg-primary-tint text-primary ring-1 ring-inset ring-primary/30'
+                                : 'bg-secondary text-muted-foreground hover:text-foreground',
+                            )}
+                          >
+                            {b.name}
+                          </button>
                         );
                       })}
                     </div>
-                  </section>
-                ))}
+                  </SectionCard>
 
-                {/* brand restriction — the shared SectionCard surface */}
-                <SectionCard
-                  title={t('roles.brands', { defaultValue: 'Brand access' })}
-                  hint={t('roles.brandsHelp', {
-                    defaultValue:
-                      'Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a conversation has no brand until a ticket gives it one.',
-                  })}
-                >
-                  <div className="flex flex-wrap gap-2">
-                    {(brands.data ?? []).map((b) => {
-                      const on = draft.brands.includes(b.id);
-                      return (
-                        <button
-                          key={b.id}
-                          type="button"
-                          aria-pressed={on}
-                          onClick={() =>
-                            setDraft((d) => ({
-                              ...d,
-                              brands: on ? d.brands.filter((x) => x !== b.id) : [...d.brands, b.id],
-                            }))
-                          }
-                          className={cn(
-                            'rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-fast',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40',
-                            // Tinted chip with hue text — the boards' tag-pill
-                            // treatment for the ticked state.
-                            on
-                              ? 'bg-primary-tint text-primary ring-1 ring-inset ring-primary/30'
-                              : 'bg-secondary text-muted-foreground hover:text-foreground',
-                          )}
-                        >
-                          {b.name}
-                        </button>
-                      );
+                  {/* Branch restriction — one level below brand, for the manager
+                      who owns specific restaurants rather than a whole chain. */}
+                  <SectionCard
+                    className="h-full"
+                    title={t('roles.branches', { defaultValue: 'Branch access' })}
+                    hint={t('roles.branchesHelp', {
+                      defaultValue:
+                        'For a role that owns particular restaurants rather than a whole brand — an area manager. Nothing ticked means every branch the brands above allow. Ticking both narrows to the intersection, and a ticket not yet linked to a branch stays visible either way.',
                     })}
-                  </div>
-                </SectionCard>
-
-                {/* Branch restriction — one level below brand, for the manager
-                    who owns specific restaurants rather than a whole chain. */}
-                <SectionCard
-                  title={t('roles.branches', { defaultValue: 'Branch access' })}
-                  hint={t('roles.branchesHelp', {
-                    defaultValue:
-                      'For a role that owns particular restaurants rather than a whole brand — an area manager. Nothing ticked means every branch the brands above allow. Ticking both narrows to the intersection, and a ticket not yet linked to a branch stays visible either way.',
-                  })}
-                >
-                  {branchChoices.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">
-                      {t('roles.branchesPickBrand', {
-                        defaultValue: 'No branches to choose from yet.',
-                      })}
-                    </p>
-                  ) : (
-                    /* A SEARCH, not 122 chips. See BranchPicker for why the
-                       chosen set and the searchable set are separated. */
-                    <BranchPicker
-                      options={branchChoices}
-                      selected={draft.stores}
-                      onChange={(stores) => setDraft((d) => ({ ...d, stores }))}
-                    />
-                  )}
-                </SectionCard>
+                  >
+                    {branchChoices.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        {t('roles.branchesPickBrand', {
+                          defaultValue: 'No branches to choose from yet.',
+                        })}
+                      </p>
+                    ) : (
+                      /* A SEARCH, not 122 chips. See BranchPicker for why the
+                         chosen set and the searchable set are separated. */
+                      <BranchPicker
+                        options={branchChoices}
+                        selected={draft.stores}
+                        onChange={(stores) => setDraft((d) => ({ ...d, stores }))}
+                      />
+                    )}
+                  </SectionCard>
+                </div>
 
                 {/* Only the DESTRUCTIVE action lives down here. Save/Create moved
                     to the toolbar: two buttons that both created a role, one of
                     them below a fifteen-row privilege matrix, is how an admin
                     ends up unsure whether their work was kept. Delete stays far
                     from the primary action on purpose. */}
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                   {draft.id && (
                     <Button
                       variant="ghost"
@@ -980,6 +1001,41 @@ export function RolesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** The two-letter tile beside a role's name: tinted for an editable role. */
+function RoleMonogram({ name, builtin }: { name: string; builtin: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'grid h-9 w-9 shrink-0 place-items-center rounded-xl text-2xs font-bold uppercase',
+        builtin ? 'bg-secondary text-muted-foreground' : 'bg-primary-tint text-primary',
+      )}
+    >
+      {name.slice(0, 2)}
+    </span>
+  );
+}
+
+/** Built-in / Active / Applying, the same pill in the list and the editor. */
+function RoleStatus({ role }: { role: Pick<AppRole, 'builtin' | 'directus_role'> }) {
+  const { t } = useTranslation();
+  if (role.builtin)
+    return (
+      <Pill tone="neutral" size="sm">
+        {t('roles.builtin', { defaultValue: 'Built-in' })}
+      </Pill>
+    );
+  return role.directus_role ? (
+    <Pill tone="success" size="sm">
+      {t('roles.active', { defaultValue: 'Active' })}
+    </Pill>
+  ) : (
+    <Pill tone="warning" size="sm">
+      {t('roles.pending', { defaultValue: 'Applying…' })}
+    </Pill>
   );
 }
 

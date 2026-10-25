@@ -54,6 +54,20 @@ describe('Login', () => {
     expect(screen.getByText('login.submit')).toBeInTheDocument();
   });
 
+  // Owner, 2026-10-25: Tab from the login name went to "Forgot password?"
+  // (it sat in the password label) before the password field.
+  it('tabs login name -> password -> Sign in -> Forgot password', async () => {
+    renderLogin();
+    const email = document.getElementById('email') as HTMLInputElement;
+    email.focus();
+    await userEvent.tab();
+    expect(document.activeElement?.id).toBe('password');
+    await userEvent.tab();
+    expect(document.activeElement?.textContent).toContain('login.submit');
+    await userEvent.tab();
+    expect(document.activeElement?.textContent).toBe('Forgot password?');
+  });
+
   it('navigates home when the portal has something for this role', async () => {
     // login() reports the DECISION alongside the identity: the portal admits
     // any role with a screen in it, not administrators only, and the screen

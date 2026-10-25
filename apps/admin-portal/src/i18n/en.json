@@ -1138,6 +1138,7 @@
     "notWritten": "not written"
   },
   "couponApprovals": {
+    "description": "Description",
     "noCode": "no code",
     "agent": "Asked by",
     "customer": "Customer",

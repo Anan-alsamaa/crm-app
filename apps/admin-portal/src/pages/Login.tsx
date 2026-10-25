@@ -223,18 +223,7 @@ export function Login() {
                 </FormField>
 
                 <FormField
-                  label={
-                    <span className="flex items-baseline justify-between gap-3">
-                      <span>{t('auth.password', { ns: 'common' })}</span>
-                      <button
-                        type="button"
-                        onClick={openForgot}
-                        className="rounded-md text-xs font-medium normal-case tracking-normal text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {t('login.forgot', { defaultValue: 'Forgot password?' })}
-                      </button>
-                    </span>
-                  }
+                  label={t('auth.password', { ns: 'common' })}
                   htmlFor="password"
                   error={errors.password?.message}
                   hint={
@@ -254,8 +243,13 @@ export function Login() {
                         onBlur: () => setCapsOn(false),
                       })}
                     />
+                    {/* Out of the Tab sequence on purpose: the owner's order is
+                        login name -> password -> Sign in -> Forgot password, and
+                        a reveal toggle between the password and the submit
+                        button broke it. Still a real button for pointer users. */}
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPw((v) => !v)}
                       aria-pressed={showPw}
                       aria-label={
@@ -288,6 +282,17 @@ export function Login() {
                 >
                   {t('login.submit')}
                 </Button>
+
+                {/* AFTER the submit button in the DOM, so Tab runs login name ->
+                    password -> Sign in -> Forgot password. It used to sit in the
+                    password label, which put it before the password field. */}
+                <button
+                  type="button"
+                  onClick={openForgot}
+                  className="mx-auto block rounded-md text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  {t('login.forgot', { defaultValue: 'Forgot password?' })}
+                </button>
               </form>
             )}
 
