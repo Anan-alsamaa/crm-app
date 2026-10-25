@@ -526,6 +526,19 @@ export function RolesPage() {
   const portal = portals.find((p) => p.portal === portalPick) ?? portals[0];
   const areaKeys = [...(portal?.areas.map((a) => a.group) ?? []), ACCESS_AREA];
   const activeArea = areaKeys.includes(areaPick) ? areaPick : (areaKeys[0] ?? ACCESS_AREA);
+  /* Hovering an area shows it (owner, 2026-10-25) - after a short pause, so
+     sweeping the pointer across the list does not flick through every area. */
+  const hoverTimer = useRef<number | null>(null);
+  const hoverArea = (key: string) => (entering: boolean) => {
+    if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
+    hoverTimer.current = entering ? window.setTimeout(() => setAreaPick(key), 140) : null;
+  };
+  useEffect(
+    () => () => {
+      if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
+    },
+    [],
+  );
   const area = portal?.areas.find((a) => a.group === activeArea) ?? null;
   const fenceCount = draft.brands.length + draft.stores.length;
 
@@ -833,6 +846,7 @@ export function RolesPage() {
                           id={a.group}
                           active={activeArea === a.group}
                           onSelect={() => setAreaPick(a.group)}
+                          onHover={hoverArea(a.group)}
                           icon={GROUP_ICONS[a.group]}
                           chip={GROUP_CHIPS[a.group]}
                           label={a.label}
@@ -847,6 +861,7 @@ export function RolesPage() {
                         id={ACCESS_AREA}
                         active={activeArea === ACCESS_AREA}
                         onSelect={() => setAreaPick(ACCESS_AREA)}
+                        onHover={hoverArea(ACCESS_AREA)}
                         icon={<ShieldIcon size={15} />}
                         chip="bg-secondary text-foreground"
                         label={t('roles.access', { defaultValue: 'Brand & branch access' })}
@@ -1102,6 +1117,7 @@ function AreaTab({
   id,
   active,
   onSelect,
+  onHover,
   icon,
   chip,
   label,
@@ -1112,6 +1128,8 @@ function AreaTab({
   id: string;
   active: boolean;
   onSelect: () => void;
+  /** Hovering shows the area too (owner, 2026-10-25); `null` on leave. */
+  onHover?: (entering: boolean) => void;
   icon: React.ReactNode;
   chip: string | undefined;
   label: string;
@@ -1128,8 +1146,10 @@ function AreaTab({
       aria-controls={active ? `role-area-panel-${id}` : undefined}
       tabIndex={active ? 0 : -1}
       onClick={onSelect}
+      onMouseEnter={onHover ? () => onHover(true) : undefined}
+      onMouseLeave={onHover ? () => onHover(false) : undefined}
       className={cn(
-        'flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-start transition-colors duration-fast',
+        'flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-start transition-colors duration-fast',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
         active ? 'bg-primary/10 ring-1 ring-inset ring-primary/25' : 'hover:bg-foreground/[0.04]',
       )}
@@ -1137,7 +1157,7 @@ function AreaTab({
       <span
         aria-hidden
         className={cn(
-          'grid h-8 w-8 shrink-0 place-items-center rounded-lg',
+          'grid h-7 w-7 shrink-0 place-items-center rounded-lg',
           chip ?? 'bg-secondary text-muted-foreground',
         )}
       >
@@ -1167,7 +1187,7 @@ function AreaTab({
         {ratio !== undefined ? (
           <span
             aria-hidden
-            className="mt-1.5 block h-1 overflow-hidden rounded-full bg-foreground/[0.08]"
+            className="mt-1 block h-1 overflow-hidden rounded-full bg-foreground/[0.08]"
           >
             <span
               className="block h-full rounded-full bg-primary transition-[width] duration-base ease-out motion-reduce:transition-none"
