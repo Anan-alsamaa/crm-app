@@ -781,6 +781,28 @@ export function RolesPage() {
                           {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
                         </Button>
                       )}
+                      {/* Delete sits with the role's other actions at the top (owner,
+                          2026-10-25), in red so it never reads as Save. */}
+                      {draft.id && !creating && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          onClick={() => {
+                            if (
+                              window.confirm(
+                                t('roles.deleteConfirm', {
+                                  name: draft.name,
+                                  defaultValue:
+                                    'Delete “{{name}}”? Users still holding it must be reassigned first.',
+                                }),
+                              )
+                            )
+                              removeRole.mutate(draft.id!);
+                          }}
+                        >
+                          {t('roles.delete', { defaultValue: 'Delete' })}
+                        </Button>
+                      )}
                       <Button
                         size="sm"
                         onClick={() => save.mutate(draft)}
@@ -1060,28 +1082,8 @@ export function RolesPage() {
                   </div>
                 </section>
 
-                {/* Only the DESTRUCTIVE action lives down here, far from Save. */}
+                {/* Delete moved to the header next to Save (owner, 2026-10-25). */}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                  {draft.id && !creating && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        if (
-                          window.confirm(
-                            t('roles.deleteConfirm', {
-                              name: draft.name,
-                              defaultValue:
-                                'Delete “{{name}}”? Users still holding it must be reassigned first.',
-                            }),
-                          )
-                        )
-                          removeRole.mutate(draft.id!);
-                      }}
-                    >
-                      {t('roles.delete', { defaultValue: 'Delete' })}
-                    </Button>
-                  )}
                   <span className="text-2xs text-muted-foreground">
                     {t('roles.assignHint', {
                       defaultValue:
