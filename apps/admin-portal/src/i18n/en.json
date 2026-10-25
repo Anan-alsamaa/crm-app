@@ -1697,5 +1697,15 @@
   "controls": {
     "clearSearch": "Clear search",
     "exportExcelCount": "Export to Excel ({{count}})"
+  },
+  "whatsNew": {
+    "menu": "What’s new",
+    "badge": "New in v{{version}}",
+    "step": "{{current}} of {{total}}",
+    "next": "Next",
+    "back": "Back",
+    "done": "Got it",
+    "close": "Close",
+    "goTo": "Go to slide {{n}}"
   }
 }

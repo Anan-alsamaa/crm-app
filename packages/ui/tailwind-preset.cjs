@@ -284,6 +284,46 @@ module.exports = {
           '0%': { transform: 'scaleY(0)' },
           '100%': { transform: 'scaleY(1)' },
         },
+        /*
+         * WHAT'S NEW (WhatsNewDialog) - opt-in, used nowhere else. A rare,
+         * once-per-release surface, so it may take longer than a working
+         * transition (the owner-approved mockup, 2026-10-25). Transform and
+         * opacity only. The slide distance comes from `--wn-from`, so one
+         * keyframe serves forwards, backwards and RTL.
+         */
+        'wn-pop': {
+          '0%': { opacity: '0', transform: 'translateY(18px) scale(0.96)' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
+        'wn-sheet': {
+          '0%': { opacity: '0.6', transform: 'translateY(100%)' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
+        'wn-slide-in': {
+          '0%': { opacity: '0', transform: 'translateX(var(--wn-from, 16px))' },
+          '100%': { opacity: '1', transform: 'none' },
+        },
+        'wn-slide-out': {
+          '0%': { opacity: '1', transform: 'none' },
+          '100%': { opacity: '0', transform: 'translateX(var(--wn-to, -16px))' },
+        },
+        'wn-glow': {
+          '0%, 100%': { opacity: '0.55', transform: 'scale(1)' },
+          '50%': { opacity: '0.85', transform: 'scale(1.08)' },
+        },
+        // Leaving is quicker than arriving: the reader has already decided.
+        'wn-fade-out': {
+          '0%': { opacity: '1' },
+          '100%': { opacity: '0' },
+        },
+        'wn-pop-out': {
+          '0%': { opacity: '1', transform: 'none' },
+          '100%': { opacity: '0', transform: 'translateY(8px) scale(0.98)' },
+        },
+        'wn-sheet-out': {
+          '0%': { transform: 'none' },
+          '100%': { transform: 'translateY(100%)' },
+        },
       },
       animation: {
         'fade-in': 'fade-in 160ms cubic-bezier(0.23, 1, 0.32, 1) both',
@@ -298,6 +338,16 @@ module.exports = {
         'rise-in': 'rise-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both',
         'grow-x': 'grow-x 700ms cubic-bezier(0.23, 1, 0.32, 1) both',
         'grow-y': 'grow-y 700ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'wn-backdrop': 'fade-in 350ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        // A spring-ish settle: the curve ends a hair past 1 and comes back.
+        'wn-pop': 'wn-pop 460ms cubic-bezier(0.2, 0.9, 0.25, 1.05) 80ms both',
+        'wn-sheet': 'wn-sheet 420ms cubic-bezier(0.32, 0.72, 0, 1) both',
+        'wn-slide-in': 'wn-slide-in 340ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'wn-slide-out': 'wn-slide-out 220ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'wn-glow': 'wn-glow 3.2s ease-in-out infinite',
+        'wn-fade-out': 'wn-fade-out 200ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'wn-pop-out': 'wn-pop-out 180ms cubic-bezier(0.23, 1, 0.32, 1) both',
+        'wn-sheet-out': 'wn-sheet-out 220ms cubic-bezier(0.32, 0.72, 0, 1) both',
       },
       boxShadow: {
         // Elevation ramp for floating surfaces (soft, layered ambient+key).

@@ -1019,5 +1019,15 @@
     "title": "AI suggestion - not sent",
     "use": "Use this",
     "handover": "The AI would hand this chat to an agent: {{reason}}"
+  },
+  "whatsNew": {
+    "menu": "What’s new",
+    "badge": "New in v{{version}}",
+    "step": "{{current}} of {{total}}",
+    "next": "Next",
+    "back": "Back",
+    "done": "Got it",
+    "close": "Close",
+    "goTo": "Go to slide {{n}}"
   }
 }

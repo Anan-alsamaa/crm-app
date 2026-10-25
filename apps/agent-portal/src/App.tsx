@@ -36,6 +36,7 @@ import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 import { NewMessageSound } from './components/NewMessageSound.js';
 import { ChatAlerts } from './components/ChatAlerts.js';
 import { receivesChatAlerts } from './lib/chat-alerts.js';
+import { AgentWhatsNew } from './features/whats-new/WhatsNew.js';
 
 // Route pages are code-split so the initial bundle stays lean; each loads on
 // first navigation behind the shared Suspense fallback below.
@@ -408,7 +409,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   // the start, the flat nav pills in the middle, utilities at the end. The
   // rail still exists but only as the mobile drawer.
   return (
-    <>
+    /* What's new: inside the signed-in shell only, never over the login page. */
+    <AgentWhatsNew>
       <AgentShell
         nav={<TopNav sections={sections} />}
         /* Count the headline numerals up on every page but the inbox, whose
@@ -501,7 +503,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       {/* New-chat alerts: WeCare roles only, always on (owner, 2026-10-22). */}
       {chatAlertsFor && <ChatAlerts />}
       <Toaster position="bottom" />
-    </>
+    </AgentWhatsNew>
   );
 }
 

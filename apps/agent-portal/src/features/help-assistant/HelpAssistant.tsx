@@ -2,7 +2,7 @@ import type { JSX } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
-import { AI_SKIN, Button, cn, Drawer, Pill, Textarea } from '@yiji/ui';
+import { AI_SKIN, Button, cn, Drawer, Pill, Textarea, useWhatsNew } from '@yiji/ui';
 import {
   HELP_HISTORY_MAX_TURNS,
   type AuraAction,
@@ -134,6 +134,8 @@ export function HelpAssistant(): JSX.Element {
   const { user } = useAuth();
   const firstName = user?.first_name?.trim() || t('helpAssistant.there', { defaultValue: 'there' });
   const [open, setOpen] = useState(false);
+  /** The release tour, when this person has one (null outside its provider). */
+  const whatsNew = useWhatsNew();
   const [question, setQuestion] = useState('');
   /** This session's transcript, oldest first. Never leaves the component. */
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -447,6 +449,26 @@ export function HelpAssistant(): JSX.Element {
                 {t('helpAssistant.role', { defaultValue: 'CRM assistant' })}
               </span>
             </span>
+            {/* What's new: the way back into this release's tour, for the
+                people it was written for (owner, 2026-10-25). */}
+            {whatsNew?.available && (
+              <button
+                type="button"
+                onClick={() => {
+                  close();
+                  whatsNew.open();
+                }}
+                className={cn(
+                  'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-[background-color,transform] duration-fast ease-out hover:bg-primary/[0.17] motion-safe:active:scale-[0.97]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+                )}
+              >
+                <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
+                  <path d="M8 1.6 9.4 5.2 13 6.6 9.4 8 8 11.6 6.6 8 3 6.6 6.6 5.2 8 1.6Z" />
+                </svg>
+                {t('whatsNew.menu', { defaultValue: 'What’s new' })}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => setTurns([])}

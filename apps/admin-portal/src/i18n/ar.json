@@ -2198,5 +2198,15 @@
   "controls": {
     "clearSearch": "مسح البحث",
     "exportExcelCount": "تصدير إلى إكسل ({{count}})"
+  },
+  "whatsNew": {
+    "menu": "ما الجديد",
+    "badge": "جديد في v{{version}}",
+    "step": "{{current}} من {{total}}",
+    "next": "التالي",
+    "back": "السابق",
+    "done": "فهمت",
+    "close": "إغلاق",
+    "goTo": "الانتقال إلى الشريحة {{n}}"
   }
 }

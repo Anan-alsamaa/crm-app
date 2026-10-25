@@ -33,6 +33,7 @@ import { LanguageToggle } from './components/LanguageToggle.js';
 import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { PageRefresh } from './components/PageRefresh.js';
 import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
+import { AdminWhatsNew } from './features/whats-new/WhatsNew.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
 import { AppKeyboardShortcuts } from './components/AppKeyboardShortcuts.js';
 
@@ -555,7 +556,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   // and a floating dark rail of quick actions. The vertical Rail below still
   // backs the mobile drawer.
   return (
-    <>
+    /* What's new: inside the signed-in shell only, never over the login page. */
+    <AdminWhatsNew>
       <AdminShell
         nav={<TopNav sections={sections} />}
         language={<LanguageToggle />}
@@ -630,7 +632,7 @@ function Shell({ children }: { children: React.ReactNode }) {
       <NewVersionBanner />
       <AppKeyboardShortcuts />
       <Toaster position="bottom" />
-    </>
+    </AdminWhatsNew>
   );
 }
 

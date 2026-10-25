@@ -152,3 +152,22 @@ export type {
   SectionCardProps,
 } from './Metrics.js';
 export { AI_SKIN } from './aiSkin.js';
+export {
+  WhatsNewDialog,
+  WhatsNewProvider,
+  useWhatsNew,
+  whatsNewCopy,
+  whatsNewStorageKey,
+  hasSeenWhatsNew,
+  markWhatsNewSeen,
+} from './WhatsNew.js';
+export type {
+  WhatsNewSlide,
+  WhatsNewCopy,
+  WhatsNewLocalized,
+  WhatsNewRelease,
+  WhatsNewLabels,
+  WhatsNewDialogProps,
+  WhatsNewContextValue,
+  WhatsNewProviderProps,
+} from './WhatsNew.js';
