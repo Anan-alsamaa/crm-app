@@ -1,5 +1,6 @@
 import { test, expect, type Page } from '@playwright/test';
 import { ADMIN_URL } from '../../../../tests/e2e-setup/urls';
+import { dismissWhatsNew } from '../../../../tests/e2e-setup/whats-new';
 
 /**
  * US1 — admin login + create team + create user (T026).
@@ -64,6 +65,9 @@ async function login(page: import('@playwright/test').Page) {
   await expect(page.getByRole('heading', { name: /^dashboard$/i, level: 1 })).toBeVisible({
     timeout: 20_000,
   });
+  // The Administrator gets the "What's new" tour on a new version; close it
+  // as a person would before driving the page behind it.
+  await dismissWhatsNew(page);
 }
 
 /**
