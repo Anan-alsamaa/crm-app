@@ -67,8 +67,9 @@ export function LateBy({
   const word = t(`lateOrders.board.severity.${sev}`, {
     defaultValue: sev === 'late' ? 'Late' : sev === 'veryLate' ? 'Very late' : 'Critical',
   });
-  /* Critical: no visible word, only for assistive tech (owner, 2026-10-25). */
-  const wordEl = sev === 'critical' ? <span className="sr-only">{word}</span> : null;
+  /* No visible word at any step - the colour carries it on screen; the word
+     stays for assistive tech (owner, 2026-10-25). */
+  const wordEl = <span className="sr-only">{word}</span>;
   if (size === 'table')
     return (
       <span className="inline-flex items-center gap-2 whitespace-nowrap">
@@ -81,7 +82,7 @@ export function LateBy({
         >
           {formatLate(minutes)}
         </span>
-        {wordEl ?? <span className="text-xs font-semibold text-foreground/70">{word}</span>}
+        {wordEl}
       </span>
     );
   return (
@@ -96,9 +97,7 @@ export function LateBy({
       >
         {formatLate(minutes)}
       </span>
-      {wordEl ?? (
-        <span className="text-xs font-semibold text-foreground/70 2xl:text-sm">{word}</span>
-      )}
+      {wordEl}
     </span>
   );
 }

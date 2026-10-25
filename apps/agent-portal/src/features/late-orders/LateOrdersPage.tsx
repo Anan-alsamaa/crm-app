@@ -1843,7 +1843,8 @@ export function LateOrdersPage() {
   /*
    * THE BOARD ROW (owner, 2026-10-22: the wall-TV view; columns set 2026-10-25).
    *
-   * Exactly the owner's eleven, in his order: Total time, the four legs
+   * The owner's eleven, in his order, plus the order number after Total time
+   * (owner, 2026-10-25: "should be there"): Total time, the four legs
    * (service, driver arrival, delivery, preparation), brand, restaurant,
    * customer mobile, order status, the decision state, and the source of
    * delay. Every value is the TABLE's own (`timesOf`, `stateOf`, `kindOf`,
@@ -1856,9 +1857,9 @@ export function LateOrdersPage() {
    */
   const boardCols = cn(
     'grid items-center gap-x-3 px-5',
-    'grid-cols-[7.75rem_repeat(4,5rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_7.25rem_minmax(0,0.9fr)_6.5rem_9rem_6.75rem]',
+    'grid-cols-[7.75rem_5.5rem_repeat(4,5rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_7.25rem_minmax(0,0.9fr)_6.5rem_9rem_6.75rem]',
     '2xl:gap-x-5 2xl:px-8',
-    '2xl:grid-cols-[10.5rem_repeat(4,6.75rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_9.5rem_minmax(0,0.9fr)_9.5rem_11rem_7.5rem]',
+    '2xl:grid-cols-[10.5rem_7rem_repeat(4,6.75rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_9.5rem_minmax(0,0.9fr)_9.5rem_11rem_7.5rem]',
   );
   const stateTone: Record<LateOrderState, { dot: string; label: string }> = {
     pending: {
@@ -1937,6 +1938,14 @@ export function LateOrdersPage() {
               {t('lateOrders.new', { defaultValue: 'New' })}
             </span>
           )}
+        </div>
+        <div role="cell">
+          <span
+            dir="ltr"
+            className="text-base font-semibold tabular-nums text-foreground 2xl:text-xl"
+          >
+            {row.orderId}
+          </span>
         </div>
         <div role="cell">{boardLeg(times.serviceMinutes, !row.closedAt)}</div>
         <div role="cell">{boardLeg(times.driverArrivalMinutes)}</div>
@@ -2489,6 +2498,7 @@ export function LateOrdersPage() {
                   {(
                     [
                       ['lateOrders.col.elapsed', 'Total time'],
+                      ['lateOrders.col.order', 'Order'],
                       ['lateOrders.col.service', 'Service time'],
                       ['lateOrders.col.driverArrival', 'Driver arrival'],
                       ['lateOrders.col.delivery', 'Delivery time'],
