@@ -47,6 +47,14 @@ export const SuggestReplyRequest = z.object({
   conversationId: z.string().uuid(),
   draft: z.string().optional(),
   locale: Locale.optional(),
+  /**
+   * Who decided `locale`.
+   *  - `draft` (or absent, for older clients): the language the agent WROTE
+   *    in wins over `locale` — Enhance must answer an Arabic draft in Arabic.
+   *  - `agent`: the agent picked it in the AI panel's EN/AR control, so it
+   *    wins over the draft's language.
+   */
+  localeSource: z.enum(['draft', 'agent']).optional(),
 });
 export type SuggestReplyRequest = z.infer<typeof SuggestReplyRequest>;
 export const SuggestReplyResponse = z.object({ reply: z.string() });
@@ -236,3 +244,20 @@ export const AiFeatureConfig = z.object({
   autoReplyMaxTurns: z.number().int().min(1).max(10).default(3),
 });
 export type AiFeatureConfig = z.infer<typeof AiFeatureConfig>;
+
+/**
+ * The language a piece of text is WRITTEN in, by script: Arabic letters vs
+ * Latin letters, the majority wins (ties go to Arabic — a mixed draft with an
+ * order number or a brand name in Latin is still an Arabic draft). Digits and
+ * punctuation say nothing, so text with no letters at all is `undefined`.
+ *
+ * One rule shared by the agent portal (Enhance states the draft's language)
+ * and the AI gateway (the prompt keeps it).
+ */
+export function textLanguage(text: string | undefined | null): 'ar' | 'en' | undefined {
+  if (!text) return undefined;
+  const arabic = (text.match(/\p{Script=Arabic}/gu) ?? []).length;
+  const latin = (text.match(/[A-Za-z]/g) ?? []).length;
+  if (arabic === 0 && latin === 0) return undefined;
+  return arabic >= latin ? 'ar' : 'en';
+}

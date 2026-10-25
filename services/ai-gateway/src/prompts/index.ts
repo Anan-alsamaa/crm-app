@@ -1,3 +1,4 @@
+import { textLanguage } from '@yiji/shared-types';
 import type { ConversationContext } from '../directus/index.js';
 import { helpAssistant } from './help-assistant.js';
 
@@ -66,11 +67,7 @@ function thread(ctx: ConversationContext): string {
  * empty or script-less draft falls back to the portal language.
  */
 export function draftLanguage(draft: string | undefined): 'ar' | 'en' | undefined {
-  if (!draft) return undefined;
-  const arabic = (draft.match(/\p{Script=Arabic}/gu) ?? []).length;
-  const latin = (draft.match(/[A-Za-z]/g) ?? []).length;
-  if (arabic === 0 && latin === 0) return undefined;
-  return arabic >= latin ? 'ar' : 'en';
+  return textLanguage(draft);
 }
 
 function writeIn(locale: string | undefined): string {
@@ -101,12 +98,29 @@ export const prompts = {
     ctx: ConversationContext,
     draft: string | undefined,
     uiLocale: string | undefined,
+    /**
+     * `agent`: the locale is the agent's explicit EN/AR pick in the AI panel and
+     * beats the draft. Otherwise (Enhance, older clients) the draft's own
+     * language wins — an Arabic draft is improved in Arabic, never translated.
+     */
+    localeSource?: 'draft' | 'agent',
   ): { system: string; user: string } {
-    const locale = draftLanguage(draft) ?? uiLocale;
+    const written = draftLanguage(draft);
+    const locale = localeSource === 'agent' ? (uiLocale ?? written) : (written ?? uiLocale);
+    const ar = !!locale && locale.toLowerCase().startsWith('ar');
+    /* Said twice on purpose for a draft: as the output language, and as "keep
+       the draft's language" — the model otherwise drifts to the language of
+       the thread or of the instructions (English) when it rewrites. */
+    const keepDraft =
+      draft && written && written === locale
+        ? `The agent wrote the draft in ${ar ? 'ARABIC' : 'ENGLISH'}: the improved version MUST ` +
+          `stay in ${ar ? 'ARABIC' : 'ENGLISH'} — improve it, do not translate it. `
+        : '';
     return {
       system:
         'You draft helpful, concise customer-support replies on behalf of an agent. ' +
-        "Match the customer's language. Be specific, never invent facts. " +
+        (locale ? '' : "Match the customer's language. ") +
+        'Be specific, never invent facts. ' +
         'No greetings or sign-offs unless the existing thread sets that tone. ' +
         // This output is sent TO a customer, so it is the highest-risk endpoint:
         // never let the thread talk the model into promising something.
@@ -121,16 +135,25 @@ export const prompts = {
           locale
             ? `WRITE THE REPLY IN THIS LANGUAGE: ${locale}. It overrides everything ` +
               'else — including the language of the thread. ' +
-              (locale.toLowerCase().startsWith('ar')
-                ? 'Write natural Modern Standard Arabic, not transliteration. '
-                : '')
+              (ar
+                ? 'That is ARABIC: write natural Modern Standard Arabic, not transliteration. '
+                : 'That is ENGLISH. ') +
+              keepDraft
             : 'Reply in the language the CUSTOMER is writing in — an Arabic thread gets an ' +
               'Arabic reply. '
         }` +
         GUARD,
       user:
-        `Conversation so far:\n${fence(thread(ctx))}\n\n` +
-        `${draft ? `Agent's draft to refine:\n${fence(draft)}` : 'Propose a reply.'}`,
+        `Conversation so far:
+${fence(thread(ctx))}
+
+` +
+        `${
+          draft
+            ? `Agent's draft to refine:
+${fence(draft)}`
+            : 'Propose a reply.'
+        }`,
     };
   },
 

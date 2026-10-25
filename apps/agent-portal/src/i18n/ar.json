@@ -1071,7 +1071,16 @@
       "waitingSignup": "بانتظار انضمام العميل إلى ييجي"
     },
     "vendor": "البائع",
-    "allVendors": "كل البائعين"
+    "allVendors": "كل البائعين",
+    "allAnswered": "تم الرد على كل المحادثات",
+    "answeredCount": "{{n}} تم الرد عليها",
+    "avgMedian": "المتوسط · الوسيط {{median}}",
+    "commonHint": "التُقطت لصالح الفريق",
+    "noDataInRange": "لا توجد بيانات في هذه الفترة",
+    "noReplyHint": "بانتظار أول رد",
+    "rowsPerPage": "عدد الصفوف في الصفحة",
+    "showingRange": "{{from}}–{{to}} من {{total}} محادثة",
+    "withinMinutes": "خلال {{n}} دقائق"
   },
   "coupons": {
     "title": "قسائمي",
@@ -1174,7 +1183,8 @@
     "langAll": "الكل",
     "noneInLang": "لا توجد ردود بهذه اللغة. جرّب الكل.",
     "openReasons": "تفسيرات جاهزة",
-    "openActions": "إجراءات جاهزة"
+    "openActions": "إجراءات جاهزة",
+    "language": "اللغة"
   },
   "lists": {
     "issuingSide": "جهة الإصدار",
@@ -1324,6 +1334,8 @@
       "colHandling": "المعالجة",
       "byAgent": "بواسطة {{name}}",
       "cart": "السلة",
+      "colState": "الحالة",
+      "rowActions": "إجراءات الطلب {{order}}",
       "severity": {
         "late": "متأخر",
         "veryLate": "متأخر جدًا",

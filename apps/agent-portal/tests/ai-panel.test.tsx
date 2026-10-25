@@ -149,6 +149,56 @@ describe('AiPanel — reply language', () => {
     expect(screen.queryByRole('button', { name: 'Score lead' })).toBeNull();
   });
 
+  it('re-asks the shown summary in Arabic when the agent switches language', async () => {
+    // Owner, 2026-10-25: the title turned Arabic and the summary stayed English.
+    ai.summarize.mockImplementation(async (_c: unknown, _id: string, locale: string) => ({
+      summary: locale === 'ar' ? 'ملخص عربي' : 'English summary',
+    }));
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+    await waitFor(() => expect(screen.getByText('English summary')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    await waitFor(() => expect(screen.getByText('ملخص عربي')).toBeInTheDocument());
+    expect(screen.queryByText('English summary')).toBeNull();
+    expect(ai.summarize).toHaveBeenCalledTimes(2);
+    expect(ai.summarize.mock.calls[1]![2]).toBe('ar');
+  });
+
+  it('does not spend a second call when switching back to a language already fetched', async () => {
+    ai.summarize.mockImplementation(async (_c: unknown, _id: string, locale: string) => ({
+      summary: locale === 'ar' ? 'ملخص عربي' : 'English summary',
+    }));
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+    await waitFor(() => expect(screen.getByText('English summary')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    await waitFor(() => expect(screen.getByText('ملخص عربي')).toBeInTheDocument());
+    await userEvent.click(screen.getByRole('button', { name: 'en' }));
+    await waitFor(() => expect(screen.getByText('English summary')).toBeInTheDocument());
+    expect(ai.summarize).toHaveBeenCalledTimes(2);
+  });
+
+  it('makes no AI call on a language switch when nothing is shown', async () => {
+    renderPanel();
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    expect(ai.summarize).not.toHaveBeenCalled();
+    expect(ai.suggestReply).not.toHaveBeenCalled();
+    expect(ai.entities).not.toHaveBeenCalled();
+  });
+
+  it('re-drafts a suggested reply in the new language from the same draft', async () => {
+    const onReplySuggested = vi.fn();
+    ai.suggestReply.mockImplementation(async (_c: unknown, _id: string, o: { locale: string }) => ({
+      reply: o.locale === 'ar' ? 'رد عربي' : 'English reply',
+    }));
+    renderPanel({ draft: 'checking', onReplySuggested });
+    await userEvent.click(screen.getByRole('button', { name: 'Suggest reply' }));
+    await waitFor(() => expect(onReplySuggested).toHaveBeenCalledWith('English reply'));
+    await userEvent.click(screen.getByRole('button', { name: 'ar' }));
+    await waitFor(() => expect(onReplySuggested).toHaveBeenCalledWith('رد عربي'));
+    expect(ai.suggestReply.mock.calls[1]![2]).toMatchObject({ locale: 'ar', draft: 'checking' });
+  });
+
   it('classifies against the ticket types the ticket form offers', async () => {
     // A generic tag like "shipping_issue" is a translation job handed back to
     // the agent; the point is an answer they can use as-is.

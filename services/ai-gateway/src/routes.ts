@@ -318,12 +318,12 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     // MV-4: the cap bucket and AI config are the CONVERSATION's vendor's.
     const scoped = scopeCallerToVendor(caller, ctx.vendor);
 
-    const cacheKey = `reply:${body.data.conversationId}:${ctx.messages.length}:${body.data.draft ?? ''}:${body.data.locale ?? ''}`;
+    const cacheKey = `reply:${body.data.conversationId}:${ctx.messages.length}:${body.data.draft ?? ''}:${body.data.locale ?? ''}:${body.data.localeSource ?? ''}`;
     const gateRes = await gate(scoped, reply, AI_ENDPOINTS.suggestReply, cacheKey, req.ip);
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as SuggestReplyResponse);
 
-    const p = prompts.suggestReply(ctx, body.data.draft, body.data.locale);
+    const p = prompts.suggestReply(ctx, body.data.draft, body.data.locale, body.data.localeSource);
     try {
       const result: SuggestReplyResponse = await runWith(
         { caller: scoped, conversationId: conversationIdOf(req.body) },

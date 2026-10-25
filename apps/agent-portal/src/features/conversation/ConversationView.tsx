@@ -1665,8 +1665,9 @@ export function ConversationView({
               on each row, not looking good").
 
               Mode first, because it decides what the box below IS; then the
-              two ways of not typing from scratch (quick replies + their
-              language); then the AI tools pushed to the end. Every control is
+              two ways of not typing from scratch (quick replies - their
+              language control lives inside the opened box, owner
+              2026-10-25); then the AI tools pushed to the end. Every control is
               one 32px pill or a 32px segmented pill, so the row has one height
               and one baseline. It wraps only when the pane is genuinely
               narrow, and then the AI pair keeps to the end of its own line.

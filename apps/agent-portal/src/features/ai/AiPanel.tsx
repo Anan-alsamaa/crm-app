@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation } from '@tanstack/react-query';
 import { Button, cn, Pill, Spinner } from '@yiji/ui';
@@ -67,9 +67,8 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
    * picked AR, the draft came back in Arabic, and the buttons that produced it
    * stayed in English.
    */
-  const portalLocale: 'en' | 'ar' = (i18n.language ?? 'en').toLowerCase().startsWith('ar')
-    ? 'ar'
-    : 'en';
+  type Loc = 'en' | 'ar';
+  const portalLocale: Loc = (i18n.language ?? 'en').toLowerCase().startsWith('ar') ? 'ar' : 'en';
   const [chosenLocale, setChosenLocale] = useState<'en' | 'ar' | null>(null);
   const uiLocale: 'en' | 'ar' = chosenLocale ?? portalLocale;
   const setReplyLocale = setChosenLocale;
@@ -84,16 +83,55 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
   const [active, setActive] = useState<ResultKey | null>(null);
   const lists = useOptionLists();
 
+  /**
+   * Results that are WRITTEN in a language, kept per language.
+   *
+   * The selector used to change only the labels: an English summary stayed
+   * English under an Arabic heading (owner, 2026-10-25). Now the shown result
+   * always matches the selected language — switching re-requests it once, and
+   * switching back shows the copy already in hand, so toggling EN/AR does not
+   * spend a model call per press. Mood and ticket type are not here: mood is a
+   * closed set translated on this side, and the ticket type answers in the
+   * ticket form's own vocabulary whatever the panel language.
+   */
+  type Written = {
+    summary: Awaited<ReturnType<typeof ai.summarize>>;
+    reply: Awaited<ReturnType<typeof ai.suggestReply>>;
+    entities: Awaited<ReturnType<typeof ai.entities>>;
+  };
+  type WrittenKey = keyof Written;
+  const [written, setWritten] = useState<{ [K in WrittenKey]: Partial<Record<Loc, Written[K]>> }>({
+    summary: {},
+    reply: {},
+    entities: {},
+  });
+  const remember = <K extends WrittenKey>(key: K, locale: Loc, data: Written[K]) =>
+    setWritten((w) => ({ ...w, [key]: { ...w[key], [locale]: data } }));
+  /** `${key}:${locale}` asked for since the agent last pressed that action — one try each, so a failure never loops. */
+  const requested = useRef(new Set<string>());
+  /** The draft the last Suggest reply was built on, reused when it is re-asked in another language. */
+  const replyDraft = useRef<string | undefined>(undefined);
+
   const summarize = useMutation({
-    mutationFn: () => ai.summarize(caller, conversationId, uiLocale),
-    onSuccess: () => setActive('summary'),
+    mutationFn: (v: { locale: Loc }) => ai.summarize(caller, conversationId, v.locale),
+    onSuccess: (data, v) => {
+      remember('summary', v.locale, data);
+      setActive('summary');
+    },
   });
   const suggestReply = useMutation({
     // Always explicit. The gateway treats a stated locale as overriding the
     // language of the thread, which is exactly what is wanted here: the agent
     // (or their portal) has said which language this customer is answered in.
-    mutationFn: () => ai.suggestReply(caller, conversationId, { draft, locale: uiLocale }),
-    onSuccess: (data) => {
+    mutationFn: (v: { locale: Loc; draft?: string }) =>
+      ai.suggestReply(caller, conversationId, {
+        draft: v.draft,
+        locale: v.locale,
+        // The panel's EN/AR pick is explicit, so it beats the draft's language.
+        localeSource: 'agent',
+      }),
+    onSuccess: (data, v) => {
+      remember('reply', v.locale, data);
       setActive('reply');
       onReplySuggested?.(data.reply);
     },
@@ -109,9 +147,58 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
     onSuccess: () => setActive('intent'),
   });
   const entities = useMutation({
-    mutationFn: () => ai.entities(caller, conversationId, uiLocale),
-    onSuccess: () => setActive('entities'),
+    mutationFn: (v: { locale: Loc }) => ai.entities(caller, conversationId, v.locale),
+    onSuccess: (data, v) => {
+      remember('entities', v.locale, data);
+      setActive('entities');
+    },
   });
+
+  /** A press of a written action: fresh content, so every language's copy of it is dropped. */
+  const runWritten = (key: WrittenKey) => {
+    setWritten((w) => ({ ...w, [key]: {} }));
+    for (const k of [...requested.current])
+      if (k.startsWith(`${key}:`)) requested.current.delete(k);
+    requested.current.add(`${key}:${uiLocale}`);
+    if (key === 'summary') summarize.mutate({ locale: uiLocale });
+    else if (key === 'entities') entities.mutate({ locale: uiLocale });
+    else {
+      replyDraft.current = draft;
+      suggestReply.mutate({ locale: uiLocale, draft });
+    }
+  };
+
+  const writtenMutation = { summary: summarize, reply: suggestReply, entities } as const;
+  const activeWritten: WrittenKey | null =
+    active === 'summary' || active === 'reply' || active === 'entities' ? active : null;
+  const activePending = activeWritten ? writtenMutation[activeWritten].isPending : false;
+  const activeHasCopy = activeWritten ? !!written[activeWritten][uiLocale] : false;
+  const prevLocale = useRef(uiLocale);
+
+  // The language changed under a shown result: re-ask it in the new language
+  // (once), or bring back the copy already fetched in that language.
+  useEffect(() => {
+    const changed = prevLocale.current !== uiLocale;
+    prevLocale.current = uiLocale;
+    if (!activeWritten || activePending) return;
+    if (activeHasCopy) {
+      // The composer follows the reply the panel shows.
+      const cached = written.reply[uiLocale];
+      if (changed && activeWritten === 'reply' && cached) onReplySuggested?.(cached.reply);
+      return;
+    }
+    const k = `${activeWritten}:${uiLocale}`;
+    if (requested.current.has(k)) return;
+    requested.current.add(k);
+    if (activeWritten === 'summary') summarize.mutate({ locale: uiLocale });
+    else if (activeWritten === 'entities') entities.mutate({ locale: uiLocale });
+    else suggestReply.mutate({ locale: uiLocale, draft: replyDraft.current });
+    // Deliberately keyed on the language and the shown result only.
+  }, [uiLocale, activeWritten, activePending, activeHasCopy]);
+
+  const summaryData = written.summary[uiLocale];
+  const replyData = written.reply[uiLocale];
+  const entitiesData = written.entities[uiLocale];
 
   /**
    * Everything the gateway can do, in its natural order. What an agent
@@ -127,13 +214,13 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
       key: 'summary',
       label: tl('ai.action.summarize', { defaultValue: 'Summarize' }),
       busy: summarize.isPending,
-      run: () => summarize.mutate(),
+      run: () => runWritten('summary'),
     },
     {
       key: 'reply',
       label: tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' }),
       busy: suggestReply.isPending,
-      run: () => suggestReply.mutate(),
+      run: () => runWritten('reply'),
     },
     {
       key: 'sentiment',
@@ -151,7 +238,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
       key: 'entities',
       label: tl('ai.action.entities', { defaultValue: 'Key details' }),
       busy: entities.isPending,
-      run: () => entities.mutate(),
+      run: () => runWritten('entities'),
     },
   ];
 
@@ -250,15 +337,15 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
         </div>
 
         {/* Results — one panel per action; whichever was last successful is shown */}
-        {active === 'summary' && summarize.data && (
+        {active === 'summary' && summaryData && (
           <ResultCard label={tl('ai.action.summarize', { defaultValue: 'Summarize' })}>
-            <p className="text-sm leading-relaxed text-foreground">{summarize.data.summary}</p>
+            <p className="text-sm leading-relaxed text-foreground">{summaryData.summary}</p>
           </ResultCard>
         )}
-        {active === 'reply' && suggestReply.data && (
+        {active === 'reply' && replyData && (
           <ResultCard label={tl('ai.action.suggestReply', { defaultValue: 'Suggest reply' })}>
             <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
-              {suggestReply.data.reply}
+              {replyData.reply}
             </p>
           </ResultCard>
         )}
@@ -296,9 +383,9 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
             </div>
           </ResultCard>
         )}
-        {active === 'entities' && entities.data && (
+        {active === 'entities' && entitiesData && (
           <ResultCard label={tl('ai.action.entities', { defaultValue: 'Key details' })}>
-            {entities.data.entities.length === 0 ? (
+            {entitiesData.entities.length === 0 ? (
               <p className="text-xs text-muted-foreground">
                 {tl('ai.noEntities', {
                   defaultValue:
@@ -307,7 +394,7 @@ export function AiPanel({ conversationId, vendorId, draft, onReplySuggested, cla
               </p>
             ) : (
               <ul className="space-y-1.5">
-                {entities.data.entities.map((e, i) => (
+                {entitiesData.entities.map((e, i) => (
                   <li key={i} className="flex items-baseline gap-2 text-sm">
                     <Pill tone="muted" size="sm">
                       {e.type}

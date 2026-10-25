@@ -444,11 +444,18 @@ export function QuickReplies({
        * it. Capped and scrollable so a long library stays reachable.
        */
       className={cn(
-        'w-full max-w-lg overflow-y-auto overscroll-contain rounded-[1.125rem] bg-popover p-1.5',
-        floatAbove
-          ? 'shadow-float ring-1 ring-foreground/[0.06]'
-          : 'max-h-64 shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_18px_40px_-26px_oklch(var(--shadow-color)/0.45)]',
-        !floatAbove && (inToolbar ? 'order-last max-w-none basis-full' : 'mt-2'),
+        'w-full max-w-lg overflow-y-auto overscroll-contain p-1.5',
+        /* In the composer toolbar the box around it (with the language
+           control on top) carries the surface; the list only scrolls. */
+        inToolbar
+          ? 'max-h-64 max-w-none'
+          : cn(
+              'rounded-[1.125rem] bg-popover',
+              floatAbove
+                ? 'shadow-float ring-1 ring-foreground/[0.06]'
+                : 'max-h-64 shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_18px_40px_-26px_oklch(var(--shadow-color)/0.45)]',
+              !floatAbove && 'mt-2',
+            ),
       )}
       /* Floating: as tall as the room above the control allows. */
       style={floatAbove && anchor ? { maxHeight: Math.max(160, anchor.top - 16) } : undefined}
@@ -511,6 +518,61 @@ export function QuickReplies({
     </div>
   );
 
+  /* ARABIC / ENGLISH / BOTH. A segmented control rather than a dropdown:
+     three options an agent flips between all day should cost one click, not
+     two. In the composer toolbar it lives INSIDE the opened box (owner,
+     2026-10-25): the row shows only "Quick replies". */
+  const langControl = (
+    <div className="flex h-8 shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]">
+      {(['ar', 'en', 'all'] as const).map((opt) => (
+        <button
+          key={opt}
+          type="button"
+          onClick={() => setLang(opt)}
+          aria-pressed={effectiveLang === opt}
+          className={cn(
+            'inline-flex h-7 items-center rounded-full px-2.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+            effectiveLang === opt
+              ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
+              : 'text-muted-foreground hover:text-foreground',
+          )}
+        >
+          {opt === 'all'
+            ? t('quickReplies.langAll', { defaultValue: 'Both' })
+            : opt === 'ar'
+              ? 'عربي'
+              : 'EN'}
+        </button>
+      ))}
+    </div>
+  );
+
+  /*
+   * THE COMPOSER-TOOLBAR BOX: the language control on top, the replies under
+   * it, on its own full-width line beneath the toolbar row. Still in the flow,
+   * never an overlay over the text box.
+   */
+  const panel = inToolbar ? (
+    <div
+      {...{ [DISMISS_FIRST_ATTR]: '' }}
+      className={cn(
+        'order-last basis-full overflow-hidden rounded-[1.125rem] bg-popover',
+        'shadow-[inset_0_0_0_1px_oklch(var(--foreground)/0.06),0_18px_40px_-26px_oklch(var(--shadow-color)/0.45)]',
+      )}
+    >
+      <div className="flex items-center justify-between gap-3 border-b border-foreground/[0.07] px-3 py-2">
+        <span className="text-2xs font-semibold text-muted-foreground">
+          {t('quickReplies.language', { defaultValue: 'Language' })}
+        </span>
+        {langControl}
+      </div>
+      {list}
+    </div>
+  ) : (
+    list
+  );
+
   return (
     <div ref={wrap} className={cn(inToolbar ? 'contents' : 'relative', className)}>
       <div className={inToolbar ? 'contents' : 'flex items-center gap-1.5'}>
@@ -537,32 +599,7 @@ export function QuickReplies({
           </span>
         </button>
 
-        {/* ARABIC / ENGLISH / BOTH. A segmented control rather than a dropdown:
-            three options an agent flips between all day should cost one click,
-            not two. */}
-        <div className="flex h-8 shrink-0 items-center rounded-full bg-secondary/80 p-0.5 ring-1 ring-inset ring-foreground/[0.06]">
-          {(['ar', 'en', 'all'] as const).map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setLang(opt)}
-              aria-pressed={effectiveLang === opt}
-              className={cn(
-                'inline-flex h-7 items-center rounded-full px-2.5 text-xs font-semibold transition-[background-color,color,box-shadow] duration-fast',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
-                effectiveLang === opt
-                  ? 'bg-card text-foreground shadow-[0_2px_8px_-4px_oklch(var(--shadow-color)/0.5)]'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              {opt === 'all'
-                ? t('quickReplies.langAll', { defaultValue: 'Both' })
-                : opt === 'ar'
-                  ? 'عربي'
-                  : 'EN'}
-            </button>
-          ))}
-        </div>
+        {!inToolbar && langControl}
 
         {/* `searching`, not `query`: a bare `/` has opened the list and the
             agent should be told the box is now a search, BEFORE they have typed
@@ -576,7 +613,7 @@ export function QuickReplies({
         )}
       </div>
 
-      {listOpen && !floatAbove && list}
+      {listOpen && !floatAbove && panel}
       {listOpen &&
         floatAbove &&
         anchor &&

@@ -134,8 +134,20 @@ describe('the quick-reply chooser', () => {
     expect(list).toMatch(/floatAbove\s*\?\s*'shadow-float[^']*'\s*:\s*'max-h-64/);
     /* In the composer toolbar it drops onto its own line under the row
        (owner, 2026-10-22: one row) - still in the flow, never an overlay. */
-    expect(list).toMatch(/inToolbar \? 'order-last max-w-none basis-full' : 'mt-2'/);
-    expect(SRC).toMatch(/\{listOpen && !floatAbove && list\}/);
+    expect(SRC).toMatch(/'order-last basis-full overflow-hidden rounded-\[1\.125rem\] bg-popover'/);
+    expect(SRC).toMatch(/\{listOpen && !floatAbove && panel\}/);
+  });
+
+  /* Owner, 2026-10-25: the composer row shows only "Quick replies"; the
+     عربي/EN/Both control lives at the top of the opened box. */
+  it('keeps the language control out of the composer toolbar row', () => {
+    expect(SRC).toMatch(/\{!inToolbar && langControl\}/);
+    const panel = SRC.slice(
+      SRC.indexOf('const panel = inToolbar ?'),
+      SRC.indexOf('<div ref={wrap}'),
+    );
+    expect(panel.indexOf('{langControl}')).toBeGreaterThan(-1);
+    expect(panel.indexOf('{langControl}')).toBeLessThan(panel.indexOf('{list}'));
   });
 
   /*

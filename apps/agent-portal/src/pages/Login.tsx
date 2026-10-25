@@ -220,18 +220,7 @@ export function Login() {
                 </FormField>
 
                 <FormField
-                  label={
-                    <span className="flex items-baseline justify-between gap-3">
-                      <span>{t('auth.password', { ns: 'common' })}</span>
-                      <button
-                        type="button"
-                        onClick={openForgot}
-                        className="inline-flex items-center rounded-full bg-primary/10 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-7 px-2.5 text-xs normal-case tracking-normal"
-                      >
-                        {t('login.forgot', { defaultValue: 'Forgot password?' })}
-                      </button>
-                    </span>
-                  }
+                  label={t('auth.password', { ns: 'common' })}
                   htmlFor="password"
                   error={errors.password?.message}
                   hint={
@@ -251,8 +240,12 @@ export function Login() {
                         onBlur: () => setCapsOn(false),
                       })}
                     />
+                    {/* Out of the Tab sequence (owner, 2026-10-25): Tab
+                        runs username -> password -> Sign in -> Forgot
+                        password. Still a click/tap target. */}
                     <button
                       type="button"
+                      tabIndex={-1}
                       onClick={() => setShowPw((v) => !v)}
                       aria-pressed={showPw}
                       aria-label={
@@ -285,6 +278,15 @@ export function Login() {
                 >
                   {t('login.submit')}
                 </Button>
+                {/* After the submit button in the DOM, so Tab reaches Sign in
+                    before Forgot password (no positive tabindex). */}
+                <button
+                  type="button"
+                  onClick={openForgot}
+                  className="mx-auto flex h-9 items-center rounded-full bg-primary/10 px-4 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                >
+                  {t('login.forgot', { defaultValue: 'Forgot password?' })}
+                </button>
               </form>
             )}
 

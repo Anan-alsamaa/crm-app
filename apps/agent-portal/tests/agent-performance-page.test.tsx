@@ -162,14 +162,12 @@ describe('AgentPerformancePage', () => {
     expect(tile('Answered in time')).toBe('33%');
   });
 
-  it('re-scores against the target when it changes', async () => {
-    const user = userEvent.setup();
+  it('has no Target filter, and says which target it scores against', () => {
+    // Owner, 2026-10-25: "remove Target from the filters".
     renderPage();
-    const target = screen.getByRole('spinbutton');
-    await user.clear(target);
-    await user.type(target, '30');
-    // At 30 minutes the slow chat now counts; the unanswered one still cannot.
-    expect(tile('Answered in time')).toBe('67%');
+    expect(screen.queryByRole('spinbutton')).toBeNull();
+    expect(screen.queryByText('Target')).toBeNull();
+    expect(screen.getByText('Within 5 min')).toBeInTheDocument();
   });
 
   it('charts the volume even when not one chat has been answered', async () => {

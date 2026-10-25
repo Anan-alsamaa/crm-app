@@ -2,6 +2,10 @@ import { useMemo, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
+  ChartIcon,
+  CheckCircleIcon,
+  ClockIcon,
+  CloseIcon,
   EmptyState,
   ErrorState,
   formatDateTime,
@@ -34,7 +38,7 @@ import {
   type PerformanceCouponRow,
   type PerformanceFilters,
 } from './api.js';
-import { Tile } from './Tile.js';
+import { PERF_BODY_ROW, PERF_HEAD_ROW, PERF_TABLE_CARD, PERF_TH, Tile, TileGrid } from './Tile.js';
 
 /**
  * The Tickets and Coupons tabs of the agent performance page (owner,
@@ -47,11 +51,10 @@ import { Tile } from './Tile.js';
  * rewrites the headline numbers.
  */
 
-const TH = 'px-4 py-2.5 text-start font-semibold';
-const HEAD_ROW =
-  'tracking-[0.12em] bg-secondary/70 text-2xs uppercase tracking-[0.14em] text-muted-foreground shadow-[inset_0_-1px_0_oklch(var(--foreground)/0.08)]';
-const BODY_ROW =
-  'cursor-pointer border-t border-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.07]';
+/* The page's one table anatomy (Tile.tsx), shared with "Chat by chat". */
+const TH = PERF_TH;
+const HEAD_ROW = PERF_HEAD_ROW;
+const BODY_ROW = PERF_BODY_ROW;
 
 const STAGE_TONE: Record<
   CouponStage,
@@ -166,15 +169,16 @@ function TableCard({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-4 py-3">
+    <section className={PERF_TABLE_CARD}>
+      <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-5 py-4">
         <h2 className="text-sm font-semibold tracking-[-0.01em] text-foreground">{title}</h2>
         <span className="text-2xs text-muted-foreground">{help}</span>
         <span className="ms-auto text-2xs tabular-nums text-muted-foreground">
           {shown === total ? total : `${shown} / ${total}`}
         </span>
       </header>
-      <div className="max-h-[28rem] overflow-auto">{children}</div>
+      {/* No inner scroller (owner, 2026-10-25): the page scrolls. */}
+      <div className="overflow-x-auto">{children}</div>
     </section>
   );
 }
@@ -183,7 +187,7 @@ function NoMatchRow({ colSpan, search }: { colSpan: number; search: string }) {
   const { t } = useTranslation();
   return (
     <tr>
-      <td colSpan={colSpan} className="px-4 py-8 text-center text-sm text-muted-foreground">
+      <td colSpan={colSpan} className="px-5 py-10 text-center text-sm text-muted-foreground">
         {t('performance.searchNoMatch', {
           defaultValue: 'Nothing matches “{{q}}”.',
           q: search.trim(),
@@ -276,33 +280,41 @@ export function TicketsTab({
 
   return (
     <>
-      <section
-        aria-label={t('performance.ticketSummary', { defaultValue: 'Ticket summary' })}
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+      <TileGrid
+        count={4}
+        label={t('performance.ticketSummary', { defaultValue: 'Ticket summary' })}
       >
         <Tile
           label={t('performance.tabTickets', { defaultValue: 'Tickets' })}
           value={String(summary.total)}
+          icon={<TicketIcon size={18} />}
+          hue="blue"
         />
         <Tile
           label={t('performance.ticketPending', { defaultValue: 'Pending' })}
           value={String(summary.pending)}
           tone={summary.pending > 0 ? 'bad' : 'plain'}
+          icon={<ClockIcon size={18} />}
+          hue="amber"
         />
         <Tile
           label={t('performance.ticketSolved', { defaultValue: 'Solved' })}
           value={String(summary.solved)}
           tone={summary.solved > 0 ? 'good' : 'plain'}
+          icon={<CheckCircleIcon size={18} />}
+          hue="green"
         />
         <Tile
           label={t('performance.avgSolve', { defaultValue: 'Time to solve' })}
           value={formatDuration(summary.avgSolve) ?? '—'}
+          icon={<ClockIcon size={18} />}
+          hue="violet"
           hint={t('performance.ticketSolveHint', {
             defaultValue: 'average · median {{median}}',
             median: formatDuration(summary.medianSolve) ?? '—',
           })}
         />
-      </section>
+      </TileGrid>
 
       <TableCard
         title={t('performance.ticketsTitle', { defaultValue: 'Ticket by ticket' })}
@@ -316,7 +328,7 @@ export function TicketsTab({
           className="w-full text-sm"
           aria-label={t('performance.ticketsTitle', { defaultValue: 'Ticket by ticket' })}
         >
-          <thead className="sticky top-0 z-10 bg-card">
+          <thead>
             <tr className={HEAD_ROW}>
               <th className={TH}>{t('performance.ticketCol', { defaultValue: 'Ticket' })}</th>
               <th className={TH}>{t('performance.customer', { defaultValue: 'Customer' })}</th>
@@ -339,7 +351,7 @@ export function TicketsTab({
                 onClick={() => navigate(`/tickets/${encodeURIComponent(r.id)}`)}
                 className={BODY_ROW}
               >
-                <td className="max-w-[18rem] px-4 py-2.5 text-foreground">
+                <td className="max-w-[18rem] px-5 py-3.5 text-foreground">
                   <span
                     className="block truncate font-medium"
                     title={r.complaintType ?? r.subject ?? ''}
@@ -352,13 +364,13 @@ export function TicketsTab({
                     {normalizeOrderId(r.orderId) ? `#${r.orderId}` : `ID ${r.id}`}
                   </span>
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">
+                <td className="px-5 py-3.5 text-muted-foreground">
                   <span className="block max-w-[12rem] truncate">
                     {r.customer ?? t('performance.unknownCustomer', { defaultValue: 'Customer' })}
                   </span>
                 </td>
                 {!oneAgent && (
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td className="px-5 py-3.5 text-muted-foreground">
                     <span className="block">{nameOf(r.assignedAgent)}</span>
                     {/* Raised by somebody other than its owner — the reason the
                         row is on this agent's list at all. */}
@@ -372,17 +384,17 @@ export function TicketsTab({
                     )}
                   </td>
                 )}
-                <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
+                <td className="px-5 py-3.5 tabular-nums text-muted-foreground">
                   {r.createdAt ? formatDateTime(r.createdAt) : '—'}
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-5 py-3.5">
                   <Pill tone={r.status === 'solved' ? 'success' : 'highlight'} size="sm">
                     {r.status === 'solved'
                       ? t('performance.ticketSolved', { defaultValue: 'Solved' })
                       : t('performance.ticketPending', { defaultValue: 'Pending' })}
                   </Pill>
                 </td>
-                <td className="px-4 py-2.5 text-end tabular-nums text-foreground">
+                <td className="px-5 py-3.5 text-end tabular-nums text-foreground">
                   {r.solveSec == null ? (
                     <span className="text-muted-foreground">
                       {t('performance.ticketPending', { defaultValue: 'Pending' })}
@@ -391,7 +403,7 @@ export function TicketsTab({
                     formatDuration(r.solveSec)
                   )}
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-5 py-3.5">
                   {r.coupon ? (
                     <span className="flex flex-wrap items-center gap-1.5">
                       <span className="font-mono text-xs font-semibold text-foreground">
@@ -484,36 +496,46 @@ export function CouponsTab({ filters, search }: { filters: PerformanceFilters; s
 
   return (
     <>
-      <section
-        aria-label={t('performance.couponSummary', { defaultValue: 'Coupon summary' })}
-        className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"
+      <TileGrid
+        count={5}
+        label={t('performance.couponSummary', { defaultValue: 'Coupon summary' })}
       >
         <Tile
           label={t('performance.couponsRequested', { defaultValue: 'Requested' })}
           value={String(summary.total)}
+          icon={<TicketIcon size={18} />}
+          hue="blue"
         />
         <Tile
           label={t('performance.stage.waitingApproval', { defaultValue: 'Waiting for approval' })}
           value={String(summary.waiting)}
+          icon={<ClockIcon size={18} />}
+          hue="amber"
         />
         <Tile
           label={t('performance.stage.approved', { defaultValue: 'Approved' })}
           value={String(summary.approved)}
           tone={summary.approved > 0 ? 'good' : 'plain'}
+          icon={<CheckCircleIcon size={18} />}
+          hue="green"
         />
         <Tile
           label={t('performance.stage.rejected', { defaultValue: 'Rejected' })}
           value={String(summary.rejected)}
           tone={summary.rejected > 0 ? 'bad' : 'plain'}
+          icon={<CloseIcon size={18} />}
+          hue="violet"
         />
         {/* SAR only, and rejected requests left out: a percentage has no face
             value to add, and a refused coupon cost nothing. */}
         <Tile
           label={t('performance.couponsValue', { defaultValue: 'Total value' })}
           value={money(summary.value)}
+          icon={<ChartIcon size={18} />}
+          hue="violet"
           hint={t('performance.couponsValueHint', { defaultValue: 'SAR, not rejected' })}
         />
-      </section>
+      </TileGrid>
 
       <TableCard
         title={t('performance.couponsTitle', { defaultValue: 'Coupon by coupon' })}
@@ -527,7 +549,7 @@ export function CouponsTab({ filters, search }: { filters: PerformanceFilters; s
           className="w-full text-sm"
           aria-label={t('performance.couponsTitle', { defaultValue: 'Coupon by coupon' })}
         >
-          <thead className="sticky top-0 z-10 bg-card">
+          <thead>
             <tr className={HEAD_ROW}>
               <th className={TH}>{t('performance.code', { defaultValue: 'Code' })}</th>
               <th className={`${TH} text-end`}>
@@ -559,18 +581,18 @@ export function CouponsTab({ filters, search }: { filters: PerformanceFilters; s
                 }
                 className={BODY_ROW}
               >
-                <td className="px-4 py-2.5 font-mono text-sm font-semibold text-foreground">
+                <td className="px-5 py-3.5 font-mono text-sm font-semibold text-foreground">
                   {r.coupon_code ?? t('performance.noCode', { defaultValue: 'no code' })}
                 </td>
-                <td className="px-4 py-2.5 text-end font-semibold tabular-nums text-foreground">
+                <td className="px-5 py-3.5 text-end font-semibold tabular-nums text-foreground">
                   {couponValue(r)}
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">
+                <td className="px-5 py-3.5 text-muted-foreground">
                   <span className="block max-w-[12rem] truncate">
                     {r.customer ?? t('performance.unknownCustomer', { defaultValue: 'Customer' })}
                   </span>
                 </td>
-                <td className="max-w-[16rem] px-4 py-2.5 text-foreground">
+                <td className="max-w-[16rem] px-5 py-3.5 text-foreground">
                   {r.ticket || r.ticketId ? (
                     <span className="block truncate" title={r.ticket?.subject ?? ''}>
                       {r.ticket?.complaint_type?.trim() ||
@@ -587,19 +609,19 @@ export function CouponsTab({ filters, search }: { filters: PerformanceFilters; s
                   )}
                 </td>
                 {!oneAgent && (
-                  <td className="px-4 py-2.5 text-muted-foreground">
+                  <td className="px-5 py-3.5 text-muted-foreground">
                     {r.requested_by?.first_name?.trim() || r.requested_by?.email || '—'}
                   </td>
                 )}
-                <td className="px-4 py-2.5 tabular-nums text-muted-foreground">
+                <td className="px-5 py-3.5 tabular-nums text-muted-foreground">
                   {r.date_created ? formatDateTime(r.date_created) : '—'}
                 </td>
-                <td className="px-4 py-2.5">
+                <td className="px-5 py-3.5">
                   <Pill tone={STAGE_TONE[r.stage]} size="sm">
                     {stageLabel(r.stage)}
                   </Pill>
                 </td>
-                <td className="px-4 py-2.5 text-muted-foreground">
+                <td className="px-5 py-3.5 text-muted-foreground">
                   {/* Undefined = the field could not be read on this env. */}
                   {r.delivery_excluded === undefined
                     ? '—'

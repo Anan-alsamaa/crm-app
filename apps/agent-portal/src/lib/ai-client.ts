@@ -92,12 +92,13 @@ export const ai = {
   suggestReply: (
     c: AiCaller,
     conversationId: string,
-    opts: { draft?: string; locale?: string } = {},
+    opts: { draft?: string; locale?: string; localeSource?: 'draft' | 'agent' } = {},
   ) =>
     post<SuggestReplyResponse>(c, AI_ENDPOINTS.suggestReply, {
       conversationId,
       draft: opts.draft,
       locale: opts.locale,
+      ...(opts.localeSource ? { localeSource: opts.localeSource } : {}),
     }),
   sentiment: (c: AiCaller, conversationId: string) =>
     post<SentimentResponse>(c, AI_ENDPOINTS.analyzeSentiment, { conversationId }),

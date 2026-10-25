@@ -4,7 +4,12 @@ import { useMutation } from '@tanstack/react-query';
 import { Button, Input, Modal, SelectMenu, Spinner, Textarea, cn } from '@yiji/ui';
 import { cleanContactName, isDialablePhone, normalizePhone } from '@yiji/shared-types';
 import { useQuery } from '@tanstack/react-query';
-import { lookupContactByPhone, soleYijiVendorId, startChatWithCustomer } from './start-chat.js';
+import {
+  lookupContactByPhone,
+  soleYijiVendorId,
+  startChatWithCustomer,
+  yijiVendorOption,
+} from './start-chat.js';
 import { QuickReplies } from '../conversation/QuickReplies.js';
 import { useVendorDirectory } from '../../lib/vendors.js';
 
@@ -74,7 +79,10 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
    * and the sole vendor is used, exactly as before.
    */
   const vendors = useVendorDirectory();
-  const [pickedVendor, setPickedVendor] = useState('');
+  /* `null` = the agent has not chosen: the Yiji vendor is preselected (owner,
+     2026-10-25). A pick — including "Choose a vendor" — is kept as made. */
+  const [vendorChoice, setPickedVendor] = useState<string | null>(null);
+  const pickedVendor = vendorChoice ?? yijiVendorOption(vendors.options)?.id ?? '';
   const picked = vendors.show ? vendors.options.find((v) => v.id === pickedVendor) : undefined;
   const vendorId = vendors.show ? (picked?.platformId ?? undefined) : (vendor.data ?? undefined);
   const [phone, setPhone] = useState('');
@@ -91,7 +99,7 @@ export function StartChatDialog({ open, onClose, onStarted }: StartChatDialogPro
     setMessage('');
     setLookup({ state: 'idle' });
     setError(null);
-    setPickedVendor('');
+    setPickedVendor(null);
   }, [open]);
 
   const canonical = normalizePhone(phone);

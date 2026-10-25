@@ -15,8 +15,10 @@ import { cn } from '@yiji/ui';
  * board is already over it.
  *
  * The board wants a colour scale read from across a room (amber, then red,
- * then solid red), and colour is never the only signal: each step also has a
- * word under the number.
+ * then solid red). Late and Very late carry a word beside the number; the
+ * solid-red step shows NO word (owner, 2026-10-25: "don't need the text
+ * critical") - its fill is the loudest on the screen, and the word stays for
+ * screen readers only.
  */
 export type LateSeverity = 'late' | 'veryLate' | 'critical';
 
@@ -65,6 +67,8 @@ export function LateBy({
   const word = t(`lateOrders.board.severity.${sev}`, {
     defaultValue: sev === 'late' ? 'Late' : sev === 'veryLate' ? 'Very late' : 'Critical',
   });
+  /* Critical: no visible word, only for assistive tech (owner, 2026-10-25). */
+  const wordEl = sev === 'critical' ? <span className="sr-only">{word}</span> : null;
   if (size === 'table')
     return (
       <span className="inline-flex items-center gap-2 whitespace-nowrap">
@@ -77,7 +81,7 @@ export function LateBy({
         >
           {formatLate(minutes)}
         </span>
-        <span className="text-xs font-semibold text-foreground/70">{word}</span>
+        {wordEl ?? <span className="text-xs font-semibold text-foreground/70">{word}</span>}
       </span>
     );
   return (
@@ -92,15 +96,51 @@ export function LateBy({
       >
         {formatLate(minutes)}
       </span>
-      <span
-        className={cn(
-          'text-xs font-semibold 2xl:text-sm',
-          sev === 'critical' ? 'text-destructive' : 'text-foreground/70',
-        )}
-      >
-        {word}
-      </span>
+      {wordEl ?? (
+        <span className="text-xs font-semibold text-foreground/70 2xl:text-sm">{word}</span>
+      )}
     </span>
+  );
+}
+
+/* The board's compact row actions. Stroke icons on the portal's 16px grid. */
+const ICON = {
+  viewBox: '0 0 16 16',
+  fill: 'none',
+  stroke: 'currentColor',
+  strokeWidth: 1.5,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  className: 'h-4 w-4',
+  'aria-hidden': true,
+};
+
+/** Cart & tracking. */
+export function BoardCartIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M3.5 5.5h9l-.8 7.2a1 1 0 0 1-1 .8H5.3a1 1 0 0 1-1-.8l-.8-7.2Z" />
+      <path d="M5.8 5.5V4.6a2.2 2.2 0 0 1 4.4 0v.9" />
+    </svg>
+  );
+}
+
+/** Comment / edit comment. */
+export function BoardCommentIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M2.8 4.2A1.7 1.7 0 0 1 4.5 2.5h7a1.7 1.7 0 0 1 1.7 1.7v5a1.7 1.7 0 0 1-1.7 1.7H7.2L4.4 13v-2.1h.1a1.7 1.7 0 0 1-1.7-1.7v-5Z" />
+    </svg>
+  );
+}
+
+/** Assign coupon. */
+export function BoardCouponIcon() {
+  return (
+    <svg {...ICON}>
+      <path d="M2.5 5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v1.4a1.6 1.6 0 0 0 0 3.2V11a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1V9.6a1.6 1.6 0 0 0 0-3.2V5Z" />
+      <path d="M9.5 4.5v7" strokeDasharray="1.2 1.4" />
+    </svg>
   );
 }
 

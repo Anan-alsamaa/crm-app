@@ -4,7 +4,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { readItems } from '@directus/sdk';
 import { Button, cn, InboxIcon } from '@yiji/ui';
-import { SOCKET_EVENTS, displayContactName } from '@yiji/shared-types';
+import {
+  SOCKET_EVENTS,
+  displayContactName,
+  type MessageDeleted,
+  type MessageEdited,
+} from '@yiji/shared-types';
 import { getSocket } from '../lib/socket.js';
 import { directus } from '../lib/directus.js';
 import { useAuth } from '../lib/auth/AuthContext.js';
@@ -20,6 +25,8 @@ const MAX_BANNERS = 3;
 
 interface Alert {
   conversationId: string;
+  /** The customer message whose text this alert shows - edits follow it. */
+  messageId: string | null;
   name: string;
   preview: string;
   /** The chat belongs to nobody yet — a waiting customer, not one of mine. */
@@ -29,6 +36,15 @@ interface Alert {
 interface Tracked {
   notification?: Notification;
   repeat?: number;
+  /** What the notification (and the one-minute reminder) currently says. */
+  alert: Alert;
+}
+
+/** The alert's one line of the customer's words. */
+function previewText(content: string | null | undefined, attachment: string): string {
+  const text = (content ?? '').trim();
+  if (!text) return attachment;
+  return text.length > 140 ? `${text.slice(0, 140)}…` : text;
 }
 
 /**
@@ -127,8 +143,15 @@ export function ChatAlerts() {
 
     const inFront = () => document.visibilityState === 'visible' && document.hasFocus();
 
-    const showDesktop = (a: Alert) => {
-      if (desktopPermission() !== 'granted' || inFront()) return undefined;
+    /**
+     * `replace`: the SAME alert with new words (the customer edited the
+     * message). The tag is per conversation, so the new notification takes the
+     * old one's place; `renotify: false` + `silent` so it neither rings nor
+     * pops again (owner, 2026-10-25). Shown even if the portal has come to the
+     * front since: the old one was on screen, so its replacement must be.
+     */
+    const showDesktop = (a: Alert, replace = false) => {
+      if (desktopPermission() !== 'granted' || (!replace && inFront())) return undefined;
       try {
         const n = new Notification(
           a.waiting
@@ -144,7 +167,9 @@ export function ChatAlerts() {
             // thing that goes unnoticed.
             requireInteraction: true,
             icon: '/sara-crm-icon.png',
-          },
+            // `renotify` is not in every DOM lib yet; it is a standard option.
+            ...(replace ? { renotify: false, silent: true } : {}),
+          } as NotificationOptions,
         );
         n.onclick = () => {
           window.focus();
@@ -200,23 +225,24 @@ export function ChatAlerts() {
           filter: {
             conversation: { _eq: conversationId },
             sender_type: { _eq: 'customer' },
+            // A message the customer withdrew is not what they are waiting on.
+            deleted_at: { _null: true },
           },
-          fields: ['content'],
+          fields: ['id', 'content'],
           sort: ['-date_created'],
           limit: 1,
         }),
-      )) as Array<{ content: string | null }>;
-      const text = (last[0]?.content ?? '').trim();
+      )) as Array<{ id?: string; content: string | null }>;
       const alert: Alert = {
         conversationId,
+        messageId: last[0]?.id ?? null,
         name:
           displayContactName(conv.contact?.name, conv.contact?.phone) ||
           t('inbox.unknownContact', { defaultValue: 'Customer' }),
-        preview: text
-          ? text.length > 140
-            ? `${text.slice(0, 140)}…`
-            : text
-          : t('chatAlerts.attachment', { defaultValue: 'Sent an attachment' }),
+        preview: previewText(
+          last[0]?.content,
+          t('chatAlerts.attachment', { defaultValue: 'Sent an attachment' }),
+        ),
         waiting,
       };
       if (cancelled) return;
@@ -225,7 +251,7 @@ export function ChatAlerts() {
       const prev = tracked.current.get(conversationId);
       prev?.notification?.close();
       if (prev?.repeat) window.clearTimeout(prev.repeat);
-      const entry: Tracked = { notification: showDesktop(alert) };
+      const entry: Tracked = { notification: showDesktop(alert), alert };
       // One reminder if nobody has answered a minute later.
       entry.repeat = window.setTimeout(() => {
         void stillUnanswered(conversationId)
@@ -233,12 +259,75 @@ export function ChatAlerts() {
             const tr = tracked.current.get(conversationId);
             if (!open || !tr) return;
             tr.notification?.close();
-            tr.notification = showDesktop(alert);
+            // The words as they are NOW - an edit since must not be undone.
+            tr.notification = showDesktop(tr.alert);
             tr.repeat = undefined;
           })
           .catch(() => undefined);
       }, REPEAT_MS);
       tracked.current.set(conversationId, entry);
+    };
+
+    /*
+     * THE CUSTOMER EDITED OR WITHDREW THE MESSAGE AN ALERT SHOWS (owner,
+     * 2026-10-25). Only that message, matched by id: an edit to an older one
+     * changes nothing on screen.
+     *  - edit: the Windows notification is replaced under the same tag,
+     *    without a ring; the centre card / banner text changes in place;
+     *  - delete: the alert is closed - there is nothing left to read.
+     */
+    const applyEdit = (conversationId: string, messageId: string, content: string) => {
+      const tr = tracked.current.get(conversationId);
+      const preview = previewText(
+        content,
+        t('chatAlerts.attachment', { defaultValue: 'Sent an attachment' }),
+      );
+      if (tr && tr.alert.messageId === messageId && tr.alert.preview !== preview) {
+        tr.alert = { ...tr.alert, preview };
+        if (tr.notification) {
+          tr.notification.close();
+          tr.notification = showDesktop(tr.alert, true);
+        }
+      }
+      setAlerts((list) =>
+        list.map((a) =>
+          a.conversationId === conversationId && a.messageId === messageId && a.preview !== preview
+            ? { ...a, preview }
+            : a,
+        ),
+      );
+    };
+    const applyDelete = (conversationId: string, messageId: string) => {
+      const tr = tracked.current.get(conversationId);
+      const shown = tr?.alert.messageId === messageId;
+      if (shown) {
+        clear(conversationId);
+        return;
+      }
+      setAlerts((list) =>
+        list.filter((a) => !(a.conversationId === conversationId && a.messageId === messageId)),
+      );
+    };
+    /*
+     * The edit events go to the CONVERSATION room, which an agent is in for
+     * their own chats but not for a waiting one; every agent does get the
+     * silent inbox activity that follows an edit. So on that, an alert showing
+     * a message re-reads it (one row, by id) and applies whatever changed.
+     */
+    const recheck = async (conversationId: string) => {
+      const messageId = tracked.current.get(conversationId)?.alert.messageId;
+      if (!messageId) return;
+      const rows = (await directus.request(
+        readItems('messages', {
+          filter: { id: { _eq: messageId } },
+          fields: ['id', 'content', 'deleted_at'],
+          limit: 1,
+        }),
+      )) as Array<{ id?: string; content: string | null; deleted_at?: string | null }>;
+      const row = rows[0];
+      if (cancelled || !row) return;
+      if (row.deleted_at) applyDelete(conversationId, messageId);
+      else applyEdit(conversationId, messageId, row.content ?? '');
     };
 
     void (async () => {
@@ -249,7 +338,13 @@ export function ChatAlerts() {
         senderType?: string;
         silent?: boolean;
       }) => {
-        if (!e?.conversationId || e.silent) return;
+        if (!e?.conversationId) return;
+        if (e.silent) {
+          // Nothing new arrived - but an alerted message may have changed.
+          if (tracked.current.has(e.conversationId))
+            void recheck(e.conversationId).catch(() => undefined);
+          return;
+        }
         // Somebody answered: the alert has done its job, on every screen.
         if (e.senderType === 'agent') {
           clear(e.conversationId);
@@ -258,8 +353,20 @@ export function ChatAlerts() {
         if (e.senderType !== 'customer') return;
         void raise(e.conversationId).catch(() => undefined);
       };
+      const onEdited = (e?: MessageEdited) => {
+        if (e?.conversationId && e.messageId) applyEdit(e.conversationId, e.messageId, e.content);
+      };
+      const onDeleted = (e?: MessageDeleted) => {
+        if (e?.conversationId && e.messageId) applyDelete(e.conversationId, e.messageId);
+      };
       socket.on(SOCKET_EVENTS.inboxActivity, onActivity);
-      cleanup = () => socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
+      socket.on(SOCKET_EVENTS.messageEdited, onEdited);
+      socket.on(SOCKET_EVENTS.messageDeleted, onDeleted);
+      cleanup = () => {
+        socket.off(SOCKET_EVENTS.inboxActivity, onActivity);
+        socket.off(SOCKET_EVENTS.messageEdited, onEdited);
+        socket.off(SOCKET_EVENTS.messageDeleted, onDeleted);
+      };
     })();
 
     const map = tracked.current;

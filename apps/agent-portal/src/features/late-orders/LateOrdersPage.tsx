@@ -32,6 +32,7 @@ import {
   toast,
   MultiSelectMenu,
   LongText,
+  IconButton,
 } from '@yiji/ui';
 import {
   lateOrderComplaintType,
@@ -85,7 +86,14 @@ import {
   FALLBACK_THRESHOLD,
 } from './api.js';
 import { useLateOrdersPush } from './live-push.js';
-import { BoardClock, LateBy, ViewSwitch } from './board.js';
+import {
+  BoardCartIcon,
+  BoardClock,
+  BoardCommentIcon,
+  BoardCouponIcon,
+  LateBy,
+  ViewSwitch,
+} from './board.js';
 
 /** Yiji stamps are Riyadh wall-clock with no zone; as a real instant for display. */
 function placedIso(raw: string): string {
@@ -1460,8 +1468,11 @@ export function LateOrdersPage() {
                   color"). Two different measures in the same row
                   must not wear the same colour, or the eye reads
                   them as one number split in two. Amber also carries
-                  "still running" on its own. */
-                <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-warning-foreground">
+                  "still running" on its own. Amber INK, not
+                  `text-warning-foreground`: that token is the white ink for
+                  a SOLID warning fill, and on this row it left the live
+                  figure invisible (seen 2026-10-25). */
+                <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-[oklch(0.5_0.13_75)]">
                   <span
                     className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning"
                     aria-hidden="true"
@@ -1830,16 +1841,25 @@ export function LateOrdersPage() {
   };
 
   /*
-   * THE BOARD ROW (owner, 2026-10-22: the wall-TV view).
+   * THE BOARD ROW (owner, 2026-10-22: the wall-TV view; columns set 2026-10-25).
    *
-   * One line per late order, read left to right in the order a supervisor
-   * asks the questions: how late, which order, whose kitchen, where is it
-   * now, has anyone handled it - then the same three actions the table has,
-   * compact at the end. The handlers are the table's own (`openDecision`,
-   * `setExpanded`, `pickKind`), so nothing about deciding changes with the view.
+   * Exactly the owner's eleven, in his order: Total time, the four legs
+   * (service, driver arrival, delivery, preparation), brand, restaurant,
+   * customer mobile, order status, the decision state, and the source of
+   * delay. Every value is the TABLE's own (`timesOf`, `stateOf`, `kindOf`,
+   * the same phone and status formatting), so the two views never disagree.
+   *
+   * Total time stays the dominant figure; the legs are one size down but
+   * still read from across a room. The actions (cart, comment, coupon) are
+   * the table's own handlers, compact icon buttons at the row end - named for
+   * assistive tech and on hover - so the eleven columns fit at 1440 and 1920.
    */
-  const boardCols =
-    'grid grid-cols-[8.5rem_6.5rem_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_28rem] items-center gap-x-5 2xl:grid-cols-[11rem_8.5rem_minmax(0,2fr)_minmax(0,1fr)_minmax(0,1.1fr)_30rem] 2xl:gap-x-8';
+  const boardCols = cn(
+    'grid items-center gap-x-3 px-5',
+    'grid-cols-[7.75rem_repeat(4,5rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_7.25rem_minmax(0,0.9fr)_6.5rem_9rem_6.75rem]',
+    '2xl:gap-x-5 2xl:px-8',
+    '2xl:grid-cols-[10.5rem_repeat(4,6.75rem)_minmax(0,1.1fr)_minmax(0,1.2fr)_9.5rem_minmax(0,0.9fr)_9.5rem_11rem_7.5rem]',
+  );
   const stateTone: Record<LateOrderState, { dot: string; label: string }> = {
     pending: {
       dot: 'bg-warning',
@@ -1854,49 +1874,94 @@ export function LateOrdersPage() {
       label: t('lateOrders.state.handled', { defaultValue: 'Handled' }),
     },
   };
+  /* A leg on the board: the table's loading / blank / minutes rule, one size
+     up so it carries on a TV. */
+  const boardLeg = (minutes: number | null, live = false) => {
+    if (eventTimes.isLoading)
+      return <span className="inline-block h-5 w-12 animate-pulse rounded bg-muted/60" />;
+    if (minutes === null) return <span className="text-muted-foreground/60">&mdash;</span>;
+    return (
+      <span
+        dir="ltr"
+        className={cn(
+          'inline-flex items-center gap-1.5 whitespace-nowrap text-base font-semibold tabular-nums 2xl:text-xl',
+          live ? 'text-[oklch(0.5_0.13_75)]' : 'text-foreground/80',
+        )}
+      >
+        {/* Service time only: still counting (pulsing amber) vs settled. */}
+        {live && (
+          <span
+            aria-hidden="true"
+            className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning 2xl:h-2 2xl:w-2"
+          />
+        )}
+        {elapsed(minutes)}
+        {live && (
+          <span className="sr-only">
+            {t('lateOrders.serviceLive', { defaultValue: 'still counting' })}
+          </span>
+        )}
+      </span>
+    );
+  };
+  const boardText = 'block truncate text-base text-foreground 2xl:text-lg';
   const boardRow = (row: (typeof paged)[number]) => {
     const state = stateOf(row.orderId);
     const agentName = decisionMap.get(row.orderId)?.decided_by?.first_name;
+    const times = timesOf(row.orderId);
+    const customer =
+      displayContactName(row.customerName, row.customerPhone) ||
+      normalizePhone(row.customerPhone) ||
+      '-';
+    const cartLabel = t('lateOrders.showDetail', { defaultValue: 'Cart & tracking' });
+    const commentLabel =
+      state === 'pending'
+        ? t('lateOrders.comment', { defaultValue: 'Comment' })
+        : t('lateOrders.editComment', { defaultValue: 'Edit' });
+    const couponLabel = t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' });
     return (
       <li
         key={row.orderId}
         role="row"
         className={cn(
           boardCols,
-          'min-h-[4.25rem] px-6 py-2.5 2xl:min-h-[5.25rem] 2xl:px-8',
+          'min-h-[4.25rem] py-2.5 2xl:min-h-[5.25rem]',
           '[&:not(:last-child)]:border-b [&:not(:last-child)]:border-foreground/[0.07]',
           'transition-colors duration-fast hover:bg-primary/[0.03]',
         )}
       >
         <div role="cell">
           <LateBy minutes={row.minutesElapsed} threshold={threshold} />
-        </div>
-        <div role="cell" className="min-w-0">
-          <span
-            dir="ltr"
-            className="block text-lg font-bold tabular-nums text-foreground 2xl:text-2xl"
-          >
-            {row.orderId}
-          </span>
           {isNew(row.orderId) && (
             <span className="mt-1 inline-flex rounded-full bg-emerald-700 px-2 py-0.5 text-xs font-bold text-white">
               {t('lateOrders.new', { defaultValue: 'New' })}
             </span>
           )}
         </div>
+        <div role="cell">{boardLeg(times.serviceMinutes, !row.closedAt)}</div>
+        <div role="cell">{boardLeg(times.driverArrivalMinutes)}</div>
+        <div role="cell">{boardLeg(times.deliveryMinutes)}</div>
+        <div role="cell">{boardLeg(times.preparationMinutes)}</div>
         <div role="cell" className="min-w-0">
-          <span className="block truncate text-lg font-semibold text-foreground 2xl:text-[1.375rem]">
+          <span className={cn(boardText, 'font-semibold')} title={row.brandName || undefined}>
             {row.brandName || '-'}
           </span>
-          <span className="block truncate text-sm text-muted-foreground 2xl:text-base">
+        </div>
+        <div role="cell" className="min-w-0">
+          <span className={boardText} title={row.restaurantName || undefined}>
             {row.restaurantName || '-'}
           </span>
         </div>
-        <div role="cell" className="min-w-0 text-base text-foreground/80 2xl:text-lg">
+        <div role="cell" className="min-w-0">
+          <span dir="ltr" className={cn(boardText, 'tabular-nums')} title={customer}>
+            {customer}
+          </span>
+        </div>
+        <div role="cell" className="min-w-0 text-sm leading-snug text-foreground/80 2xl:text-base">
           {t(`commerce.orderStatuses.${row.status}`, { defaultValue: row.status })}
         </div>
         <div role="cell" className="min-w-0">
-          <span className="inline-flex items-center gap-2 text-base font-semibold text-foreground 2xl:text-lg">
+          <span className="inline-flex items-center gap-2 text-sm font-semibold text-foreground 2xl:text-base">
             <span
               aria-hidden
               className={cn('h-2.5 w-2.5 shrink-0 rounded-full', stateTone[state].dot)}
@@ -1904,40 +1969,62 @@ export function LateOrdersPage() {
             {stateTone[state].label}
           </span>
           {agentName && (
-            <span className="block truncate text-sm text-muted-foreground 2xl:text-base">
+            <span className="block truncate text-xs text-muted-foreground 2xl:text-sm">
               {t('lateOrders.board.byAgent', { name: agentName, defaultValue: 'by {{name}}' })}
             </span>
           )}
         </div>
-        <div role="cell" className="flex flex-wrap items-center justify-end gap-1.5 2xl:gap-2">
+        <div role="cell" className="min-w-0">
           <SelectMenu
             value={kindOf(row)}
             size="sm"
+            fullWidth
             aria-label={t('lateOrders.col.kind', { defaultValue: 'Source of delay' })}
             onChange={(v) => pickKind(row.orderId, v)}
             options={causeOptions}
           />
-          <Button
-            size="sm"
+        </div>
+        <div
+          role="cell"
+          aria-label={t('lateOrders.board.rowActions', {
+            order: row.orderId,
+            defaultValue: 'Order {{order}} actions',
+          })}
+          className="flex items-center justify-end gap-1"
+        >
+          <IconButton
             variant="secondary"
+            aria-label={`${cartLabel} · ${row.orderId}`}
+            title={cartLabel}
             aria-haspopup="dialog"
+            className="rounded-full"
             onClick={() => setExpanded(row.orderId)}
           >
-            {t('lateOrders.board.cart', { defaultValue: 'Cart' })}
-          </Button>
-          <Button
-            size="sm"
+            <BoardCartIcon />
+          </IconButton>
+          <IconButton
             variant="secondary"
+            aria-label={`${commentLabel} · ${row.orderId}`}
+            title={commentLabel}
+            className="rounded-full"
             onClick={() => openDecision(row, 'commented', true)}
           >
-            {state === 'pending'
-              ? t('lateOrders.comment', { defaultValue: 'Comment' })
-              : t('lateOrders.editComment', { defaultValue: 'Edit' })}
-          </Button>
-          {state === 'handled' ? null : !canRequestCoupon ? null : (
-            <Button size="sm" onClick={() => openDecision(row, 'compensated')}>
-              {t('lateOrders.assignCoupon', { defaultValue: 'Assign coupon' })}
-            </Button>
+            <BoardCommentIcon />
+          </IconButton>
+          {state === 'handled' || !canRequestCoupon ? (
+            /* Holds the slot, so the buttons line up down the board. */
+            <span aria-hidden className="h-8 w-8" />
+          ) : (
+            /* The one decision, so the one solid brand fill on the row. */
+            <button
+              type="button"
+              aria-label={`${couponLabel} · ${row.orderId}`}
+              title={couponLabel}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-[transform,background-color] duration-fast ease-out hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.94]"
+              onClick={() => openDecision(row, 'compensated')}
+            >
+              <BoardCouponIcon />
+            </button>
           )}
         </div>
       </li>
@@ -2396,25 +2483,29 @@ export function LateOrdersPage() {
                   role="row"
                   className={cn(
                     boardCols,
-                    'h-12 border-b border-foreground/[0.07] px-6 text-xs font-semibold text-muted-foreground 2xl:h-14 2xl:px-8 2xl:text-sm',
+                    'min-h-12 border-b border-foreground/[0.07] py-2 text-xs font-semibold text-muted-foreground 2xl:min-h-14 2xl:text-sm',
                   )}
                 >
-                  <span role="columnheader">
-                    {t('lateOrders.board.colRunning', { defaultValue: 'Running for' })}
-                  </span>
-                  <span role="columnheader">
-                    {t('lateOrders.col.order', { defaultValue: 'Order' })}
-                  </span>
-                  <span role="columnheader">
-                    {t('lateOrders.board.colBranch', { defaultValue: 'Brand / branch' })}
-                  </span>
-                  <span role="columnheader">
-                    {t('lateOrders.col.status', { defaultValue: 'Order status' })}
-                  </span>
-                  <span role="columnheader">
-                    {t('lateOrders.board.colHandling', { defaultValue: 'Handling' })}
-                  </span>
-                  <span role="columnheader" className="text-end">
+                  {(
+                    [
+                      ['lateOrders.col.elapsed', 'Total time'],
+                      ['lateOrders.col.service', 'Service time'],
+                      ['lateOrders.col.driverArrival', 'Driver arrival'],
+                      ['lateOrders.col.delivery', 'Delivery time'],
+                      ['lateOrders.col.preparation', 'Preparation time'],
+                      ['lateOrders.col.brandOnly', 'Brand'],
+                      ['lateOrders.col.restaurant', 'Restaurant'],
+                      ['lateOrders.col.customer', 'Customer mobile'],
+                      ['lateOrders.col.status', 'Order status'],
+                      ['lateOrders.board.colState', 'Status'],
+                      ['lateOrders.col.kind', 'Source of delay'],
+                    ] as const
+                  ).map(([key, def]) => (
+                    <span key={key} role="columnheader" className="leading-tight">
+                      {t(key, { defaultValue: def })}
+                    </span>
+                  ))}
+                  <span role="columnheader" className="sr-only">
                     {t('lateOrders.col.actions', { defaultValue: 'Decision' })}
                   </span>
                 </div>

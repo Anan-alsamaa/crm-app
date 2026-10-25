@@ -219,3 +219,24 @@ export async function soleYijiVendorId(): Promise<string | null> {
   if (rows.length !== 1) return null;
   return rows[0]?.yiji_vendor_id?.trim() || null;
 }
+
+/**
+ * THE YIJI VENDOR among the start-chat options — the dialog's default (owner,
+ * 2026-10-25), still changeable.
+ *
+ * Found by NAME, because the vendor's display fields are all an agent may read
+ * (MV-5: `platform` and the rest are the Administrator's), and never by a
+ * hard-coded id, which differs per environment. An exact "Yiji" / "ييجي" wins;
+ * otherwise a single vendor whose name contains it. Only a vendor that can
+ * actually be messaged (it has a platform id) qualifies; no match is no default.
+ */
+export function yijiVendorOption<T extends { name: string; platformId: string | null }>(
+  options: readonly T[],
+): T | undefined {
+  const usable = options.filter((o) => o.platformId);
+  const key = (name: string) => name.toLowerCase().replace(/[^\p{L}]/gu, '');
+  const exact = usable.find((o) => ['yiji', 'ييجي'].includes(key(o.name)));
+  if (exact) return exact;
+  const partial = usable.filter((o) => /yiji|ييجي/.test(key(o.name)));
+  return partial.length === 1 ? partial[0] : undefined;
+}

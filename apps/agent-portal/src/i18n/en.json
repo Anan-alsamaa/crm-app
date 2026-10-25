@@ -979,6 +979,8 @@
       "colHandling": "Handling",
       "byAgent": "by {{name}}",
       "cart": "Cart",
+      "colState": "Status",
+      "rowActions": "Order {{order}} actions",
       "severity": {
         "late": "Late",
         "veryLate": "Very late",

@@ -4,6 +4,7 @@ import { useMutation } from '@tanstack/react-query';
 import { cn, SparkleIcon, Spinner } from '@yiji/ui';
 import { ai, type AiError } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { enhanceLocale } from './enhance-locale.js';
 
 /**
  * ENHANCE — the AI's improved version of what the agent wrote, OFFERED.
@@ -62,20 +63,22 @@ export function EnhanceButton({
   const [suggestion, setSuggestion] = useState<string | null>(null);
 
   /*
-   * THE LANGUAGE IS STATED, never inferred.
+   * THE DRAFT'S LANGUAGE, STATED (owner, 2026-10-25).
    *
-   * The gateway treats a stated locale as overriding the language of the
-   * thread, which is what is wanted: the agent's portal language is an
-   * explicit choice about which language this customer is answered in. Same
-   * precedence the AI panel and the reply drafter already use.
+   * An Arabic draft must come back Arabic. Sending the portal language made an
+   * English portal translate Arabic drafts, so the request now carries the
+   * language the agent actually typed in (Arabic-script detection), and
+   * `localeSource: 'draft'` tells the gateway to keep it. Only a draft with no
+   * letters falls back to the portal language.
    */
-  const locale = i18n.language?.toLowerCase().startsWith('ar') ? 'ar' : 'en';
+  const locale = enhanceLocale(draft, i18n.language);
 
   const enhance = useMutation({
     mutationFn: () =>
       ai.suggestReply({ userId: user?.id ?? '', vendorId: vendorId ?? '' }, conversationId, {
         draft,
         locale,
+        localeSource: 'draft',
       }),
     onSuccess: (data) => {
       const text = data.reply?.trim();

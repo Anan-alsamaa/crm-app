@@ -33,4 +33,24 @@ describe('Enhance keeps the language the agent wrote in', () => {
       'WRITE THE REPLY IN THIS LANGUAGE: ar.',
     );
   });
+
+  it('tells the model to keep an Arabic draft in Arabic, not translate it', () => {
+    const p = prompts.suggestReply(ctx, 'نعتذر عن التأخير', 'ar', 'draft');
+    expect(p.system).toContain('MUST stay in ARABIC');
+    expect(p.system).toContain('do not translate it');
+    // The old "match the customer" line contradicted a stated language.
+    expect(p.system).not.toContain("Match the customer's language");
+  });
+
+  it("the AI panel's explicit EN/AR pick beats the draft's language", () => {
+    const p = prompts.suggestReply(ctx, 'sorry for the delay', 'ar', 'agent');
+    expect(p.system).toContain('WRITE THE REPLY IN THIS LANGUAGE: ar.');
+    expect(p.system).not.toContain('MUST stay in');
+  });
+
+  it('an older client with no localeSource still gets draft-wins', () => {
+    expect(prompts.suggestReply(ctx, 'نعتذر', 'en').system).toContain(
+      'WRITE THE REPLY IN THIS LANGUAGE: ar.',
+    );
+  });
 });
