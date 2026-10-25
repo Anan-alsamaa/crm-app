@@ -988,9 +988,11 @@ export function LateOrdersReportPage() {
         - and a `<Table>` with no surface had nothing establishing its width.
 
       Now the three-part split `AgentReportsPage` uses: this root owns the height
-      and clips; the scrollport below owns the page's vertical scroll with no
-      vertical padding; and each table scrolls sideways INSIDE its own card
-      (`WIDE_TABLE`, owner 2026-10-22), with its header sticky at the card's top.
+      and clips; the scrollport below owns BOTH axes with no vertical padding; and
+      `w-max min-w-full` inside lets a wide table stretch the scrollport rather
+      than escape its card. `TableSurface flow` (WIDE_TABLE) then has the page's
+      own scrollport directly above it, which is the one thing that makes its
+      sticky header work. The page scrolls, not the card (owner, 2026-10-25).
       See [[layout-height-budget]].
     */
     <div className="flex h-full flex-col overflow-hidden">
@@ -1007,7 +1009,7 @@ export function LateOrdersReportPage() {
         ref={pinRef}
         className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5 sm:px-7"
       >
-        <div className="min-w-0 space-y-4 pb-8">
+        <div className="w-max min-w-full space-y-4 pb-8">
           <PageTitle
             className="sticky start-0 w-[var(--pin-w,100%)]"
             title={t('nav.lateOrdersReport', { defaultValue: 'Late orders' })}

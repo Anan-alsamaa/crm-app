@@ -29,12 +29,8 @@ describe('pinned scrollports', () => {
     .flatMap((app) => tsxFiles(join(APPS, app, 'src')))
     .filter((f) => readFileSync(f, 'utf8').includes('w-max min-w-full'));
 
-  /* The admin reports no longer scroll sideways as a whole (Rapport skin,
-     owner 2026-10-22): their wide tables scroll INSIDE the card, so only the
-     agent portal's Late orders page still takes this shape. The guard stays
-     for it and for any page that returns to the pattern. */
   it('finds the sideways-scrolling report pages', () => {
-    expect(pages.length).toBeGreaterThanOrEqual(1);
+    expect(pages.length).toBeGreaterThanOrEqual(5);
   });
 
   it.each(pages)('%s attaches usePinnedWidth to its scrollport', (file) => {

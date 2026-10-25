@@ -25,28 +25,13 @@ import { cn } from '@yiji/ui';
  * Sticky to the bottom of the scrollport and to its start edge, so it holds
  * still on both axes while the table moves underneath.
  *
- * WHICH ELEMENT SCROLLS (Rapport skin, owner 2026-10-22). The wide reports
- * used to let the PAGE scroll sideways, so the table ran out past its own
- * card. They now scroll INSIDE the card, and the element that moves is the
- * table's own scroller (`data-table-scroller`), found inside the port. A port
- * with no such table - or one whose table does not overflow - falls back to
- * the port itself, which is the old behaviour exactly. With more than one
- * overflowing table on a page (Ticket deadlines has a small by-agent table
- * above the main one) it takes the one with the most hidden - the report.
+ * WHICH ELEMENT SCROLLS. The PAGE body (`portRef`). The wide reports let the
+ * page scroll sideways (`TableSurface flow`): the redesign briefly moved that
+ * scroll inside each table's card, and the owner asked for it back on the
+ * page (2026-10-25) - "for operations, page level is simpler". In Arabic the
+ * later columns are off the LEFT edge and `scrollLeft` runs negative, which
+ * the measurement and the nudge both allow for.
  */
-function scrollerIn(port: HTMLElement): HTMLElement {
-  let best: HTMLElement | null = null;
-  let most = 4;
-  for (const el of Array.from(port.querySelectorAll<HTMLElement>('[data-table-scroller]'))) {
-    const hidden = el.scrollWidth - el.clientWidth;
-    if (hidden > most) {
-      best = el;
-      most = hidden;
-    }
-  }
-  return best ?? port;
-}
-
 export function ColumnScroller({
   portRef,
   className,
@@ -59,9 +44,8 @@ export function ColumnScroller({
   const [state, setState] = useState({ max: 0, left: 0, hidden: 0 });
 
   useEffect(() => {
-    const root = portRef.current;
-    if (!root) return;
-    const port = scrollerIn(root);
+    const port = portRef.current;
+    if (!port) return;
 
     const measure = () => {
       const max = port.scrollWidth - port.clientWidth;
@@ -107,10 +91,9 @@ export function ColumnScroller({
   // Nothing hidden, nothing to offer.
   if (state.max <= 4) return null;
 
-  const target = () => (portRef.current ? scrollerIn(portRef.current) : null);
-  const step = () => Math.max(160, (target()?.clientWidth ?? 600) * 0.8);
+  const step = () => Math.max(160, (portRef.current?.clientWidth ?? 600) * 0.8);
   const nudge = (dir: -1 | 1) => {
-    const el = target();
+    const el = portRef.current;
     if (!el) return;
     // "Later" is leftward in RTL, where scrollLeft counts down from 0.
     const rtl = getComputedStyle(el).direction === 'rtl';

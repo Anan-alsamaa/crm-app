@@ -1318,9 +1318,10 @@ function ComplaintsReport({
 
       {/* The filter bar. Free text first because it answers most questions on
           its own; the dropdowns are for slicing rather than finding. */}
-      {/* Pinned, like the rest of the furniture — see usePinnedWidth. Harmless
-          now the table scrolls inside its own card (WIDE_TABLE): the stack is
-          the page's width, and so is --pin-w. */}
+      {/* Pinned, like the rest of the furniture — see usePinnedWidth. Without
+          the explicit width it would be laid out at the TABLE's width (the
+          stack is `w-max` so sticky has room to work), which is a filter card
+          five thousand pixels wide with its controls huddled at one end. */}
       <form
         // A real form, so Enter anywhere inside it applies — the reflex anybody
         // typing into a search box already has.
@@ -3100,7 +3101,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
             it — the cap was the reason nine columns needed a sideways swipe on
             a screen with room for twenty. The strip stays capped on its own
             (see ReportKpiStrip usages); the table gets the width. */}
-        <div className="min-w-0 space-y-4 pb-6 pt-1">
+        <div className="w-max min-w-full space-y-4 pb-6 pt-1">
           {/* The name stays a real h1: the tab strip above shows it as a
               selected pill, but a pill is not a heading. Rapport title block
               (owner, 2026-10-22): the purpose sits UNDER the big title rather

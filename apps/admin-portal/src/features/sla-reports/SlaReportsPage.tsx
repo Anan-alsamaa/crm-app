@@ -396,7 +396,7 @@ export function SlaReportsPage() {
             })}
           />
         ) : (
-          <div className="mt-3 min-w-0 space-y-3 pb-4 sm:pb-5">
+          <div className="mt-3 w-max min-w-full space-y-3 pb-4 sm:pb-5">
             {/* ONE table. This page used to toggle between a per-agent view and a
                 per-ticket view, and the per-agent one duplicated the Agent KPI
                 report. SLA performance is about which TICKETS met their promise,

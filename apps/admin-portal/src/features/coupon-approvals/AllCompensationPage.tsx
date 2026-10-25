@@ -786,7 +786,7 @@ export function AllCompensationPage() {
         ref={pinRef}
         className="[&::-webkit-scrollbar]:h-3.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-foreground/25 hover:[&::-webkit-scrollbar-thumb]:bg-foreground/40 [&::-webkit-scrollbar-track]:bg-foreground/[0.06] [scrollbar-width:auto] flex-1 overflow-auto px-5 sm:px-7"
       >
-        <div className="min-w-0 space-y-4 pb-6">
+        <div className="w-max min-w-full space-y-4 pb-6">
           <PageTitle
             className="sticky start-0 w-[var(--pin-w,100%)]"
             title={t('nav.compensationAll', { defaultValue: 'Compensation' })}

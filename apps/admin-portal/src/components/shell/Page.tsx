@@ -130,16 +130,20 @@ export function PageTitle({
 }
 
 /**
- * A wide report table that stays INSIDE its card (owner, 2026-10-22).
+ * A wide report table that lets the PAGE scroll (owner, 2026-10-25).
  *
- * The reports used `TableSurface flow`: the card grew to the table's own width
- * and the PAGE scrolled sideways, so a 28-column table ran out past its card
- * and off the screen. `fill` is the other bargain the primitive already offers
- * - the card keeps the page's width, takes the height left below it, and
- * scrolls on both axes itself, with the column names sticky at its top. The
- * pager, the row count and the generated-at line live in the card's own
- * footer (`TableSurface footer`), which `fill` measures, so the gap only has
- * to hold the ColumnScroller pill that sticks to the bottom of the page under
- * the card (it pages this scroller, finding it by `data-table-scroller`).
+ * For one release the reports scrolled inside their card (`fill`: the card
+ * took the height left on screen and scrolled on both axes itself). The owner
+ * asked for the page-level scroll back: "operations people care more about
+ * easiness than UI; for them page level is simpler". So this is `flow` again -
+ * the card grows to the table's own width and height, the page body scrolls
+ * down AND sideways, the column names stick to the top of the page body, and
+ * the horizontal scrollbar sits at the foot of the screen. The redesign's look
+ * stays: the card, the rows, the light header, and the footer (row count +
+ * pager, `TableSurface footer`) inside the card at the end of the table,
+ * pinned to the screen's width so it does not slide away sideways.
+ *
+ * A page using it must make its content stack as wide as the table and attach
+ * `usePinnedWidth` to its scrollport (packages/ui/tests/pinned-scrollports).
  */
-export const WIDE_TABLE = { fill: true, fillGap: 64 } as const;
+export const WIDE_TABLE = { flow: true } as const;

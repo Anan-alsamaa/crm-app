@@ -25,6 +25,7 @@ import {
   pageCountOf,
   toast,
 } from '@yiji/ui';
+import { usePinnedWidth } from '../../lib/pinned-width.js';
 import {
   useCompensationRequests,
   useCompensationRequest,
@@ -117,11 +118,16 @@ function RequestQueue() {
   const current = Math.min(page, pageCountOf(rows.length, pageSize));
   const paged = rows.slice((current - 1) * pageSize, current * pageSize);
   const open = (r: CompensationRow) => navigate(`/compensation-requests/${r.id}`);
+  /* The PAGE scrolls, on both axes (owner, 2026-10-25: "page level is simpler"
+     for operations): the table is `TableSurface flow`, the stack below is as
+     wide as the table, and everything that is not the table pins itself to
+     the visible width (--pin-w) so only the table moves sideways. */
+  const pinRef = usePinnedWidth();
 
   return (
-    <div className="h-full w-full overflow-y-auto pb-10">
+    <div ref={pinRef} className="agent-gutter h-full w-full overflow-auto">
       {/* Title block: big title + description, the queue's size on the far side. */}
-      <header className="agent-gutter flex flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-5 pt-5">
+      <header className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-end justify-between gap-x-6 gap-y-3 pb-5 pt-5">
         <div className="min-w-0">
           <h1 className="text-foreground">
             {t('compensation.title', { defaultValue: 'Compensation' })}
@@ -147,9 +153,9 @@ function RequestQueue() {
         )}
       </header>
 
-      <div className="agent-gutter space-y-4">
+      <div className="w-max min-w-full space-y-4 pb-10">
         {/* Filter card: the status chips, each with its count. */}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-card px-4 py-3">
+        <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl bg-card px-4 py-3">
           <span className="text-sm font-semibold text-foreground/80">
             {t('compensation.statusFilter', { defaultValue: 'Status' })}
           </span>
@@ -196,7 +202,7 @@ function RequestQueue() {
         </div>
 
         {isLoading ? (
-          <div className="space-y-px overflow-hidden rounded-2xl bg-card p-4">
+          <div className="sticky start-0 w-[var(--pin-w,100%)] space-y-px overflow-hidden rounded-2xl bg-card p-4">
             {Array.from({ length: 6 }).map((_, i) => (
               <Skeleton key={i} className="h-12 w-full rounded-xl" />
             ))}
@@ -204,7 +210,7 @@ function RequestQueue() {
         ) : isError ? (
           // Composed failure state on the card surface — a bare sentence adrift
           // under the filters reads as a rendering bug, not as an error.
-          <div className="rounded-2xl bg-card">
+          <div className="sticky start-0 w-[var(--pin-w,100%)] rounded-2xl bg-card">
             <ErrorState
               title={t('compensation.loadError', {
                 defaultValue: 'Could not load compensation requests.',
@@ -212,7 +218,7 @@ function RequestQueue() {
             />
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-2xl bg-card">
+          <div className="sticky start-0 w-[var(--pin-w,100%)] rounded-2xl bg-card">
             <EmptyState
               icon={<InboxIcon size={24} />}
               title={t('compensation.empty', { defaultValue: 'No compensation requests' })}
@@ -223,6 +229,7 @@ function RequestQueue() {
           </div>
         ) : (
           <TableSurface
+            flow
             scrollLabel={t('compensation.title', { defaultValue: 'Compensation' })}
             footer={
               <div className="px-6 py-3">
