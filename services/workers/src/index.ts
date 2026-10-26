@@ -34,6 +34,8 @@ import {
   scheduleYijiUsageRetention,
   scheduleYijiVolumeAlert,
   DEFAULT_YIJI_VOLUME_ALERT_MS,
+  scheduleCouponCustomerCheck,
+  DEFAULT_COUPON_CUSTOMER_CHECK_MS,
   setYijiUsageSink,
   yijiUsageWriter,
   DEFAULT_YIJI_USAGE_RETENTION_MS,
@@ -270,6 +272,19 @@ async function main(): Promise<void> {
     logger.info({ everyMs: yijiVolumeAlertMs }, 'yiji volume alert scheduled (0 = off)');
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'yiji volume alert could not be scheduled');
+  }
+
+  /* Pending coupons: does the phone have a Yiji account? Looked up ONCE per
+     request (<= 10 a run) and stored for the approval card, which must never
+     call Yiji itself (incident 2026-10-26). `COUPON_CUSTOMER_CHECK_MS=0` off. */
+  const couponCustomerCheckMs = Number(
+    process.env.COUPON_CUSTOMER_CHECK_MS ?? DEFAULT_COUPON_CUSTOMER_CHECK_MS,
+  );
+  try {
+    await scheduleCouponCustomerCheck(queues[QUEUES.automation], couponCustomerCheckMs);
+    logger.info({ everyMs: couponCustomerCheckMs }, 'coupon customer check scheduled (0 = off)');
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'coupon customer check could not be scheduled');
   }
 
   const lateOrdersPollMs = Number(process.env.LATE_ORDERS_POLL_MS ?? DEFAULT_LATE_ORDERS_POLL_MS);

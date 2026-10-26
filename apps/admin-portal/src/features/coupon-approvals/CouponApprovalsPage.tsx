@@ -36,7 +36,6 @@ import { SearchField } from '../../components/SearchField.js';
 import { useStoreIndex } from '../restaurants/api.js';
 import {
   useCouponApprovals,
-  useCustomerReachable,
   useDecideCoupon,
   useRetryCouponDelivery,
   useSaveCouponTerms,
@@ -466,21 +465,14 @@ function Row({
       .find((v) => v.replace(/\D/g, '').length >= 9) ?? '';
   const canBeDelivered = Boolean(deliveryPhone);
   /*
-   * Can this number actually be reached on Yiji?
-   *
-   * Asked only for the rows where it changes what the card says: no order, a
-   * phone to try, and not deliberately withheld. One cheap upstream call per
-   * such row, cached for the session, so opening the queue does not become a
-   * burst of lookups.
+   * Can this number actually be reached on Yiji? THE CARD NEVER ASKS YIJI
+   * (prod incident, 2026-10-26: a per-card lookup - 378 for the All tab,
+   * re-asked on every refocus - rate-limited Yiji and froze the late-orders
+   * TV). The workers look each pending request's phone up ONCE and store the
+   * answer on the row; this only reads it. `false` is a definite no; null or
+   * absent (not checked yet, or the field not applied) says nothing.
    */
-  /* ONLY FOR THE CARD BEING READ (prod incident, 2026-10-26). This ran for
-     EVERY card in the list - 378 Yiji lookups for the All tab, re-asked on
-     every refocus - until Yiji rate-limited us and the late-orders TV went
-     stale. The answer only feeds a notice inside an opened PENDING card. */
-  const reach = useCustomerReachable(
-    expanded && pending && !row.delivery_excluded ? deliveryPhone : '',
-    row.vendor,
-  );
+  const noYijiAccount = pending && row.yiji_customer_found === false;
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while
@@ -1010,29 +1002,26 @@ function Row({
             noise on the great majority that deliver perfectly well and trains
             a supervisor to ignore the line that matters (owner, 2026-10-01).
 
-            So the card ASKS: `/commerce/customer-exists` resolves the number
-            against Yiji, exactly as the delivery worker will. A customer who
-            exists gets no notice at all. One who does not gets a real warning,
+            So the number is resolved against Yiji, exactly as the delivery
+            worker will - but by the WORKERS, once, stored on the row
+            (`yiji_customer_found`), never by this page. A customer who exists
+            gets no notice at all. One who does not gets a real warning,
             because approving that coupon records a compensation nothing will
             deliver — and an agent must not tell them it is on the way.
 
-            Nothing is said while the answer is loading, and nothing is said
-            when the lookup is not configured: an unanswered question is not
-            evidence of absence.
+            Nothing is said until the answer is stored: an unanswered question
+            is not evidence of absence.
           */}
-          {Boolean(deliveryPhone) &&
-            !row.delivery_excluded &&
-            reach.data?.configured === true &&
-            reach.data.exists === false && (
-              <p role="note" className={NOTICE}>
-                <InfoIcon size={14} className="mt-0.5 shrink-0 text-foreground/70" aria-hidden />
-                {t('couponApprovals.noYijiAccount', {
-                  defaultValue:
-                    '{{phone}} has no Yiji account yet — the coupon is held and sent automatically if they sign up. Until then honour it in the branch.',
-                  phone: normalizePhone(deliveryPhone) || deliveryPhone,
-                })}
-              </p>
-            )}
+          {Boolean(deliveryPhone) && !row.delivery_excluded && noYijiAccount && (
+            <p role="note" className={NOTICE}>
+              <InfoIcon size={14} className="mt-0.5 shrink-0 text-foreground/70" aria-hidden />
+              {t('couponApprovals.noYijiAccount', {
+                defaultValue:
+                  '{{phone}} has no Yiji account yet — the coupon is held and sent automatically if they sign up. Until then honour it in the branch.',
+                phone: normalizePhone(deliveryPhone) || deliveryPhone,
+              })}
+            </p>
+          )}
 
           {/* Never-send outranks every other delivery state: there is nothing
               to report on and nothing to retry. */}

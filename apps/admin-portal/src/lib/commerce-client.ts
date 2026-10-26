@@ -70,21 +70,13 @@ export const commerce = {
    * page of rows is one call rather than one per row, and the gateway caps it at
    * 50 — which is why only the VISIBLE page is ever asked for.
    */
-  /**
-   * Does this phone belong to a Yiji customer?
-   *
-   * The coupon approval card asks before it warns: an order-less coupon is
-   * delivered by resolving the customer from their number, so a caveat about
-   * "they may not have the app" is noise on the majority who do.
-   *
-   * `configured: false` means nothing was asked (no admin credential), which is
-   * NOT the same as "they do not exist" and must not render a warning.
+  /*
+   * NO `customerExists` HERE, ON PURPOSE (incident 2026-10-26). The coupon
+   * approval card asked `/commerce/customer-exists` per card and flooded Yiji.
+   * The answer is now looked up ONCE by the workers and stored on the row
+   * (`coupon_approvals.yiji_customer_found`); the admin portal reads that and
+   * never asks Yiji for it.
    */
-  customerExists: (phone: string, vendorId?: string | null) =>
-    get<{ configured: boolean; exists: boolean; customerId: string | null }>(
-      '/commerce/customer-exists',
-      { phone, ...vendorParam(vendorId) },
-    ),
   getOrderEventTimes: (orderIds: string[], vendorId?: string | null) =>
     get<Record<string, Record<string, string | null>>>('/commerce/service-times', {
       orderIds: orderIds.join(','),

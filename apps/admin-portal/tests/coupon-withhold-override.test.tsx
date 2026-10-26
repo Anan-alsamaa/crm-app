@@ -48,10 +48,6 @@ const api = vi.hoisted(() => ({
   useDecideCoupon: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useSaveCouponTerms: vi.fn(),
   useRetryCouponDelivery: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
-  /* The card asks Yiji whether an order-less coupon can actually reach the
-     customer. Default here is the quiet answer — a configured lookup that
-     found them — so these tests assert what they were written for. */
-  useCustomerReachable: vi.fn(() => ({ data: { configured: true, exists: true } })),
 }));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
 
