@@ -928,6 +928,23 @@
     "noReason": "No reason was given.",
     "needsApproval": "A supervisor has to approve this coupon. It is not on the ticket until they do — do not promise it to the customer yet.",
     "sentForApproval": "Coupon sent for approval.",
+    "notSent": {
+      "title": "The coupon was not sent",
+      "body": "The ticket is saved as Not Compensated. The coupon request did not reach the server.",
+      "retry": "Retry",
+      "skip": "Don't add a coupon",
+      "skipped": "No coupon was added.",
+      "reason": {
+        "network": "No connection to the server.",
+        "server": "The server did not answer. It may be restarting.",
+        "session": "Your session had expired.",
+        "permission": "Your account is not allowed to request coupons.",
+        "invalid": "The server refused the coupon details.",
+        "duplicate_code": "That coupon code is already used.",
+        "prepare": "The coupon details could not be prepared.",
+        "unknown": "Something unexpected went wrong."
+      }
+    },
     "requestFailed": "The coupon was NOT sent for approval — raise it from the ticket.",
     "status": {
       "pending": "Pending",

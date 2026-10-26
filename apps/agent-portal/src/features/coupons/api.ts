@@ -4,6 +4,13 @@ import type { CouponApprovalStatus, CouponFields } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { vendorField } from '../../lib/record-vendor.js';
 import { jobProducer } from '../../lib/job-producer.js';
+import {
+  COUPON_LOG_TAG,
+  CouponRequestError,
+  createCouponRequestIdempotent,
+  newCouponRequestId,
+  type SendOptions,
+} from './coupon-request-send.js';
 
 /**
  * Every compensation/coupon request, from every agent.
@@ -114,6 +121,12 @@ export function useMyCouponRequests() {
 
 export interface CreateCouponRequestInput extends CouponFields {
   /**
+   * The new row's id, made in the browser (owner, 2026-10-25). Pass the SAME
+   * id to retry a request that failed, so it can never be created twice;
+   * left out, one is made for this call.
+   */
+  id?: string;
+  /**
    * The ticket this compensates, when there is one.
    *
    * OPTIONAL since 2026-09-21. A coupon given straight from the late-orders
@@ -181,27 +194,125 @@ export interface CreateCouponRequestInput extends CouponFields {
  * `status` is left to the schema default rather than sent: a client that names
  * its own starting status is one typo away from creating an already-approved
  * request.
+ *
+ * IDEMPOTENT AND RETRIED (owner, 2026-10-25) - see `coupon-request-send.ts`.
+ * Every caller (the Add-ticket form, from a chat or not; the ticket card's
+ * "Assign a coupon"; the ticket edit form) goes through here, so all of them
+ * get the same protection. A failure rejects with a `CouponRequestError`, is
+ * logged to the console under `[coupon-request]`, and - for a coupon about a
+ * ticket - is written to that ticket's history, so a supervisor can read why.
  */
-export function useRequestCouponApproval() {
+export function useRequestCouponApproval(opts: Pick<SendOptions, 'delays' | 'sleep'> = {}) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: CreateCouponRequestInput) => {
-      /* THE VENDOR, so the worker delivers it through that vendor's platform
-         (MV-1). Best-effort: a coupon request is never lost to this lookup. */
-      const { vendor: explicit, ...rest } = input;
-      const vendor = await vendorField({
-        explicit,
-        ticket: input.ticket ?? null,
-        contact: input.contact,
-      });
-      return directus.request(
-        createItem('coupon_approvals' as never, { ...rest, ...vendor } as never),
-      );
-    },
-    onSuccess: () => {
+    mutationFn: (input: CreateCouponRequestInput) => sendCouponRequest(input, opts),
+    onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
+      if (vars.ticket) void qc.invalidateQueries({ queryKey: ['ticket-events', vars.ticket] });
+    },
+    onError: (_e, vars) => {
+      if (vars.ticket) void qc.invalidateQueries({ queryKey: ['ticket-events', vars.ticket] });
     },
   });
+}
+
+/** Requests that failed in this tab, so a later success can say "sent on retry". */
+const failedRequestIds = new Set<string>();
+
+/**
+ * One line in the ticket's history (`ticket_events`, append-only; the agent's
+ * `create_tickets` privilege grants the create). Written as a `commented`
+ * event because that is what the ticket page already renders with its text,
+ * on every release; `payload.coupon_request` marks it as the system's line,
+ * and it carries no mentions, so it notifies nobody. Best-effort: history
+ * must never be the reason a coupon is reported as failed.
+ */
+async function recordCouponHistory(
+  ticketId: string,
+  actorId: string | null,
+  text: string,
+  detail: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await directus.request(
+      createItem(
+        'ticket_events' as never,
+        {
+          ticket: ticketId,
+          event_type: 'commented',
+          ...(actorId ? { actor: actorId } : {}),
+          payload: { text, coupon_request: detail },
+        } as never,
+      ),
+    );
+  } catch (err) {
+    console.error(`${COUPON_LOG_TAG} could not write the ticket history line`, err);
+  }
+}
+
+/** The mutation's body, exported for tests and for callers outside React. */
+export async function sendCouponRequest(
+  input: CreateCouponRequestInput,
+  opts: Pick<SendOptions, 'delays' | 'sleep'> = {},
+): Promise<unknown> {
+  const { vendor: explicit, id: givenId, ...rest } = input;
+  const id = givenId ?? newCouponRequestId();
+  try {
+    /* THE VENDOR, so the worker delivers it through that vendor's platform
+       (MV-1). Best-effort: a coupon request is never lost to this lookup. */
+    const vendor = await vendorField({
+      explicit,
+      ticket: input.ticket ?? null,
+      contact: input.contact,
+    }).catch(() => ({}));
+    const row = await createCouponRequestIdempotent(
+      directus,
+      id,
+      { ...rest, ...vendor } as Record<string, unknown>,
+      {
+        ...opts,
+        onAttemptFailed: (attempt, c, err) =>
+          console.warn(
+            `${COUPON_LOG_TAG} attempt ${attempt} failed (${c.kind}${c.status ? ` ${c.status}` : ''})`,
+            { requestId: id, ticket: input.ticket ?? null, error: err },
+          ),
+      },
+    );
+    if (failedRequestIds.delete(id) && input.ticket) {
+      await recordCouponHistory(input.ticket, input.requested_by, 'Coupon request sent on retry.', {
+        id,
+        outcome: 'sent',
+      });
+    }
+    return row;
+  } catch (err) {
+    const e =
+      err instanceof CouponRequestError
+        ? err
+        : new CouponRequestError({
+            kind: 'unknown',
+            status: null,
+            detail: (err as Error)?.message ?? String(err),
+            attempts: 1,
+            requestId: id,
+          });
+    console.error(`${COUPON_LOG_TAG} NOT sent: ${e.message}`, {
+      requestId: id,
+      ticket: input.ticket ?? null,
+      attempts: e.attempts,
+      error: err,
+    });
+    failedRequestIds.add(id);
+    if (input.ticket) {
+      await recordCouponHistory(
+        input.ticket,
+        input.requested_by,
+        `Coupon request failed: ${e.message}`,
+        { id, outcome: 'failed', kind: e.kind, status: e.status, attempts: e.attempts },
+      );
+    }
+    throw e;
+  }
 }
 
 /**

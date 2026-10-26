@@ -2078,11 +2078,14 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
             reason: draft.response_desc.trim() || null,
           });
           couponAsked = true;
-        } catch {
+        } catch (err) {
+          /* Already retried, logged and written to this ticket's history by
+             the hook (owner, 2026-10-25); the agent is told why. */
           toast.error(
             t('coupons.requestFailed', {
               defaultValue: 'The coupon was NOT sent for approval — raise it from the ticket.',
             }),
+            { description: err instanceof Error ? err.message : undefined },
           );
         }
       }

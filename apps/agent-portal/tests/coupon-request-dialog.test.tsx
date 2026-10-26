@@ -134,6 +134,30 @@ describe('CouponRequestDialog', () => {
     expect(sent.coupon_percent).toBeNull();
   });
 
+  /* The ticket card's "Assign a coupon" (EMA-80) goes through this dialog
+     (owner, 2026-10-25): pressing Send again after a failure must re-send the
+     SAME request, so a retry can never create a second coupon. */
+  it('re-sends the same request id after a failure', async () => {
+    mutateAsync.mockRejectedValueOnce(new Error('no connection to the server'));
+    renderDialog();
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    await userEvent.click(screen.getByLabelText(/delivery type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+    const val = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(val);
+    await userEvent.type(val, '25');
+    await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
+    const send = screen.getByRole('button', { name: /send for approval/i });
+    await userEvent.click(send);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
+    await userEvent.click(send);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(2));
+    const [a, b] = mutateAsync.mock.calls.map((c) => c[0] as { id: string });
+    expect(typeof a!.id).toBe('string');
+    expect(b!.id).toBe(a!.id);
+  });
+
   it('puts the number in the percentage column when the category says so', async () => {
     renderDialog();
     await userEvent.click(screen.getByLabelText(/issuing side/i));

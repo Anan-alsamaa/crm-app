@@ -28,6 +28,7 @@ import {
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useCouponCodeTaken, useRequestCouponApproval } from './api.js';
 import { couponTermsFromDraft } from './coupon-request-fields.js';
+import { newCouponRequestId } from './coupon-request-send.js';
 
 /**
  * The coupon an agent asks a supervisor to approve.
@@ -330,6 +331,9 @@ export function CouponRequestDialog({
   // Today, and a month out. Computed once per opening so the dates do not shift
   // under the agent while they are filling the form in.
   const dates = useMemo(() => defaultCouponDates(new Date()), [open]);
+  /* ONE id per opening (owner, 2026-10-25): pressing Send again after a
+     failure re-sends the SAME request, so it can never be created twice. */
+  const requestId = useMemo(() => newCouponRequestId(), [open]);
 
   const [draft, setDraft] = useState<CouponRequestDraft>(() => ({
     title: customerPhone ?? '',
@@ -477,6 +481,7 @@ export function CouponRequestDialog({
     }
     create
       .mutateAsync({
+        id: requestId,
         ticket: ticketId ?? null,
         // Only when there is no ticket: `couponOrderId` prefers the ticket's
         // order, and writing both would create a second thing to disagree.
@@ -512,8 +517,11 @@ export function CouponRequestDialog({
         onCreated?.();
         onClose();
       })
-      .catch(() =>
-        toast.error(t('coupons.requestFailed', { defaultValue: 'Could not send that request.' })),
+      .catch((err: unknown) =>
+        toast.error(t('coupons.requestFailed', { defaultValue: 'Could not send that request.' }), {
+          /* The reason, in plain words - it is in the ticket's history too. */
+          description: err instanceof Error ? err.message : undefined,
+        }),
       );
   };
 
