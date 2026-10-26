@@ -40,7 +40,10 @@ import {
   complaintSubject,
 } from './ComplaintFields.js';
 import { useOrderStore, useStores, toStoreRecord } from './useStoreMatch.js';
-import { useRequestCouponApproval } from '../coupons/api.js';
+import { useRequestCouponApproval, type CreateCouponRequestInput } from '../coupons/api.js';
+import { CouponNotSentDialog } from '../coupons/CouponNotSentDialog.js';
+import { newCouponRequestId, type CouponRequestError } from '../coupons/coupon-request-send.js';
+import { raiseTicketCoupon } from '../coupons/ticket-coupon.js';
 import { couponTermsFromDraft } from '../coupons/coupon-request-fields.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { useContact } from '../contacts/api.js';
@@ -56,6 +59,11 @@ import {
 } from './ticket-draft.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
+
+/** What the ticket save hands back: the new id and the branch-notify outcome. */
+type CreatedTicket = Awaited<
+  ReturnType<ReturnType<typeof useCreateTicketFromConversation>['mutateAsync']>
+>;
 
 /**
  * No `subject`. A ticket's name is its complaint type, by request — one list of
@@ -413,9 +421,22 @@ function CreateTicketForm({
     return orderStore;
   }, [storeId, orderStore, stores.data, orderSnapshotView]);
 
+  /* The coupon that did not go out with the ticket just saved, while the
+     agent decides: Retry or Don't add (owner, 2026-10-25). Escape must not
+     leave the page under that question. */
+  const [couponFailure, setCouponFailure] = useState<{
+    ticketId: string;
+    created: CreatedTicket;
+    input: CreateCouponRequestInput & { id: string };
+    error: CouponRequestError;
+  } | null>(null);
+  const [couponRetrying, setCouponRetrying] = useState(false);
+  const couponFailureOpen = useRef(false);
+  couponFailureOpen.current = !!couponFailure;
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape' && !couponFailureOpen.current) onClose();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -500,6 +521,77 @@ function CreateTicketForm({
     onClose();
   };
 
+  const sendTicketCoupon = (ticketId: string, input: CreateCouponRequestInput & { id: string }) =>
+    raiseTicketCoupon({
+      ticketId,
+      input,
+      send: requestCoupon.mutateAsync,
+      markCompensated: (id, value) =>
+        updateTicket.mutateAsync({ id, patch: { compensation: value } as never }),
+    });
+
+  /** Everything after the save: the pin, the toast, and where to go next. */
+  const finishCreated = (created: CreatedTicket, coupon: 'sent' | 'none' | 'skipped') => {
+    // The ticket now holds a snapshot of the order, so the sidebar pin has done
+    // its job. Leaving it would show the same order twice — live in the sidebar
+    // and frozen on the ticket — with no way to tell which is authoritative.
+    if (includeOrder && latestOrder) clearPinnedOrder(conversationId);
+    // Say what reached the branch, and say it when it did NOT. An agent who
+    // believes the store was told and writes nothing further is the failure
+    // mode a silent queue produces.
+    const branchLine =
+      created?.storeNotify === 'queued'
+        ? t('tickets.branchNotified', { defaultValue: 'The branch will be told.' })
+        : created?.storeNotify === 'failed'
+          ? t('tickets.branchNotifyFailed', {
+              defaultValue: 'The branch could NOT be told — tell a supervisor.',
+            })
+          : created?.storeNotify === 'no-store'
+            ? t('tickets.branchNotifyNoStore', {
+                defaultValue: 'No branch attached, so nobody was told.',
+              })
+            : '';
+    const couponLine =
+      coupon === 'sent'
+        ? t('coupons.sentForApproval', { defaultValue: 'Coupon sent for approval.' })
+        : coupon === 'skipped'
+          ? t('coupons.notSent.skipped', { defaultValue: 'No coupon was added.' })
+          : '';
+    toast[created?.storeNotify === 'failed' ? 'warning' : 'success'](
+      t('tickets.created', { defaultValue: 'Ticket created' }),
+      {
+        description: [optionLabel(subject), branchLine, couponLine].filter(Boolean).join(' · '),
+      },
+    );
+    // Hand the id back BEFORE closing: a page-hosted form navigates to the new
+    // ticket, and closing first would bounce the agent to the inbox on the way.
+    if (created?.id) onCreated?.(created.id);
+    else onClose();
+  };
+
+  /** The dialog's Retry: the SAME request again (same id). */
+  const retryCoupon = async () => {
+    if (!couponFailure || couponRetrying) return;
+    setCouponRetrying(true);
+    const outcome = await sendTicketCoupon(couponFailure.ticketId, couponFailure.input);
+    setCouponRetrying(false);
+    if (!outcome.ok) {
+      setCouponFailure({ ...couponFailure, error: outcome.error });
+      return;
+    }
+    const { created } = couponFailure;
+    setCouponFailure(null);
+    finishCreated(created, 'sent');
+  };
+
+  /** The dialog's Don't add: the ticket stays Not Compensated, as saved. */
+  const skipCoupon = () => {
+    if (!couponFailure) return;
+    const { created } = couponFailure;
+    setCouponFailure(null);
+    finishCreated(created, 'skipped');
+  };
+
   const onSubmit = handleSubmit(async (values) => {
     if (!contactId || !vendorId) return;
     if (complaintHasErrors(complaint) || !subject) return;
@@ -564,8 +656,10 @@ function CreateTicketForm({
           // Overrides the coupon fields complaintPatch just wrote — they are
           // the supervisor's to release, not this form's.
           ...coupon.ticket,
-          // Compensated ONLY when a coupon request goes out with the ticket.
-          compensation: compensationFlag(!!request),
+          /* NOT Compensated yet, even with a coupon (owner, 2026-10-25): it
+             becomes Compensated once the coupon request row EXISTS - see
+             raiseTicketCoupon. Without a coupon this is what it always was. */
+          compensation: compensationFlag(false),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
         storeNotifyTypes: notifyTypes.data ?? [],
@@ -576,69 +670,30 @@ function CreateTicketForm({
       clearTicketDraft(draftKey);
 
       // Raised AFTER the ticket, because the request has to point at one. If it
-      // fails the ticket still stands and the agent is told the coupon did not
-      // go anywhere — the alternative is a promise nobody is holding.
-      let couponAsked = false;
+      // fails the ticket still stands, Not Compensated, and the agent has to
+      // answer a dialog that says why - the alternative is a promise nobody
+      // is holding.
       if (request && created?.id) {
-        try {
-          await requestCoupon.mutateAsync({
-            ...request,
-            ticket: created.id,
-            contact: contactId,
-            requested_by: user?.id ?? null,
-            reason:
-              collectedCoupon?.compensation_reason?.trim() ||
-              complaint.response_desc.trim() ||
-              null,
-          });
-          couponAsked = true;
-        } catch {
-          /* No coupon went out, so the ticket must not claim one. */
-          await updateTicket
-            .mutateAsync({
-              id: created.id,
-              patch: { compensation: compensationFlag(false) } as never,
-            })
-            .catch(() => undefined);
-          toast.error(
-            t('coupons.requestFailed', {
-              defaultValue: 'The coupon was NOT sent for approval — raise it from the ticket.',
-            }),
-          );
+        const input: CreateCouponRequestInput & { id: string } = {
+          ...request,
+          /* Made once, here: every retry - automatic or the dialog's - sends
+             this same id, so the coupon can never be created twice. */
+          id: newCouponRequestId(),
+          ticket: created.id,
+          contact: contactId,
+          requested_by: user?.id ?? null,
+          reason:
+            collectedCoupon?.compensation_reason?.trim() || complaint.response_desc?.trim() || null,
+        };
+        const outcome = await sendTicketCoupon(created.id, input);
+        if (!outcome.ok) {
+          setCouponFailure({ ticketId: created.id, created, input, error: outcome.error });
+          return; // the dialog finishes the save
         }
+        finishCreated(created, 'sent');
+        return;
       }
-      // The ticket now holds a snapshot of the order, so the sidebar pin has done
-      // its job. Leaving it would show the same order twice — live in the sidebar
-      // and frozen on the ticket — with no way to tell which is authoritative.
-      if (includeOrder && latestOrder) clearPinnedOrder(conversationId);
-      // Say what reached the branch, and say it when it did NOT. An agent who
-      // believes the store was told and writes nothing further is the failure
-      // mode a silent queue produces.
-      const branchLine =
-        created?.storeNotify === 'queued'
-          ? t('tickets.branchNotified', { defaultValue: 'The branch will be told.' })
-          : created?.storeNotify === 'failed'
-            ? t('tickets.branchNotifyFailed', {
-                defaultValue: 'The branch could NOT be told — tell a supervisor.',
-              })
-            : created?.storeNotify === 'no-store'
-              ? t('tickets.branchNotifyNoStore', {
-                  defaultValue: 'No branch attached, so nobody was told.',
-                })
-              : '';
-      const couponLine = couponAsked
-        ? t('coupons.sentForApproval', { defaultValue: 'Coupon sent for approval.' })
-        : '';
-      toast[created?.storeNotify === 'failed' ? 'warning' : 'success'](
-        t('tickets.created', { defaultValue: 'Ticket created' }),
-        {
-          description: [optionLabel(subject), branchLine, couponLine].filter(Boolean).join(' · '),
-        },
-      );
-      // Hand the id back BEFORE closing: a page-hosted form navigates to the new
-      // ticket, and closing first would bounce the agent to the inbox on the way.
-      if (created?.id) onCreated?.(created.id);
-      else onClose();
+      finishCreated(created, 'none');
     } catch {
       toast.error(t('tickets.createError'));
     }
@@ -1143,6 +1198,16 @@ function CreateTicketForm({
           locale={i18n.language}
         />
       </div>
+      {/* Blocking until answered: the ticket is saved, the coupon is not. */}
+      <CouponNotSentDialog
+        open={!!couponFailure}
+        kind={couponFailure?.error.kind ?? 'unknown'}
+        status={couponFailure?.error.status ?? null}
+        detail={couponFailure?.error.detail ?? null}
+        retrying={couponRetrying}
+        onRetry={() => void retryCoupon()}
+        onSkip={skipCoupon}
+      />
     </form>
   );
 }
