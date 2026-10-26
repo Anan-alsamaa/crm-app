@@ -42,8 +42,15 @@ export function AppCommandPalette({ open: openProp, onOpenChange }: AppCommandPa
   useCommandPaletteShortcut(() => setOpen(true));
 
   // Cap at 8 each so the palette stays scannable; users type to narrow.
-  const conversations = useConversations({ status: 'open', sort: 'recent' });
-  const tickets = useTickets();
+  /* Both lists only while the palette is open, eight each (prod, 2026-10-26):
+     mounted on every page, they read every open chat and every ticket on
+     every load and refocus of every agent. */
+  const conversations = useConversations(
+    { status: 'open', sort: 'recent' },
+    { enabled: open, limit: 8 },
+  );
+  // Only while the palette is open - see useTickets.
+  const tickets = useTickets({ enabled: open });
 
   const groups = useMemo<CommandGroup[]>(() => {
     const out: CommandGroup[] = [];

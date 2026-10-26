@@ -470,15 +470,22 @@ export function useInboxCounts(
   });
 }
 
-export function useConversations(filters: InboxFilters = {}) {
+export function useConversations(
+  filters: InboxFilters = {},
+  /** For a preview of a few (the command palette): only while shown, capped. */
+  opts: { enabled?: boolean; limit?: number } = {},
+) {
   const filter = buildFilter(filters);
   const sort = buildSort(filters);
+  const limit = opts.limit ?? -1;
   return useQuery({
-    queryKey: ['conversations', filters],
+    queryKey: limit === -1 ? ['conversations', filters] : ['conversations', filters, limit],
+    enabled: opts.enabled ?? true,
+    ...(limit === -1 ? {} : { staleTime: 60_000, refetchOnWindowFocus: false }),
     queryFn: () =>
       directus.request(
         readItems('conversations', {
-          limit: -1,
+          limit,
           fields: [
             'id',
             'status',
