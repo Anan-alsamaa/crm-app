@@ -944,6 +944,27 @@ export const collections: CollectionSpec[] = [
         note: 'Why the last delivery attempt failed. Null once the coupon has been delivered.',
       },
       /*
+       * DOES THE CUSTOMER HAVE A YIJI ACCOUNT - CHECKED ONCE, STORED (incident
+       * 2026-10-26). The admin Coupon approvals card used to ask Yiji live,
+       * once per card, and flooded it. Now the workers' coupon-customer-check
+       * job looks each PENDING request's phone up once (small batches, behind
+       * the Yiji guard) and writes the answer here; the card only reads it.
+       * NULL = not checked yet, and the card then says nothing.
+       *
+       * Needs a manual `apply:fields` on staging and prod. The card and the job
+       * both degrade (read without them / skip) while they are missing.
+       */
+      {
+        field: 'yiji_customer_found',
+        type: 'boolean',
+        note: 'Whether the request’s phone resolved to a Yiji customer when last checked. Empty = not checked yet. Written by the workers, read by the approval card.',
+      },
+      {
+        field: 'yiji_customer_checked_at',
+        type: 'dateTime',
+        note: 'When yiji_customer_found was last looked up on Yiji (re-checked after ~24h while still pending).',
+      },
+      /*
        * TAKEN BACK FROM THE TICKET (owner, 2026-10-21, EMA-80).
        *
        * Setting a ticket's Compensation to "Not Compensated" removes its

@@ -8,7 +8,6 @@ import {
 } from '@yiji/shared-types';
 import { jobProducer } from '../../lib/job-producer.js';
 import { directus } from '../../lib/directus.js';
-import { commerce } from '../../lib/commerce-client.js';
 
 /**
  * The supervisor's side of coupon approval.
@@ -79,6 +78,13 @@ export interface CouponApprovalRow {
   /** Held because the customer has no Yiji account yet (EMA-49). */
   awaiting_signup_at?: string | null;
   signup_checked_at?: string | null;
+  /**
+   * Whether the request's phone has a Yiji account, as the WORKERS last found
+   * it (incident 2026-10-26: the page itself never asks Yiji). Null/absent =
+   * not checked yet - the card then says nothing.
+   */
+  yiji_customer_found?: boolean | null;
+  yiji_customer_checked_at?: string | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -115,93 +121,115 @@ export interface CouponApprovalRow {
   decided_by: { id: string; first_name: string | null; email: string | null } | null;
 }
 
+/**
+ * The stored "has a Yiji account" answer (written by the workers' coupon
+ * customer check). Optional in the read: the fields need a manual
+ * `apply:fields`, and until then naming them 403s the WHOLE read - so the
+ * queue falls back to reading without them rather than going empty.
+ */
+export const COUPON_CUSTOMER_CHECK_FIELDS = [
+  'yiji_customer_found',
+  'yiji_customer_checked_at',
+] as const;
+
 export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pending') {
   return useQuery({
     queryKey: ['coupon-approvals', status],
     // Short: several supervisors may be working the same queue, and a decision
     // taken next to you should not stay on screen as still-pending.
     refetchInterval: 30_000,
-    queryFn: async () =>
-      (await directus.request(
-        readItems(
-          'coupon_approvals' as never,
-          {
-            fields: [
-              'id',
-              'coupon_code',
-              'coupon_value',
-              'coupon_percent',
-              'compensation',
-              'reason',
-              'status',
-              'decided_at',
-              'decision_note',
-              'date_created',
-              'title',
-              'issuing_side',
-              'delivery_type',
-              'coupon_type',
-              'discount_category',
-              'valid_from',
-              'valid_to',
-              'max_discount',
-              'usage_limit',
-              'item_name',
-              'item_sku',
-              'no_other_discounts',
-              'customer_phone',
-              'brand_id',
-              'restaurant_id',
-              'edited_by_admin',
-              'yiji_coupon_user_id',
-              'yiji_pushed_at',
-              'yiji_push_error',
-              'delivery_excluded',
-              'delivery_excluded_reason',
-              'yiji_coupon_id',
-              'awaiting_signup_at',
-              'signup_checked_at',
-              'order_id',
-              'vendor',
-              {
-                ticket: [
-                  'id',
-                  'subject',
-                  'complaint_type',
-                  // EMA-57 (2026-10-07): the ticket's source, to review where
-                  // the complaint came from before approving.
-                  'complaint_source',
-                  'description',
-                  'order_id',
-                  'priority',
-                  'status',
-                  // The branch this complaint was about. The coupon's own
-                  // `restaurant_id` is Yiji's identifier — right for the push,
-                  // useless to read — so the readable name comes from here.
-                  { store: ['id', 'code', 'name', 'city', { brand: ['name'] }] },
-                ],
-              },
-              { contact: ['id', 'name', 'phone'] },
-              { requested_by: ['id', 'first_name', 'email'] },
-              { decided_by: ['id', 'first_name', 'email'] },
-            ],
-            // Newest first: a queue is worked from the top, and the request
-            // that just came in is the one somebody is waiting on.
-            sort: ['-date_created'],
-            limit: -1,
-            // "approved" is every APPROVED decision — 'edited' (terms amended)
-            // and 'assigned' (delivered) included. Listing only two of the three
-            // meant an amended approval matched NO tab and simply vanished.
-            ...(status === 'all'
-              ? {}
-              : status === 'approved'
-                ? { filter: { status: { _in: [...COUPON_APPROVED_STATUSES] } } }
-                : { filter: { status: { _eq: status } } }),
-          } as never,
-        ),
-      )) as unknown as CouponApprovalRow[],
+    queryFn: async () => {
+      const read = async (extra: readonly string[]) =>
+        (await directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              fields: [...COUPON_APPROVAL_FIELDS, ...extra],
+              // Newest first: a queue is worked from the top, and the request
+              // that just came in is the one somebody is waiting on.
+              sort: ['-date_created'],
+              limit: -1,
+              // "approved" is every APPROVED decision — 'edited' (terms amended)
+              // and 'assigned' (delivered) included. Listing only two of the three
+              // meant an amended approval matched NO tab and simply vanished.
+              ...(status === 'all'
+                ? {}
+                : status === 'approved'
+                  ? { filter: { status: { _in: [...COUPON_APPROVED_STATUSES] } } }
+                  : { filter: { status: { _eq: status } } }),
+            } as never,
+          ),
+        )) as unknown as CouponApprovalRow[];
+      try {
+        return await read(COUPON_CUSTOMER_CHECK_FIELDS);
+      } catch {
+        /* Fields not applied in this environment yet: read without them. The
+           card then shows no "no Yiji account" notice - never a Yiji call. */
+        return read([]);
+      }
+    },
   });
 }
+
+const COUPON_APPROVAL_FIELDS = [
+  'id',
+  'coupon_code',
+  'coupon_value',
+  'coupon_percent',
+  'compensation',
+  'reason',
+  'status',
+  'decided_at',
+  'decision_note',
+  'date_created',
+  'title',
+  'issuing_side',
+  'delivery_type',
+  'coupon_type',
+  'discount_category',
+  'valid_from',
+  'valid_to',
+  'max_discount',
+  'usage_limit',
+  'item_name',
+  'item_sku',
+  'no_other_discounts',
+  'customer_phone',
+  'brand_id',
+  'restaurant_id',
+  'edited_by_admin',
+  'yiji_coupon_user_id',
+  'yiji_pushed_at',
+  'yiji_push_error',
+  'delivery_excluded',
+  'delivery_excluded_reason',
+  'yiji_coupon_id',
+  'awaiting_signup_at',
+  'signup_checked_at',
+  'order_id',
+  'vendor',
+  {
+    ticket: [
+      'id',
+      'subject',
+      'complaint_type',
+      // EMA-57 (2026-10-07): the ticket's source, to review where
+      // the complaint came from before approving.
+      'complaint_source',
+      'description',
+      'order_id',
+      'priority',
+      'status',
+      // The branch this complaint was about. The coupon's own
+      // `restaurant_id` is Yiji's identifier — right for the push,
+      // useless to read — so the readable name comes from here.
+      { store: ['id', 'code', 'name', 'city', { brand: ['name'] }] },
+    ],
+  },
+  { contact: ['id', 'name', 'phone'] },
+  { requested_by: ['id', 'first_name', 'email'] },
+  { decided_by: ['id', 'first_name', 'email'] },
+] as const;
 
 export interface DecideInput {
   row: CouponApprovalRow;
@@ -417,37 +445,5 @@ export function useRetryCouponDelivery() {
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['coupon-approvals'] }),
-  });
-}
-
-/**
- * Whether a phone resolves to a Yiji customer — i.e. whether an order-less
- * coupon can actually be delivered.
- *
- * The approval card warns only when the answer is a definite NO, so the shape
- * matters: `configured` false means nothing was asked and the caller must stay
- * silent rather than treat an unanswered question as absence.
- *
- * DISABLED on an empty phone, so a row that needs no lookup makes no call. The
- * answer is cached for the session — a customer does not acquire an account
- * while a supervisor reads one card — and never retried, because a failure here
- * must not turn into a warning about the customer.
- */
-export function useCustomerReachable(phone: string, vendorId?: string | null) {
-  const trimmed = (phone ?? '').trim();
-  return useQuery({
-    /* The vendor is in the key: the same number can be a customer of one
-       vendor's platform and not another's (MV-1). */
-    queryKey: ['yiji-customer-exists', trimmed, vendorId ?? null],
-    enabled: trimmed.length > 0,
-    retry: false,
-    staleTime: 10 * 60_000,
-    /* Asked once per card per session, success or failure: a failed lookup
-       re-asked on every refocus/remount is how one page flooded Yiji
-       (2026-10-26). */
-    refetchOnMount: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    queryFn: () => commerce.customerExists(trimmed, vendorId),
   });
 }

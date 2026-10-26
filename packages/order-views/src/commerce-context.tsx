@@ -18,8 +18,8 @@ import type { YijiOrder, YijiOrderCart, YijiOrderTimeline } from '@yiji/shared-t
  *
  * This interface is the SUBSET these views actually call, deliberately narrower
  * than either portal's `CommerceClient`: the agent's also holds `getInboxOrders`
- * and the admin's holds `customerExists`, and neither is any of this component's
- * business. Both clients satisfy it structurally, so each portal passes its own
+ * and the admin's holds the late-orders reads, and neither is any of this
+ * component's business. Both clients satisfy it structurally, so each portal passes its own
  * and nothing is adapted.
  */
 export interface OrderCommerceClient {

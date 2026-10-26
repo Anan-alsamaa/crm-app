@@ -54,6 +54,7 @@ import {
   type VolumeAlertRedis,
 } from './yiji-volume-alert.js';
 export { runCouponDeliverySweep } from './coupon-push.js';
+import { COUPON_CUSTOMER_CHECK_JOB, runCouponCustomerCheck } from './coupon-customer-check.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
 import {
@@ -371,6 +372,16 @@ export const processors: Record<QueueName, Processor> = {
       });
       return;
     }
+    /* "Has this customer a Yiji account?" for pending coupons, checked ONCE
+       and stored, so the approval page never asks Yiji (incident 2026-10-26). */
+    if (job.name === COUPON_CUSTOMER_CHECK_JOB) {
+      await runCouponCustomerCheck({
+        directus: deps.directus,
+        connectors: connectorsFor(deps),
+        logger: deps.logger,
+      });
+      return;
+    }
     if (job.name === INACTIVITY_SWEEP_NAME) {
       await runInactivitySweep({
         directus: deps.directus,
@@ -632,6 +643,10 @@ export { scheduleReconcile } from './sla.js';
 export { scheduleLateOrdersPoll, DEFAULT_LATE_ORDERS_POLL_MS } from './late-orders-poll.js';
 export { scheduleInactivitySweep } from './automation.js';
 export { scheduleYijiVolumeAlert, DEFAULT_YIJI_VOLUME_ALERT_MS } from './yiji-volume-alert.js';
+export {
+  scheduleCouponCustomerCheck,
+  DEFAULT_COUPON_CUSTOMER_CHECK_MS,
+} from './coupon-customer-check.js';
 export {
   scheduleYijiUsageRetention,
   yijiUsageWriter,
