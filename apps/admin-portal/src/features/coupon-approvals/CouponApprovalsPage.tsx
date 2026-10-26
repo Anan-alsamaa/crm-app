@@ -473,7 +473,14 @@ function Row({
    * such row, cached for the session, so opening the queue does not become a
    * burst of lookups.
    */
-  const reach = useCustomerReachable(!row.delivery_excluded ? deliveryPhone : '', row.vendor);
+  /* ONLY FOR THE CARD BEING READ (prod incident, 2026-10-26). This ran for
+     EVERY card in the list - 378 Yiji lookups for the All tab, re-asked on
+     every refocus - until Yiji rate-limited us and the late-orders TV went
+     stale. The answer only feeds a notice inside an opened PENDING card. */
+  const reach = useCustomerReachable(
+    expanded && pending && !row.delivery_excluded ? deliveryPhone : '',
+    row.vendor,
+  );
 
   /**
    * What is wrong with the numbers as they now stand — the amended terms while

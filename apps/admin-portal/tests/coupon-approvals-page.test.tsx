@@ -531,6 +531,23 @@ describe('CouponApprovalsPage — how an order-less coupon can still be delivere
    * almost always wrong trains a supervisor to ignore the one that is not
    * (owner, 2026-10-01). The default mock answers "configured, exists".
    */
+  /*
+   * PROD INCIDENT (2026-10-26): the lookup ran for EVERY card - 378 Yiji
+   * calls for the All tab, re-asked on refocus - until Yiji rate-limited us
+   * and late orders went stale. It must only run for an OPENED pending card.
+   */
+  it('asks Yiji only once a pending card is opened', async () => {
+    api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
+    api.useCustomerReachable.mockClear();
+    const user = userEvent.setup();
+    renderPage();
+    const phones = () =>
+      (api.useCustomerReachable.mock.calls as unknown as Array<[string]>).map(([p]) => p);
+    expect(phones().every((p) => p === '')).toBe(true);
+    await expandFirst(user);
+    expect(phones().some((p) => p !== '')).toBe(true);
+  });
+
   it('says NOTHING when the phone resolves to a Yiji customer', async () => {
     api.useCouponApprovals.mockReturnValue({ data: [noOrder], isLoading: false });
     const user = userEvent.setup();
