@@ -256,11 +256,14 @@ function RequestCard({
   const maxDiscount = r.max_discount != null ? sar(Number(r.max_discount), 'SAR') : null;
 
   return (
-    <li className="h-full">
-      <article
-        style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
-        className="relative flex h-full flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5 motion-safe:animate-rise-in"
-      >
+    /* The entrance animation sits on the <li>, the hover lift on the card:
+       `rise-in` fills `both`, so on the same element its final `transform`
+       would pin the card and the hover lift would never show. */
+    <li
+      style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
+      className="h-full motion-safe:animate-rise-in"
+    >
+      <article className="relative flex h-full flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float hover:ring-primary/25 motion-safe:hover:-translate-y-1">
         {onOpen && (
           <button
             type="button"
