@@ -2183,6 +2183,8 @@
       "total": "الاستدعاءات",
       "failed": "مرفوض / أخطاء",
       "failedShort": "فاشل",
+      "rateLimited": "رفض لكثرة الطلبات (429)",
+      "breakerOpens": "إيقاف مؤقت للاستدعاءات غير العاجلة",
       "lastBackup": "آخر استخدام للرمز الاحتياطي {{when}}",
       "lastBackupWhy": "آخر استخدام احتياطي: {{operation}} ({{service}}) - {{reason}}",
       "neverBackup": "لم يُستخدم الرمز الاحتياطي",

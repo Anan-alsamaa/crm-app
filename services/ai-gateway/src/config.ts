@@ -38,6 +38,14 @@ const schema = z
     AI_PER_IP_RPM: numericEnv(60),
     /** Global requests per minute. */
     AI_GLOBAL_RPM: numericEnv(120),
+    /**
+     * Commerce requests per minute per signed-in user (incident 2026-10-26:
+     * one tab flooded Yiji). An agent working chats or a TV screen polling
+     * makes a few a minute; 120 is far past any person. `0` = no limit.
+     */
+    COMMERCE_PER_USER_RPM: numericEnv(120),
+    /** Of those, phone lookups (`/commerce/customer-exists`). `0` = no limit. */
+    COMMERCE_LOOKUP_PER_USER_RPM: numericEnv(20),
     /** Cache TTL in seconds. */
     AI_CACHE_TTL_SEC: numericEnv(900),
     /**

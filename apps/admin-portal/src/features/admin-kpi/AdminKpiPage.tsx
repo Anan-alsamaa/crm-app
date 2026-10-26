@@ -1093,6 +1093,34 @@ export function AdminKpiPage() {
                             {`${n(y.totals.refused)} / ${n(y.totals.error)}`}
                           </dd>
                         </div>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            {t('adminKpi.yiji.rateLimited', { defaultValue: 'Rate-limited (429)' })}
+                          </dt>
+                          <dd
+                            className={cn(
+                              'font-semibold tabular-nums',
+                              (y.rateLimited ?? 0) > 0 && 'text-destructive',
+                            )}
+                          >
+                            {n(y.rateLimited ?? 0)}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-xs text-muted-foreground">
+                            {t('adminKpi.yiji.breakerOpens', {
+                              defaultValue: 'Non-urgent calls paused',
+                            })}
+                          </dt>
+                          <dd
+                            className={cn(
+                              'font-semibold tabular-nums',
+                              (y.breakerOpens ?? 0) > 0 && 'text-destructive',
+                            )}
+                          >
+                            {n(y.breakerOpens ?? 0)}
+                          </dd>
+                        </div>
                       </dl>
                     </div>
                     <div className={PANEL}>

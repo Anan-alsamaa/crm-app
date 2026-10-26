@@ -23,6 +23,7 @@ import {
   type YijiUsageAccount,
   type YijiUsageSink,
 } from './yiji-usage.js';
+import { currentYijiOutboundGuard, type YijiOutboundGuard } from './yiji-guard-registry.js';
 import type {
   YijiCartLine,
   YijiModifierGroup,
@@ -347,6 +348,12 @@ export interface HttpYijiClientOptions {
   backupToken?: string;
   /** Told about every HTTP exchange with Yiji (see yiji-usage.ts). */
   onUsage?: YijiUsageSink;
+  /**
+   * The outbound budget + circuit breaker every call passes first (incident
+   * 2026-10-26, see yiji-guard.ts). Absent = the process's installed guard
+   * (`setYijiOutboundGuard`); null = none, whatever is installed.
+   */
+  guard?: YijiOutboundGuard | null;
 }
 
 /**
@@ -771,6 +778,7 @@ export class HttpYijiClient implements YijiClient {
   private readonly adminPassword?: string;
   private readonly backupToken?: string;
   private readonly onUsage?: YijiUsageSink;
+  private readonly guardOption?: YijiOutboundGuard | null;
   /** Cached admin-API bearer token; refreshed on 401 via re-login. */
   private adminToken: string | null = null;
 
@@ -784,6 +792,23 @@ export class HttpYijiClient implements YijiClient {
     this.adminPassword = opts.adminPassword || undefined;
     this.backupToken = opts.backupToken?.trim().replace(/^Bearer\s+/i, '') || undefined;
     this.onUsage = opts.onUsage;
+    this.guardOption = opts.guard;
+  }
+
+  private get guard(): YijiOutboundGuard | null {
+    return this.guardOption !== undefined ? this.guardOption : currentYijiOutboundGuard();
+  }
+
+  /**
+   * ASK THE GUARD BEFORE ASKING YIJI (incident 2026-10-26).
+   *
+   * Called before each request's timeout starts, so a short wait for budget
+   * never eats into the time Yiji is given to answer. A refusal is thrown as
+   * a `YijiShedError` - a `YijiUnavailableError`, so every caller treats it
+   * as "we could not ask" - and nothing is sent or recorded as a call.
+   */
+  private async admit(url: string): Promise<void> {
+    await this.guard?.admit(yijiOperationFor(url));
   }
 
   /**
@@ -802,8 +827,13 @@ export class HttpYijiClient implements YijiClient {
   ): Promise<Response> {
     const started = Date.now();
     const operation = yijiOperationFor(url);
+    const guard = this.guard;
     try {
       const res = await fetch(url, init);
+      guard?.observe(operation, {
+        status: res.status,
+        retryAfter: res.headers?.get?.('retry-after') ?? null,
+      });
       reportYijiUsage(this.onUsage, {
         operation,
         account,
@@ -815,6 +845,7 @@ export class HttpYijiClient implements YijiClient {
       });
       return res;
     } catch (err) {
+      guard?.observe(operation, { status: null });
       reportYijiUsage(this.onUsage, {
         operation,
         account,
@@ -842,6 +873,7 @@ export class HttpYijiClient implements YijiClient {
    * ever talks to our own gateway.
    */
   private async adminLogin(): Promise<string> {
+    await this.admit(`${this.adminUrl}/api/Account/login`);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
@@ -924,6 +956,7 @@ export class HttpYijiClient implements YijiClient {
       retryOn: readonly number[],
       fallbackReason: string | null = null,
     ): Promise<{ retry: number } | { value: R }> => {
+      await this.admit(url);
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
       try {
@@ -1224,6 +1257,7 @@ export class HttpYijiClient implements YijiClient {
    */
   private async fetch<T>(path: string): Promise<T | null> {
     const url = `${this.baseUrl}${path}`;
+    await this.admit(url);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {

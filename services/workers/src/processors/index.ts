@@ -47,6 +47,12 @@ import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
 import { purgeYijiUsage, YIJI_USAGE_RETENTION_JOB } from './yiji-usage.js';
+import {
+  runYijiVolumeCheck,
+  yijiVolumeThresholdsFromEnv,
+  YIJI_VOLUME_ALERT_JOB,
+  type VolumeAlertRedis,
+} from './yiji-volume-alert.js';
 export { runCouponDeliverySweep } from './coupon-push.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
@@ -354,6 +360,17 @@ export const processors: Record<QueueName, Processor> = {
       await purgeYijiUsage({ directus: deps.directus, logger: deps.logger });
       return;
     }
+    /* Yiji call volume vs its baseline, every 15 min (incident 2026-10-26). */
+    if (job.name === YIJI_VOLUME_ALERT_JOB) {
+      await runYijiVolumeCheck({
+        directus: deps.directus,
+        notificationsQueue: deps.queues[QUEUES.notifications],
+        ...(deps.redis ? { redis: deps.redis as unknown as VolumeAlertRedis } : {}),
+        logger: deps.logger,
+        thresholds: yijiVolumeThresholdsFromEnv(process.env),
+      });
+      return;
+    }
     if (job.name === INACTIVITY_SWEEP_NAME) {
       await runInactivitySweep({
         directus: deps.directus,
@@ -614,6 +631,7 @@ export const processors: Record<QueueName, Processor> = {
 export { scheduleReconcile } from './sla.js';
 export { scheduleLateOrdersPoll, DEFAULT_LATE_ORDERS_POLL_MS } from './late-orders-poll.js';
 export { scheduleInactivitySweep } from './automation.js';
+export { scheduleYijiVolumeAlert, DEFAULT_YIJI_VOLUME_ALERT_MS } from './yiji-volume-alert.js';
 export {
   scheduleYijiUsageRetention,
   yijiUsageWriter,
