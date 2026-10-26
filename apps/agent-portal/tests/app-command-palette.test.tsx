@@ -63,3 +63,28 @@ describe('AppCommandPalette', () => {
     expect(screen.getByText('Refund')).toBeInTheDocument();
   });
 });
+
+/*
+ * PROD, 2026-10-26: mounted on every page, the palette read every open chat
+ * and every ticket ever (8,000+, unbounded) on each load and refocus of every
+ * agent, and Directus blocked on it. Closed, it must ask for nothing; open, a
+ * handful.
+ */
+describe('AppCommandPalette — loads only while open, and only a few', () => {
+  it('asks for no chats and no tickets while closed', () => {
+    inbox.useConversations.mockClear();
+    tickets.useTickets.mockClear();
+    renderPalette();
+    const convOpts = inbox.useConversations.mock.calls.map((c) => c[1] as { enabled?: boolean });
+    const tkOpts = tickets.useTickets.mock.calls.map((c) => c[0] as { enabled?: boolean });
+    expect(convOpts.every((o) => o?.enabled === false)).toBe(true);
+    expect(tkOpts.every((o) => o?.enabled === false)).toBe(true);
+  });
+
+  it('caps the chat preview at eight', () => {
+    inbox.useConversations.mockClear();
+    renderPalette();
+    const opts = inbox.useConversations.mock.calls.map((c) => c[1] as { limit?: number });
+    expect(opts.every((o) => o?.limit === 8)).toBe(true);
+  });
+});

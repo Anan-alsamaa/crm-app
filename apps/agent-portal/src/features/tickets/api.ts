@@ -167,13 +167,28 @@ export function useVendors() {
   });
 }
 
-export function useTickets() {
+/**
+ * The most recent tickets, for the command palette.
+ *
+ * BOUNDED AND ON DEMAND (prod, 2026-10-26). This read every ticket ever -
+ * 8,000+ with descriptions, no filter, no limit - on every page load and tab
+ * refocus of every agent, ~67 times an hour at 1.6 s each, and Directus
+ * blocked on it ("Under pressure", slow reloads for everyone). The palette
+ * shows eight, so it asks for a few and only while it is open.
+ */
+export function useTickets({
+  enabled = true,
+  limit = 8,
+}: { enabled?: boolean; limit?: number } = {}) {
   return useQuery({
-    queryKey: ['tickets'],
+    queryKey: ['tickets', limit],
+    enabled,
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
     queryFn: () =>
       directus.request(
         readItems('tickets', {
-          limit: -1,
+          limit,
           fields: [
             'id',
             'subject',
