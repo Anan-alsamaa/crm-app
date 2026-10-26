@@ -1,4 +1,4 @@
-import { createContext, Fragment, useContext, useMemo, useState } from 'react';
+import { createContext, Fragment, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX, ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { deleteItem, readUsers } from '@directus/sdk';
@@ -842,6 +842,16 @@ function TicketsReport({
  * reporting the same values however the upstream order later changes.
  */
 
+/**
+ * One value from the address this page was opened with (`?status=pending`
+ * from the dashboard's Open tickets tile). Read from the location directly so
+ * the page needs no router to render, as in its tests.
+ */
+function linkParam(name: string): string | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return new URLSearchParams(window.location.search).get(name) || undefined;
+}
+
 function ComplaintsReport({
   rows,
   tr,
@@ -946,7 +956,13 @@ function ComplaintsReport({
    * The filter, shared with the agent portal's own ticket queue so "find order
    * 946641" behaves identically wherever it is asked. See @yiji/reports.
    */
-  const [criteria, setCriteria] = useState<TicketFilterCriteria>({});
+  /* Arriving from the dashboard's Open tickets tile (owner, 2026-10-26): the
+     link carries `?status=pending`, so the list opens on the open tickets
+     only. Read once; after that the filter bar is the user's. */
+  const [linkedStatus] = useState(() => linkParam('status'));
+  const [criteria, setCriteria] = useState<TicketFilterCriteria>(() =>
+    linkedStatus ? { status: linkedStatus } : {},
+  );
   /*
    * What is typed but not yet asked for.
    *
@@ -955,7 +971,9 @@ function ComplaintsReport({
    * hands of somebody still deciding what to ask. Same bargain as the shared
    * ReportFilterBar: type freely, then Apply (or press Enter).
    */
-  const [draft, setDraft] = useState<TicketFilterCriteria>({});
+  const [draft, setDraft] = useState<TicketFilterCriteria>(() =>
+    linkedStatus ? { status: linkedStatus } : {},
+  );
   /**
    * How many rows to show at once.
    *
@@ -3041,6 +3059,18 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
     setRange,
     reset: resetRange,
   } = useRememberedRange('sara.reports.range', defaultReportRange);
+  /* A link that names its dates (the dashboard's Open tickets tile) opens on
+     exactly those dates, so the list covers what the tile counted. Once. */
+  const linkedRange = useRef(false);
+  useEffect(() => {
+    if (linkedRange.current) return;
+    linkedRange.current = true;
+    const lf = linkParam('from');
+    const lt = linkParam('to');
+    if (lf && lt && (lf !== from || lt !== to)) setRange({ from: lf, to: lt });
+    // Once, on arrival: later changes to the range are the user's own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const report = useAgentReportData(
     0,
     {

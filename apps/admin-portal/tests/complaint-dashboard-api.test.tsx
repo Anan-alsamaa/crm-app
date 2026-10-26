@@ -777,3 +777,52 @@ describe('ticket dashboard — unsolved work per agent', () => {
     expect(d.byOpenAgent.rows).toHaveLength(14);
   });
 });
+
+/*
+ * YIJI VS NON-YIJI FOLLOWS THE FILTERS (owner, 2026-10-26).
+ *
+ * The card counted the whole customer base whatever the dashboard was set to,
+ * so a filtered dashboard showed it unchanged beside numbers that had all moved.
+ * The metrics now carry the customers behind the tickets in view.
+ */
+describe('ticket dashboard — customers behind the tickets', () => {
+  const yiji = { id: 'c1', external_customer_id: 'Y-77' };
+  const walkIn = { id: 'c2', external_customer_id: null };
+  const blankId = { id: 'c3', external_customer_id: '  ' };
+
+  it('counts each customer once, split by app account', async () => {
+    const tickets = [
+      ticket({ contact: yiji }),
+      ticket({ contact: yiji }),
+      ticket({ contact: walkIn }),
+      ticket({ contact: blankId }),
+      ticket({ contact: null }),
+    ];
+    mockData({ tickets, stores: STORES, users: USERS });
+    expect((await run()).customers).toEqual({ total: 3, withYiji: 1 });
+  });
+
+  it('narrows with the dashboard filters', async () => {
+    const tickets = [
+      ticket({ store: 'st1', contact: yiji }),
+      ticket({ store: 'st2', contact: walkIn }),
+    ];
+    mockData({ tickets, stores: STORES, users: USERS });
+    expect((await run({ ...emptyComplaintFilters, brand: 'br2' })).customers).toEqual({
+      total: 1,
+      withYiji: 0,
+    });
+  });
+
+  it('asks for the contact id and Yiji id only, never the phone', async () => {
+    mockData({ tickets: [ticket({ contact: yiji })], stores: STORES, users: USERS });
+    await run();
+    const ticketRead = request.mock.calls
+      .map(([q]) => q as { collection?: string; opts?: { fields?: string[] } })
+      .find((q) => q.collection === 'tickets');
+    expect(ticketRead?.opts?.fields).toEqual(
+      expect.arrayContaining(['contact.id', 'contact.external_customer_id']),
+    );
+    expect(ticketRead?.opts?.fields).not.toContain('contact.phone');
+  });
+});

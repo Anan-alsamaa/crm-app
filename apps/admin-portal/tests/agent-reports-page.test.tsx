@@ -1377,3 +1377,38 @@ describe('AgentReportsPage — ticket breakdown', () => {
     expect(screen.queryByText(/^Export \d+ rows$/)).not.toBeInTheDocument();
   });
 });
+
+/*
+ * FROM THE DASHBOARD'S OPEN TICKETS TILE (owner, 2026-10-26).
+ *
+ * The tile's link names `status=pending` and the dates it counted over, so
+ * Ticket breakdown opens on the open tickets only, over those dates.
+ */
+describe('AgentReportsPage — opened from the Open tickets tile', () => {
+  afterEach(() => window.history.replaceState(null, '', '/'));
+
+  it('opens on the pending tickets only, over the linked dates', () => {
+    window.history.replaceState(
+      null,
+      '',
+      '/reports/operational-kpi/tickets?status=pending&from=2021-01-01&to=2026-10-26',
+    );
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.queryByText('One pasta missing')).not.toBeInTheDocument();
+    expect(screen.getByText('Wrong item')).toBeInTheDocument();
+    expect(api.useAgentReportData).toHaveBeenLastCalledWith(
+      expect.any(Number),
+      expect.anything(),
+      { from: '2021-01-01', to: '2026-10-26' },
+      'complaints',
+    );
+  });
+
+  it('shows every status when opened normally', () => {
+    api.useAgentReportData.mockReturnValue(ok);
+    renderPage('complaints');
+    expect(screen.getByText('One pasta missing')).toBeInTheDocument();
+    expect(screen.getByText('Wrong item')).toBeInTheDocument();
+  });
+});

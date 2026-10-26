@@ -243,6 +243,13 @@ export interface ComplaintMetrics {
    */
   avgScore: number | null;
   /**
+   * The customers BEHIND the tickets in view, split by whether they are in the
+   * Yiji app (owner, 2026-10-26: the "Yiji vs non-Yiji customers" card ignored
+   * the date range and filters, so it disagreed with every number beside it).
+   * Distinct contacts, so a customer with three tickets counts once.
+   */
+  customers: { total: number; withYiji: number };
+  /**
    * Complaints marked Compensated. A COUNT, deliberately — there is no money
    * figure on this type any more.
    *
@@ -348,6 +355,8 @@ interface TicketRecord {
   } | null;
   /** Attribution frozen when the ticket was raised — see StoreSnapshot. */
   store_snapshot: StoreSnapshot | null;
+  /** Only whether the customer is in the Yiji app — never their phone. */
+  contact?: { id: string; external_customer_id: string | null } | null;
 }
 
 interface StoreRecordRow {
@@ -505,6 +514,10 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
                 'coupon_value',
                 'order_snapshot',
                 'store_snapshot',
+                // Who the customer is to the app, for the Yiji vs non-Yiji card:
+                // the contact's id and Yiji id only.
+                'contact.id',
+                'contact.external_customer_id',
                 // Deliberately NOT `contact.phone`. This dashboard is about
                 // where complaints come from, not about who made them; it never
                 // displayed a number, and fetching one only to filter on it put
@@ -789,7 +802,13 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
       >();
       const flat: ComplaintRow[] = [];
 
+      /* Customers behind the tickets in view: id -> has a Yiji account. */
+      const customerYiji = new Map<string, boolean>();
       for (const r of rows) {
+        if (r.contact?.id) {
+          const yiji = !!r.contact.external_customer_id?.trim();
+          customerYiji.set(r.contact.id, (customerYiji.get(r.contact.id) ?? false) || yiji);
+        }
         const status = normaliseTicketStatus(r.status);
         const isSolved = status === 'solved';
         /*
@@ -1062,6 +1081,10 @@ export function useComplaintMetrics(filters: ComplaintFilters) {
 
       return {
         total: rows.length,
+        customers: {
+          total: customerYiji.size,
+          withYiji: [...customerYiji.values()].filter(Boolean).length,
+        },
         monthsCovered: months.length,
         open,
         overdue,
