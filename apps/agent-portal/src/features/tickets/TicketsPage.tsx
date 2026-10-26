@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
@@ -116,6 +116,34 @@ import { useAssetBlobUrl } from '../../lib/useAssetBlobUrl.js';
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
 
 type TicketFilter = 'all' | TicketStatus | 'overdue';
+
+/**
+ * One row of the ticket filters: its controls side by side, wrapping only when
+ * the rail is dragged too narrow for three usable cells. `min-w-0` lives on
+ * each slot so a long agent name truncates instead of widening its column.
+ */
+const FILTER_ROW = 'grid grid-cols-[repeat(auto-fit,minmax(5.75rem,1fr))] gap-1.5';
+
+/**
+ * The status + dates row. A full date needs more room than a menu label, so
+ * the two date cells take a larger share, and their inner padding is trimmed
+ * (the calendar button stays a full-height target) so "dd/mm/yyyy" is never
+ * clipped at the rail's 300px minimum.
+ */
+const DATE_ROW = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] gap-1.5';
+const COMPACT_DATE = '[&_input]:pe-7 [&_input]:ps-2.5 [&_button]:w-7';
+
+/** A filter control under its micro-label. */
+function FilterSlot({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 space-y-1">
+      <span className="block truncate text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+        {label}
+      </span>
+      {children}
+    </div>
+  );
+}
 /*
  * Two statuses now (owner, 2026-10-07: "only 2 states for the tickets: pending
  * and solved"), and they do not both deserve a tile.
@@ -380,6 +408,22 @@ export function TicketsPage() {
     return list.filter((r) => r.complaintStatus === f).length;
   };
 
+  /* The status menu's options, built here rather than inline so the row of
+     filters below stays readable. `all` is the placeholder row, not a status. */
+  const statusOptions = [
+    { value: 'all', label: t('tickets.anyStatus', { defaultValue: 'Any status' }) },
+    // The SAME translation keys the tiles use, so one status never reads two
+    // ways on one screen — in Arabic too.
+    ...STATUS_FILTERS.map((f) => ({
+      value: f,
+      label: `${
+        f === 'overdue'
+          ? t('tickets.overdue', { defaultValue: 'Overdue' })
+          : t(`status.${f}`, { ns: 'common' })
+      } (${filterCount(f)})`,
+    })),
+  ];
+
   return (
     <div className="flex h-full flex-col">
       {/* The toolbar keeps the page title and the one ACTION. The status
@@ -505,124 +549,130 @@ export function TicketsPage() {
                 a filter that gets reported as missing data, which is exactly what
                 happened here twice.
               */}
+              {/*
+                TWO ROWS, NOT SIX (owner, 2026-10-26).
+
+                One control per row stacked six full-width boxes above the
+                queue and pushed the first ticket below the fold. They now sit
+                as two rows: WHO and WHAT (agent, vendor, ticket type), then
+                WHICH and WHEN (status, from, to). The first row is an
+                auto-fit grid (two or three menus, depending on whether the
+                vendor filter shows); the second is a fixed three-column grid
+                sized so a full date fits even at the rail's minimum width.
+
+                Every control carries the same micro-label. The dates always
+                had one (two bare date boxes read as a single range control);
+                once they share a row with the status menu, a label on some
+                cells and not others would misalign the row.
+              */}
               <>
-                {/* WHOSE TICKETS, first: it changes what every other filter and
-                      count below it means. */}
-                <SelectMenu
-                  size="sm"
-                  className="w-full"
-                  value={scope}
-                  aria-label={t('tickets.scopeLabel', { defaultValue: 'Agent' })}
-                  onChange={(v) => setScope(v as ComplaintScope)}
-                  options={[
-                    { value: 'me', label: t('tickets.scopeMine', { defaultValue: 'My tickets' }) },
-                    { value: 'all', label: t('tickets.scopeAll', { defaultValue: 'All agents' }) },
-                    ...(agentOptions.data ?? []).map((a) => ({
-                      value: a.id,
-                      label: a.first_name?.trim() || a.email || a.id,
-                    })),
-                  ]}
-                />
-                {vendors.show && (
-                  <SelectMenu
-                    size="sm"
-                    className="w-full"
-                    value={vendorFilter}
-                    onChange={setVendorChoice}
-                    aria-label={t('tickets.vendorLabel', { defaultValue: 'Vendor' })}
-                    options={[
-                      {
-                        value: '',
-                        label: t('tickets.anyVendor', { defaultValue: 'All vendors' }),
-                      },
-                      ...vendors.options.map((v) => ({ value: v.id, label: v.name })),
-                    ]}
-                  />
-                )}
-                <SelectMenu
-                  size="sm"
-                  className="w-full"
-                  value={criteria.complaintType ?? ''}
-                  onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
-                  aria-label={t('complaint.type', { defaultValue: 'Ticket type' })}
-                  options={[
-                    {
-                      value: '',
-                      label: t('tickets.anyType', { defaultValue: 'Any ticket type' }),
-                    },
-                    // From the data in range, not the full vocabulary: a menu of
-                    // types this agent has never handled is a list to read past.
-                    ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
-                  ]}
-                />
-                {/*
-                  STATUS BELONGS HERE TOO (owner, 2026-10-05): "along with the
-                  filters for agent, ticket type, we also need a status filter".
-                  It already existed as counted tiles in the rail below, which is
-                  a different gesture in a different place — an agent narrowing
-                  by agent and type looks for status in the same row and finds
-                  nothing. Reported twice as missing while technically present.
+                <div className={FILTER_ROW}>
+                  {/* WHOSE TICKETS, first: it changes what every other filter
+                      and count below it means. */}
+                  <FilterSlot label={t('tickets.scopeLabel', { defaultValue: 'Agent' })}>
+                    <SelectMenu
+                      size="sm"
+                      className="w-full"
+                      value={scope}
+                      aria-label={t('tickets.scopeLabel', { defaultValue: 'Agent' })}
+                      onChange={(v) => setScope(v as ComplaintScope)}
+                      options={[
+                        {
+                          value: 'me',
+                          label: t('tickets.scopeMine', { defaultValue: 'My tickets' }),
+                        },
+                        {
+                          value: 'all',
+                          label: t('tickets.scopeAll', { defaultValue: 'All agents' }),
+                        },
+                        ...(agentOptions.data ?? []).map((a) => ({
+                          value: a.id,
+                          label: a.first_name?.trim() || a.email || a.id,
+                        })),
+                      ]}
+                    />
+                  </FilterSlot>
+                  {vendors.show && (
+                    <FilterSlot label={t('tickets.vendorLabel', { defaultValue: 'Vendor' })}>
+                      <SelectMenu
+                        size="sm"
+                        className="w-full"
+                        value={vendorFilter}
+                        onChange={setVendorChoice}
+                        aria-label={t('tickets.vendorLabel', { defaultValue: 'Vendor' })}
+                        options={[
+                          {
+                            value: '',
+                            label: t('tickets.anyVendor', { defaultValue: 'All vendors' }),
+                          },
+                          ...vendors.options.map((v) => ({ value: v.id, label: v.name })),
+                        ]}
+                      />
+                    </FilterSlot>
+                  )}
+                  <FilterSlot label={t('complaint.type', { defaultValue: 'Ticket type' })}>
+                    <SelectMenu
+                      size="sm"
+                      className="w-full"
+                      value={criteria.complaintType ?? ''}
+                      onChange={(v) => setCriteria((c) => ({ ...c, complaintType: v }))}
+                      aria-label={t('complaint.type', { defaultValue: 'Ticket type' })}
+                      options={[
+                        {
+                          value: '',
+                          label: t('tickets.anyType', { defaultValue: 'Any ticket type' }),
+                        },
+                        // From the data in range, not the full vocabulary: a menu
+                        // of types this agent has never handled is a list to read
+                        // past.
+                        ...typesInRange.map((v) => ({ value: v, label: optionLabel(v) })),
+                      ]}
+                    />
+                  </FilterSlot>
+                </div>
+                <div className={DATE_ROW}>
+                  {/*
+                    STATUS BELONGS HERE TOO (owner, 2026-10-05): "along with the
+                    filters for agent, ticket type, we also need a status
+                    filter". It already existed as counted tiles in the rail
+                    above, which is a different gesture in a different place.
 
-                  The two stay in sync rather than competing: this writes the
-                  SAME `filter` state the tiles set, so picking "Pending" here
-                  lights the Pending tile and vice versa. Two controls disagreeing
-                  about one question is worse than having only one.
+                    The two stay in sync rather than competing: this writes the
+                    SAME `filter` state the tiles set, so picking "Pending" here
+                    lights the Pending tile and vice versa.
 
-                  Unlike the type menu above, the options are the full enum, not
-                  the values in range: status is a fixed vocabulary of two that
-                  an agent reasons about as a set, and a "Solved" option missing
-                  because today happens to have none reads as the filter being
-                  broken.
-                */}
-                <SelectMenu
-                  size="sm"
-                  className="w-full"
-                  value={filter}
-                  onChange={(v) => setFilter(v as TicketFilter)}
-                  aria-label={t('tickets.statusLabel', { defaultValue: 'Status' })}
-                  options={[
-                    { value: 'all', label: t('tickets.anyStatus', { defaultValue: 'Any status' }) },
-                    // The SAME translation keys the tiles use, so one status
-                    // never reads two ways on one screen — in Arabic too.
-                    ...STATUS_FILTERS.map((f) => ({
-                      value: f,
-                      label: `${
-                        f === 'overdue'
-                          ? t('tickets.overdue', { defaultValue: 'Overdue' })
-                          : t(`status.${f}`, { ns: 'common' })
-                      } (${filterCount(f)})`,
-                    })),
-                  ]}
-                />
-                {/* The dates carry visible micro-labels: two bare date boxes side
-                  by side read as one range control with no way to tell which
-                  end is which. Full-width halves, so the pair squares up with
-                  the search box above instead of ending ragged mid-rail. */}
-                <div className="grid grid-cols-2 gap-1.5">
-                  <label className="block space-y-1">
-                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('performance.from', { defaultValue: 'From' })}
-                    </span>
+                    The options are the full enum, not the values in range: a
+                    "Solved" option missing because today happens to have none
+                    reads as the filter being broken.
+                  */}
+                  <FilterSlot label={t('tickets.statusLabel', { defaultValue: 'Status' })}>
+                    <SelectMenu
+                      size="sm"
+                      className="w-full"
+                      value={filter}
+                      onChange={(v) => setFilter(v as TicketFilter)}
+                      aria-label={t('tickets.statusLabel', { defaultValue: 'Status' })}
+                      options={statusOptions}
+                    />
+                  </FilterSlot>
+                  <FilterSlot label={t('performance.from', { defaultValue: 'From' })}>
                     <DateField
                       size="sm"
                       value={ticketsRange.from}
                       onChange={ticketsRange.setFrom}
                       aria-label={t('performance.from', { defaultValue: 'From' })}
-                      className="w-full"
+                      className={cn('w-full', COMPACT_DATE)}
                     />
-                  </label>
-                  <label className="block space-y-1">
-                    <span className="block text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {t('performance.to', { defaultValue: 'To' })}
-                    </span>
+                  </FilterSlot>
+                  <FilterSlot label={t('performance.to', { defaultValue: 'To' })}>
                     <DateField
                       size="sm"
                       value={ticketsRange.to}
                       onChange={ticketsRange.setTo}
                       aria-label={t('performance.to', { defaultValue: 'To' })}
-                      className="w-full"
+                      className={cn('w-full', COMPACT_DATE)}
                     />
-                  </label>
+                  </FilterSlot>
                 </div>
               </>
               {(!isEmptyFilter(criteria) || ticketsRange.isCustom) && (

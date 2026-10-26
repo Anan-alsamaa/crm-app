@@ -1,11 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   cn,
   EmptyState,
   toast,
-  formatRelative,
+  formatDateTime,
   Pill,
   Skeleton,
   TicketIcon,
@@ -20,6 +20,7 @@ import {
   couponOrderId,
   normalizePhone,
   type CouponApprovalStatus,
+  type VendorRef,
 } from '@yiji/shared-types';
 import {
   useMyCouponRequests,
@@ -28,7 +29,13 @@ import {
 } from './api.js';
 import { CouponRequestDialog } from './CouponRequestDialog.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-import { useRecordVendorIds, useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
+import {
+  useRecordVendorIds,
+  useVendorDirectory,
+  VendorBadge,
+  type VendorDirectory,
+} from '../../lib/vendors.js';
+import { correctionOf, useCorrectionStamps, type CorrectionStamp } from './correction-stamps.js';
 /* Every agent, service accounts excluded — the same list the inbox offers
    for assignment, so the two can never disagree about who exists. */
 import { useAgents } from '../inbox/api.js';
@@ -50,23 +57,314 @@ import { useAgents } from '../inbox/api.js';
 const TONE: Record<string, 'warning' | 'highlight' | 'success' | 'destructive'> = {
   pending: 'highlight',
   approved: 'success',
+  edited: 'success',
   assigned: 'success',
   rejected: 'destructive',
 };
 
+/**
+ * Several cards per row (owner, 2026-10-26): three on a 1440 desktop, two on a
+ * laptop, one below that. `items-stretch` + `h-full` cards keep a row's
+ * footers on one line however long each card's description runs.
+ */
+const CARD_GRID = 'grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2 min-[1440px]:grid-cols-3';
+
+function sar(n: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(n);
+  } catch {
+    return `${n} ${currency}`;
+  }
+}
+
 function amount(r: CouponRequestRow, currency: string): string {
   const bits: string[] = [];
-  if (r.coupon_value != null) {
-    try {
-      bits.push(
-        new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(r.coupon_value),
-      );
-    } catch {
-      bits.push(`${r.coupon_value} ${currency}`);
-    }
-  }
+  if (r.coupon_value != null) bits.push(sar(r.coupon_value, currency));
   if (r.coupon_percent != null) bits.push(`${r.coupon_percent}%`);
   return bits.join(' · ');
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-3.5 w-3.5 shrink-0"
+      aria-hidden
+    >
+      <path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L6 12l-3 1 1-3 7.5-7.5z" />
+    </svg>
+  );
+}
+
+/** One coupon term as a compact label-over-value tile. */
+function Tile({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string | number | null | undefined;
+  className?: string;
+}) {
+  const shown = value == null || value === '' ? '—' : String(value);
+  return (
+    <div
+      className={cn(
+        'min-w-0 rounded-xl bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.05]',
+        className,
+      )}
+    >
+      <div className="truncate text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+        {label}
+      </div>
+      <div
+        dir="auto"
+        title={shown}
+        className="mt-0.5 truncate text-xs font-semibold tabular-nums text-foreground"
+      >
+        {shown}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Text the agent may want to copy (owner, 2026-09-29): selectable, so a drag
+ * becomes a selection, while a plain click still opens the ticket like the
+ * rest of the card. It sits ABOVE the card's overlay, so it forwards the click
+ * itself rather than relying on it bubbling there.
+ */
+function selectable(onOpen: (() => void) | null) {
+  return {
+    onMouseDown: (e: MouseEvent) => e.stopPropagation(),
+    onClick: (e: MouseEvent) => {
+      e.stopPropagation();
+      if (!window.getSelection()?.toString()) onOpen?.();
+    },
+  };
+}
+
+/**
+ * ONE REQUEST AS A COMPACT CARD (owner, 2026-10-26: the full-width rows
+ * "look stretched").
+ *
+ * Built like the SLA policy cards the owner pointed at: title and pills at the
+ * top, the money as the bold end-aligned numeral, the terms as small tiles,
+ * and the card's one action in a hairline footer. EVERY requested term is on
+ * the card, so an agent asked "what exactly did you request?" reads it here
+ * rather than opening the ticket.
+ *
+ * The whole card still opens the ticket. The trigger is a STRETCHED OVERLAY
+ * under the content rather than a <button> around it, because the card now
+ * holds a real Edit button and a button inside a button is invalid HTML. The
+ * content passes clicks through to the overlay; the code, the customer line
+ * and the Edit button opt back in.
+ */
+function RequestCard({
+  r,
+  index,
+  vendor,
+  vendors,
+  canEdit,
+  correction,
+  onOpen,
+  onEdit,
+}: {
+  r: CouponRequestRow;
+  index: number;
+  vendor: VendorRef;
+  vendors: VendorDirectory;
+  canEdit: boolean;
+  correction: CorrectionStamp | null;
+  onOpen: (() => void) | null;
+  onEdit: () => void;
+}) {
+  const { t } = useTranslation();
+  const customer = [
+    /* The PHONE always, not only when the name is absent: it is what an agent
+       reads back to a customer. A name that is only that number is dropped
+       rather than shown twice in two spellings. */
+    cleanContactName(r.contact?.name),
+    normalizePhone(r.contact?.phone ?? r.customer_phone ?? '') || null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  /* The ticket's order FIRST, then the request's own — a late-order coupon has
+     no ticket, so reading only `ticket.order_id` showed nothing for them. */
+  const order = couponOrderId(r);
+  const requester = r.requested_by?.first_name?.trim() || r.requested_by?.email || '—';
+  const decider = r.decided_by?.first_name?.trim() || r.decided_by?.email || null;
+  const validity =
+    r.valid_from || r.valid_to
+      ? `${r.valid_from?.slice(0, 10) ?? '…'} → ${r.valid_to?.slice(0, 10) ?? '…'}`
+      : null;
+  const maxDiscount = r.max_discount != null ? sar(Number(r.max_discount), 'SAR') : null;
+
+  return (
+    <li className="h-full">
+      <article
+        style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
+        className="relative flex h-full flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,background-color] duration-fast ease-out hover:bg-primary/[0.02] motion-safe:animate-rise-in"
+      >
+        {onOpen && (
+          <button
+            type="button"
+            onClick={onOpen}
+            aria-label={r.ticket?.subject ?? r.coupon_code ?? ''}
+            className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
+          />
+        )}
+        <div className="pointer-events-none relative flex min-h-0 flex-1 flex-col">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span
+                  className="pointer-events-auto select-text font-mono text-sm font-semibold text-foreground"
+                  {...selectable(onOpen)}
+                >
+                  {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
+                </span>
+                <Pill tone={TONE[r.status] ?? 'success'} size="sm">
+                  {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
+                </Pill>
+                <VendorBadge vendor={vendor} directory={vendors} />
+                {r.edited_by_admin && (
+                  <Pill tone="primary" size="sm">
+                    {t('coupons.amended', { defaultValue: 'Amended' })}
+                  </Pill>
+                )}
+              </div>
+              {customer && (
+                <p
+                  className="pointer-events-auto mt-1 w-fit max-w-full select-text truncate text-xs text-muted-foreground"
+                  {...selectable(onOpen)}
+                >
+                  {customer}
+                </p>
+              )}
+            </div>
+            <div className="shrink-0 text-end">
+              <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+                {amount(r, 'SAR') || '—'}
+              </div>
+            </div>
+          </div>
+
+          {(r.ticket?.subject || order) && (
+            <p
+              dir="auto"
+              className="pointer-events-auto mt-2.5 w-fit max-w-full select-text truncate text-xs font-medium text-foreground/85"
+              {...selectable(onOpen)}
+            >
+              {[r.ticket?.subject, order ? `#${order}` : null].filter(Boolean).join(' · ')}
+            </p>
+          )}
+
+          {/* The terms, as asked for. Validity and delivery types run long, so
+              each takes two cells rather than truncating to nothing. */}
+          <div className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <Tile
+              label={t('lists.couponType', { defaultValue: 'Coupon type' })}
+              value={r.coupon_type}
+            />
+            <Tile
+              label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
+              value={r.discount_category}
+            />
+            <Tile
+              label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+              value={maxDiscount}
+            />
+            <Tile
+              className="sm:col-span-2"
+              label={t('coupons.validity', { defaultValue: 'Valid' })}
+              value={validity}
+            />
+            <Tile
+              label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+              value={r.usage_limit}
+            />
+            <Tile
+              className="sm:col-span-2"
+              label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+              value={r.delivery_type}
+            />
+            <Tile label={t('coupons.itemShort', { defaultValue: 'Item' })} value={r.item_name} />
+          </div>
+
+          {r.reason?.trim() && (
+            <div className="mt-2.5 rounded-xl bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.05]">
+              <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
+                {t('coupons.descriptionLabel', { defaultValue: 'Description' })}
+              </div>
+              <p
+                dir="auto"
+                className="pointer-events-auto mt-0.5 line-clamp-3 select-text whitespace-pre-line text-xs leading-relaxed text-foreground"
+                {...selectable(onOpen)}
+              >
+                {r.reason.trim()}
+              </p>
+            </div>
+          )}
+
+          {/* The supervisor's word. A rejection is what the agent has to tell
+              the customer, so it is on the card, in red, not behind a click. */}
+          {r.status === 'rejected' ? (
+            <p className="mt-2.5 rounded-xl bg-destructive-tint px-3 py-2 text-xs leading-relaxed text-foreground">
+              {decider && <span className="font-semibold">{decider}: </span>}
+              {r.decision_note ?? t('coupons.noReason', { defaultValue: 'No reason was given.' })}
+            </p>
+          ) : r.decision_note?.trim() ? (
+            <p className="mt-2.5 rounded-xl bg-primary/[0.06] px-3 py-2 text-xs leading-relaxed text-foreground">
+              <span className="font-semibold">
+                {decider ?? t('coupons.supervisor', { defaultValue: 'Supervisor' })}:{' '}
+              </span>
+              {r.decision_note.trim()}
+            </p>
+          ) : null}
+
+          <div className="min-h-2 flex-1" />
+
+          {correction && (
+            <p className="mt-2.5 inline-flex min-w-0 items-center gap-1 text-2xs text-primary">
+              <PencilIcon />
+              <span className="truncate">
+                {t('coupons.correctedBy', {
+                  defaultValue: 'Corrected by {{who}} · {{when}}',
+                  who: requester,
+                  when: formatDateTime(correction.at),
+                })}
+              </span>
+            </p>
+          )}
+
+          {/* The footer: the card's one action first, then whose request this
+              is and when. Edit only on a PENDING request the viewer raised —
+              the update filter enforces the same rule server-side. */}
+          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-foreground/[0.07] pt-3">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={onEdit}
+                className="pointer-events-auto inline-flex h-8 items-center gap-1.5 rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+              >
+                <PencilIcon />
+                {t('coupons.correct', { defaultValue: 'Edit' })}
+              </button>
+            )}
+            <span className="ms-auto text-end text-2xs tabular-nums text-muted-foreground">
+              {requester} · {formatDateTime(r.date_created)}
+            </span>
+          </div>
+        </div>
+      </article>
+    </li>
+  );
 }
 
 export function MyCouponsPage() {
@@ -107,6 +405,9 @@ export function MyCouponsPage() {
   /** The pending request being corrected, if any. */
   const [editing, setEditing] = useState<CouponRequestRow | null>(null);
   const updateRequest = useUpdatePendingCouponRequest();
+  /* Who last corrected a pending request — a mark on the card, never a
+     dependency of the list itself. */
+  const stamps = useCorrectionStamps();
   /* Which vendor each coupon is for (MV-4) — read, and shown, only when 2+
      vendors are live. A separate read so the queue never names the MV-1
      column itself. */
@@ -268,9 +569,9 @@ export function MyCouponsPage() {
       <div className="agent-gutter min-h-0 flex-1 overflow-auto pb-8 pt-3">
         <div className="w-full">
           {requests.isLoading ? (
-            <div className="space-y-2.5">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={i} className="h-16 w-full rounded-2xl" />
+            <div className={CARD_GRID}>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Skeleton key={i} className="h-72 w-full rounded-2xl" />
               ))}
             </div>
           ) : rows.length === 0 ? (
@@ -291,131 +592,23 @@ export function MyCouponsPage() {
               />
             </div>
           ) : (
-            <ul className="space-y-2.5">
-              {rows.map((r) => (
-                <li key={r.id}>
-                  <button
-                    type="button"
-                    onClick={() => r.ticket && navigate(`/tickets/${r.ticket.id}`)}
-                    // Board card anatomy: code + status pill leading, the amount as
-                    // the bold end-aligned numeral, meta underneath — hairline ring
-                    // so the card holds its edge on the dark canvas.
-                    className="grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 rounded-2xl bg-card p-4 text-start shadow-soft ring-1 ring-foreground/[0.06] transition-colors duration-fast hover:bg-primary/[0.03]"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {/*
-                          SELECTABLE, so the code can be copied with the mouse
-                          (owner, 2026-09-29). The card is a <button>, and a
-                          button swallows a click-drag as a press gesture rather
-                          than a selection — `select-text` plus stopping the
-                          MOUSEDOWN is what lets the drag become a selection.
-                          No Copy button: the browser's own copy is what was
-                          asked for.
-
-                          The CLICK still reaches the card, so opening the
-                          ticket keeps working; only a real selection is
-                          swallowed, which is what `getSelection` tests for.
-                        */}
-                        <span
-                          className="select-text font-mono text-sm font-semibold text-foreground"
-                          onMouseDown={(e) => e.stopPropagation()}
-                          onClick={(e) => {
-                            // A drag that selected something is not a click on
-                            // the card; a bare click still opens the ticket.
-                            if (window.getSelection()?.toString()) e.stopPropagation();
-                          }}
-                        >
-                          {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
-                        </span>
-                        <Pill tone={TONE[r.status]} size="sm">
-                          {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
-                        </Pill>
-                        <VendorBadge
-                          vendor={couponVendors.data?.get(r.id) ?? null}
-                          directory={vendors}
-                        />
-                      </div>
-                      {/* `truncate` removed: it hid the order id and the agent
-                          on a narrow rail, which are two of the four things
-                          this line exists to show. It wraps instead. */}
-                      <div
-                        className="mt-1 select-text text-xs leading-relaxed text-muted-foreground"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={(e) => {
-                          if (window.getSelection()?.toString()) e.stopPropagation();
-                        }}
-                      >
-                        {[
-                          /* The PHONE always, not only when the name is absent:
-                             it is what an agent reads back to a customer.
-                             So a name that is only that number is dropped
-                             rather than shown twice in two spellings. */
-                          cleanContactName(r.contact?.name),
-                          normalizePhone(r.contact?.phone ?? r.customer_phone ?? '') || null,
-                          r.ticket?.subject,
-                          /* The ticket's order FIRST, then the request's own —
-                             a late-order coupon has no ticket, so reading only
-                             `ticket.order_id` showed nothing for any of them. */
-                          couponOrderId(r) ? `#${couponOrderId(r)}` : null,
-                          // Whose ask this is — the queue shows every agent's.
-                          r.requested_by?.first_name?.trim() || r.requested_by?.email || null,
-                        ]
-                          .filter(Boolean)
-                          .join(' · ')}
-                      </div>
-                    </div>
-                    <div className="shrink-0 text-end">
-                      <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-                        {amount(r, 'SAR') || '—'}
-                      </div>
-                      <div className="mt-1 text-2xs tabular-nums text-muted-foreground">
-                        {formatRelative(r.decided_at ?? r.date_created)}
-                      </div>
-                    </div>
-                    {/*
-                      CORRECT IT, while it is still pending (owner, 2026-09-28).
-                      
-                      A `<span role="button">`, NOT a nested `<button>`: the card
-                      itself is a button, and a button inside a button is invalid
-                      HTML that browsers resolve by dropping one of them. The
-                      click is stopped from reaching the card, or correcting a
-                      request would also navigate away from it.
-                      
-                      Offered only on a PENDING request, and only to the agent
-                      who RAISED it — correcting a colleague's wording is not a
-                      typo fix. The mutation re-checks both server-side.
-                    */}
-                    {r.status === 'pending' && r.requested_by?.id === user?.id && (
-                      <span
-                        role="button"
-                        tabIndex={0}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditing(r);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setEditing(r);
-                          }
-                        }}
-                        className="col-span-full mt-1 inline-flex h-8 w-fit cursor-pointer items-center rounded-full bg-primary/10 px-3.5 text-xs font-semibold text-primary transition-colors duration-fast hover:bg-primary/[0.17] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
-                      >
-                        {t('coupons.correct', { defaultValue: 'Correct this request' })}
-                      </span>
-                    )}
-                    {r.status === 'rejected' && (
-                      // On the row, not behind a click: this is what the agent
-                      // has to tell the customer.
-                      <p className="col-span-full mt-1 rounded-xl bg-destructive-tint px-3.5 py-2 text-xs leading-relaxed text-foreground">
-                        {r.decision_note ??
-                          t('coupons.noReason', { defaultValue: 'No reason was given.' })}
-                      </p>
-                    )}
-                  </button>
-                </li>
+            <ul className={CARD_GRID}>
+              {rows.map((r, i) => (
+                <RequestCard
+                  key={r.id}
+                  r={r}
+                  index={i}
+                  vendor={couponVendors.data?.get(r.id) ?? null}
+                  vendors={vendors}
+                  /* CORRECT IT, while it is still pending (owner, 2026-09-28).
+                     Only the agent who RAISED it — correcting a colleague's
+                     wording is not a typo fix. The mutation re-checks the
+                     status server-side. */
+                  canEdit={r.status === 'pending' && r.requested_by?.id === user?.id}
+                  correction={correctionOf(r, stamps.data)}
+                  onOpen={r.ticket ? () => navigate(`/tickets/${r.ticket!.id}`) : null}
+                  onEdit={() => setEditing(r)}
+                />
               ))}
             </ul>
           )}

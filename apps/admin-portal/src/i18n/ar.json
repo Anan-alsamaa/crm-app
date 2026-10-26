@@ -741,7 +741,11 @@
     "yijiOrder": "طلب يجي",
     "approvePhoneHint": "لا توجد تذكرة — يُرسل الكوبون مباشرة إلى {{phone}}.",
     "codeLocked": "موجود على يجي — لم يعد بالإمكان تغيير الرمز.",
-    "orderEditHint": "للمرجع فقط — يُرسل الكوبون دائمًا إلى جوال العميل."
+    "orderEditHint": "للمرجع فقط — يُرسل الكوبون دائمًا إلى جوال العميل.",
+    "sectionRequest": "الطلب",
+    "sectionCoupon": "القسيمة",
+    "correctedBy": "عدّله {{who}} · {{when}}",
+    "brandBranch": "العلامة / الفرع"
   },
   "couponReport": {
     "noDecisions": "لم يُحسم شيء بعد",

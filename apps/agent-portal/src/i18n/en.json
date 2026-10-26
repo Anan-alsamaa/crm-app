@@ -960,7 +960,13 @@
       "pending": "Removing…",
       "by": "Removed by",
       "at": "Removed on"
-    }
+    },
+    "correct": "Edit",
+    "editTitle": "Edit this request",
+    "correctedBy": "Corrected by {{who}} · {{when}}",
+    "descriptionLabel": "Description",
+    "supervisor": "Supervisor",
+    "amended": "Amended"
   },
   "busy": {
     "on": "Busy",

@@ -568,7 +568,7 @@ export function CouponRequestDialog({
       width="md"
       title={
         onSave
-          ? t('coupons.editTitle', { defaultValue: 'Correct this request' })
+          ? t('coupons.editTitle', { defaultValue: 'Edit this request' })
           : t('coupons.requestTitle', { defaultValue: 'Request a coupon' })
       }
       description={

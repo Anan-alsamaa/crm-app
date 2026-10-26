@@ -1182,7 +1182,11 @@
     "approvePhoneHint": "No ticket — the coupon goes to {{phone}} directly.",
     "noTicketHint": "No ticket and no customer phone on this request — there is nobody to send the coupon to.",
     "codeLocked": "Already on Yiji — the code can no longer change.",
-    "orderEditHint": "For reference — the coupon always goes to the customer’s phone."
+    "orderEditHint": "For reference — the coupon always goes to the customer’s phone.",
+    "sectionRequest": "Request",
+    "sectionCoupon": "Coupon",
+    "correctedBy": "Corrected by {{who}} · {{when}}",
+    "brandBranch": "Brand / branch"
   },
   "complaintReport": {
     "any": "Any",

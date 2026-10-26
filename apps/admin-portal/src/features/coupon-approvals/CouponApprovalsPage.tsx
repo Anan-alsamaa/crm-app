@@ -9,6 +9,7 @@ import {
   EmptyState,
   formatDateTime,
   InboxIcon,
+  InfoIcon,
   Input,
   Pill,
   Skeleton,
@@ -41,6 +42,7 @@ import {
   useSaveCouponTerms,
   type CouponApprovalRow,
 } from './api.js';
+import { correctionOf, useCorrectionStamps, type CorrectionStamp } from './correction-stamps.js';
 
 /**
  * The supervisor's queue: every coupon an agent wants to give away, decided one
@@ -118,34 +120,88 @@ function EditField({
   );
 }
 
-/** One coupon term as label over value, for the terms grid on the card. */
+/**
+ * The card's detail grids: two columns on a phone, four on a laptop, six on a
+ * wide screen. Long values (customer, branch, ticket, validity, delivery
+ * types) span two cells rather than truncating to nothing.
+ */
+const TILE_GRID = 'mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-6';
+
+/** One term as a compact label-over-value tile. */
 function Term({
   label,
   value,
   mono,
+  className,
 }: {
   label: string;
   value: React.ReactNode;
   /** For values read aloud character by character — a coupon code. */
   mono?: boolean;
+  className?: string;
 }) {
+  const shown = value == null || value === '' ? '—' : value;
   return (
-    <div className="min-w-0">
-      <dt className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+    <div
+      className={cn(
+        'min-w-0 rounded-xl bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.05]',
+        className,
+      )}
+    >
+      <dt className="truncate text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
         {label}
       </dt>
       <dd
         dir="auto"
-        className={cn(
-          'mt-0.5 truncate text-xs font-medium text-foreground',
-          mono && 'font-mono font-semibold',
-        )}
+        title={typeof shown === 'string' || typeof shown === 'number' ? String(shown) : undefined}
+        className={cn('mt-0.5 truncate text-xs font-semibold text-foreground', mono && 'font-mono')}
       >
-        {value ?? '—'}
+        {shown}
       </dd>
     </div>
   );
 }
+
+function PencilIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={cn('h-3.5 w-3.5 shrink-0', className)}
+      aria-hidden
+    >
+      <path d="M11.5 2.5a1.4 1.4 0 0 1 2 2L6 12l-3 1 1-3 7.5-7.5z" />
+    </svg>
+  );
+}
+
+/** "Corrected by <agent> · <time>" — the agent's own fix to a pending request. */
+function CorrectedMark({ who, at, className }: { who: string; at: string; className?: string }) {
+  const { t } = useTranslation();
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-2xs font-medium text-primary',
+        className,
+      )}
+    >
+      <PencilIcon className="h-3 w-3" />
+      {t('couponApprovals.correctedBy', {
+        defaultValue: 'Corrected by {{who}} · {{when}}',
+        who,
+        when: formatDateTime(at),
+      })}
+    </span>
+  );
+}
+
+/** An inline notice: something that changes what approving this means. */
+const NOTICE =
+  'mt-3 flex items-start gap-2 rounded-xl bg-warning-tint px-3.5 py-2.5 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25';
 
 /** The full set of terms a supervisor may amend before approving. */
 export interface TermEdits {
@@ -311,10 +367,13 @@ function Row({
   row,
   onDecide,
   busy,
+  correction,
 }: {
   row: CouponApprovalRow;
   onDecide: (approve: boolean, note: string, edits?: Record<string, unknown>) => void;
   busy: boolean;
+  /** Set when the requesting agent corrected this pending request. */
+  correction: CorrectionStamp | null;
 }) {
   const { t } = useTranslation();
   /**
@@ -454,49 +513,83 @@ function Row({
   /** The branch, as a person would say it. */
   const branch = branchLabel(row, storeIndex);
 
-  return (
-    <li className="rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06]">
-      {/*
-        THE SUMMARY LINE, always visible.
+  const requester = row.requested_by?.first_name?.trim() || row.requested_by?.email?.trim() || '—';
+  const orderRef = normalizeOrderId(row.ticket?.order_id || row.order_id)
+    ? `#${row.ticket?.order_id || row.order_id}`
+    : null;
+  /*
+   * THE CUSTOMER MUST MATCH THE COUPON TITLE (owner spec §18).
+   *
+   * Both when both are known: the name is who it is, the phone is what a
+   * supervisor searches by and reads back on a call. `customer_phone` covers a
+   * LATE-ORDERS coupon, which has no CONTACT row. Through `displayContactName`
+   * (owner, 2026-10-05) so a stored `+966…` name renders as `05…`, and deduped
+   * against the phone — most customers have no real name, so the "name" IS
+   * the number, and the pair exists to show two facts, not one twice.
+   */
+  const phone =
+    normalizePhone(row.contact?.phone ?? row.customer_phone ?? '') ||
+    row.contact?.phone ||
+    row.customer_phone ||
+    '';
+  const name = displayContactName(row.contact?.name, phone);
+  const customer = [name === phone ? '' : name, phone].filter(Boolean).join(' · ') || null;
+  /* The readable branch. The ticket's store when there is one, otherwise
+     resolved from the store master by Yiji's restaurant id — a late-order
+     coupon has no ticket store at all (owner spec §18). */
+  const branchFull =
+    [
+      row.ticket?.store?.brand?.name,
+      row.ticket?.store?.code,
+      row.ticket?.store?.name,
+      row.ticket?.store?.city,
+    ]
+      .filter(Boolean)
+      .join(' · ') ||
+    branch ||
+    null;
+  const title =
+    row.ticket?.subject ??
+    row.title ??
+    t('couponApprovals.noTicket', { defaultValue: 'No ticket' });
 
-        Every request used to render at full height, so a queue of twenty was a
-        page of twenty tall cards and comparing two meant scrolling between
-        them. This is what a supervisor triages on — what it is, what it costs,
-        where it went, who asked and when — with everything else one click away.
+  return (
+    <li
+      className={cn(
+        'rounded-2xl bg-card shadow-soft ring-1 ring-foreground/[0.06] transition-shadow duration-base ease-out',
+        expanded && 'shadow-float',
+      )}
+    >
+      {/*
+        THE HEADER, always visible — and, collapsed, the whole card.
+
+        One line a supervisor triages on: what it is about and what it costs on
+        the left, its state as two pills, then the reference facts (order,
+        branch, who asked, when) as ONE quiet run of text rather than five
+        loose fragments, and the decision buttons at the end.
 
         The toggle is a STRETCHED OVERLAY sitting under the content, not a
-        <button> wrapped around it. Wrapping was the first attempt and it was
-        wrong twice over: only the part of the row it covered responded, so the
-        hover lit a fragment of the box rather than the box, and the action
-        buttons could not live inside it because a button inside a button is
-        invalid. As an overlay the WHOLE row highlights and the whole row
-        clicks, while Approve/Edit/Reject sit above it and keep their own
-        clicks. Same pattern the order cards in the agent portal use.
+        <button> wrapped around it: the whole header highlights and clicks,
+        while Approve/Edit/Reject sit above it and keep their own clicks (a
+        button inside a button is invalid). Same pattern the order cards in the
+        agent portal use.
       */}
       <div
         className={cn(
-          'relative flex flex-wrap items-center gap-x-3 gap-y-2 rounded-2xl p-4',
+          'relative flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl px-4 py-3.5 sm:px-5',
           'transition-colors duration-fast ease-out hover:bg-secondary/40',
-          expanded && 'rounded-b-none bg-secondary/25',
+          expanded && 'rounded-b-none',
         )}
       >
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
-          aria-label={
-            row.ticket?.subject ??
-            row.title ??
-            t('couponApprovals.noTicket', { defaultValue: 'No ticket' })
-          }
+          aria-label={title}
           className="absolute inset-0 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/50"
         />
-        {/*
-          The summary text sits ABOVE the overlay so it renders, but passes its
-          clicks straight through — otherwise the text would be a dead patch in
-          the middle of a clickable row.
-        */}
-        <div className="pointer-events-none relative flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+        {/* Above the overlay so it renders, but passing clicks through to it. */}
+        <div className="pointer-events-none relative flex min-w-0 flex-1 items-center gap-3">
           <ChevronDownIcon
             size={14}
             className={cn(
@@ -504,60 +597,53 @@ function Row({
               expanded && 'rotate-180',
             )}
           />
-          {/* The ticket is what the request is ABOUT, so it leads. */}
-          <span className="min-w-0 max-w-[16rem] truncate text-sm font-semibold text-foreground">
-            {row.ticket?.subject ??
-              row.title ??
-              t('couponApprovals.noTicket', { defaultValue: 'No ticket' })}
-          </span>
-          {worth && (
-            <span className="shrink-0 text-base font-extrabold tabular-nums tracking-[-0.02em] text-foreground">
-              {worth}
-            </span>
-          )}
-          <Pill tone={TONE[row.status] ?? 'success'} size="sm">
-            {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
-          </Pill>
-          {normalizeOrderId(row.ticket?.order_id || row.order_id) && (
-            <span className="shrink-0 font-mono text-2xs text-muted-foreground">
-              #{row.ticket?.order_id || row.order_id}
-            </span>
-          )}
-          {/* WHETHER IT GOES TO THE YIJI APP, on every row (owner, 2026-10-05).
-              It was readable only by opening the card and finding the
-              checkbox, so a supervisor approving from the row could not see
-              that a coupon was set to be withheld. "No" is the exception worth
-              noticing, so it carries the warning tone and "Yes" stays quiet. */}
-          <Pill tone={row.delivery_excluded ? 'warning' : 'muted'} size="sm">
-            {row.delivery_excluded
-              ? t('couponApprovals.sendOnAppNo', { defaultValue: 'Send on app: No' })
-              : t('couponApprovals.sendOnAppYes', { defaultValue: 'Send on app: Yes' })}
-          </Pill>
-          {branch && (
-            <span className="min-w-0 max-w-[14rem] truncate text-2xs text-muted-foreground">
-              {branch}
-            </span>
-          )}
-          <span className="shrink-0 text-2xs text-muted-foreground">
-            {row.requested_by?.first_name?.trim() || row.requested_by?.email?.trim() || '—'}
-          </span>
-          <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
-            {formatDateTime(row.date_created)}
-          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1">
+              {/* The ticket is what the request is ABOUT, so it leads. */}
+              <span
+                dir="auto"
+                className="min-w-0 max-w-[18rem] truncate text-sm font-semibold text-foreground"
+              >
+                {title}
+              </span>
+              {worth && (
+                <span className="shrink-0 text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
+                  {worth}
+                </span>
+              )}
+              <Pill tone={TONE[row.status] ?? 'success'} size="sm">
+                {t(`couponApprovals.status.${row.status}`, { defaultValue: row.status })}
+              </Pill>
+              {/* WHETHER IT GOES TO THE YIJI APP, on every row (owner,
+                  2026-10-05) — a supervisor approving from the row must see
+                  that a coupon is set to be withheld. "No" is the exception
+                  worth noticing, so it carries the warning tone. */}
+              <Pill tone={row.delivery_excluded ? 'warning' : 'muted'} size="sm">
+                {row.delivery_excluded
+                  ? t('couponApprovals.sendOnAppNo', { defaultValue: 'Send on app: No' })
+                  : t('couponApprovals.sendOnAppYes', { defaultValue: 'Send on app: Yes' })}
+              </Pill>
+              {correction && (
+                <CorrectedMark who={requester} at={correction.at} className="shrink-0" />
+              )}
+            </div>
+            <p className="mt-1 truncate text-2xs text-muted-foreground">
+              {orderRef && <span className="font-mono">{orderRef}</span>}
+              {orderRef && ' · '}
+              {[branch, requester, formatDateTime(row.date_created)].filter(Boolean).join(' · ')}
+            </p>
+          </div>
         </div>
         {/* Above the overlay AND clickable: deciding must not be a side effect
             of trying to expand, nor the other way round. */}
         {pending && canDecide && !rejecting && !expanded && (
-          <div className="relative flex shrink-0 items-center gap-2">
+          <div className="relative flex shrink-0 items-center gap-1.5">
             <Button
               type="button"
               size="sm"
-              /* Same rule as the expanded card: approval is gated on the
-                 TERMS, not on a ticket. A late-order coupon has no ticket by
-                 design and is still perfectly deliverable — this second copy
-                 of the button kept the old guard when the expanded one was
-                 fixed, so the row could be approved only by opening it first
-                 (owner, 2026-09-28). */
+              /* Gated on the TERMS, not on a ticket: a late-order coupon has no
+                 ticket by design and is still perfectly deliverable (owner,
+                 2026-09-28). */
               disabled={busy || termsProblems.length > 0}
               title={termsProblems[0]?.message}
               onClick={() => onDecide(true, note)}
@@ -567,7 +653,7 @@ function Row({
             <Button
               type="button"
               size="sm"
-              variant="secondary"
+              variant="ghost"
               disabled={busy}
               onClick={() => {
                 setExpanded(true);
@@ -580,7 +666,8 @@ function Row({
             <Button
               type="button"
               size="sm"
-              variant="destructive"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
               disabled={busy}
               onClick={() => {
                 setExpanded(true);
@@ -594,231 +681,173 @@ function Row({
       </div>
 
       {expanded && (
-        <div className="border-t border-border/60 px-5 pb-5 pt-4">
-          {/* Meta pairs flow from the start edge rather than sitting on a rigid
-          half-width grid — a short "Asked by" used to strand "Customer" in the
-          middle of the card. The ticket line keeps a row to itself because
-          subjects run long. */}
-          <dl className="mt-3 flex flex-wrap items-baseline gap-x-8 gap-y-1.5 text-xs">
-            <div className="flex items-baseline gap-2">
-              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('couponApprovals.agent', { defaultValue: 'Asked by' })}
-              </dt>
-              <dd className="min-w-0 truncate font-medium text-foreground">
-                {row.requested_by?.first_name?.trim() || row.requested_by?.email?.trim() || '—'}
-              </dd>
-            </div>
-            <div className="flex min-w-0 items-baseline gap-2">
-              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('couponApprovals.customer', { defaultValue: 'Customer' })}
-              </dt>
-              <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-                {/*
-                  THE CUSTOMER MUST MATCH THE COUPON TITLE (owner spec §18).
+        <div className="border-t border-foreground/[0.07] px-4 pb-4 pt-4 sm:px-5 sm:pb-5">
+          {/*
+            TWO SECTIONS, each a grid of label/value tiles (owner, 2026-10-26:
+            "the cards could be better designed").
 
-                  Both when both are known: the name is who it is, the phone is
-                  what a supervisor searches by and reads back on a call.
-
-                  `customer_phone` is the fix. A coupon raised from the
-                  LATE-ORDERS queue has no CONTACT row — the queue knows a phone,
-                  not a CRM customer — so this read "—" while the Coupon title
-                  right below it showed that very number. The number was never
-                  missing; the query simply did not ask for the column that
-                  holds it.
-                */}
-                {(() => {
-                  const phone =
-                    normalizePhone(row.contact?.phone ?? row.customer_phone ?? '') ||
-                    row.contact?.phone ||
-                    row.customer_phone ||
-                    '';
-                  /*
-                   * THROUGH `displayContactName` (owner, 2026-10-05), so a
-                   * stored `+966…` name renders as `05…`.
-                   *
-                   * AND DEDUPED against the phone beside it. Most customers
-                   * have no real name, so the "name" IS the number — once
-                   * normalised it becomes character-for-character the phone on
-                   * its right, and joining them printed `0508315325 ·
-                   * 0508315325`. The pair exists to show two different facts;
-                   * when there is only one fact, show it once.
-                   */
-                  const name = displayContactName(row.contact?.name, phone);
-                  return [name === phone ? '' : name, phone].filter(Boolean).join(' · ') || '—';
-                })()}
-              </dd>
-            </div>
-            <div className="flex items-baseline gap-2">
-              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('couponApprovals.requestedAt', { defaultValue: 'Requested' })}
-              </dt>
-              {/* Date AND time. "2 hours ago" answers how long they have waited;
-              the timestamp is what gets quoted in an audit. */}
-              <dd className="min-w-0 truncate font-medium tabular-nums text-foreground">
-                {row.date_created ? formatDateTime(row.date_created) : '—'}
-              </dd>
-            </div>
-            <div className="flex min-w-0 items-baseline gap-2">
-              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('couponApprovals.branch', { defaultValue: 'Branch' })}
-              </dt>
-              <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-                {/* The readable branch. The ticket's store when there is one,
-                    otherwise resolved from the store master by Yiji's
-                    restaurant id — a late-order coupon has no ticket store at
-                    all, which is why this read "—" (owner spec §18). */}
-                {[
-                  row.ticket?.store?.brand?.name,
-                  row.ticket?.store?.code,
-                  row.ticket?.store?.name,
-                  row.ticket?.store?.city,
-                ]
-                  .filter(Boolean)
-                  .join(' · ') ||
-                  branch ||
-                  '—'}
-              </dd>
-            </div>
-            <div className="flex w-full min-w-0 items-baseline gap-2">
-              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('couponApprovals.ticket', { defaultValue: 'Ticket' })}
-              </dt>
-              <dd className="min-w-0 truncate font-medium text-foreground">
-                {[
-                  row.ticket?.subject,
-                  normalizeOrderId(row.ticket?.order_id) ? `#${row.ticket?.order_id}` : null,
-                  row.ticket?.priority,
-                  row.ticket?.status,
-                ]
-                  .filter(Boolean)
-                  .join(' · ') || '—'}
-              </dd>
-            </div>
-            {/* EMA-57 (operations, 2026-10-07): where the complaint came in —
-                CRM, WhatsApp, social media — exactly as the agent set it on
-                the ticket. A late-order coupon has no ticket, and says so. */}
-            <div className="flex min-w-0 items-baseline gap-2">
-              <dt className="shrink-0 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                {t('couponApprovals.ticketSource', { defaultValue: 'Ticket source' })}
-              </dt>
-              <dd dir="auto" className="min-w-0 truncate font-medium text-foreground">
-                {row.ticket?.complaint_source?.trim() ||
+            REQUEST is who and what it is about; COUPON is what is being signed
+            off. They used to be a run of inline pairs followed by a grey
+            four-column block, which read as one long flat paragraph. Tiles in a
+            responsive grid give every value the same shape and the eye a column
+            to run down.
+          */}
+          <section aria-labelledby={`req-${row.id}`}>
+            <h4 id={`req-${row.id}`} className="text-xs font-semibold text-foreground">
+              {t('couponApprovals.sectionRequest', { defaultValue: 'Request' })}
+            </h4>
+            <dl className={TILE_GRID}>
+              <Term
+                label={t('couponApprovals.agent', { defaultValue: 'Asked by' })}
+                value={requester}
+              />
+              <Term
+                label={t('couponApprovals.customer', { defaultValue: 'Customer' })}
+                value={customer}
+                className="sm:col-span-2"
+              />
+              {/* Date AND time: the timestamp is what gets quoted in an audit. */}
+              <Term
+                label={t('couponApprovals.requestedAt', { defaultValue: 'Requested' })}
+                value={row.date_created ? formatDateTime(row.date_created) : null}
+              />
+              <Term
+                label={t('couponApprovals.branch', { defaultValue: 'Branch' })}
+                value={branchFull}
+                className="sm:col-span-2"
+              />
+              <Term
+                label={t('couponApprovals.ticket', { defaultValue: 'Ticket' })}
+                value={
+                  [
+                    row.ticket?.subject,
+                    normalizeOrderId(row.ticket?.order_id) ? `#${row.ticket?.order_id}` : null,
+                    row.ticket?.priority,
+                    row.ticket?.status,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || null
+                }
+                className="sm:col-span-2"
+              />
+              {/* EMA-57 (operations, 2026-10-07): where the complaint came in,
+                  exactly as the agent set it. A late-order coupon has no ticket,
+                  and says so. */}
+              <Term
+                label={t('couponApprovals.ticketSource', { defaultValue: 'Ticket source' })}
+                value={
+                  row.ticket?.complaint_source?.trim() ||
                   (!row.ticket && row.order_id
                     ? t('couponApprovals.sourceLateOrder', { defaultValue: 'Late orders' })
-                    : '—')}
-              </dd>
-            </div>
-          </dl>
+                    : null)
+                }
+              />
+            </dl>
+          </section>
 
           {/* The COMPLETE terms, not the two that fit a summary: a supervisor is
-          signing off on all of them, so all of them are on the card. */}
-          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-4">
-            {/* The CODE leads the detail. It is the one value a customer reads
-                back down a phone, and the summary line above deliberately does
-                not carry it — a queue is triaged on what a request costs and
-                who it is for, not on a string nobody can scan. */}
-            <Term
-              label={t('coupons.code', { defaultValue: 'Coupon code' })}
-              value={row.coupon_code}
-              mono
-            />
-            <Term
-              label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
-              value={row.title}
-            />
-            {/* THE ORDER, on every card (owner, 2026-10-11). Reference only: the
-                coupon goes to the customer's PHONE, never to this number. For
-                Dine-in / Takeout it is the restaurant's own order number. */}
-            <Term
-              label={
-                isRestaurantOrderNumber(row.delivery_type)
-                  ? t('couponApprovals.restaurantOrder', { defaultValue: 'Restaurant order no.' })
-                  : t('couponApprovals.yijiOrder', { defaultValue: 'Yiji order' })
-              }
-              value={row.order_id ?? row.ticket?.order_id ?? null}
-              mono
-            />
-            <Term
-              label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
-              value={row.issuing_side}
-            />
-            <Term
-              label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
-              value={row.delivery_type}
-            />
-            <Term
-              label={t('lists.couponType', { defaultValue: 'Coupon type' })}
-              value={row.coupon_type}
-            />
-            <Term
-              label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
-              value={row.discount_category}
-            />
-            {/* ALWAYS rendered, never hidden when empty.
-                It used to be wrapped in `row.item_name && …`, so a coupon with
-                no item simply had no Item row — indistinguishable from a page
-                that does not carry the field at all, which is how it read as
-                missing. `Term` already prints an em dash for an empty value,
-                so "no item" now says so out loud. This is also the field the
-                supervisor is most likely to be checking the coupon against:
-                a coupon raised for one item should be worth that item. */}
-            <Term label={t('coupons.itemShort', { defaultValue: 'Item' })} value={row.item_name} />
-            {/* A real term of the coupon, so the supervisor approves it rather
-                than discovering it. Plain Yes/No, because the column is a
-                NEGATIVE — "Yes" here means the customer is restricted. */}
-            <Term
-              label={t('coupons.noOtherDiscounts', {
-                defaultValue: 'Cannot be used with other discounts',
-              })}
-              value={
-                row.no_other_discounts
-                  ? t('common.yes', { defaultValue: 'Yes' })
-                  : t('common.no', { defaultValue: 'No' })
-              }
-            />
-            <Term
-              label={t('couponApprovals.validity', { defaultValue: 'Valid' })}
-              value={
-                row.valid_from || row.valid_to
-                  ? `${row.valid_from?.slice(0, 10) ?? '…'} → ${row.valid_to?.slice(0, 10) ?? '…'}`
-                  : null
-              }
-            />
-            <Term
-              label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-              value={row.max_discount != null ? money(Number(row.max_discount)) : null}
-            />
-            <Term
-              label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
-              value={row.usage_limit}
-            />
-            {/* NAMES, not ids (owner spec §18). This printed `brand_id` and
-                `restaurant_id` raw — Yiji's identifiers, which are exactly right
-                to send with the coupon and unreadable to a supervisor deciding
-                whether to approve it. `branchLabel` resolves them through the
-                store master and only falls back to the ids when the master does
-                not have that branch, which is a gap worth seeing. */}
-            {branch && (
+              signing off on all of them, so all of them are on the card. */}
+          <section className="mt-4" aria-labelledby={`cpn-${row.id}`}>
+            <h4 id={`cpn-${row.id}`} className="text-xs font-semibold text-foreground">
+              {t('couponApprovals.sectionCoupon', { defaultValue: 'Coupon' })}
+            </h4>
+            <dl className={TILE_GRID}>
+              {/* The CODE leads: it is the one value a customer reads back down
+                  a phone, and the header deliberately does not carry it. */}
               <Term
-                label={t('couponApprovals.branch', { defaultValue: 'Brand / branch' })}
-                value={branch}
+                label={t('coupons.code', { defaultValue: 'Coupon code' })}
+                value={row.coupon_code}
+                mono
               />
-            )}
-          </dl>
+              <Term
+                label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
+                value={row.title}
+              />
+              {/* THE ORDER, on every card (owner, 2026-10-11). Reference only:
+                  the coupon goes to the customer's PHONE, never to this number.
+                  For Dine-in / Takeout it is the restaurant's own number. */}
+              <Term
+                label={
+                  isRestaurantOrderNumber(row.delivery_type)
+                    ? t('couponApprovals.restaurantOrder', { defaultValue: 'Restaurant order no.' })
+                    : t('couponApprovals.yijiOrder', { defaultValue: 'Yiji order' })
+                }
+                value={row.order_id ?? row.ticket?.order_id ?? null}
+                mono
+              />
+              <Term
+                label={t('lists.couponType', { defaultValue: 'Coupon type' })}
+                value={row.coupon_type}
+              />
+              <Term
+                label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
+                value={row.discount_category}
+              />
+              <Term
+                label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+                value={row.max_discount != null ? money(Number(row.max_discount)) : null}
+              />
+              <Term
+                label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+                value={row.delivery_type}
+                className="sm:col-span-2"
+              />
+              <Term
+                label={t('couponApprovals.validity', { defaultValue: 'Valid' })}
+                value={
+                  row.valid_from || row.valid_to
+                    ? `${row.valid_from?.slice(0, 10) ?? '…'} → ${row.valid_to?.slice(0, 10) ?? '…'}`
+                    : null
+                }
+                className="sm:col-span-2"
+              />
+              <Term
+                label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+                value={row.usage_limit}
+              />
+              {/* ALWAYS rendered, never hidden when empty: "no item" says so
+                  out loud rather than reading as a missing field. */}
+              <Term
+                label={t('coupons.itemShort', { defaultValue: 'Item' })}
+                value={row.item_name}
+              />
+              <Term
+                label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
+                value={row.issuing_side}
+              />
+              {/* A real term, approved rather than discovered. The column is a
+                  NEGATIVE — "Yes" means the customer is restricted. */}
+              <Term
+                label={t('coupons.noOtherDiscounts', {
+                  defaultValue: 'Cannot be used with other discounts',
+                })}
+                value={
+                  row.no_other_discounts
+                    ? t('common.yes', { defaultValue: 'Yes' })
+                    : t('common.no', { defaultValue: 'No' })
+                }
+              />
+              {/* NAMES, not Yiji's ids (owner spec §18) — `branchLabel` falls
+                  back to the ids only when the store master lacks the branch. */}
+              {branch && (
+                <Term
+                  label={t('couponApprovals.brandBranch', { defaultValue: 'Brand / branch' })}
+                  value={branch}
+                  className="sm:col-span-2"
+                />
+              )}
+            </dl>
+          </section>
 
           {/*
-            ONE BOX, NOT TWO (owner, 2026-10-07). The ticket description used to
-            sit above the agent's reason, and since the reason is normally that
-            same description the card printed it twice. The reason box stays;
-            when an agent left it empty, the ticket's description fills it so
-            the supervisor still reads what the customer reported.
+            ONE BOX, NOT TWO (owner, 2026-10-07): the agent's reason, or the
+            ticket's description when they left it empty. LABELLED like every
+            term above it (owner, 2026-10-25) — "Description" is the word the
+            Edit form uses for this field (`reason`).
           */}
-          {/* LABELLED like every term above it (owner, 2026-10-25): an
-              unlabelled box read as stray text. "Description" is the same word
-              the Edit form uses for this field (`reason`). */}
           {(row.reason?.trim() || row.ticket?.description?.trim()) && (
-            <div className="mt-2.5 rounded-lg bg-secondary/60 px-3 py-2 ring-1 ring-inset ring-foreground/[0.04]">
-              <p className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            <div className="mt-3 rounded-xl bg-secondary/40 px-3.5 py-2.5 ring-1 ring-inset ring-foreground/[0.05]">
+              <p className="text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
                 {t('couponApprovals.description', { defaultValue: 'Description' })}
               </p>
               <p
@@ -847,8 +876,13 @@ function Row({
               2026-10-06): its code is taken there, and unticking would route
               a coupon that must never be assigned into the assignment path. */}
           {!row.yiji_coupon_user_id && !row.yiji_coupon_id && (
-            <div className="mt-2.5 rounded-lg bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.04]">
-              <label className="flex cursor-pointer items-start gap-2.5">
+            <div className="mt-3 rounded-xl bg-secondary/40 px-3.5 py-2.5 ring-1 ring-inset ring-foreground/[0.05]">
+              <label
+                className={cn(
+                  'flex items-start gap-2.5',
+                  canDecide ? 'cursor-pointer' : 'cursor-default',
+                )}
+              >
                 <input
                   type="checkbox"
                   className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
@@ -947,7 +981,8 @@ function Row({
               obstacle to something nobody is attempting, and it tells the
               supervisor this "cannot be approved" when it can. */}
           {!canBeDelivered && !row.delivery_excluded && (
-            <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+            <p role="note" className={NOTICE}>
+              <InfoIcon size={14} className="mt-0.5 shrink-0 text-foreground/70" aria-hidden />
               {t('couponApprovals.noOrderNoPhone', {
                 defaultValue:
                   'No customer phone on this request, so it cannot reach the customer on Yiji (coupons go to the phone number, never to an order). Approving still records the compensation, but nothing will arrive in the app — add the customer’s number first.',
@@ -982,7 +1017,8 @@ function Row({
             !row.delivery_excluded &&
             reach.data?.configured === true &&
             reach.data.exists === false && (
-              <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+              <p role="note" className={NOTICE}>
+                <InfoIcon size={14} className="mt-0.5 shrink-0 text-foreground/70" aria-hidden />
                 {t('couponApprovals.noYijiAccount', {
                   defaultValue:
                     '{{phone}} has no Yiji account yet — the coupon is held and sent automatically if they sign up. Until then honour it in the branch.',
@@ -1111,7 +1147,7 @@ function Row({
           {pending && (
             // The decision strip sits on its own hairline band — the card's footer,
             // so the actions read as one place rather than a loose button cluster.
-            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-foreground/[0.07] pt-3.5">
               {rejecting ? (
                 <>
                   <Input
@@ -1126,7 +1162,8 @@ function Row({
                   <Button
                     type="button"
                     size="sm"
-                    variant="destructive"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
                     disabled={busy || !note.trim()}
                     onClick={() => onDecide(false, note)}
                   >
@@ -1144,7 +1181,7 @@ function Row({
               ) : (
                 <>
                   {editing && (
-                    <div className="mb-1 grid w-full gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="mb-1 grid w-full gap-3 rounded-xl bg-secondary/40 p-3.5 ring-1 ring-inset ring-foreground/[0.05] sm:grid-cols-2 lg:grid-cols-3">
                       {/* CODE and ORDER, editable (owner, 2026-10-11). The code is
                           locked once the coupon exists on Yiji: their copy keeps
                           the code it was created with. */}
@@ -1311,7 +1348,6 @@ function Row({
                       <Button
                         type="button"
                         size="sm"
-                        variant="secondary"
                         disabled={
                           busy ||
                           saveTerms.isPending ||
@@ -1326,12 +1362,9 @@ function Row({
                                 defaultValue: 'Give a reason for the change first.',
                               }))
                         }
-                        // Turns the colour of Approve under the cursor: this is
-                        // the button that commits, and it should say so at the
-                        // moment somebody is about to press it. `!` because `cn`
-                        // is a joiner, not tailwind-merge — without it the
-                        // variant's own hover wins on specificity order.
-                        className="hover:!bg-primary hover:!text-primary-foreground"
+                        // Solid ink: while an edit is open, Save is the one
+                        // action that commits, so it carries the primary weight
+                        // Approve has outside the editor.
                         onClick={() => {
                           const patch = diffEdits(row, edits);
                           if (Object.keys(patch).length === 0) {
@@ -1389,7 +1422,7 @@ function Row({
                       >
                         {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
                       </Button>
-                      <span className="text-2xs text-muted-foreground">
+                      <span className="ms-auto text-end text-2xs text-muted-foreground">
                         {t('couponApprovals.editingHint', {
                           defaultValue: 'Save or cancel this change before deciding.',
                         })}
@@ -1459,7 +1492,7 @@ function Row({
                         <Button
                           type="button"
                           size="sm"
-                          variant="secondary"
+                          variant="ghost"
                           disabled={busy}
                           onClick={() => {
                             setEditing(true);
@@ -1475,14 +1508,15 @@ function Row({
                         <Button
                           type="button"
                           size="sm"
-                          variant="destructive"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
                           disabled={busy}
                           onClick={() => setRejecting(true)}
                         >
                           {t('couponApprovals.reject', { defaultValue: 'Reject' })}
                         </Button>
                       )}
-                      <span className="text-2xs text-muted-foreground">
+                      <span className="ms-auto text-end text-2xs text-muted-foreground">
                         {row.ticket?.id
                           ? t('couponApprovals.approveHint', {
                               defaultValue: 'Approving puts the coupon on the ticket.',
@@ -1520,6 +1554,8 @@ export function CouponApprovalsPage() {
   );
   const approvals = useCouponApprovals(view);
   const decide = useDecideCoupon();
+  /* Agents' own corrections of pending requests — a mark on the card only. */
+  const stamps = useCorrectionStamps();
 
   const all = approvals.data ?? [];
   const [query, setQuery] = useState('');
@@ -1845,6 +1881,7 @@ export function CouponApprovalsPage() {
                   key={row.id}
                   row={row}
                   busy={decide.isPending}
+                  correction={correctionOf(row, stamps.data)}
                   onDecide={(approve, note, edits) => onDecide(row, approve, note, edits)}
                 />
               ))}
