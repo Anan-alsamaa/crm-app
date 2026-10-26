@@ -20,13 +20,16 @@ import { registerCommerceRoutes } from './commerce/index.js';
 import { CommerceCache } from './commerce/cache.js';
 import { RedisLateOrdersLiveStore } from './commerce/late-orders-live.js';
 import { Registry } from './metrics.js';
+import { envKey } from '@yiji/shared-config/redis';
 import {
   createEnvConnectorRegistry,
   createYijiUsageRecorder,
   mockVendorsAllowed,
   vendorsFromRows,
   errorText,
+  installYijiOutboundGuard,
   yijiBackupTokenFromEnv,
+  type YijiGuardRedis,
 } from '@yiji/shared-types';
 import type { AIProvider } from './provider/types.js';
 
@@ -176,6 +179,20 @@ async function main(): Promise<void> {
     onError: (err, droppedRows) =>
       logger.warn({ err: errorText(err), droppedRows }, 'yiji usage rows not recorded'),
   });
+  /*
+   * THE OUTBOUND YIJI GUARD (incident 2026-10-26): every Yiji call this
+   * process makes passes one budget shared with every other task and service
+   * (Redis), by priority - the coupon card's phone lookups are LOW and are
+   * refused first - and a circuit breaker that stops non-critical calls when
+   * Yiji answers 429 or stops answering. See shared-types/yiji-guard.ts.
+   */
+  installYijiOutboundGuard({
+    service: 'ai-gateway',
+    redis: redis as unknown as YijiGuardRedis,
+    env: process.env,
+    log: logger,
+    onUsage: yijiUsage.record,
+  });
   /* The owner's admin token: a BACKUP for a call the CRM's own Yiji account
      was refused, never the first credential (owner, 2026-10-21). */
   const yijiBackupToken = yijiBackupTokenFromEnv(process.env);
@@ -240,6 +257,28 @@ async function main(): Promise<void> {
     /* Today's late-orders queue from the workers' once-a-minute snapshot
        (owner, 2026-10-12); a missing or stale one falls back to Yiji. */
     lateOrdersLive: new RedisLateOrdersLiveStore(redis),
+    /* Per signed-in user, every commerce request and (tighter) the phone
+       lookups - one browser tab can no longer fan out (incident 2026-10-26). */
+    ...(config.COMMERCE_PER_USER_RPM > 0
+      ? {
+          callerLimiter: new SlidingWindowLimiter(
+            redis,
+            60_000,
+            config.COMMERCE_PER_USER_RPM,
+            envKey('rl:commerce'),
+          ),
+        }
+      : {}),
+    ...(config.COMMERCE_LOOKUP_PER_USER_RPM > 0
+      ? {
+          lookupLimiter: new SlidingWindowLimiter(
+            redis,
+            60_000,
+            config.COMMERCE_LOOKUP_PER_USER_RPM,
+            envKey('rl:commerce-lookup'),
+          ),
+        }
+      : {}),
   });
 
   await app.listen({ port: config.PORT, host: '0.0.0.0' });

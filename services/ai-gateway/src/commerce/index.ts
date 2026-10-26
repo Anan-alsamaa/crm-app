@@ -9,8 +9,29 @@ import {
 } from '@yiji/shared-types';
 import type { ConnectorRegistry, VendorConnector } from '@yiji/shared-types';
 import { verifyCaller, AuthError, type CallerVerifierDeps } from '../auth/index.js';
-import { COMMERCE_TTL, type CommerceCache } from './cache.js';
+import {
+  COMMERCE_SINGLE_FLIGHT_MS,
+  COMMERCE_TTL,
+  type CommerceCache,
+  type CommerceWrapOptions,
+} from './cache.js';
 import type { LateOrdersLiveStore } from './late-orders-live.js';
+
+/**
+ * A per-caller request budget (a `SlidingWindowLimiter`, or anything with its
+ * `check`). Narrow so tests need no Redis.
+ */
+export interface CommerceCallerLimiter {
+  check(scope: string): Promise<{ allowed: boolean; resetAt: number }>;
+}
+
+/**
+ * The phone as Yiji indexes it - digits, no country code, no leading zero - so
+ * `+966 50 123 4567`, `0501234567` and `501234567` share ONE cache entry.
+ */
+export function nationalPhone(phone: string): string {
+  return phone.replace(/\D/g, '').replace(/^966/, '').replace(/^0+/, '');
+}
 
 /**
  * Commerce proxy (C-2).
@@ -61,6 +82,16 @@ export interface CommerceDeps {
   lateOrdersLive?: LateOrdersLiveStore;
   /** The clock, for the snapshot's freshness. Tests pin it. */
   now?: () => number;
+  /**
+   * PER-CALLER LIMITS (incident 2026-10-26: one browser tab fired thousands
+   * of lookups). `callerLimiter` counts every commerce request a signed-in
+   * user makes; `lookupLimiter` additionally counts their phone lookups
+   * (`/commerce/customer-exists`), the call that flooded Yiji. Over either,
+   * the request is answered 429 without touching the cache or Yiji. Absent =
+   * no limit (tests, and a gateway without Redis).
+   */
+  callerLimiter?: CommerceCallerLimiter;
+  lookupLimiter?: CommerceCallerLimiter;
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '');
@@ -114,11 +145,49 @@ export async function registerCommerceRoutes(
      request keeps hitting the entry it always did. */
   const vendorKeyPart = (vendorId: string): string[] => (vendorId ? ['v', vendorId] : []);
 
-  /** Require a verified Directus agent session; replies + returns false on fail. */
-  async function requireAgent(req: FastifyRequest, reply: FastifyReply): Promise<boolean> {
+  /**
+   * One limiter's verdict for this caller; replies 429 and returns false when
+   * over. A limiter that cannot answer (Redis down) lets the request through:
+   * the outbound Yiji guard still bounds what reaches Yiji.
+   */
+  async function withinLimit(
+    limiter: CommerceCallerLimiter | undefined,
+    scope: string,
+    what: string,
+    req: FastifyRequest,
+    reply: FastifyReply,
+  ): Promise<boolean> {
+    if (!limiter) return true;
+    let verdict: { allowed: boolean; resetAt: number };
     try {
-      await verifyCaller(req, deps.directus);
+      verdict = await limiter.check(scope);
+    } catch (err) {
+      app.log.warn({ err, scope }, 'commerce rate limiter unavailable - request allowed');
       return true;
+    }
+    if (verdict.allowed) return true;
+    app.log.warn({ scope, limit: what, url: req.url.split('?')[0] }, 'commerce rate limited');
+    void reply.code(429).send({
+      error: 'rate_limited',
+      scope: what,
+      retryAfterMs: Math.max(0, verdict.resetAt - nowMs()),
+    });
+    return false;
+  }
+
+  /**
+   * Require a verified Directus agent session, within the caller's request
+   * budget; replies + returns false on fail. Scoped by USER, not IP: every
+   * agent in an office shares one IP, and it is one person's tab that floods.
+   */
+  async function requireAgent(
+    req: FastifyRequest,
+    reply: FastifyReply,
+    lookup = false,
+  ): Promise<boolean> {
+    let userId: string;
+    try {
+      userId = (await verifyCaller(req, deps.directus)).userId;
     } catch (err) {
       if (err instanceof AuthError) {
         app.log.warn({ ip: req.ip, reason: err.message }, 'commerce auth rejected');
@@ -127,6 +196,12 @@ export async function registerCommerceRoutes(
       }
       throw err;
     }
+    const scope = `user:${userId || `ip:${req.ip}`}`;
+    if (!(await withinLimit(deps.callerLimiter, scope, 'commerce', req, reply))) return false;
+    if (lookup && !(await withinLimit(deps.lookupLimiter, scope, 'lookup', req, reply))) {
+      return false;
+    }
+    return true;
   }
 
   /**
@@ -154,8 +229,16 @@ export async function registerCommerceRoutes(
   };
 
   /** Through the cache when there is one; straight upstream when there is not. */
-  const cached = <T>(parts: readonly string[], ttl: number, fn: () => Promise<T>): Promise<T> =>
-    deps.cache ? deps.cache.wrap(parts, ttl, fn) : fn();
+  const cached = <T>(
+    parts: readonly string[],
+    ttl: number,
+    fn: () => Promise<T>,
+    opts?: CommerceWrapOptions<T>,
+  ): Promise<T> => (deps.cache ? deps.cache.wrap(parts, ttl, fn, opts) : fn());
+
+  /* While Yiji is failing, a repeat of the same question is answered with the
+     failure for a moment rather than asked again (incident 2026-10-26). */
+  const failFast = { failTtlSeconds: COMMERCE_TTL.upstreamFailed };
 
   /* Cache keys are unchanged (the vendor id as the request named it), so a
      deploy of this layer does not cold-start the cache. */
@@ -215,19 +298,40 @@ export async function registerCommerceRoutes(
    * Returns a BOOLEAN and the id, never a profile: the card needs to know
    * whether delivery will work, and a lookup endpoint that hands back customer
    * records to any signed-in agent is a different, wider thing.
+   *
+   * CACHED SERVER-SIDE (incident 2026-10-26: this route, once per card and
+   * again on every refocus, rate-limited our whole AWS egress at Yiji). Per
+   * vendor and NATIONAL number, so every spelling of one phone is one entry:
+   * a yes for 12 h, a no for 15 min, a failure for 60 s; one lookup per
+   * number at a time across all gateway tasks; and a per-user lookup budget
+   * on top of the commerce one. Yiji sees at most one call per number per
+   * window however many cards, tabs or agents ask.
    */
   app.get('/commerce/customer-exists', async (req, reply) => {
-    if (!(await requireAgent(req, reply))) return;
+    if (!(await requireAgent(req, reply, true))) return;
     const q = req.query as Record<string, string | undefined>;
     const phone = str(q.phone);
     const vendorId = str(q.vendorId);
     if (!phone) return reply.code(400).send({ error: 'missing_params' });
-    return answering(reply, { route: 'customer-exists', phone, vendorId }, async () => {
+    return answering(reply, { route: 'customer-exists', vendorId }, async () => {
       const findCustomer = (await connectorForOptional(vendorId)).findCustomerIdByPhone;
-      const id = findCustomer ? await findCustomer(phone) : null;
       /* `configured: false` is NOT "they do not exist" — without the credential
          nothing was asked, and the caller must not render a warning off it. */
-      return { configured: Boolean(findCustomer), exists: Boolean(id), customerId: id ?? null };
+      if (!findCustomer) return { configured: false, exists: false, customerId: null };
+      return cached(
+        ['customer-exists', vendorId || '-', nationalPhone(phone) || phone],
+        COMMERCE_TTL.customerExists,
+        async () => {
+          const id = await findCustomer(phone);
+          return { configured: true, exists: Boolean(id), customerId: id ?? null };
+        },
+        {
+          negativeTtlSeconds: COMMERCE_TTL.customerMissing,
+          isNegative: (v) => !v.exists,
+          failTtlSeconds: COMMERCE_TTL.customerFailed,
+          lockMs: COMMERCE_SINGLE_FLIGHT_MS,
+        },
+      );
     });
   });
 
@@ -468,6 +572,12 @@ export async function registerCommerceRoutes(
           ],
           ttl,
           () => connector.getLateDeliveryOrders(thresholdMinutes, opts),
+          /* THE SCREENS' FALLBACK MUST NOT MULTIPLY (incident 2026-10-26):
+             while the snapshot is stale every TV and agent screen lands here
+             every 30 s. One task asks Yiji per key at a time, the rest wait
+             for its answer, and a failure is remembered for 30 s so the
+             screens are told "unavailable" without each asking again. */
+          { ...failFast, lockMs: COMMERCE_SINGLE_FLIGHT_MS },
         );
         /* A LATE order ran past the threshold (owner, 2026-10-11). Yiji's own
            filter also returned order 1339586, force-cancelled after 9 minutes;
@@ -540,6 +650,7 @@ export async function registerCommerceRoutes(
               ['timeline', orderId, ...vendorKeyPart(vendorId)],
               COMMERCE_TTL.order,
               () => connector.getOrderTimeline(orderId),
+              failFast,
             );
             /*
              * THE WHOLE HISTORY, flattened to `status -> first timestamp`.

@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { aggregate, readItems, readUsers } from '@directus/sdk';
+import { YIJI_GUARD_BREAKER_OPERATION } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import {
   aiSummary,
@@ -249,34 +250,42 @@ export function useYijiUsageKpi(w: Window) {
     staleTime: STALE,
     queryFn: async () => {
       const win = inWindow(w);
-      const [byAccount, byOperation, byDay, lastBackup, recent] = await Promise.all([
-        count('yiji_api_usage', win, ['account', 'outcome']),
-        count('yiji_api_usage', win, ['operation', 'account', 'outcome']),
-        /* Calendar days (UTC), grouped by the server. A failure here (an older
+      /* Calls only: the outbound guard's own bookkeeping rows (`guard.*`, a
+         breaker opening) are not calls to Yiji and are counted apart. */
+      const calls = and(win, { operation: { _nstarts_with: 'guard.' } });
+      const [byAccount, byOperation, byDay, lastBackup, recent, rateLimited, breakerOpens] =
+        await Promise.all([
+          count('yiji_api_usage', calls, ['account', 'outcome']),
+          count('yiji_api_usage', calls, ['operation', 'account', 'outcome']),
+          /* Calendar days (UTC), grouped by the server. A failure here (an older
            Directus without date functions in groupBy) costs the chart only. */
-        count('yiji_api_usage', win, [
-          'year(date_created)',
-          'month(date_created)',
-          'day(date_created)',
-          'account',
-          'outcome',
-        ]).catch(() => null),
-        /* The backup's LAST use, whenever it was - not only in this window. */
-        rows<YijiUsageEventRow>('yiji_api_usage', {
-          fields: USAGE_FIELDS,
-          filter: { account: { _eq: 'backup' } },
-          sort: ['-date_created'],
-          limit: 1,
-        }),
-        rows<YijiUsageEventRow>('yiji_api_usage', {
-          fields: USAGE_FIELDS,
-          filter: and(win, {
-            _or: [{ outcome: { _neq: 'ok' } }, { account: { _eq: 'backup' } }],
+          count('yiji_api_usage', calls, [
+            'year(date_created)',
+            'month(date_created)',
+            'day(date_created)',
+            'account',
+            'outcome',
+          ]).catch(() => null),
+          /* The backup's LAST use, whenever it was - not only in this window. */
+          rows<YijiUsageEventRow>('yiji_api_usage', {
+            fields: USAGE_FIELDS,
+            filter: { account: { _eq: 'backup' } },
+            sort: ['-date_created'],
+            limit: 1,
           }),
-          sort: ['-date_created'],
-          limit: RECENT_USAGE_LIMIT,
-        }),
-      ]);
+          rows<YijiUsageEventRow>('yiji_api_usage', {
+            fields: USAGE_FIELDS,
+            filter: and(win, {
+              _or: [{ outcome: { _neq: 'ok' } }, { account: { _eq: 'backup' } }],
+            }),
+            sort: ['-date_created'],
+            limit: RECENT_USAGE_LIMIT,
+          }),
+          /* Yiji telling us to slow down (incident 2026-10-26): its 429s, and
+           how often the guard's breaker paused non-urgent calls. */
+          count('yiji_api_usage', and(calls, { http_status: { _eq: 429 } })),
+          count('yiji_api_usage', and(win, { operation: { _eq: YIJI_GUARD_BREAKER_OPERATION } })),
+        ]);
       const days = windowDays(w.fromIso, w.toIso);
       return {
         totals: yijiUsageTotals(byAccount),
@@ -284,6 +293,8 @@ export function useYijiUsageKpi(w: Window) {
         trend: byDay ? yijiDailyTrend(byDay, days.from, days.to) : null,
         lastBackup: lastBackup[0] ?? null,
         recent,
+        rateLimited: totalOf(rateLimited),
+        breakerOpens: totalOf(breakerOpens),
       };
     },
   });

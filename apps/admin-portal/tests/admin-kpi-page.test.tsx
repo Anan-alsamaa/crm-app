@@ -81,6 +81,8 @@ beforeEach(() => {
   api.useYijiUsageKpi.mockReturnValue(
     ok({
       totals: { total: 100, crm: 96, backup: 4, ok: 94, refused: 4, error: 2, backupPct: 4 },
+      rateLimited: 37,
+      breakerOpens: 2,
       operations: [
         { operation: 'coupon.remove', total: 4, crm: 2, backup: 2, refused: 2, error: 0 },
       ],
@@ -156,6 +158,13 @@ describe('AdminKpiPage', () => {
       screen.getByRole('table', { name: 'Yiji failures and backup uses' }),
     ).toBeInTheDocument();
     expect(screen.getAllByText('HTTP 403').length).toBeGreaterThan(0);
+  });
+
+  it('shows Yiji telling us to slow down: 429s and breaker pauses (incident 2026-10-26)', () => {
+    renderPage();
+    expect(screen.getByText('Rate-limited (429)')).toBeInTheDocument();
+    expect(screen.getByText('37')).toBeInTheDocument();
+    expect(screen.getByText('Non-urgent calls paused')).toBeInTheDocument();
   });
 
   it('one failed block does not take the page down', () => {

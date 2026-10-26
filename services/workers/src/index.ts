@@ -13,7 +13,14 @@ import { Queue, Worker } from 'bullmq';
 import { createRedis, bullPrefix } from '@yiji/shared-config/redis';
 import pino from 'pino';
 import { createServiceClient } from '@yiji/shared-config';
-import { QUEUES, createYijiUsageRecorder, errorText, type QueueName } from '@yiji/shared-types';
+import {
+  QUEUES,
+  createYijiUsageRecorder,
+  errorText,
+  installYijiOutboundGuard,
+  type QueueName,
+  type YijiGuardRedis,
+} from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { createMailTransport } from './mail/index.js';
 import {
@@ -25,6 +32,8 @@ import {
   scheduleLateOrdersPoll,
   DEFAULT_LATE_ORDERS_POLL_MS,
   scheduleYijiUsageRetention,
+  scheduleYijiVolumeAlert,
+  DEFAULT_YIJI_VOLUME_ALERT_MS,
   setYijiUsageSink,
   yijiUsageWriter,
   DEFAULT_YIJI_USAGE_RETENTION_MS,
@@ -64,6 +73,20 @@ async function main(): Promise<void> {
       logger.warn({ err: errorText(err), droppedRows }, 'yiji usage rows not recorded'),
   });
   setYijiUsageSink(yijiUsage.record);
+  /*
+   * THE OUTBOUND YIJI GUARD (incident 2026-10-26): the budget and breaker
+   * every service shares. The workers' calls are the critical ones (the
+   * late-orders poll, coupons, pushes) and are never refused - only counted,
+   * and a 429 they meet stops everyone's non-critical calls. Installed before
+   * any job runs; the clients built at module load consult it per call.
+   */
+  installYijiOutboundGuard({
+    service: 'workers',
+    redis: connection as unknown as YijiGuardRedis,
+    env: process.env,
+    log: logger,
+    onUsage: yijiUsage.record,
+  });
 
   // One Queue per queue name (used by SLA processor to schedule warning/breach
   // and to enqueue notifications cross-queue).
@@ -234,6 +257,19 @@ async function main(): Promise<void> {
   } catch (err) {
     /* Not fatal: the log only grows until the next start schedules it. */
     logger.warn({ err: (err as Error).message }, 'yiji usage retention could not be scheduled');
+  }
+
+  /* Yiji call volume vs its weekly baseline, every 15 min; the Administrator
+     is told in-app on a 429, a breaker opening or a jump (incident
+     2026-10-26). `YIJI_VOLUME_ALERT_MS=0` turns it off. */
+  const yijiVolumeAlertMs = Number(
+    process.env.YIJI_VOLUME_ALERT_MS ?? DEFAULT_YIJI_VOLUME_ALERT_MS,
+  );
+  try {
+    await scheduleYijiVolumeAlert(queues[QUEUES.automation], yijiVolumeAlertMs);
+    logger.info({ everyMs: yijiVolumeAlertMs }, 'yiji volume alert scheduled (0 = off)');
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'yiji volume alert could not be scheduled');
   }
 
   const lateOrdersPollMs = Number(process.env.LATE_ORDERS_POLL_MS ?? DEFAULT_LATE_ORDERS_POLL_MS);

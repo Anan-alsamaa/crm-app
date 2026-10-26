@@ -1,4 +1,5 @@
 import {
+  currentYijiOutboundGuard,
   YijiLoginRefusedError,
   YijiRefusedError,
   YijiUnavailableError,
@@ -110,12 +111,22 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
     account: YijiUsageAccount,
     fallbackReason: string | null = null,
   ): Promise<Response> {
+    /* The outbound guard first (incident 2026-10-26): removal is critical
+       work and is never refused, but it is counted, and a 429 here opens the
+       breaker for everyone. Before the timer, so a wait is not a timeout. */
+    const guard = currentYijiOutboundGuard();
+    const operation = yijiOperationFor(url);
+    await guard?.admit(operation);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const started = Date.now();
-    const usage = { operation: yijiOperationFor(url), account, fallbackReason };
+    const usage = { operation, account, fallbackReason };
     try {
       const res = await doFetch(url, { ...init, signal: controller.signal });
+      guard?.observe(operation, {
+        status: res.status,
+        retryAfter: res.headers?.get?.('retry-after') ?? null,
+      });
       reportYijiUsage(env.onUsage, {
         ...usage,
         outcome: yijiUsageOutcome(res.status),
@@ -129,6 +140,7 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
         err instanceof Error && err.name === 'AbortError'
           ? `timed out after ${timeoutMs}ms`
           : `network error: ${err instanceof Error ? err.message : String(err)}`;
+      guard?.observe(operation, { status: null });
       reportYijiUsage(env.onUsage, {
         ...usage,
         outcome: 'error',

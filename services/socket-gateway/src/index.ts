@@ -41,7 +41,9 @@ import {
   createEnvVendorSecrets,
   createYijiUsageRecorder,
   errorText,
+  installYijiOutboundGuard,
   yijiBackupTokenFromEnv,
+  type YijiGuardRedis,
 } from '@yiji/shared-types';
 import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
@@ -424,6 +426,16 @@ async function main(): Promise<void> {
     write: (rows) => directus.logYijiUsage(rows),
     onError: (err, droppedRows) =>
       logger.warn({ err: errorText(err), droppedRows }, 'yiji usage rows not recorded'),
+  });
+  /* The outbound Yiji guard (incident 2026-10-26): the budget and breaker
+     every service shares - see shared-types/yiji-guard.ts. Without Redis the
+     budget is this process's own. */
+  installYijiOutboundGuard({
+    service: 'socket-gateway',
+    redis: (pubClient ?? null) as unknown as YijiGuardRedis | null,
+    env: process.env,
+    log: logger,
+    onUsage: yijiUsage.record,
   });
   const yijiBackupToken = yijiBackupTokenFromEnv(process.env);
   const connectors = createEnvConnectorRegistry({

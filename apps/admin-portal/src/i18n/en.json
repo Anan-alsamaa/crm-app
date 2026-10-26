@@ -1689,6 +1689,8 @@
       "total": "Calls",
       "failed": "Refused / errors",
       "failedShort": "Failed",
+      "rateLimited": "Rate-limited (429)",
+      "breakerOpens": "Non-urgent calls paused",
       "lastBackup": "Backup last used {{when}}",
       "lastBackupWhy": "Last backup use: {{operation}} ({{service}}) - {{reason}}",
       "neverBackup": "Backup never used",

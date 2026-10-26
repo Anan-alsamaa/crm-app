@@ -1,3 +1,5 @@
+import { currentYijiOutboundGuard } from './yiji-guard-registry.js';
+
 /**
  * EVERY CALL THE CRM MAKES TO YIJI, AND WHICH ACCOUNT MADE IT (owner, 2026-10-21).
  *
@@ -299,9 +301,18 @@ export function fetchWithYijiUsage(
   return (async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.href : String(input.url);
+    /* The same outbound guard as HttpYijiClient (incident 2026-10-26): a
+       refusal throws before anything is sent. */
+    const guard = currentYijiOutboundGuard();
+    const operation = yijiOperationFor(url);
+    await guard?.admit(operation);
     const started = Date.now();
     try {
       const res = await (doFetch ?? fetch)(input, init);
+      guard?.observe(operation, {
+        status: res.status,
+        retryAfter: res.headers?.get?.('retry-after') ?? null,
+      });
       reportYijiUsage(sink, {
         operation: yijiOperationFor(url),
         account,
@@ -312,6 +323,7 @@ export function fetchWithYijiUsage(
       });
       return res;
     } catch (err) {
+      guard?.observe(operation, { status: null });
       reportYijiUsage(sink, {
         operation: yijiOperationFor(url),
         account,
