@@ -442,6 +442,12 @@ export function useCustomerReachable(phone: string, vendorId?: string | null) {
     enabled: trimmed.length > 0,
     retry: false,
     staleTime: 10 * 60_000,
+    /* Asked once per card per session, success or failure: a failed lookup
+       re-asked on every refocus/remount is how one page flooded Yiji
+       (2026-10-26). */
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     queryFn: () => commerce.customerExists(trimmed, vendorId),
   });
 }
