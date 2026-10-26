@@ -194,6 +194,12 @@ export function AgentPerformancePage() {
      inside their own tab components — a tab's data loads when it is opened. */
   const onChats = tab === 'chats';
   const timings = useChatTimings(filters, onChats);
+  /* The same range for EVERY agent, read only while one agent is picked: an
+     agent's totals row must be the row they have in the full table, and part
+     of it - first replies they sent on colleagues' chats - lives on chats the
+     agent filter leaves out (owner, 2026-10-26: filtered vs unfiltered differed). */
+  const { agentId: _picked, ...everyAgent } = filters;
+  const allTimings = useChatTimings(everyAgent, onChats && !!filters.agentId);
   /* WORKING HOURS (owner, 2026-10-08): every duration on this page counts only
      the chat SLA policy's working hours, as the SLA engine does. Stamped on each
      chat so every shared function below reads the same clock. */
@@ -266,7 +272,20 @@ export function AgentPerformancePage() {
   );
   const trend = useMemo(() => dailyTrend(chats), [chats]);
   /** The full numbers per agent — this page's drill-down, since no row opens a chat. */
-  const rows = useMemo(() => agentPerformance(chats), [chats]);
+  const rows = useMemo(() => {
+    const population = filters.agentId
+      ? (allTimings.data ?? []).map((c) => ({
+          ...c,
+          businessHours: chatHours,
+          agentName: c.agentId ? (agentNames.get(c.agentId) ?? '') : '',
+        }))
+      : chats;
+    const all = agentPerformance(population, undefined, agentNames);
+    /* ONE AGENT PICKED, ONE ROW (owner, 2026-10-26). A colleague who sent the
+       first reply on one of this agent's chats gets a row of their own in the
+       full table; under this agent's filter it read as a duplicate of them. */
+    return filters.agentId ? all.filter((r) => r.agentId === filters.agentId) : all;
+  }, [chats, allTimings.data, chatHours, agentNames, filters.agentId]);
 
   /**
    * Export what is on screen, not a second query: the CSV is built from the

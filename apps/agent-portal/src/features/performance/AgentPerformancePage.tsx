@@ -385,7 +385,7 @@ export function AgentPerformancePage() {
   /** Per-agent totals — the same shared rollup the admin console reports. */
   const chatIds = useMemo(() => chats.map((c) => c.conversationId), [chats]);
   const csat = useCsatByConversation(scoped, chatIds);
-  const totals = useMemo(() => agentPerformance(chats), [chats]);
+  const totals = useMemo(() => agentPerformance(chats, undefined, agentNames), [chats, agentNames]);
   /* CSAT joined onto the same chats the rest of the page measures, so the
      rating column can never describe a different population than the timings
      beside it. `null` where nobody rated — an unrated agent is not a zero. */

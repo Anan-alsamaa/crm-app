@@ -258,6 +258,8 @@ function responder(c: ChatTiming): string {
 export function agentPerformance(
   population: readonly ChatTiming[],
   hours?: SlaBusinessHours | null,
+  /** Agent id -> display name, for agents who replied but hold no chat. */
+  names?: ReadonlyMap<string, string>,
 ): AgentPerformanceRow[] {
   const chats = withBusinessHours(population, hours);
   const groups = new Map<string, ChatTiming[]>();
@@ -323,7 +325,12 @@ export function agentPerformance(
          they replied to, and `group[0]` is never indexed blind. */
       agentName:
         group[0]?.agentName?.trim() ||
-        chats.find((c) => responder(c) === key)?.agentName?.trim() ||
+        /* NEVER the name on a chat they only REPLIED to: `agentName` there is
+           the chat's ASSIGNEE, so the replier's row was labelled with somebody
+           else's name - two "Sultan" rows, one of them another agent
+           (owner-reported, 2026-10-26). */
+        names?.get(key)?.trim() ||
+        chats.find((c) => c.agentId === key)?.agentName?.trim() ||
         group[0]?.agentId ||
         key ||
         'Unassigned',
