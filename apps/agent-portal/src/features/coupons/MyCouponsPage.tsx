@@ -148,10 +148,12 @@ function Stat({
 /** A labelled row of soft chips - the SLA card's "Priority  Low Medium ...". */
 function ChipRow({ label, values }: { label: string; values: (string | null | undefined)[] }) {
   const shown = values.filter((v): v is string => !!v && v.trim() !== '');
-  if (shown.length === 0) return null;
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <div className="flex min-h-[22px] min-w-0 flex-wrap items-center gap-1.5">
       <span className="me-0.5 text-xs text-muted-foreground">{label}</span>
+      {/* Always drawn, a dash when empty (owner, 2026-10-26: "should be
+          uniform") - a row that vanishes shifts everything under it. */}
+      {shown.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
       {shown.map((v) => (
         <span
           key={v}
@@ -283,14 +285,12 @@ function RequestCard({
               >
                 {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
               </h3>
-              {customer && (
-                <p
-                  className="pointer-events-auto mt-0.5 w-fit max-w-full select-text truncate text-xs text-muted-foreground"
-                  {...selectable(onOpen)}
-                >
-                  {customer}
-                </p>
-              )}
+              <p
+                className="pointer-events-auto mt-0.5 w-fit max-w-full select-text truncate text-xs text-muted-foreground"
+                {...selectable(onOpen)}
+              >
+                {customer || '—'}
+              </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
               <VendorBadge vendor={vendor} directory={vendors} />
@@ -312,15 +312,16 @@ function RequestCard({
             </div>
           </div>
 
-          {(r.ticket?.subject || order) && (
-            <p
-              dir="auto"
-              className="pointer-events-auto mt-2 w-fit max-w-full select-text truncate text-xs leading-relaxed text-foreground/85"
-              {...selectable(onOpen)}
-            >
-              {[r.ticket?.subject, order ? `#${order}` : null].filter(Boolean).join(' · ')}
-            </p>
-          )}
+          {/* EVERY ROW ON EVERY CARD (owner, 2026-10-26: "should be uniform").
+              A missing value is a dash, never a missing row, so the boxes and
+              chips sit at the same height on every card in a row. */}
+          <p
+            dir="auto"
+            className="pointer-events-auto mt-2 w-fit max-w-full select-text truncate text-xs leading-relaxed text-foreground/85"
+            {...selectable(onOpen)}
+          >
+            {[r.ticket?.subject, order ? `#${order}` : null].filter(Boolean).join(' · ') || '—'}
+          </p>
 
           {/* The three numbers, each in its own coloured box (owner,
               2026-10-26). The money is the brand colour and comes first: it is
@@ -360,16 +361,16 @@ function RequestCard({
             />
           </div>
 
-          {r.reason?.trim() && (
-            <p
-              dir="auto"
-              title={r.reason.trim()}
-              className="pointer-events-auto mt-3 line-clamp-2 select-text whitespace-pre-line text-xs leading-relaxed text-muted-foreground"
-              {...selectable(onOpen)}
-            >
-              {r.reason.trim()}
-            </p>
-          )}
+          {/* Two lines reserved whether the description is short, long or
+              absent, so the note and footer below line up too. */}
+          <p
+            dir="auto"
+            title={r.reason?.trim() || undefined}
+            className="pointer-events-auto mt-3 line-clamp-2 min-h-[2.5rem] select-text whitespace-pre-line text-xs leading-relaxed text-muted-foreground"
+            {...selectable(onOpen)}
+          >
+            {r.reason?.trim() || '—'}
+          </p>
 
           {/* The supervisor's word. A rejection is what the agent has to tell
               the customer, so it is on the card, in red, not behind a click. */}
@@ -390,12 +391,10 @@ function RequestCard({
           <div className="min-h-2 flex-1" />
 
           {/* When the coupon is good for, said like the SLA card's hours line. */}
-          {validity && (
-            <p className="mt-3 flex items-center gap-1.5 text-2xs tabular-nums text-muted-foreground">
-              <CalendarGlyph />
-              {t('coupons.validity', { defaultValue: 'Valid' })} {validity}
-            </p>
-          )}
+          <p className="mt-3 flex items-center gap-1.5 text-2xs tabular-nums text-muted-foreground">
+            <CalendarGlyph />
+            {t('coupons.validity', { defaultValue: 'Valid' })} {validity ?? '—'}
+          </p>
           {correction && (
             <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-2xs text-primary">
               <PencilIcon />
