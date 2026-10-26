@@ -199,7 +199,9 @@ export function SelectMenu({
     variant === 'ghost'
       ? cn(
           'inline-flex items-center gap-1.5 rounded-full text-xs text-muted-foreground transition-colors duration-fast ease-out',
-          'hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
+          // A darker wash than the toolbar pill it sits in (owner, 2026-10-26: "a
+          // lil more darker"); `secondary/60` on a `secondary/70` pill barely showed.
+          'hover:bg-foreground/[0.09] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40',
           size === 'sm' ? 'h-7 px-2.5' : 'h-8 px-3',
         )
       : cn(

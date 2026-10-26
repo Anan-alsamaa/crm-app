@@ -411,7 +411,9 @@ function RequestCard({
           {/* The footer: the card's one action first, then whose request this
               is and when. Edit only on a PENDING request the viewer raised -
               the update filter enforces the same rule server-side. */}
-          <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-foreground/[0.07] pt-3">
+          {/* Same height with or without the Edit button, so the divider and
+              the Valid line sit at one height across a row of cards. */}
+          <div className="mt-4 flex min-h-[2.75rem] flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-foreground/[0.07] pt-3">
             {canEdit && (
               <button
                 type="button"
