@@ -283,7 +283,7 @@ export function Login() {
                 <button
                   type="button"
                   onClick={openForgot}
-                  className="mx-auto flex h-9 items-center rounded-full bg-primary/10 px-4 text-xs font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  className="mx-auto block rounded-md text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t('login.forgot', { defaultValue: 'Forgot password?' })}
                 </button>
@@ -320,7 +320,7 @@ export function Login() {
                 <button
                   type="button"
                   onClick={backToSignIn}
-                  className="inline-flex items-center rounded-full bg-primary/10 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 mx-auto flex h-9 px-4 text-xs"
+                  className="mx-auto block rounded-md text-xs font-medium text-muted-foreground transition-colors duration-fast ease-out hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
                 </button>
@@ -332,20 +332,16 @@ export function Login() {
               <div className="space-y-4 px-8 py-7">
                 <p
                   role="status"
-                  className="rounded-2xl bg-primary/[0.06] px-4 py-3 text-sm leading-relaxed text-foreground"
+                  className="rounded-2xl bg-primary-subtle px-3.5 py-3 text-sm text-foreground ring-1 ring-primary/20"
                 >
                   {t('login.forgotSent', {
                     defaultValue:
                       'If that email matches an account, we just sent a reset link. It expires shortly — check your spam folder if it does not arrive.',
                   })}
                 </p>
-                <button
-                  type="button"
-                  onClick={backToSignIn}
-                  className="inline-flex items-center rounded-full bg-primary/10 font-semibold text-primary transition-colors duration-fast ease-out hover:bg-primary/[0.17] active:bg-primary/[0.24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 h-12 w-full justify-center text-sm"
-                >
+                <Button type="button" variant="outline" fullWidth size="lg" onClick={backToSignIn}>
                   {t('login.backToSignIn', { defaultValue: 'Back to sign in' })}
-                </button>
+                </Button>
               </div>
             )}
 
