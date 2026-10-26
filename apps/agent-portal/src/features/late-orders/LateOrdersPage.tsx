@@ -462,13 +462,19 @@ export function LateOrdersPage() {
    * 10 s, and tags the ones that just arrived. Remembered in this browser, so
    * the TV screen comes back live after a reload or a power cut.
    */
-  const [liveMode, setLiveModeState] = useState<boolean>(() => {
+  const [liveStored, setLiveModeState] = useState<boolean>(() => {
     try {
       return window.localStorage.getItem(LIVE_MODE_KEY) === 'on';
     } catch {
       return false;
     }
   });
+  /* LIVE IS THE TV SCREEN'S ONLY (owner, 2026-10-26). Every other role -
+     the Administrator included - works the list without it: live polls Yiji
+     every 10 s per open screen, and an agent left on it is load for nothing.
+     Forced off here, so a browser that remembered "on" stays off. */
+  const liveAllowed = isTvScreenRole(user?.role?.name);
+  const liveMode = liveAllowed && liveStored;
   const setLiveMode = (on: boolean) => {
     setLiveModeState(on);
     try {
@@ -2196,7 +2202,7 @@ export function LateOrdersPage() {
               )}
             </button>
             <ViewSwitch value={view} onChange={setView} />
-            <LiveToggle live={liveMode} onChange={setLiveMode} />
+            {liveAllowed && <LiveToggle live={liveMode} onChange={setLiveMode} />}
           </div>
         }
       />
