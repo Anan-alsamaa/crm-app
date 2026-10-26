@@ -161,8 +161,10 @@ export {
   hasSeenWhatsNew,
   markWhatsNewSeen,
 } from './WhatsNew.js';
+export type { WhatsNewArtKind } from './WhatsNewArt.js';
 export type {
   WhatsNewSlide,
+  WhatsNewOutro,
   WhatsNewCopy,
   WhatsNewLocalized,
   WhatsNewRelease,

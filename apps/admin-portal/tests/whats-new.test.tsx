@@ -95,7 +95,23 @@ describe('who sees it in the admin portal', () => {
       const entry = ADMIN_PORTAL_WHATS_NEW.audiences[a]!;
       expect(entry.en.slides.length).toBeGreaterThan(0);
       expect(entry.ar.slides.length).toBe(entry.en.slides.length);
+      entry.en.slides.forEach((slide, i) => {
+        expect(slide.art).toBeTruthy();
+        expect(entry.ar.slides[i]!.art).toBe(slide.art);
+      });
+      expect(entry.en.outro?.title).toBeTruthy();
+      expect(entry.ar.outro?.title).toBeTruthy();
     }
+  });
+
+  it('ends on the thank-you step with Let’s go', async () => {
+    renderTour();
+    await settle();
+    await screen.findByRole('dialog');
+    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByRole('heading', { name: 'Your console is ready' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Let’s go' }));
+    expect(localStorage.getItem(KEY)).toBe(WHATS_NEW_VERSION);
   });
 
   it('shows the Administrator the console tour', async () => {

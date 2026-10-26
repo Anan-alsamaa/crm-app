@@ -27,7 +27,7 @@ export function AdminWhatsNew({ children }: { children: ReactNode }): JSX.Elemen
         t('whatsNew.step', { defaultValue: '{{current}} of {{total}}', current, total }),
       next: t('whatsNew.next', { defaultValue: 'Next' }),
       back: t('whatsNew.back', { defaultValue: 'Back' }),
-      done: t('whatsNew.done', { defaultValue: 'Got it' }),
+      done: t('whatsNew.done', { defaultValue: 'Let’s go' }),
       close: t('whatsNew.close', { defaultValue: 'Close' }),
       goTo: (n) => t('whatsNew.goTo', { defaultValue: 'Go to slide {{n}}', n }),
     }),

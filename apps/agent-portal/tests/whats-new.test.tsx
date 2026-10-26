@@ -131,6 +131,14 @@ describe('who sees it in the agent portal', () => {
       const entry = AGENT_PORTAL_WHATS_NEW.audiences[a]!;
       expect(entry.en.slides.length).toBeGreaterThan(0);
       expect(entry.ar.slides.length).toBe(entry.en.slides.length);
+      // Every slide has its picture, the same one in both languages, and
+      // both languages end on the thank-you step.
+      entry.en.slides.forEach((slide, i) => {
+        expect(slide.art).toBeTruthy();
+        expect(entry.ar.slides[i]!.art).toBe(slide.art);
+      });
+      expect(entry.en.outro?.title).toBeTruthy();
+      expect(entry.ar.outro?.title).toBeTruthy();
     }
   });
 
@@ -142,7 +150,7 @@ describe('who sees it in the agent portal', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(screen.getByRole('heading', { name: 'A fresh Sara CRM' })).toBeInTheDocument();
     expect(screen.getByText('New in v1.2.1')).toBeInTheDocument();
-    expect(screen.getAllByText('1 of 4').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1 of 5').length).toBeGreaterThan(0);
   });
 
   it('shows a WeCare Supervisor and a WeCare Admin the supervisor tour', async () => {
@@ -177,14 +185,15 @@ describe('who sees it in the agent portal', () => {
 });
 
 describe('once per user per version', () => {
-  it('walks the slides, Got it remembers the version, and it does not come back', async () => {
+  it('walks the slides to the finale, Let’s go remembers the version, and it does not come back', async () => {
     const view = renderTour();
     await settle();
     await screen.findByRole('dialog');
-    for (let i = 0; i < 3; i++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
-    expect(screen.getAllByText('4 of 4').length).toBeGreaterThan(0);
+    for (let i = 0; i < 4; i++) fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getAllByText('5 of 5').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'You are all set' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Got it' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Let’s go' }));
     expect(localStorage.getItem(KEY)).toBe('1.2.1');
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
 
@@ -206,6 +215,30 @@ describe('once per user per version', () => {
     renderTour();
     await settle();
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('the arrow keys walk the tour, mirrored in Arabic', async () => {
+    const view = renderTour();
+    await settle();
+    await screen.findByRole('dialog');
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    expect(screen.getAllByText('3 of 5').length).toBeGreaterThan(0);
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(screen.getAllByText('2 of 5').length).toBeGreaterThan(0);
+    // Not past either end.
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(screen.getAllByText('1 of 5').length).toBeGreaterThan(0);
+    view.unmount();
+
+    localStorage.clear();
+    i18nState.language = 'ar';
+    renderTour();
+    await settle();
+    await screen.findByRole('dialog');
+    fireEvent.keyDown(window, { key: 'ArrowLeft' });
+    expect(screen.getAllByText('2 of 5').length).toBeGreaterThan(0);
   });
 
   it('Escape closes it and counts as seen', async () => {

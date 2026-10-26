@@ -37,119 +37,156 @@ export function agentPortalAudience(
   return null;
 }
 
+/*
+ * The copy speaks to the reader warmly, but every sentence is a fact about
+ * this release: a slide's `art` names the little animated picture beside it
+ * (packages/ui WhatsNewArt), and `outro` is the thank-you step at the end.
+ */
 export const AGENT_PORTAL_WHATS_NEW: WhatsNewRelease<AgentPortalAudience> = {
   version: WHATS_NEW_VERSION,
   audiences: {
     agent: {
       en: {
         headline: 'A fresh Sara CRM',
-        sub: 'Same work, a calmer screen. Here is what changed for you.',
+        sub: 'Same work you know, on a calmer screen. Here is what is new for you; it takes less than a minute.',
         audienceLabel: 'For WeCare Agents',
         slides: [
           {
-            title: 'A new look, everywhere',
-            body: 'Cleaner pages, the menu on a dark bar at the top, and roomier lists. Everything you use is still where you expect it.',
+            title: 'A new look, and nothing moved',
+            body: 'Cleaner pages, the menu on a dark bar along the top, and roomier lists that are easier on the eyes. Everything you use is right where you left it.',
             tags: ['Inbox', 'Tickets', 'Late orders'],
+            art: 'layout',
           },
           {
-            title: 'A tidier reply box',
-            body: 'Reply and Internal note sit in one row with Quick replies, Enhance and AI. The quick-replies language switch now lives inside the quick-replies box.',
+            title: 'Your reply box, tidied up',
+            body: 'Reply and Internal note now sit in one row, next to Quick replies, Enhance and AI. The quick-replies language switch moved inside the quick-replies box, right where you need it.',
             tags: ['Inbox'],
+            art: 'composer',
           },
           {
-            title: 'AI speaks your language',
-            body: 'Switch AI assistance to Arabic and the summary or suggested reply follows. Enhance keeps Arabic text in Arabic.',
+            title: 'AI that speaks your language',
+            body: 'Switch AI assistance to Arabic and the summary or suggested reply comes back in Arabic. Enhance keeps Arabic text in Arabic, too.',
             tags: ['AI assistance', 'Enhance'],
+            art: 'language',
           },
           {
-            title: 'Fewer clicks to close',
-            body: 'AI, quick replies and Enhance close when you click anywhere outside them, or press Esc.',
+            title: 'Out of your way in one click',
+            body: 'AI, Quick replies and Enhance now close when you click anywhere outside them, or press Esc. Fewer clicks, more flow.',
             tags: ['Inbox'],
+            art: 'dismiss',
           },
         ],
+        outro: {
+          title: 'You are all set',
+          body: 'Thank you for taking such good care of our customers. To see this tour again, open the Aura help panel and choose What’s new.',
+        },
       },
       ar: {
         headline: 'Sara CRM بحلّة جديدة',
-        sub: 'العمل نفسه، وشاشة أهدأ. إليك ما تغيّر بالنسبة لك.',
+        sub: 'العمل الذي تعرفه، على شاشة أهدأ. إليك ما الجديد لك، في أقل من دقيقة.',
         audienceLabel: 'لموظفي WeCare',
         slides: [
           {
-            title: 'مظهر جديد في كل مكان',
-            body: 'صفحات أنظف، والقائمة على شريط داكن في الأعلى، وقوائم أكثر اتساعًا. وكل ما تستخدمه ما زال في مكانه المعتاد.',
+            title: 'مظهر جديد، ولم يتغيّر مكان شيء',
+            body: 'صفحات أنظف، والقائمة على شريط داكن في الأعلى، وقوائم أكثر اتساعًا وأريح للعين. وكل ما تستخدمه ما زال في مكانه المعتاد.',
             tags: ['صندوق الوارد', 'التذاكر', 'الطلبات المتأخرة'],
+            art: 'layout',
           },
           {
-            title: 'صندوق رد أكثر ترتيبًا',
-            body: 'الرد والملاحظة الداخلية في صف واحد مع الردود السريعة والتحسين والذكاء الاصطناعي. ومفتاح لغة الردود السريعة أصبح داخل نافذة الردود السريعة نفسها.',
+            title: 'صندوق الرد، أكثر ترتيبًا',
+            body: 'الرد والملاحظة الداخلية أصبحا في صف واحد، بجوار الردود السريعة والتحسين والذكاء الاصطناعي. ومفتاح لغة الردود السريعة انتقل إلى داخل نافذة الردود السريعة، حيث تحتاجه تمامًا.',
             tags: ['صندوق الوارد'],
+            art: 'composer',
           },
           {
-            title: 'الذكاء الاصطناعي يتحدث لغتك',
-            body: 'اختر العربية في المساعدة بالذكاء الاصطناعي ليأتي الملخص أو الرد المقترح بالعربية. والتحسين يُبقي النص العربي عربيًا.',
+            title: 'ذكاء اصطناعي يتحدث لغتك',
+            body: 'اختر العربية في المساعدة بالذكاء الاصطناعي ليأتيك الملخص أو الرد المقترح بالعربية. والتحسين أيضًا يُبقي النص العربي عربيًا.',
             tags: ['المساعدة بالذكاء الاصطناعي', 'التحسين'],
+            art: 'language',
           },
           {
-            title: 'نقرات أقل للإغلاق',
-            body: 'تُغلق نوافذ الذكاء الاصطناعي والردود السريعة والتحسين عند النقر في أي مكان خارجها، أو بالضغط على Esc.',
+            title: 'تُغلق بنقرة واحدة',
+            body: 'نوافذ الذكاء الاصطناعي والردود السريعة والتحسين تُغلق الآن عند النقر في أي مكان خارجها، أو بالضغط على Esc. نقرات أقل، وتركيز أكثر.',
             tags: ['صندوق الوارد'],
+            art: 'dismiss',
           },
         ],
+        outro: {
+          title: 'كل شيء جاهز',
+          body: 'شكرًا لاهتمامك الدائم بعملائنا. لمشاهدة هذه الجولة مرة أخرى، افتح لوحة المساعدة Aura واختر "ما الجديد".',
+        },
       },
     },
     supervisor: {
       en: {
         headline: 'More control, less hunting',
-        sub: 'Everything agents got, plus the tools you asked for.',
+        sub: 'Everything your agents got, plus the tools you asked for.',
         audienceLabel: 'For supervisors and WeCare admins',
         slides: [
           {
-            title: 'Assign or remove a coupon on a ticket',
-            body: 'From the ticket card: assign a coupon, or set it to Not compensated to take it back, from the CRM and from the customer’s Yiji app.',
+            title: 'Coupons, right from the ticket',
+            body: 'On the ticket card, assign a coupon, or set it to Not compensated to take it back, from the CRM and from the customer’s Yiji app.',
             tags: ['Tickets', 'Coupons'],
+            art: 'coupon',
           },
           {
-            title: 'Late orders, made for the wall',
-            body: 'A live board with big times that turn from amber to red, sorted most late first. Switch to Table for the full detail.',
+            title: 'Late orders, made for the big screen',
+            body: 'A live board with big times that turn from amber to red, most late first. Switch to Table whenever you need the full detail.',
             tags: ['Late orders', 'TV board'],
+            art: 'board',
           },
           {
-            title: 'Clearer reports',
-            body: 'Proper number cards, roomy tables, and the page scrolls as a whole. Exports always show how many rows they will download.',
+            title: 'Reports you read at a glance',
+            body: 'Proper number cards, roomy tables, and the whole page scrolls together. Every export tells you how many rows it will download.',
             tags: ['Agent performance', 'Compensation'],
+            art: 'reports',
           },
           {
-            title: 'Edits you can trust',
-            body: 'When a customer edits a message, your new-chat alert updates too, without ringing again.',
+            title: 'Alerts that keep up',
+            body: 'When a customer edits a message, your new-chat alert updates with it, without ringing a second time.',
             tags: ['Alerts'],
+            art: 'alert',
           },
         ],
+        outro: {
+          title: 'Your team is ready',
+          body: 'Thank you for keeping the floor running. To see this tour again, open the Aura help panel and choose What’s new.',
+        },
       },
       ar: {
         headline: 'تحكّم أكبر، وبحث أقل',
-        sub: 'كل ما حصل عليه الموظفون، مع الأدوات التي طلبتها.',
+        sub: 'كل ما حصل عليه فريقك، مع الأدوات التي طلبتها.',
         audienceLabel: 'للمشرفين ومسؤولي WeCare',
         slides: [
           {
-            title: 'إضافة قسيمة إلى تذكرة أو إزالتها',
+            title: 'القسائم من التذكرة مباشرة',
             body: 'من بطاقة التذكرة: أضف قسيمة، أو اجعلها "لم يتم التعويض" لاسترجاعها، من النظام ومن تطبيق Yiji لدى العميل.',
             tags: ['التذاكر', 'القسائم'],
+            art: 'coupon',
           },
           {
-            title: 'الطلبات المتأخرة على شاشة العرض',
-            body: 'لوحة مباشرة بأوقات كبيرة تتحول من الكهرماني إلى الأحمر، مرتبة من الأكثر تأخرًا. انتقل إلى الجدول لرؤية التفاصيل كاملة.',
+            title: 'الطلبات المتأخرة على الشاشة الكبيرة',
+            body: 'لوحة مباشرة بأوقات كبيرة تتحول من الكهرماني إلى الأحمر، مرتبة من الأكثر تأخرًا. انتقل إلى الجدول متى احتجت التفاصيل كاملة.',
             tags: ['الطلبات المتأخرة', 'لوحة العرض'],
+            art: 'board',
           },
           {
-            title: 'تقارير أوضح',
-            body: 'بطاقات أرقام واضحة، وجداول أوسع، والصفحة تتمرر كاملة. ويعرض التصدير دائمًا عدد الصفوف التي سيتم تنزيلها.',
+            title: 'تقارير تقرؤها من نظرة',
+            body: 'بطاقات أرقام واضحة، وجداول أوسع، والصفحة كلها تتمرر معًا. وكل تصدير يوضح لك عدد الصفوف التي سيتم تنزيلها.',
             tags: ['أداء الموظفين', 'التعويض'],
+            art: 'reports',
           },
           {
-            title: 'تعديلات يمكنك الوثوق بها',
-            body: 'عندما يعدّل العميل رسالته، يتحدّث تنبيه المحادثة الجديدة لديك أيضًا، دون أن يرن مرة أخرى.',
+            title: 'تنبيهات تواكب التعديل',
+            body: 'عندما يعدّل العميل رسالته، يتحدّث تنبيه المحادثة الجديدة لديك معها، دون أن يرن مرة ثانية.',
             tags: ['التنبيهات'],
+            art: 'alert',
           },
         ],
+        outro: {
+          title: 'فريقك جاهز',
+          body: 'شكرًا لأنك تُبقي العمل يسير بسلاسة. لمشاهدة هذه الجولة مرة أخرى، افتح لوحة المساعدة Aura واختر "ما الجديد".',
+        },
       },
     },
     owner: {
@@ -159,31 +196,40 @@ export const AGENT_PORTAL_WHATS_NEW: WhatsNewRelease<AgentPortalAudience> = {
         audienceLabel: 'For the Administrator',
         slides: [
           {
-            title: 'A new look, everywhere',
+            title: 'One look, both portals',
             body: 'The agent portal now matches the admin console: the menu on a dark bar at the top, cleaner pages and roomier lists. Nothing moved.',
             tags: ['Inbox', 'Tickets', 'Late orders'],
+            art: 'layout',
           },
           {
             title: 'A tidier reply box',
             body: 'Reply and Internal note sit in one row with Quick replies, Enhance and AI. These panels now close when you click anywhere outside them, or press Esc.',
             tags: ['Inbox'],
+            art: 'composer',
           },
           {
-            title: 'AI speaks your language',
-            body: 'Switch AI assistance to Arabic and the summary or suggested reply follows. Enhance keeps Arabic text in Arabic.',
+            title: 'AI that speaks your language',
+            body: 'Switch AI assistance to Arabic and the summary or suggested reply comes back in Arabic. Enhance keeps Arabic text in Arabic, too.',
             tags: ['AI assistance', 'Enhance'],
+            art: 'language',
           },
           {
-            title: 'Assign or remove a coupon on a ticket',
-            body: 'From the ticket card: assign a coupon, or set it to Not compensated to take it back, from the CRM and from the customer’s Yiji app.',
+            title: 'Coupons, right from the ticket',
+            body: 'On the ticket card, assign a coupon, or set it to Not compensated to take it back, from the CRM and from the customer’s Yiji app.',
             tags: ['Tickets', 'Coupons'],
+            art: 'coupon',
           },
           {
-            title: 'Late orders, made for the wall',
-            body: 'A live board with big times that turn from amber to red, sorted most late first. Switch to Table for the full detail.',
+            title: 'Late orders, made for the big screen',
+            body: 'A live board with big times that turn from amber to red, most late first. Switch to Table whenever you need the full detail.',
             tags: ['Late orders', 'TV board'],
+            art: 'board',
           },
         ],
+        outro: {
+          title: 'All live for your team',
+          body: 'Everything here is now in their hands. To see this tour again, open the Aura help panel and choose What’s new.',
+        },
       },
       ar: {
         headline: 'بوابة الموظفين بحلّة جديدة',
@@ -191,31 +237,40 @@ export const AGENT_PORTAL_WHATS_NEW: WhatsNewRelease<AgentPortalAudience> = {
         audienceLabel: 'لمدير النظام',
         slides: [
           {
-            title: 'مظهر جديد في كل مكان',
+            title: 'مظهر واحد للبوابتين',
             body: 'أصبحت بوابة الموظفين بمظهر لوحة الإدارة نفسه: القائمة على شريط داكن في الأعلى، وصفحات أنظف، وقوائم أكثر اتساعًا. ولم يتغيّر مكان أي شيء.',
             tags: ['صندوق الوارد', 'التذاكر', 'الطلبات المتأخرة'],
+            art: 'layout',
           },
           {
             title: 'صندوق رد أكثر ترتيبًا',
             body: 'الرد والملاحظة الداخلية في صف واحد مع الردود السريعة والتحسين والذكاء الاصطناعي. وتُغلق هذه النوافذ الآن عند النقر في أي مكان خارجها، أو بالضغط على Esc.',
             tags: ['صندوق الوارد'],
+            art: 'composer',
           },
           {
-            title: 'الذكاء الاصطناعي يتحدث لغتك',
-            body: 'اختر العربية في المساعدة بالذكاء الاصطناعي ليأتي الملخص أو الرد المقترح بالعربية. والتحسين يُبقي النص العربي عربيًا.',
+            title: 'ذكاء اصطناعي يتحدث لغتك',
+            body: 'اختر العربية في المساعدة بالذكاء الاصطناعي ليأتيك الملخص أو الرد المقترح بالعربية. والتحسين أيضًا يُبقي النص العربي عربيًا.',
             tags: ['المساعدة بالذكاء الاصطناعي', 'التحسين'],
+            art: 'language',
           },
           {
-            title: 'إضافة قسيمة إلى تذكرة أو إزالتها',
+            title: 'القسائم من التذكرة مباشرة',
             body: 'من بطاقة التذكرة: أضف قسيمة، أو اجعلها "لم يتم التعويض" لاسترجاعها، من النظام ومن تطبيق Yiji لدى العميل.',
             tags: ['التذاكر', 'القسائم'],
+            art: 'coupon',
           },
           {
-            title: 'الطلبات المتأخرة على شاشة العرض',
-            body: 'لوحة مباشرة بأوقات كبيرة تتحول من الكهرماني إلى الأحمر، مرتبة من الأكثر تأخرًا. انتقل إلى الجدول لرؤية التفاصيل كاملة.',
+            title: 'الطلبات المتأخرة على الشاشة الكبيرة',
+            body: 'لوحة مباشرة بأوقات كبيرة تتحول من الكهرماني إلى الأحمر، مرتبة من الأكثر تأخرًا. انتقل إلى الجدول متى احتجت التفاصيل كاملة.',
             tags: ['الطلبات المتأخرة', 'لوحة العرض'],
+            art: 'board',
           },
         ],
+        outro: {
+          title: 'كل شيء متاح لفريقك',
+          body: 'كل ما رأيته هنا أصبح بين أيديهم الآن. لمشاهدة هذه الجولة مرة أخرى، افتح لوحة المساعدة Aura واختر "ما الجديد".',
+        },
       },
     },
   },

@@ -36,63 +36,84 @@ export function adminPortalAudience(
   return null;
 }
 
+/*
+ * The copy speaks to the reader warmly, but every sentence is a fact about
+ * this release: a slide's `art` names the little animated picture beside it
+ * (packages/ui WhatsNewArt), and `outro` is the thank-you step at the end.
+ */
 export const ADMIN_PORTAL_WHATS_NEW: WhatsNewRelease<AdminPortalAudience> = {
   version: WHATS_NEW_VERSION,
   audiences: {
     owner: {
       en: {
         headline: 'Your console, redesigned',
-        sub: 'The admin portal and the agent portal now share one look.',
+        sub: 'The admin portal and the agent portal now share one look. Here is what is new for you.',
         audienceLabel: 'For the Administrator',
         slides: [
           {
-            title: 'Admin KPI',
+            title: 'Admin KPI, just for you',
             body: 'A new owner-only page: chats, tickets, coupons, late orders and Yiji API usage, including every time the backup token was used, and why.',
             tags: ['Reports', 'Owner only'],
+            art: 'kpi',
           },
           {
             title: 'Roles, as a settings page',
             body: 'Pick a role, then one area at a time. Hover an area to see its switches; Delete now sits next to Save.',
             tags: ['Roles & privileges'],
+            art: 'roles',
           },
           {
             title: 'Actions look like actions',
             body: 'Anything you can click is a soft filled pill; anything you cannot is clearly greyed out. Clear lights up only when a filter is applied.',
             tags: ['Every page'],
+            art: 'buttons',
           },
           {
             title: 'Reports that breathe',
             body: 'Metric cards, roomy tables, page-level scrolling and one export button per report.',
             tags: ['Reports'],
+            art: 'reports',
           },
         ],
+        outro: {
+          title: 'Your console is ready',
+          body: 'Enjoy the new look. To see this tour again, open the Aura help panel and choose What’s new.',
+        },
       },
       ar: {
         headline: 'لوحة الإدارة بتصميم جديد',
-        sub: 'بوابة الإدارة وبوابة الموظفين أصبحتا بمظهر واحد.',
+        sub: 'بوابة الإدارة وبوابة الموظفين أصبحتا بمظهر واحد. إليك ما الجديد لك.',
         audienceLabel: 'لمدير النظام',
         slides: [
           {
-            title: 'مؤشرات الإدارة',
+            title: 'مؤشرات الإدارة، لك وحدك',
             body: 'صفحة جديدة لمالك النظام فقط: المحادثات والتذاكر والقسائم والطلبات المتأخرة واستخدام واجهة Yiji، بما في ذلك كل مرة استُخدم فيها الرمز الاحتياطي، وسبب ذلك.',
             tags: ['التقارير', 'للمالك فقط'],
+            art: 'kpi',
           },
           {
             title: 'الأدوار كصفحة إعدادات',
             body: 'اختر دورًا، ثم مجالًا واحدًا في كل مرة. مرّر المؤشر فوق المجال لترى مفاتيحه؛ وأصبح زر الحذف بجوار زر الحفظ.',
             tags: ['الأدوار والصلاحيات'],
+            art: 'roles',
           },
           {
             title: 'الأزرار تبدو كأزرار',
             body: 'كل ما يمكنك النقر عليه زر ممتلئ بلون هادئ، وكل ما لا يمكنك النقر عليه باهت بوضوح. ولا يُضاء زر المسح إلا عند تطبيق عامل تصفية.',
             tags: ['كل الصفحات'],
+            art: 'buttons',
           },
           {
             title: 'تقارير أكثر اتساعًا',
             body: 'بطاقات مؤشرات، وجداول أوسع، وتمرير للصفحة كاملة، وزر تصدير واحد لكل تقرير.',
             tags: ['التقارير'],
+            art: 'reports',
           },
         ],
+        outro: {
+          title: 'لوحتك جاهزة',
+          body: 'استمتع بالمظهر الجديد. لمشاهدة هذه الجولة مرة أخرى، افتح لوحة المساعدة Aura واختر "ما الجديد".',
+        },
       },
     },
     supervisor: {
@@ -105,23 +126,31 @@ export const ADMIN_PORTAL_WHATS_NEW: WhatsNewRelease<AdminPortalAudience> = {
             title: 'Reports that breathe',
             body: 'Proper metric cards at the top, roomy tables, and the whole page scrolls instead of a box inside it.',
             tags: ['Reports', 'Agent performance'],
+            art: 'reports',
           },
           {
             title: 'Coupon requests, clearly labelled',
             body: 'The reason an agent gave for a coupon now sits under a Description label, with its line breaks kept, so you read all of it before you decide.',
             tags: ['Coupon approvals'],
+            art: 'description',
           },
           {
             title: 'Clear and Export, at a glance',
             body: 'Clear lights up only when a filter is applied, and every export button says how many rows it will download.',
             tags: ['Every report'],
+            art: 'filters',
           },
           {
             title: 'One response target',
             body: 'Agent performance no longer has an Answer within filter. Chats are scored against the standard five minutes, and the card says so.',
             tags: ['Agent performance'],
+            art: 'target',
           },
         ],
+        outro: {
+          title: 'You are all set',
+          body: 'Thank you for keeping the team on track. To see this tour again, open the Aura help panel and choose What’s new.',
+        },
       },
       ar: {
         headline: 'تقارير تُقرأ أسرع',
@@ -132,23 +161,31 @@ export const ADMIN_PORTAL_WHATS_NEW: WhatsNewRelease<AdminPortalAudience> = {
             title: 'تقارير أكثر اتساعًا',
             body: 'بطاقات مؤشرات واضحة في الأعلى، وجداول أوسع، والصفحة كلها تتمرر بدلًا من صندوق داخلها.',
             tags: ['التقارير', 'أداء الموظفين'],
+            art: 'reports',
           },
           {
             title: 'طلبات القسائم بعناوين واضحة',
             body: 'السبب الذي كتبه الموظف لطلب القسيمة أصبح تحت عنوان "الوصف"، مع الحفاظ على فواصل الأسطر، لتقرأه كاملًا قبل أن تقرر.',
             tags: ['موافقات القسائم'],
+            art: 'description',
           },
           {
             title: 'المسح والتصدير من نظرة واحدة',
             body: 'لا يُضاء زر المسح إلا عند تطبيق عامل تصفية، وكل زر تصدير يوضح عدد الصفوف التي سيتم تنزيلها.',
             tags: ['كل التقارير'],
+            art: 'filters',
           },
           {
             title: 'هدف رد واحد',
             body: 'لم يعد في أداء الموظفين عامل التصفية "الرد خلال". تُقيَّم المحادثات وفق الدقائق الخمس المعتمدة، والبطاقة توضح ذلك.',
             tags: ['أداء الموظفين'],
+            art: 'target',
           },
         ],
+        outro: {
+          title: 'كل شيء جاهز',
+          body: 'شكرًا لأنك تُبقي الفريق على المسار الصحيح. لمشاهدة هذه الجولة مرة أخرى، افتح لوحة المساعدة Aura واختر "ما الجديد".',
+        },
       },
     },
   },

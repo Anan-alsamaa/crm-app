@@ -1708,7 +1708,7 @@
     "step": "{{current}} of {{total}}",
     "next": "Next",
     "back": "Back",
-    "done": "Got it",
+    "done": "Let’s go",
     "close": "Close",
     "goTo": "Go to slide {{n}}"
   }
