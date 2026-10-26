@@ -63,11 +63,13 @@ const TONE: Record<string, 'warning' | 'highlight' | 'success' | 'destructive'> 
 };
 
 /**
- * Several cards per row (owner, 2026-10-26): three on a 1440 desktop, two on a
- * laptop, one below that. `items-stretch` + `h-full` cards keep a row's
- * footers on one line however long each card's description runs.
+ * Several cards per row (owner, 2026-10-26), sized like the SLA policy cards:
+ * a card is never narrower than 380px nor stretched past what its content
+ * needs, so a 1440 desktop holds three and a 1920 one four. `h-full` cards
+ * keep a row's footers on one line however long each description runs.
  */
-const CARD_GRID = 'grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2 min-[1440px]:grid-cols-3';
+const CARD_GRID =
+  'grid grid-cols-1 items-stretch gap-4 sm:grid-cols-[repeat(auto-fill,minmax(380px,1fr))]';
 
 function sar(n: number, currency: string): string {
   try {
@@ -101,35 +103,83 @@ function PencilIcon() {
   );
 }
 
-/** One coupon term as a compact label-over-value tile. */
-function Tile({
+/**
+ * One headline number in a coloured box, like the SLA cards' "5m first reply":
+ * the value big and centred, its meaning in small caps under it. The colour
+ * says which number it is at a glance - the money is always the brand tint.
+ */
+function Stat({
   label,
   value,
-  className,
+  tone,
 }: {
   label: string;
   value: string | number | null | undefined;
-  className?: string;
+  tone: 'primary' | 'sky' | 'violet';
 }) {
   const shown = value == null || value === '' ? '—' : String(value);
   return (
     <div
       className={cn(
-        'min-w-0 rounded-xl bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.05]',
-        className,
+        'min-w-0 rounded-xl px-2.5 py-2.5 text-center ring-1 ring-inset',
+        tone === 'primary' && 'bg-primary-tint ring-primary/15',
+        tone === 'sky' && 'bg-sky-tint ring-sky/15',
+        tone === 'violet' && 'bg-violet-tint ring-violet/15',
       )}
     >
-      <div className="truncate text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-        {label}
-      </div>
       <div
-        dir="auto"
         title={shown}
-        className="mt-0.5 truncate text-xs font-semibold tabular-nums text-foreground"
+        className={cn(
+          'truncate text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em]',
+          /* Only the money is in colour; the tinted boxes already tell the
+             other two apart, and a pale numeral on a pale tint is hard to read. */
+          tone === 'primary' ? 'text-primary' : 'text-foreground',
+        )}
       >
         {shown}
       </div>
+      <div className="mt-1 truncate text-2xs font-semibold uppercase leading-tight tracking-[0.06em] text-muted-foreground">
+        {label}
+      </div>
     </div>
+  );
+}
+
+/** A labelled row of soft chips - the SLA card's "Priority  Low Medium ...". */
+function ChipRow({ label, values }: { label: string; values: (string | null | undefined)[] }) {
+  const shown = values.filter((v): v is string => !!v && v.trim() !== '');
+  if (shown.length === 0) return null;
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <span className="me-0.5 text-xs text-muted-foreground">{label}</span>
+      {shown.map((v) => (
+        <span
+          key={v}
+          dir="auto"
+          title={v}
+          className="max-w-full truncate rounded-full bg-primary/[0.08] px-2.5 py-0.5 text-xs font-medium text-primary"
+        >
+          {v}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CalendarGlyph() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      className="h-3 w-3 shrink-0"
+      aria-hidden
+    >
+      <rect x="2.5" y="3.5" width="11" height="10" rx="2" />
+      <path d="M2.5 6.5h11M5.5 2v3M10.5 2v3" />
+    </svg>
   );
 }
 
@@ -209,7 +259,7 @@ function RequestCard({
     <li className="h-full">
       <article
         style={{ animationDelay: `${Math.min(index, 8) * 40}ms` }}
-        className="relative flex h-full flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,background-color] duration-fast ease-out hover:bg-primary/[0.02] motion-safe:animate-rise-in"
+        className="relative flex h-full flex-col rounded-2xl bg-card p-5 shadow-soft ring-1 ring-foreground/[0.06] transition-[box-shadow,transform] duration-base ease-out hover:shadow-float motion-safe:hover:-translate-y-0.5 motion-safe:animate-rise-in"
       >
         {onOpen && (
           <button
@@ -220,107 +270,106 @@ function RequestCard({
           />
         )}
         <div className="pointer-events-none relative flex min-h-0 flex-1 flex-col">
+          {/* Title and pills, as on the SLA cards: what it is on the left,
+              its state on the right. */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span
-                  className="pointer-events-auto select-text font-mono text-sm font-semibold text-foreground"
-                  {...selectable(onOpen)}
-                >
-                  {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
-                </span>
-                <Pill tone={TONE[r.status] ?? 'success'} size="sm">
-                  {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
-                </Pill>
-                <VendorBadge vendor={vendor} directory={vendors} />
-                {r.edited_by_admin && (
-                  <Pill tone="primary" size="sm">
-                    {t('coupons.amended', { defaultValue: 'Amended' })}
-                  </Pill>
-                )}
-              </div>
+              <h3
+                className="pointer-events-auto w-fit max-w-full select-text truncate font-mono text-sm font-semibold tracking-tight text-foreground"
+                {...selectable(onOpen)}
+              >
+                {r.coupon_code ?? t('coupons.noCode', { defaultValue: 'no code' })}
+              </h3>
               {customer && (
                 <p
-                  className="pointer-events-auto mt-1 w-fit max-w-full select-text truncate text-xs text-muted-foreground"
+                  className="pointer-events-auto mt-0.5 w-fit max-w-full select-text truncate text-xs text-muted-foreground"
                   {...selectable(onOpen)}
                 >
                   {customer}
                 </p>
               )}
             </div>
-            <div className="shrink-0 text-end">
-              <div className="text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em] text-foreground">
-                {amount(r, 'SAR') || '—'}
-              </div>
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
+              <VendorBadge vendor={vendor} directory={vendors} />
+              {r.edited_by_admin && (
+                <Pill tone="primary" size="sm">
+                  {t('coupons.amended', { defaultValue: 'Amended' })}
+                </Pill>
+              )}
+              <Pill tone={TONE[r.status] ?? 'success'} size="sm" dot>
+                {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
+              </Pill>
             </div>
           </div>
 
           {(r.ticket?.subject || order) && (
             <p
               dir="auto"
-              className="pointer-events-auto mt-2.5 w-fit max-w-full select-text truncate text-xs font-medium text-foreground/85"
+              className="pointer-events-auto mt-2 w-fit max-w-full select-text truncate text-xs leading-relaxed text-foreground/85"
               {...selectable(onOpen)}
             >
               {[r.ticket?.subject, order ? `#${order}` : null].filter(Boolean).join(' · ')}
             </p>
           )}
 
-          {/* The terms, as asked for. Validity and delivery types run long, so
-              each takes two cells rather than truncating to nothing. */}
-          <div className="mt-3.5 grid grid-cols-2 gap-2 sm:grid-cols-3">
-            <Tile
-              label={t('lists.couponType', { defaultValue: 'Coupon type' })}
-              value={r.coupon_type}
+          {/* The three numbers, each in its own coloured box (owner,
+              2026-10-26). The money is the brand colour and comes first: it is
+              what the customer was given. */}
+          <div className="mt-3.5 grid grid-cols-3 gap-2">
+            <Stat
+              tone="primary"
+              label={t('coupons.amountLabel', { defaultValue: 'Amount' })}
+              value={amount(r, 'SAR')}
             />
-            <Tile
-              label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
-              value={r.discount_category}
-            />
-            <Tile
-              label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
+            <Stat
+              tone="sky"
+              label={t('coupons.maxShort', { defaultValue: 'Max discount' })}
               value={maxDiscount}
             />
-            <Tile
-              className="sm:col-span-2"
-              label={t('coupons.validity', { defaultValue: 'Valid' })}
-              value={validity}
-            />
-            <Tile
-              label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
+            <Stat
+              tone="violet"
+              label={t('coupons.usesShort', { defaultValue: 'Uses' })}
               value={r.usage_limit}
             />
-            <Tile
-              className="sm:col-span-2"
-              label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
-              value={r.delivery_type}
+          </div>
+
+          {/* The rest of the terms as chips - every requested term stays on the
+              card, so "what exactly did you ask for?" is answered here. */}
+          <div className="mt-3.5 space-y-2">
+            <ChipRow
+              label={t('lists.couponType', { defaultValue: 'Coupon type' })}
+              values={[r.coupon_type, r.discount_category]}
             />
-            <Tile label={t('coupons.itemShort', { defaultValue: 'Item' })} value={r.item_name} />
+            <ChipRow
+              label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
+              values={(r.delivery_type ?? '').split(',').map((v) => v.trim())}
+            />
+            <ChipRow
+              label={t('coupons.itemShort', { defaultValue: 'Item' })}
+              values={[r.item_name]}
+            />
           </div>
 
           {r.reason?.trim() && (
-            <div className="mt-2.5 rounded-xl bg-secondary/40 px-3 py-2 ring-1 ring-inset ring-foreground/[0.05]">
-              <div className="text-2xs font-semibold uppercase tracking-[0.06em] text-muted-foreground">
-                {t('coupons.descriptionLabel', { defaultValue: 'Description' })}
-              </div>
-              <p
-                dir="auto"
-                className="pointer-events-auto mt-0.5 line-clamp-3 select-text whitespace-pre-line text-xs leading-relaxed text-foreground"
-                {...selectable(onOpen)}
-              >
-                {r.reason.trim()}
-              </p>
-            </div>
+            <p
+              dir="auto"
+              title={r.reason.trim()}
+              className="pointer-events-auto mt-3 line-clamp-2 select-text whitespace-pre-line text-xs leading-relaxed text-muted-foreground"
+              {...selectable(onOpen)}
+            >
+              {r.reason.trim()}
+            </p>
           )}
 
           {/* The supervisor's word. A rejection is what the agent has to tell
               the customer, so it is on the card, in red, not behind a click. */}
           {r.status === 'rejected' ? (
-            <p className="mt-2.5 rounded-xl bg-destructive-tint px-3 py-2 text-xs leading-relaxed text-foreground">
+            <p className="mt-3 rounded-xl bg-destructive-tint px-3 py-2 text-xs leading-relaxed text-foreground">
               {decider && <span className="font-semibold">{decider}: </span>}
               {r.decision_note ?? t('coupons.noReason', { defaultValue: 'No reason was given.' })}
             </p>
           ) : r.decision_note?.trim() ? (
-            <p className="mt-2.5 rounded-xl bg-primary/[0.06] px-3 py-2 text-xs leading-relaxed text-foreground">
+            <p className="mt-3 rounded-xl bg-primary/[0.06] px-3 py-2 text-xs leading-relaxed text-foreground">
               <span className="font-semibold">
                 {decider ?? t('coupons.supervisor', { defaultValue: 'Supervisor' })}:{' '}
               </span>
@@ -330,8 +379,15 @@ function RequestCard({
 
           <div className="min-h-2 flex-1" />
 
+          {/* When the coupon is good for, said like the SLA card's hours line. */}
+          {validity && (
+            <p className="mt-3 flex items-center gap-1.5 text-2xs tabular-nums text-muted-foreground">
+              <CalendarGlyph />
+              {t('coupons.validity', { defaultValue: 'Valid' })} {validity}
+            </p>
+          )}
           {correction && (
-            <p className="mt-2.5 inline-flex min-w-0 items-center gap-1 text-2xs text-primary">
+            <p className="mt-1.5 flex min-w-0 items-center gap-1.5 text-2xs text-primary">
               <PencilIcon />
               <span className="truncate">
                 {t('coupons.correctedBy', {
@@ -344,9 +400,9 @@ function RequestCard({
           )}
 
           {/* The footer: the card's one action first, then whose request this
-              is and when. Edit only on a PENDING request the viewer raised —
+              is and when. Edit only on a PENDING request the viewer raised -
               the update filter enforces the same rule server-side. */}
-          <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-foreground/[0.07] pt-3">
+          <div className="mt-4 flex flex-wrap items-center gap-x-2 gap-y-1.5 border-t border-foreground/[0.07] pt-3">
             {canEdit && (
               <button
                 type="button"

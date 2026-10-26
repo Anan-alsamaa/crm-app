@@ -966,7 +966,10 @@
     "correctedBy": "Corrected by {{who}} · {{when}}",
     "descriptionLabel": "Description",
     "supervisor": "Supervisor",
-    "amended": "Amended"
+    "amended": "Amended",
+    "amountLabel": "Amount",
+    "maxShort": "Max discount",
+    "usesShort": "Uses"
   },
   "busy": {
     "on": "Busy",

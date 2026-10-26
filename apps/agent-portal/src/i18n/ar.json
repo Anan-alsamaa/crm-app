@@ -1193,7 +1193,10 @@
     },
     "correctedBy": "عدّله {{who}} · {{when}}",
     "descriptionLabel": "الوصف",
-    "supervisor": "المشرف"
+    "supervisor": "المشرف",
+    "amountLabel": "المبلغ",
+    "maxShort": "أقصى خصم",
+    "usesShort": "الاستخدامات"
   },
   "quickReplies": {
     "filtering": "مطابقة",
