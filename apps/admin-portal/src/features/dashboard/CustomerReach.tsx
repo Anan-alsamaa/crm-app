@@ -15,11 +15,11 @@ import { BentoCard, CountUp } from '../../components/dash/Dash.js';
  * coupon delivery are all keyed on. A contact without one can still be helped,
  * but every one of those becomes manual.
  *
- * NOT filtered by the dashboard's date range, and the card says so. "What
- * share of our customers use the app" is a question about the customer base,
- * not about a fortnight; scoping it to the range would make the number swing
- * on how many people happened to write in that week, which is a different
- * question wearing this one's clothes.
+ * FOLLOWS THE DASHBOARD'S FILTERS (owner, 2026-10-26). With nothing applied
+ * it is the whole customer base, as before. Once a date range or any filter is
+ * applied it becomes the customers behind the tickets in view - otherwise it
+ * kept showing the unfiltered base beside numbers that had all moved, which
+ * read as wrong data. The hint under the title says which one is showing.
  *
  * Counted with Directus `aggregate` rather than by reading the rows: this only
  * ever needs two numbers, and pulling every contact to length-check an array
@@ -28,6 +28,11 @@ import { BentoCard, CountUp } from '../../components/dash/Dash.js';
 
 interface Props {
   className?: string;
+  /**
+   * The customers behind the dashboard's filtered tickets, or null when no
+   * filter is applied (then the card counts the whole customer base).
+   */
+  scoped?: { total: number; withYiji: number } | null;
 }
 
 /*
@@ -40,9 +45,10 @@ const HAS_YIJI = {
   external_customer_id: { _nempty: true },
 } as const;
 
-function useCustomerReach() {
+function useCustomerReach(enabled: boolean) {
   return useQuery({
     queryKey: ['customer-reach'],
+    enabled,
     // The base moves slowly; a minute of staleness is invisible here and saves
     // two round trips on every dashboard filter change.
     staleTime: 60_000,
@@ -70,15 +76,21 @@ function useCustomerReach() {
 
 const NUM = new Intl.NumberFormat('en-US');
 
-export function CustomerReach({ className }: Props): JSX.Element | null {
+export function CustomerReach({ className, scoped = null }: Props): JSX.Element | null {
   const { t } = useTranslation();
-  const q = useCustomerReach();
+  const q = useCustomerReach(!scoped);
 
   // A permissions gap or a dead request should cost the dashboard a card, not
   // put a zero on screen that reads as "nobody uses the app".
-  if (q.isError) return null;
+  if (!scoped && q.isError) return null;
 
-  const d = q.data;
+  const d = scoped
+    ? {
+        total: scoped.total,
+        withYiji: Math.min(scoped.withYiji, scoped.total),
+        without: Math.max(scoped.total - scoped.withYiji, 0),
+      }
+    : q.data;
   const pct = d && d.total > 0 ? (d.withYiji / d.total) * 100 : 0;
 
   return (
@@ -87,9 +99,15 @@ export function CustomerReach({ className }: Props): JSX.Element | null {
       icon={<UsersIcon size={17} />}
       className={className}
       title={t('customerReach.title', { defaultValue: 'Yiji vs non-Yiji customers' })}
-      hint={t('customerReach.note', {
-        defaultValue: 'All customers — not the selected range',
-      })}
+      hint={
+        scoped
+          ? t('customerReach.noteFiltered', {
+              defaultValue: 'Customers behind the tickets matching these filters',
+            })
+          : t('customerReach.note', {
+              defaultValue: 'All customers — not the selected range',
+            })
+      }
     >
       {!d ? (
         <div className="h-20 animate-pulse rounded-xl bg-secondary/60" />

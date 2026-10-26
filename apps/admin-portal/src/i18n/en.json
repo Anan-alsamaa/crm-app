@@ -1499,7 +1499,8 @@
     "noneOpen": "Every ticket is finished."
   },
   "customerReach": {
-    "title": "Yiji vs non-Yiji customers"
+    "title": "Yiji vs non-Yiji customers",
+    "noteFiltered": "Customers behind the tickets matching these filters"
   },
   "couponSpend": {
     "reconcile": "Tickets in this range carry {{total}} SAR in total. {{gap}} SAR of that was set straight on the ticket, with no approval raised here."

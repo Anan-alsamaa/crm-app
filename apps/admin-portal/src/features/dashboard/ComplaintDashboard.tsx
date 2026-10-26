@@ -1210,7 +1210,18 @@ export function ComplaintDashboard({
                   index={1}
                   title={t('complaintDash.kpiOpen', { defaultValue: 'Open tickets' })}
                   value={d.open}
-                  onOpen={() => navigate('/reports/operational-kpi/tickets')}
+                  /* Straight to the OPEN ones (owner, 2026-10-26): Ticket
+                     breakdown opens pre-filtered to Pending, over the same
+                     dates this tile counted, so the list matches the number. */
+                  onOpen={() =>
+                    navigate(
+                      `/reports/operational-kpi/tickets?${new URLSearchParams({
+                        status: 'pending',
+                        from: applied.from || d.firstDate || '',
+                        to: applied.to || new Date().toISOString().slice(0, 10),
+                      }).toString()}`,
+                    )
+                  }
                   visual={
                     <ProgressRing value={d.total ? (d.open / d.total) * 100 : 0} tone="sky" />
                   }
@@ -1357,7 +1368,7 @@ export function ComplaintDashboard({
           {view === 'agent' && (
             <div className="grid gap-4 lg:grid-cols-3 lg:[&>*:only-child]:col-span-3">
               <CouponSpend from={applied.from} to={applied.to} className="lg:col-span-2" />
-              <CustomerReach />
+              <CustomerReach scoped={anyFilter ? d.customers : null} />
             </div>
           )}
 
