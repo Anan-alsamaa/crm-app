@@ -144,7 +144,7 @@
     "title": "Ask AI help",
     "description": "Ask how something works in this CRM. Follow-up questions keep their context; the chat is cleared when you close this panel and nothing is saved.",
     "label": "Your question",
-    "placeholder": "How do I reassign a ticket to another agent?",
+    "placeholder": "Ask Aura anything…",
     "counter": "{{chars}}/{{max}}",
     "send": "Ask",
     "thinking": "Looking that up…",
@@ -162,7 +162,37 @@
     },
     "empty": "Ask about the inbox, tickets, SLA, reports, contacts, automation or the widget. Follow-up questions work — the chat clears when you close this panel.",
     "title2": "Aura",
-    "jumpToLatest": "Jump to the latest message"
+    "jumpToLatest": "Jump to the latest message",
+    "greeting": "Hi {{name}}, I’m Aura",
+    "intro": "I know Sara CRM inside out. Ask me how something works, or why something is happening.",
+    "enterToSend": "to send",
+    "newLine": "for a new line",
+    "copy": "Copy",
+    "copied": "Copied",
+    "retry": "Try again",
+    "privacy": "Nothing is saved. The chat clears when you close this panel.",
+    "log": "Conversation with Aura",
+    "whatsNewCardTitle": "New in this release",
+    "whatsNewCardBody": "Take the one-minute tour of what changed",
+    "welcome": "Hi {{name}}, I am Aura. I know this CRM inside out: the inbox, tickets, SLA, reports, contacts, automation and the widget. What are we solving?",
+    "caveat": "Aura can be wrong. Check anything that matters.",
+    "role": "CRM assistant",
+    "tryAsking": "Try asking",
+    "newChat": "Start a new chat",
+    "there": "there",
+    "starterTitle": {
+      "quickReply": "Quick replies",
+      "reassign": "Reassign a ticket",
+      "firstResponse": "First-response SLA",
+      "note": "Internal notes"
+    },
+    "starter": {
+      "quickReply": "How do I insert a quick reply in a chat?",
+      "reassign": "How do I reassign a ticket to another agent?",
+      "firstResponse": "How do I stop the first-response SLA clock?",
+      "note": "How do I leave an internal note and @mention a colleague?"
+    },
+    "adminOnly": "Scheduled reports are set up in the admin portal. Pass these to an admin."
   },
   "login": {
     "title": "Sign in to Sara CRM",

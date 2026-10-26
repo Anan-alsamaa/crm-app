@@ -263,7 +263,7 @@ describe('HelpAssistant — the panel a reader can actually read', () => {
     });
     renderHelp();
     await openPanel();
-    expect(screen.getByText(/I am Aura/)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /I’m Aura/ })).toBeInTheDocument();
     expect(scrollTo, 'the opening greeting must not be scrolled away').not.toHaveBeenCalled();
     expect(scrollIntoView, 'nor by an anchor below the starter chips').not.toHaveBeenCalled();
   });
@@ -310,5 +310,133 @@ describe('HelpAssistant — the panel a reader can actually read', () => {
     // header stays while the first message slides underneath it.
     const header = screen.getByText('CRM assistant').closest('div')?.parentElement;
     expect(header?.className ?? '').not.toContain('sticky');
+  });
+});
+
+describe('HelpAssistant — the redesigned panel (2026-10-26)', () => {
+  it('Enter sends the question; Shift+Enter only starts a new line', async () => {
+    ai.helpAssistant.mockResolvedValueOnce({ answer: 'Use the Assignee menu.', offTopic: false });
+    renderHelp();
+    await openPanel();
+    const field = screen.getByLabelText('Your question') as HTMLTextAreaElement;
+
+    await user.type(field, 'How do I reassign{Shift>}{Enter}{/Shift}a ticket?');
+    expect(ai.helpAssistant).not.toHaveBeenCalled();
+    expect(field.value).toBe('How do I reassign\na ticket?');
+
+    await user.type(field, '{Enter}');
+    await screen.findByText('Use the Assignee menu.');
+    expect(ai.helpAssistant).toHaveBeenCalledTimes(1);
+    expect(ai.helpAssistant.mock.calls[0]?.[1]).toBe('How do I reassign\na ticket?');
+    // The composer clears for the follow-up.
+    expect(field.value).toBe('');
+  });
+
+  it('Enter on a too-short question sends nothing', async () => {
+    renderHelp();
+    await openPanel();
+    await user.type(screen.getByLabelText('Your question'), 'hi{Enter}');
+    expect(ai.helpAssistant).not.toHaveBeenCalled();
+  });
+
+  it('a starter card asks its question in one click', async () => {
+    ai.helpAssistant.mockResolvedValueOnce({ answer: 'Press Quick replies.', offTopic: false });
+    renderHelp();
+    await openPanel();
+    expect(screen.getByText('Try asking')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Quick replies/ }));
+    await screen.findByText('Press Quick replies.');
+    expect(ai.helpAssistant).toHaveBeenCalledWith(
+      { userId: 'agent-1', vendorId: 'global' },
+      'How do I insert a quick reply in a chat?',
+      [],
+      undefined,
+    );
+    // Underway, the starters make way for the conversation, which opens on
+    // Aura's greeting.
+    expect(screen.queryByText('Try asking')).toBeNull();
+    expect(screen.getByText(/I am Aura/)).toBeInTheDocument();
+  });
+
+  it('starts a new chat back on the empty state', async () => {
+    ai.helpAssistant.mockResolvedValueOnce({ answer: 'Use the Assignee menu.', offTopic: false });
+    renderHelp();
+    await openPanel();
+    await user.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?{Enter}');
+    await screen.findByText('Use the Assignee menu.');
+    await user.click(screen.getByRole('button', { name: 'Start a new chat' }));
+    expect(screen.queryByText('Use the Assignee menu.')).toBeNull();
+    expect(screen.getByText('Try asking')).toBeInTheDocument();
+  });
+
+  it('a failed question can be asked again without showing it twice', async () => {
+    ai.helpAssistant
+      .mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 500, code: 'upstream' }))
+      .mockResolvedValueOnce({ answer: 'Use the Assignee menu.', offTopic: false });
+    renderHelp();
+    await openPanel();
+    await user.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?{Enter}');
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Couldn’t get an answer.'),
+    );
+    await user.click(screen.getByRole('button', { name: 'Try again' }));
+    await screen.findByText('Use the Assignee menu.');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.getAllByText('How do I reassign a ticket?')).toHaveLength(1);
+    // The retried question is not replayed as its own history.
+    expect(ai.helpAssistant).toHaveBeenNthCalledWith(
+      2,
+      { userId: 'agent-1', vendorId: 'global' },
+      'How do I reassign a ticket?',
+      [],
+      undefined,
+    );
+  });
+
+  it('offers no retry where asking again cannot help', async () => {
+    ai.helpAssistant.mockRejectedValueOnce(
+      Object.assign(new Error('off'), { status: 403, code: 'feature_disabled' }),
+    );
+    renderHelp();
+    await openPanel();
+    await user.type(screen.getByLabelText('Your question'), 'How do I close a ticket?{Enter}');
+    await screen.findByRole('alert');
+    expect(screen.queryByRole('button', { name: 'Try again' })).toBeNull();
+  });
+
+  it('copies one of Aura’s replies', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    ai.helpAssistant.mockResolvedValueOnce({ answer: 'Use the Assignee menu.', offTopic: false });
+    renderHelp();
+    await openPanel();
+    await user.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?{Enter}');
+    await screen.findByText('Use the Assignee menu.');
+    await user.click(screen.getByRole('button', { name: 'Copy' }));
+    expect(writeText).toHaveBeenCalledWith('Use the Assignee menu.');
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+  });
+
+  it('sets numbered steps as a list', async () => {
+    ai.helpAssistant.mockResolvedValueOnce({
+      answer: 'Here is how:\n1. Open the ticket.\n2. Use the Assignee menu.',
+      offTopic: false,
+    });
+    renderHelp();
+    await openPanel();
+    await user.type(screen.getByLabelText('Your question'), 'How do I reassign a ticket?{Enter}');
+    const step = await screen.findByText('Open the ticket.');
+    expect(step.closest('ol')).not.toBeNull();
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+  });
+
+  it('names the conversation and announces replies politely', async () => {
+    renderHelp();
+    await openPanel();
+    const log = screen.getByRole('log', { name: 'Conversation with Aura' });
+    expect(log).toHaveAttribute('aria-live', 'polite');
   });
 });

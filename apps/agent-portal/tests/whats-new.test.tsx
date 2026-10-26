@@ -288,12 +288,24 @@ describe('reopening from the help panel', () => {
     await waitFor(() => expect(document.activeElement).toBe(launcher));
   });
 
+  it('the empty state offers the tour too, as a card under the starters', async () => {
+    localStorage.setItem(KEY, WHATS_NEW_VERSION);
+    renderTour(<HelpAssistant />);
+    await settle(900);
+    fireEvent.click(screen.getByRole('button', { name: 'Ask AI help' }));
+    // Both ways in: the header pill and the card.
+    expect(await screen.findByRole('button', { name: 'What’s new' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /New in this release/ }));
+    expect(await screen.findByRole('dialog', { name: 'A fresh Sara CRM' })).toBeInTheDocument();
+  });
+
   it('a role with no tour gets no entry in the panel', async () => {
     setRole('CEO');
     renderTour(<HelpAssistant />);
     fireEvent.click(screen.getByRole('button', { name: 'Ask AI help' }));
     await screen.findByPlaceholderText('Ask Aura anything…');
     expect(screen.queryByRole('button', { name: 'What’s new' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /New in this release/ })).toBeNull();
   });
 });
 

@@ -152,6 +152,15 @@ export type {
   SectionCardProps,
 } from './Metrics.js';
 export { AI_SKIN } from './aiSkin.js';
+export { AuraPanel, AuraLauncher, AuraMark, AuraRichText, AURA_STYLES } from './Aura.js';
+export type {
+  AuraPanelProps,
+  AuraLauncherProps,
+  AuraMarkProps,
+  AuraTurn,
+  AuraSuggestion,
+  AuraLabels,
+} from './Aura.js';
 export {
   WhatsNewDialog,
   WhatsNewProvider,

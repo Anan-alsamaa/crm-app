@@ -163,4 +163,16 @@ describe('memory and reopening', () => {
       await screen.findByRole('dialog', { name: 'Your console, redesigned' }),
     ).toBeInTheDocument();
   });
+
+  it('the empty state offers the tour too, as a card under the starters', async () => {
+    localStorage.setItem(KEY, WHATS_NEW_VERSION);
+    renderTour(<HelpAssistant />);
+    fireEvent.click(screen.getByRole('button', { name: 'Ask AI help' }));
+    // Both ways in: the header pill and the card.
+    expect(await screen.findByRole('button', { name: 'What’s new' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /New in this release/ }));
+    expect(
+      await screen.findByRole('dialog', { name: 'Your console, redesigned' }),
+    ).toBeInTheDocument();
+  });
 });
