@@ -613,7 +613,10 @@ function AuraBody<T extends AuraTurn>({
           />
         ) : (
           turns.map((turn, i) =>
-            turn.role === 'user' ? (
+            /* The greeting turn is for the model's context only: the Welcome
+               screen already said hello, so repeating it as the first bubble
+               of every conversation read as Aura introducing herself twice. */
+            turn.welcome ? null : turn.role === 'user' ? (
               <div key={i} className="aura-in flex justify-end ps-10">
                 <p className="max-w-full whitespace-pre-wrap break-words rounded-[1.25rem] rounded-ee-md bg-[linear-gradient(135deg,oklch(var(--primary)),oklch(0.5_0.2_290))] px-4 py-2.5 text-sm leading-relaxed text-primary-foreground shadow-[0_8px_20px_-12px_rgb(75_59_213/0.8)]">
                   {turn.content}
@@ -843,18 +846,20 @@ function Welcome({
 }): JSX.Element {
   return (
     <div className="flex flex-col">
-      <div className="flex flex-col items-center px-2 pt-4 text-center sm:pt-8">
-        <span className="aura-pop" style={delay(40)}>
+      {/* Tighter below `sm`, so on a phone the whole welcome - starters,
+          release card and privacy line - fits above the composer. */}
+      <div className="flex flex-col items-center px-2 pt-1 text-center sm:pt-8">
+        <span className="aura-pop -my-2 scale-[0.78] sm:my-0 sm:scale-100" style={delay(40)}>
           <AuraMark size={72} state="live" />
         </span>
         <h3
-          className="aura-in mt-5 text-balance text-2xl font-bold leading-tight tracking-[-0.02em] text-foreground"
+          className="aura-in mt-3 text-balance text-xl font-bold sm:mt-5 sm:text-2xl leading-tight tracking-[-0.02em] text-foreground"
           style={delay(140)}
         >
           {greeting}
         </h3>
         <p
-          className="aura-in mt-2 max-w-[24rem] text-balance text-sm leading-relaxed text-muted-foreground"
+          className="aura-in mt-1.5 max-w-[24rem] text-balance text-sm leading-snug text-muted-foreground sm:mt-2 sm:leading-relaxed"
           style={delay(220)}
         >
           {intro}
@@ -862,14 +867,14 @@ function Welcome({
       </div>
 
       {suggestions.length > 0 && (
-        <div className="mt-7">
+        <div className="mt-4 sm:mt-7">
           <p
             className="aura-in mb-2.5 px-1 text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
             style={delay(280)}
           >
             {labels.tryAsking}
           </p>
-          <div className="grid grid-cols-1 gap-2">
+          <div className="grid grid-cols-1 gap-1.5 sm:gap-2">
             {suggestions.map((s, i) => (
               <button
                 key={s.key}
@@ -878,7 +883,7 @@ function Welcome({
                 onClick={() => onPick(s.prompt)}
                 style={delay(320 + i * 60)}
                 className={cn(
-                  'aura-in group flex items-start gap-3 rounded-[1.125rem] bg-card/90 p-3.5 text-start shadow-soft ring-1 ring-foreground/[0.07]',
+                  'aura-in group flex items-start gap-3 rounded-[1.125rem] bg-card/90 px-3.5 py-2.5 text-start sm:py-3.5 shadow-soft ring-1 ring-foreground/[0.07]',
                   'transition-[box-shadow,background-color,transform] duration-base ease-out hover:bg-card hover:ring-primary/35 hover:shadow-[0_10px_26px_-14px_rgb(75_59_213/0.55)]',
                   'motion-safe:active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50',
                   'disabled:cursor-not-allowed disabled:opacity-60',
@@ -908,7 +913,7 @@ function Welcome({
           onClick={onWhatsNew}
           style={delay(320 + suggestions.length * 60 + 40)}
           className={cn(
-            'aura-in group relative mt-3 flex items-center gap-3 overflow-hidden rounded-[1.125rem] p-3.5 text-start text-white',
+            'aura-in group relative mt-2 flex items-center gap-3 overflow-hidden rounded-[1.125rem] px-3.5 py-2.5 text-start text-white sm:mt-3 sm:py-3.5',
             'bg-[linear-gradient(120deg,#2E2390_0%,#4B3BD5_55%,#7C5CF0_100%)] shadow-[0_14px_30px_-18px_rgb(46_35_144/0.9)]',
             'transition-transform duration-base ease-out motion-safe:active:scale-[0.98]',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background',
@@ -936,7 +941,7 @@ function Welcome({
       )}
 
       <p
-        className="aura-in mt-5 flex items-center justify-center gap-1.5 px-2 text-center text-2xs text-muted-foreground"
+        className="aura-in mt-3 flex items-center justify-center gap-1.5 px-2 text-center text-2xs text-muted-foreground sm:mt-5"
         style={delay(560)}
       >
         <Glyph d={G.lock} className="h-3.5 w-3.5 opacity-70" />

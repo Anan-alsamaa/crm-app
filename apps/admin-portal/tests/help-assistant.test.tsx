@@ -352,10 +352,10 @@ describe('HelpAssistant — the redesigned panel (2026-10-26)', () => {
       [],
       undefined,
     );
-    // Underway, the starters make way for the conversation, which opens on
-    // Aura's greeting.
+    // Underway, the starters make way for the conversation - which does NOT
+    // repeat Aura's greeting: the welcome screen already said hello.
     expect(screen.queryByText('Try asking')).toBeNull();
-    expect(screen.getByText(/I am Aura/)).toBeInTheDocument();
+    expect(screen.queryByText(/I am Aura/)).toBeNull();
   });
 
   it('starts a new chat back on the empty state', async () => {
