@@ -115,24 +115,24 @@ function Stat({
 }: {
   label: string;
   value: string | number | null | undefined;
-  tone: 'primary' | 'sky' | 'violet';
+  tone: 'primary' | 'neutral';
 }) {
   const shown = value == null || value === '' ? '—' : String(value);
   return (
     <div
       className={cn(
         'min-w-0 rounded-xl px-2.5 py-2.5 text-center ring-1 ring-inset',
-        tone === 'primary' && 'bg-primary-tint ring-primary/15',
-        tone === 'sky' && 'bg-sky-tint ring-sky/15',
-        tone === 'violet' && 'bg-violet-tint ring-violet/15',
+        /* The SLA cards' quiet boxes; only the money gets the brand tint, so
+           the colour on the card is an accent rather than a fill. */
+        tone === 'primary'
+          ? 'bg-primary-tint/70 ring-primary/10'
+          : 'bg-secondary/40 ring-foreground/[0.05]',
       )}
     >
       <div
         title={shown}
         className={cn(
           'truncate text-lg font-extrabold leading-none tabular-nums tracking-[-0.03em]',
-          /* Only the money is in colour; the tinted boxes already tell the
-             other two apart, and a pale numeral on a pale tint is hard to read. */
           tone === 'primary' ? 'text-primary' : 'text-foreground',
         )}
       >
@@ -296,6 +296,13 @@ function RequestCard({
                   {t('coupons.amended', { defaultValue: 'Amended' })}
                 </Pill>
               )}
+              {/* The coupon's type as a coloured tag, like the SLA card's
+                  Chat / Ticket pill. */}
+              {r.coupon_type && (
+                <Pill tone={r.coupon_type === 'General' ? 'blue' : 'purple'} size="sm">
+                  {r.coupon_type}
+                </Pill>
+              )}
               <Pill tone={TONE[r.status] ?? 'success'} size="sm" dot>
                 {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
               </Pill>
@@ -322,12 +329,12 @@ function RequestCard({
               value={amount(r, 'SAR')}
             />
             <Stat
-              tone="sky"
+              tone="neutral"
               label={t('coupons.maxShort', { defaultValue: 'Max discount' })}
               value={maxDiscount}
             />
             <Stat
-              tone="violet"
+              tone="neutral"
               label={t('coupons.usesShort', { defaultValue: 'Uses' })}
               value={r.usage_limit}
             />
@@ -337,8 +344,8 @@ function RequestCard({
               card, so "what exactly did you ask for?" is answered here. */}
           <div className="mt-3.5 space-y-2">
             <ChipRow
-              label={t('lists.couponType', { defaultValue: 'Coupon type' })}
-              values={[r.coupon_type, r.discount_category]}
+              label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
+              values={[r.discount_category]}
             />
             <ChipRow
               label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
