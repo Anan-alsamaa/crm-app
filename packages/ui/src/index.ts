@@ -9,7 +9,7 @@ export type { EnvironmentBannerProps } from './EnvironmentBanner.js';
  */
 
 export { cn } from './cn.js';
-export { NewVersionBanner } from './NewVersionBanner.js';
+export { NewVersionBanner, hasUnsavedText } from './NewVersionBanner.js';
 export { SavedTick } from './SavedTick.js';
 export { EmojiPicker } from './EmojiPicker.js';
 export type { EmojiPickerProps } from './EmojiPicker.js';

@@ -34,14 +34,74 @@ export interface NewVersionBannerProps {
   intervalMs?: number;
   label?: string;
   action?: string;
+  /**
+   * Reload on its own once a newer build is served (default on). Without it a
+   * fix reaches only those who click Reload: on 2026-10-27 tabs left open - the
+   * TV screen above all - kept running a build that loaded every ticket, long
+   * after the fix was released.
+   */
+  autoReload?: boolean;
+  /** No keyboard/pointer input for this long counts as idle. Default 5 min. */
+  idleMs?: number;
+}
+
+/**
+ * Text the person has typed and not sent: any non-empty textarea or
+ * contenteditable, or the focused text input. A reload would lose it, so the
+ * automatic reload waits while there is any.
+ */
+export function hasUnsavedText(doc: Document = document): boolean {
+  for (const el of Array.from(doc.querySelectorAll('textarea'))) {
+    if ((el as HTMLTextAreaElement).value.trim()) return true;
+  }
+  for (const el of Array.from(doc.querySelectorAll('[contenteditable="true"]'))) {
+    if ((el.textContent ?? '').trim()) return true;
+  }
+  const active = doc.activeElement as HTMLInputElement | null;
+  if (active && active.tagName === 'INPUT' && active.value && active.value.trim()) return true;
+  return false;
 }
 
 export function NewVersionBanner({
   intervalMs = 5 * 60_000,
   label = 'A newer version of this app is available.',
   action = 'Reload',
+  autoReload = true,
+  idleMs = 5 * 60_000,
 }: NewVersionBannerProps): JSX.Element | null {
   const [stale, setStale] = useState(false);
+
+  /*
+   * THE SAFE AUTOMATIC RELOAD.
+   *   - A tab in the background reloads at once: nobody is looking at it.
+   *   - A tab on screen (the TV) reloads after `idleMs` with no input.
+   *   - Never while there is typed, unsent text (hasUnsavedText) - it waits.
+   * The strip below stays, so anyone can update at once.
+   */
+  useEffect(() => {
+    if (!stale || !autoReload) return;
+    let lastInput = Date.now();
+    const touch = () => {
+      lastInput = Date.now();
+    };
+    const tryReload = (force: boolean) => {
+      if (hasUnsavedText()) return;
+      if (force || Date.now() - lastInput >= idleMs) window.location.reload();
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') tryReload(true);
+    };
+    if (document.visibilityState === 'hidden') tryReload(true);
+    const events = ['keydown', 'pointerdown', 'pointermove', 'wheel', 'touchstart'] as const;
+    for (const e of events) window.addEventListener(e, touch, { passive: true });
+    document.addEventListener('visibilitychange', onVisibility);
+    const id = setInterval(() => tryReload(false), 30_000);
+    return () => {
+      for (const e of events) window.removeEventListener(e, touch);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clearInterval(id);
+    };
+  }, [stale, autoReload, idleMs]);
 
   useEffect(() => {
     const mine = currentBundle();
