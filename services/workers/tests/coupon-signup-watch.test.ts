@@ -64,11 +64,11 @@ describe('the delivery sweep and coupons held for signup', () => {
     const h = harness(
       [{ id: 'fresh-due' }, { id: 'fresh-wait' }, { id: 'old-wait' }, { id: 'normal' }],
       [
-        // First day: every 10 minutes.
+        // Every 5 hours (owner, 2026-10-27).
         {
           id: 'fresh-due',
-          awaiting_signup_at: minutesAgo(60),
-          signup_checked_at: minutesAgo(11),
+          awaiting_signup_at: minutesAgo(6 * 60),
+          signup_checked_at: minutesAgo(5 * 60 + 1),
           valid_to: null,
         },
         {
@@ -77,7 +77,7 @@ describe('the delivery sweep and coupons held for signup', () => {
           signup_checked_at: minutesAgo(4),
           valid_to: null,
         },
-        // Three days in: hourly, so 30 minutes is too soon.
+        // Three days in: still every 5 hours, so 30 minutes is too soon.
         {
           id: 'old-wait',
           awaiting_signup_at: minutesAgo(3 * 24 * 60),
