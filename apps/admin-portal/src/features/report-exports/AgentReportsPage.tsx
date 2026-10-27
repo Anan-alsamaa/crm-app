@@ -996,7 +996,6 @@ function ComplaintsReport({
     () => joinComplaintStores(rows, storeIndex),
     [rows, storeIndex],
   );
-  const unmapped = useMemo(() => countUnmappedComplaints(joined), [joined]);
 
   /*
    * COMPLETE ROWS ONLY, by default.
@@ -1489,14 +1488,8 @@ function ComplaintsReport({
           to the far columns is a toolbar you have to scroll back for. See
           usePinnedWidth. */}
       <div className="sticky start-0 flex w-[var(--pin-w,100%)] flex-wrap items-center gap-3">
-        {canSeeWarnings && unmapped > 0 && (
-          <Pill tone="warning" size="sm">
-            {t('complaintReport.unmappedStores', {
-              count: unmapped,
-              defaultValue: '{{count}} rows with an unmapped store',
-            })}
-          </Pill>
-        )}
+        {/* No "N rows with an unmapped store" pill (owner, 2026-10-27: "never
+            show this"). An unmapped branch still shows on its own row. */}
         {/* Tickets that are HALF-FILLED — most often a missing branch. They are
             SHOWN, and this says how many need attention. It used to say how many
             were hidden, which was the problem rather than a warning about it. */}

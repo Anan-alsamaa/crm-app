@@ -1035,10 +1035,11 @@ describe('AgentReportsPage — ticket breakdown', () => {
     expect(within(secondRow).getAllByText('Not mapped').length).toBe(4);
   });
 
-  it('counts the unmapped rows so the gap is visible without reading the table', () => {
+  // Owner, 2026-10-27: "never show this" - no unmapped-store count pill.
+  it('shows no "rows with an unmapped store" notice', () => {
     api.useAgentReportData.mockReturnValue(ok);
     renderPage('complaints');
-    expect(screen.getByText('1 rows with an unmapped store')).toBeInTheDocument();
+    expect(screen.queryByText(/rows with an unmapped store/)).toBeNull();
   });
 
   it('reports the branch as it was when the ticket was raised, not as it is now', async () => {
