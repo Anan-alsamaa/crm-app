@@ -100,6 +100,7 @@ import {
   useTicketCoupons,
   type CouponRequestRow,
 } from '../coupons/api.js';
+import { PolicyPills } from '../coupons/PolicyPills.js';
 import {
   AssignTicketCouponDialog,
   COMPENSATED,
@@ -2464,6 +2465,8 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
               )}
               {/* Owner, 2026-10-27: one side of an edit-after-approval. */}
               <CouponReplacementPill c={c} />
+              {/* The compensation rule behind it, and whether it was changed. */}
+              <PolicyPills rule={c.policy_rule} differs={c.differs_from_policy} />
               {/* EMA-80: taken back from the ticket - or not, and why. */}
               {removalTone(c.removal_status) && (
                 <Pill tone={removalTone(c.removal_status)!} size="sm">

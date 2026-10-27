@@ -85,7 +85,17 @@ export interface CouponRequestRow {
   restaurant_id?: string | null;
   delivery_excluded?: boolean | null;
   delivery_excluded_reason?: string | null;
+  /* The compensation rule it came from, and whether the agent changed its
+     terms (owner, 2026-10-27). ABSENT where the fields are not applied. */
+  policy_rule?: { id: string; name: string | null } | null;
+  differs_from_policy?: boolean | null;
 }
+
+/** Read first, dropped first: the newest columns (2026-10-27, manual apply). */
+export const COUPON_POLICY_FIELDS = [
+  'differs_from_policy',
+  { policy_rule: ['id', 'name'] },
+] as const;
 
 export const COUPON_REQUEST_FIELDS = [
   'id',
@@ -125,17 +135,25 @@ export const COUPON_REQUEST_FIELDS = [
 export function useMyCouponRequests() {
   return useQuery({
     queryKey: ['my-coupon-requests'],
-    queryFn: async () =>
-      (await directus.request(
-        readItems(
-          'coupon_approvals' as never,
-          {
-            fields: COUPON_REQUEST_FIELDS,
-            sort: ['-date_created'],
-            limit: -1,
-          } as never,
-        ),
-      )) as unknown as CouponRequestRow[],
+    queryFn: async () => {
+      const read = async (fields: readonly unknown[]) =>
+        (await directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              fields: fields as never,
+              sort: ['-date_created'],
+              limit: -1,
+            } as never,
+          ),
+        )) as unknown as CouponRequestRow[];
+      try {
+        return await read([...COUPON_REQUEST_FIELDS, ...COUPON_POLICY_FIELDS]);
+      } catch {
+        /* The compensation-rule columns are not applied here yet. */
+        return read(COUPON_REQUEST_FIELDS);
+      }
+    },
   });
 }
 
@@ -197,6 +215,14 @@ export interface CreateCouponRequestInput extends CouponFields {
   delivery_excluded?: boolean;
   /** Why it is withheld, shown on the supervisor's approval card. Optional. */
   delivery_excluded_reason?: string | null;
+  /**
+   * THE COMPENSATION RULE the coupon was pre-filled from, and whether the
+   * agent changed its terms (owner, 2026-10-27). Sent ONLY when a rule was
+   * involved - see `policyFields` - so a plain request never names columns an
+   * environment may not have yet.
+   */
+  policy_rule?: string;
+  differs_from_policy?: boolean;
   /* Resolved from the ticket's order, never chosen in the form. */
   brand_id?: string | null;
   restaurant_id?: string | null;
@@ -444,6 +470,11 @@ export function useTicketCoupons(
             } as never,
           ),
         ) as unknown as Promise<CouponRequestRow[]>;
+      try {
+        return await read([...TICKET_COUPON_REPLACE_FIELDS, ...COUPON_POLICY_FIELDS]);
+      } catch {
+        /* The compensation-rule columns (2026-10-27) are not applied here. */
+      }
       try {
         return await read(TICKET_COUPON_REPLACE_FIELDS);
       } catch {

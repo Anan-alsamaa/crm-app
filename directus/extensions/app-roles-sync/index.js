@@ -146,6 +146,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   const CONVERSATION_FIELDS_CLOSE = ['status', 'solved_at'];
   const CONVERSATION_FIELDS_ASSIGN = ['assigned_agent', 'assigned_team'];
   const ORG_NOTIFICATION_DEFAULTS = { key: { _eq: 'notification_defaults' } };
+  /** Mirrors RULE_COUPON_LIMIT_SETTING_KEY in packages/shared-types. */
+  const RULE_COUPON_LIMIT_SETTING = { key: { _eq: 'compensation_rules_customer_limit' } };
 
   /* ── the Administrator's fine-grained permissions ─────────────────────── */
 
@@ -199,6 +201,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     delete_compensation: never,
     manage_ticket_compensation: holds('approve_coupons'),
     edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
+    manage_compensation_rules: nameIn('administrator', 'wecare admin'),
     view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
     view_agent_reports: holds('view_all_chats'),
     view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
@@ -300,6 +303,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     ...readOnly('custom_fields'),
     ...readOnly('store_notify_rules'),
     ...readOnly('automation_rules'),
+    /* The compensation rules (owner, 2026-10-27): every role that raises a
+       ticket reads them so the coupon section can be PRE-FILLED. Editing is
+       manage_compensation_rules below. */
+    ...readOnly('compensation_rules'),
     g('notifications', 'read', SELF_RECIPIENT),
     g('notifications', 'update', SELF_RECIPIENT),
     g('directus_users', 'update', { id: { _eq: '$CURRENT_USER' } }, [
@@ -616,6 +623,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('coupon_approvals', 'create'),
       g('coupon_approvals', 'read'),
       g('coupon_approvals', 'update'),
+    ],
+    /* The Compensation rules page (owner, 2026-10-27): the rules, plus the ONE
+       app_settings row holding the optional per-customer limit. */
+    manage_compensation_rules: [
+      ...crud('compensation_rules'),
+      g('app_settings', 'create', {}, null, RULE_COUPON_LIMIT_SETTING),
+      g('app_settings', 'update', RULE_COUPON_LIMIT_SETTING),
     ],
     view_agent_dashboard: [], // UI gate; its reads come with REPORT_ACCESS below
     view_agent_reports: [],
@@ -983,14 +997,28 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       row.stores,
       await protectedRoleIds(),
     );
-    const desired = grants.map((grant) => ({
-      policy: policyId,
-      collection: grant.collection,
-      action: grant.action,
-      permissions: grant.filter && Object.keys(grant.filter).length ? grant.filter : {},
-      validation: grant.validation ?? {},
-      fields: grant.fields ?? ['*'],
-    }));
+    /*
+     * A COLLECTION NEWER THAN THIS ENVIRONMENT'S SCHEMA is skipped, not
+     * granted: `compensation_rules` (2026-10-27) reaches an environment by a
+     * manual schema apply, and a permission on a collection that does not
+     * exist yet must never be what makes a role save fail. Named, not
+     * inferred - a schema-cache miss must not quietly drop real grants.
+     */
+    const NEWER_THAN_SCHEMA = ['compensation_rules'];
+    const desired = grants
+      .filter(
+        (grant) =>
+          !NEWER_THAN_SCHEMA.includes(grant.collection) ||
+          !!schema?.collections?.[grant.collection],
+      )
+      .map((grant) => ({
+        policy: policyId,
+        collection: grant.collection,
+        action: grant.action,
+        permissions: grant.filter && Object.keys(grant.filter).length ? grant.filter : {},
+        validation: grant.validation ?? {},
+        fields: grant.fields ?? ['*'],
+      }));
     /** What identifies a rule, so an unchanged one is left exactly where it is. */
     const sigOf = (p) =>
       JSON.stringify([

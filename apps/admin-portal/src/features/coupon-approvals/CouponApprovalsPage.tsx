@@ -47,6 +47,7 @@ import {
   type CouponApprovalRow,
 } from './api.js';
 import { correctionOf, useCorrectionStamps, type CorrectionStamp } from './correction-stamps.js';
+import { PolicyPills } from './PolicyPills.js';
 import {
   useCouponReplacements,
   useReplaceCoupon,
@@ -909,6 +910,9 @@ function Row({
                   ? t('couponApprovals.sendOnAppNo', { defaultValue: 'Send on app: No' })
                   : t('couponApprovals.sendOnAppYes', { defaultValue: 'Send on app: Yes' })}
               </Pill>
+              {/* The compensation rule behind it, and whether the agent
+                  changed its terms (owner, 2026-10-27). */}
+              <PolicyPills rule={row.policy_rule} differs={row.differs_from_policy} />
               {correction && (
                 <CorrectedMark who={requester} at={correction.at} className="shrink-0" />
               )}

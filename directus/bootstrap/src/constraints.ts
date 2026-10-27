@@ -22,6 +22,12 @@ export const constraintStatements: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_coupon_approvals_vendor_external_id
      ON coupon_approvals (vendor, external_id) WHERE external_id IS NOT NULL;`,
 
+  // Compensation rules (2026-10-27): ONE rule coupon per ticket, at the
+  // database - a retried Yiji call, a race, or a later change of the ticket's
+  // type can never add a second. Coupons not from a rule are untouched.
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_coupon_approvals_ticket_policy_rule
+     ON coupon_approvals (ticket) WHERE policy_rule IS NOT NULL AND ticket IS NOT NULL;`,
+
   // Supporting lookup indexes.
   `CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts (phone);`,
   `CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts (email);`,

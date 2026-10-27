@@ -127,6 +127,9 @@ const ALL_BUSINESS = [
   // The supervisor IS the admin role here: approving a coupon is the one thing
   // an agent must not be able to do for themselves.
   'coupon_approvals',
+  // The compensation policy as data (owner, 2026-10-27). CRM administrators
+  // maintain it; every other role only reads it (to pre-fill a coupon).
+  'compensation_rules',
 ];
 
 /**
@@ -413,6 +416,9 @@ export const roles: RoleSpec[] = [
       { collection: 'tags', action: 'delete' },
       ...readOnly('sla_policies'),
       ...readOnly('automation_rules'),
+      // The compensation rules: read, so a new ticket's coupon is PRE-FILLED
+      // with the matching rule's suggestion (owner, 2026-10-27).
+      ...readOnly('compensation_rules'),
       ...readOnly('custom_fields'),
       ...readOnly('csat_responses'),
       { collection: 'directus_users', action: 'read' },
@@ -796,6 +802,14 @@ export const roles: RoleSpec[] = [
       ...appendOnly('ticket_events'),
       ...readOnly('stores'),
       ...readOnly('brands'),
+      /*
+       * THE COMPENSATION RULES (owner, 2026-10-27): a Yiji ticket sent WITHOUT
+       * a coupon gets the matching rule's coupon REQUEST (pending, like every
+       * other). Read the rules and the optional per-customer limit
+       * (`app_settings`, read above); the rule coupons already given are
+       * counted through the coupon_approvals read above.
+       */
+      ...readOnly('compensation_rules'),
     ],
   },
   {
@@ -828,6 +842,9 @@ export const roles: RoleSpec[] = [
       { collection: 'messages', action: 'read' },
       { collection: 'automation_rules', action: 'read' },
       { collection: 'automation_rules', action: 'update' },
+      /* Read-only: the coupon reports name the rule a coupon came from
+         (owner, 2026-10-27). Nothing in the workers applies a rule. */
+      ...readOnly('compensation_rules'),
       { collection: 'reports', action: 'read' },
       { collection: 'reports', action: 'update' },
       ...readOnly('sla_policies'),

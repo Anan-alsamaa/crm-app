@@ -1,9 +1,14 @@
 import { createItem, readItems, readMe, updateItem } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import {
+  RULE_COUPON_LIMIT_SETTING_KEY,
   cleanContactName,
   internationalPhone,
   isPhoneDerivedCustomerId,
+  parseRuleCouponLimit,
+  ruleCouponCountFilter,
+  type CompensationRule,
+  type RuleCouponLimit,
   type StoreRecord,
 } from '@yiji/shared-types';
 import {
@@ -87,6 +92,60 @@ const COUPON_FIELDS = [
 /* Newer columns, read in their OWN best-effort query: a column not yet
    bootstrapped on an environment must not 403 the read-back as a whole. */
 const COUPON_LATE_FIELDS = ['id', 'removal_status', 'replaced_by'];
+/* Newer still (compensation rules, 2026-10-27): tried WITH the late fields
+   first, then without - so an environment missing only this column keeps
+   reading the removal state. */
+const COUPON_RULE_FIELDS = ['policy_rule'];
+
+/** Every column of a rule the matcher and the coupon read. */
+const RULE_FIELDS = [
+  'id',
+  'name',
+  'active',
+  'priority',
+  'complaint_type',
+  'service_type',
+  'min_delay_minutes',
+  'min_order_value',
+  'max_order_value',
+  'discount_category',
+  'coupon_value',
+  'coupon_percent',
+  'max_discount',
+  'validity_days',
+  'usage_limit',
+  'delivery_type',
+  'coupon_type',
+  'issuing_side',
+  'no_other_discounts',
+  'date_created',
+];
+
+/** Directus may hand back decimals as strings; the matcher wants numbers. */
+function toRule(r: Record<string, unknown>): CompensationRule {
+  return {
+    id: String(r.id),
+    name: String(r.name ?? ''),
+    active: r.active !== false,
+    priority: num(r.priority) ?? 0,
+    complaint_type: String(r.complaint_type ?? ''),
+    service_type: str(r.service_type),
+    min_delay_minutes: num(r.min_delay_minutes),
+    min_order_value: num(r.min_order_value),
+    max_order_value: num(r.max_order_value),
+    discount_category: String(r.discount_category ?? ''),
+    coupon_value: num(r.coupon_value),
+    coupon_percent: num(r.coupon_percent),
+    max_discount: num(r.max_discount),
+    validity_days: num(r.validity_days),
+    usage_limit: num(r.usage_limit),
+    delivery_type: str(r.delivery_type),
+    coupon_type: str(r.coupon_type),
+    issuing_side: str(r.issuing_side),
+    no_other_discounts: r.no_other_discounts === true,
+    date_created: str(r.date_created),
+  };
+}
 
 type Ref = string | { id?: string | null } | null | undefined;
 const refId = (v: Ref): string | null =>
@@ -131,7 +190,7 @@ type CouponRow = Record<string, unknown> & { id: string };
 
 function toCoupon(
   r: CouponRow,
-  late?: { removal_status?: unknown; replaced_by?: Ref },
+  late?: { removal_status?: unknown; replaced_by?: Ref; policy_rule?: Ref },
 ): InboundCoupon {
   return {
     id: String(r.id),
@@ -149,6 +208,7 @@ function toCoupon(
     removalStatus: str(late?.removal_status),
     replacedBy: refId(late?.replaced_by),
     dateCreated: str(r.date_created),
+    policyRule: refId(late?.policy_rule),
   };
 }
 
@@ -158,11 +218,14 @@ export interface YijiInboundDirectusOptions {
   /** `YIJI_INBOUND_ACTOR_USER_ID`: the "Yiji" system user. Unset = the service account itself. */
   actorUserId?: string | null;
   storesTtlMs?: number;
+  /** How long the compensation rules are cached (default 60 s). */
+  rulesTtlMs?: number;
 }
 
 export class YijiInboundDirectus implements YijiInboundStore {
   private vendorCache: { id: string; at: number } | null = null;
   private storesCache: { rows: StoreRecord[]; at: number } | null = null;
+  private rulesCache: { rows: CompensationRule[]; at: number } | null = null;
   private actor: string | null | undefined;
 
   constructor(
@@ -215,25 +278,33 @@ export class YijiInboundDirectus implements YijiInboundStore {
 
   private async lateCouponFields(
     ids: string[],
-  ): Promise<Map<string, { removal_status?: unknown; replaced_by?: Ref }>> {
-    const out = new Map<string, { removal_status?: unknown; replaced_by?: Ref }>();
+  ): Promise<Map<string, { removal_status?: unknown; replaced_by?: Ref; policy_rule?: Ref }>> {
+    const out = new Map<
+      string,
+      { removal_status?: unknown; replaced_by?: Ref; policy_rule?: Ref }
+    >();
     if (ids.length === 0) return out;
-    try {
-      const rows = await this.req<
-        Array<{ id: string; removal_status?: unknown; replaced_by?: Ref }>
+    const read = (fields: string[]) =>
+      this.req<
+        Array<{ id: string; removal_status?: unknown; replaced_by?: Ref; policy_rule?: Ref }>
       >(
         readItems(
           'coupon_approvals' as never,
           {
             filter: { id: { _in: ids } },
-            fields: COUPON_LATE_FIELDS,
+            fields,
             limit: ids.length,
           } as never,
         ),
       );
-      for (const r of rows) out.set(String(r.id), r);
-    } catch {
-      /* Not bootstrapped here yet: read as "never removed / not replaced". */
+    for (const fields of [[...COUPON_LATE_FIELDS, ...COUPON_RULE_FIELDS], COUPON_LATE_FIELDS]) {
+      try {
+        for (const r of await read(fields)) out.set(String(r.id), r);
+        return out;
+      } catch {
+        /* Not bootstrapped here yet: try the older set, then read as "never
+           removed / not replaced / not from a rule". */
+      }
     }
     return out;
   }
@@ -401,6 +472,59 @@ export class YijiInboundDirectus implements YijiInboundStore {
       if (raced) return String(raced.id);
       throw classifyDirectusError(err);
     }
+  }
+
+  /** The compensation rules, cached briefly (one small read per minute at most). */
+  async compensationRules(): Promise<CompensationRule[]> {
+    const ttl = this.opts.rulesTtlMs ?? 60_000;
+    if (this.rulesCache && Date.now() - this.rulesCache.at < ttl) return this.rulesCache.rows;
+    const rows = await this.req<Array<Record<string, unknown>>>(
+      readItems(
+        'compensation_rules' as never,
+        {
+          filter: { active: { _eq: true } },
+          fields: RULE_FIELDS,
+          limit: -1,
+        } as never,
+      ),
+    );
+    const mapped = rows.map(toRule);
+    this.rulesCache = { rows: mapped, at: Date.now() };
+    return mapped;
+  }
+
+  /** The optional per-customer limit (`app_settings`); unreadable = off. */
+  async ruleCouponLimit(): Promise<RuleCouponLimit | null> {
+    try {
+      const rows = await this.req<Array<{ value: unknown }>>(
+        readItems(
+          'app_settings' as never,
+          {
+            filter: { key: { _eq: RULE_COUPON_LIMIT_SETTING_KEY } },
+            fields: ['value'],
+            limit: 1,
+          } as never,
+        ),
+      );
+      return parseRuleCouponLimit(rows[0]?.value ?? null);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Rule coupons this customer got since `sinceIso` - read up to `max` rows only. */
+  async ruleCouponsSince(contactId: string, sinceIso: string, max: number): Promise<number> {
+    const rows = await this.req<unknown[]>(
+      readItems(
+        'coupon_approvals' as never,
+        {
+          filter: ruleCouponCountFilter(contactId, sinceIso),
+          fields: ['id'],
+          limit: Math.max(1, max),
+        } as never,
+      ),
+    );
+    return rows.length;
   }
 
   async couponCodeTaken(code: string): Promise<boolean> {

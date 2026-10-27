@@ -27,6 +27,7 @@ import {
   useUpdatePendingCouponRequest,
   type CouponRequestRow,
 } from './api.js';
+import { PolicyPills } from './PolicyPills.js';
 import { CouponRequestDialog } from './CouponRequestDialog.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import {
@@ -309,6 +310,8 @@ function RequestCard({
               <Pill tone={TONE[r.status] ?? 'success'} size="sm" dot>
                 {t(`coupons.status.${r.status}`, { defaultValue: r.status })}
               </Pill>
+              {/* The compensation rule behind it (owner, 2026-10-27). */}
+              <PolicyPills rule={r.policy_rule} differs={r.differs_from_policy} />
             </div>
           </div>
 

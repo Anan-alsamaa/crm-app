@@ -462,6 +462,10 @@ export function RolesPage() {
       defaultValue:
         "Edit an approved coupon (applies at once: a new coupon replaces it, also in the customer's Yiji app; a used coupon cannot be edited)",
     }),
+    manage_compensation_rules: t('roles.p.manageCompensationRules', {
+      defaultValue:
+        'Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)',
+    }),
     view_agent_reports: t('roles.p.viewAgentReports', {
       defaultValue:
         'View agent summary reports (Agent summary, Chat status, Busy time, Agent performance)',

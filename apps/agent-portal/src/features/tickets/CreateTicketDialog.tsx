@@ -11,6 +11,7 @@ import {
   isCouponRequested,
   isNotifyingType,
   manualStoreMatch,
+  pickCompensationRule,
   splitCouponForApproval,
   toStoreSnapshot,
   type CouponRequestDraft,
@@ -46,6 +47,14 @@ import { newCouponRequestId, type CouponRequestError } from '../coupons/coupon-r
 import { raiseTicketCoupon } from '../coupons/ticket-coupon.js';
 import { couponTermsFromDraft } from '../coupons/coupon-request-fields.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import { useCompensationRules, useRuleLimitReached } from '../coupons/compensation-rules.js';
+import {
+  isAdjusted,
+  nextRuleCoupon,
+  policyFields,
+  suggestionFor,
+  type AppliedRule,
+} from '../coupons/rule-prefill.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
@@ -344,6 +353,12 @@ function CreateTicketForm({
   const [collectedCoupon, setCollectedCoupon] = useState<CouponRequestDraft | null>(
     restored?.collectedCoupon ?? null,
   );
+  /* THE COMPENSATION RULE behind the collected coupon, when it was PRE-FILLED
+     (owner, 2026-10-27) - and whether the agent switched that off. */
+  const [couponRule, setCouponRule] = useState<AppliedRule | null>(restored?.couponRule ?? null);
+  const [couponRuleDeclined, setCouponRuleDeclined] = useState(
+    restored?.couponRuleDeclined ?? false,
+  );
   const [includeOrder, setIncludeOrder] = useState(restored?.includeOrder ?? true);
   const [includeFiles, setIncludeFiles] = useState(restored?.includeFiles ?? true);
   // Seeded lazily with "now": a module-level default would freeze at import
@@ -421,6 +436,62 @@ function CreateTicketForm({
     return orderStore;
   }, [storeId, orderStore, stores.data, orderSnapshotView]);
 
+  /*
+   * PRE-FILL FROM THE COMPENSATION RULES (owner, 2026-10-27).
+   *
+   * The complaint type (and service type, and the attached order's value) pick
+   * the matching rule; its coupon fills the section below. The agent accepts
+   * it as is, adjusts it (the request then says "differs from policy") or
+   * unticks it. No rule, or the customer at the optional limit: nothing is
+   * pre-filled. Delay is not known on this form, so a rule that needs one
+   * never pre-fills here. Reads only Directus - never Yiji.
+   */
+  const rules = useCompensationRules(canRequestCoupon);
+  const ruleLimit = useRuleLimitReached(contactId, canRequestCoupon);
+  const matchedRule = useMemo(
+    () =>
+      ruleLimit.data?.reached
+        ? null
+        : pickCompensationRule(rules.data ?? [], {
+            complaintType: complaint.complaint_type,
+            serviceType: complaint.service_type || null,
+            orderValue: includeOrder && latestOrder ? latestOrder.total : null,
+            delayMinutes: null,
+          }),
+    [
+      rules.data,
+      ruleLimit.data?.reached,
+      complaint.complaint_type,
+      complaint.service_type,
+      includeOrder,
+      latestOrder,
+    ],
+  );
+  useEffect(() => {
+    if (!canRequestCoupon || rules.isLoading) return;
+    const current = {
+      assignCoupon,
+      collectedCoupon,
+      rule: couponRule,
+      declined: couponRuleDeclined,
+    };
+    const next = nextRuleCoupon(current, matchedRule, (rule) =>
+      suggestionFor(rule, {
+        today: new Date(),
+        phone: contact.data?.phone ?? null,
+        brandId: chosenMatch?.store?.brandYijiName?.trim() || chosenMatch?.brandName || null,
+        restaurantId: chosenMatch?.store?.yijiRestaurantId || null,
+      }),
+    );
+    if (next === current) return;
+    setAssignCoupon(next.assignCoupon);
+    setCollectedCoupon(next.collectedCoupon);
+    setCouponRule(next.rule);
+    setComplaint((c) => ({ ...c, compensation: compensationFlag(next.assignCoupon) }));
+    // Only when the MATCH changes: the agent's own edits must not re-trigger it.
+  }, [matchedRule?.id, canRequestCoupon, rules.isLoading]);
+  const couponAdjusted = isAdjusted({ rule: couponRule, collectedCoupon });
+
   /* The coupon that did not go out with the ticket just saved, while the
      agent decides: Retry or Don't add (owner, 2026-10-25). Escape must not
      leave the page under that question. */
@@ -478,6 +549,7 @@ function CreateTicketForm({
       !!typedOrderId.trim() ||
       assignCoupon ||
       !!collectedCoupon ||
+      couponRuleDeclined ||
       (!!storeId && storeId !== inferredStoreId) ||
       !includeOrder ||
       !includeFiles ||
@@ -493,6 +565,8 @@ function CreateTicketForm({
             storeId,
             assignCoupon,
             collectedCoupon,
+            couponRule,
+            couponRuleDeclined,
             includeOrder,
             includeFiles,
           }
@@ -510,6 +584,8 @@ function CreateTicketForm({
     inferredService,
     assignCoupon,
     collectedCoupon,
+    couponRule,
+    couponRuleDeclined,
     includeOrder,
     includeFiles,
   ]);
@@ -611,7 +687,19 @@ function CreateTicketForm({
          field must say whether one exists (owner, 2026-10-21: "only when a
          coupon is issued the compensated should be there"). The SAME mapping
          the coupon dialog uses, so `delivery_excluded` is never dropped. */
-      const fullCoupon = collectedCoupon ? couponTermsFromDraft(collectedCoupon) : null;
+      /* A PRE-FILLED coupon was built before the customer or the branch may
+         have been chosen: it takes the form's current ones, exactly as the
+         dialog does when it opens. */
+      const toSend: CouponRequestDraft | null =
+        collectedCoupon && couponRule
+          ? {
+              ...collectedCoupon,
+              title: collectedCoupon.title || contact.data?.phone || '',
+              brand_id: chosenMatch?.store?.brandYijiName?.trim() || chosenMatch?.brandName || null,
+              restaurant_id: chosenMatch?.store?.yijiRestaurantId || null,
+            }
+          : collectedCoupon;
+      const fullCoupon = toSend ? couponTermsFromDraft(toSend) : null;
       const request = fullCoupon ?? coupon.request;
 
       const created = await createFromChat.mutateAsync({
@@ -683,7 +771,13 @@ function CreateTicketForm({
           contact: contactId,
           requested_by: user?.id ?? null,
           reason:
-            collectedCoupon?.compensation_reason?.trim() || complaint.response_desc?.trim() || null,
+            collectedCoupon?.compensation_reason?.trim() ||
+            (couponRule ? description : undefined) ||
+            complaint.response_desc?.trim() ||
+            null,
+          /* The rule it came from and whether the agent changed it - only when
+             a rule was involved (owner, 2026-10-27). */
+          ...(fullCoupon ? policyFields(couponRule, collectedCoupon) : {}),
         };
         const outcome = await sendTicketCoupon(created.id, input);
         if (!outcome.ok) {
@@ -1075,7 +1169,13 @@ function CreateTicketForm({
                       onChange={(e) => {
                         const on = e.target.checked;
                         setAssignCoupon(on);
-                        if (!on) setCollectedCoupon(null);
+                        if (!on) {
+                          setCollectedCoupon(null);
+                          /* Switching a rule's suggestion off is final for
+                             this form: it is not pre-filled again. */
+                          if (couponRule) setCouponRuleDeclined(true);
+                          setCouponRule(null);
+                        }
                         // The compensation flag follows the box, so the agent is
                         // never asked the same thing twice.
                         setComplaint((c) => ({ ...c, compensation: compensationFlag(on) }));
@@ -1112,6 +1212,37 @@ function CreateTicketForm({
                       </span>
                     )}
                   </div>
+                  {/* THE POLICY behind a pre-filled coupon (owner, 2026-10-27):
+                      which rule, and whether the agent changed it. */}
+                  {couponRule && collectedCoupon && (
+                    <p
+                      data-testid="coupon-rule-line"
+                      className="mt-2.5 flex flex-wrap items-center gap-2 ps-[1.625rem] text-xs text-muted-foreground"
+                    >
+                      <span>
+                        {t('coupons.prefilledFrom', {
+                          defaultValue:
+                            'Pre-filled from the rule "{{name}}". Accept it, adjust it with Create coupon, or untick to send none.',
+                          name: couponRule.name,
+                        })}
+                      </span>
+                      {couponAdjusted && (
+                        <Pill tone="warning" size="sm" dot>
+                          {t('coupons.differsPill', { defaultValue: 'Differs from policy' })}
+                        </Pill>
+                      )}
+                    </p>
+                  )}
+                  {ruleLimit.data?.reached && (
+                    <p className="mt-2.5 ps-[1.625rem] text-xs text-muted-foreground">
+                      {t('coupons.ruleLimitReached', {
+                        defaultValue:
+                          'This customer already had {{max}} rule coupon(s) in the last {{days}} days, so nothing was pre-filled. You can still create one by hand.',
+                        max: ruleLimit.data.limit?.maxPerCustomer ?? '',
+                        days: ruleLimit.data.limit?.windowDays ?? '',
+                      })}
+                    </p>
+                  )}
                 </div>
               )}
               <CouponRequestDialog
@@ -1155,6 +1286,10 @@ function CreateTicketForm({
                 }
                 requestedBy={user?.id ?? null}
                 onCollect={setCollectedCoupon}
+                prefill={couponRule ? collectedCoupon : null}
+                policy={
+                  couponRule ? { name: couponRule.name, suggested: couponRule.suggested } : null
+                }
               />
               <ComplaintResolution
                 values={complaint}

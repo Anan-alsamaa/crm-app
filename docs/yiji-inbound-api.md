@@ -123,6 +123,8 @@ Send the same string you signed (`body`), not a re-serialised object.
 | `serviceType`                 | no   | Delivery, Dinning (dine-in), Drive Thru, Pickup, TakeOut.                                                                                                                                                                                                 |
 | `attachments`                 | no   | Up to 10 `https://` URLs. Listed on the ticket as links; the CRM does not download them.                                                                                                                                                                  |
 | `occurredAt`                  | no   | ISO 8601 date-time of the incident.                                                                                                                                                                                                                       |
+| `orderValue`                  | no   | The order's value in SAR (>= 0). Used only by the CRM's compensation rules (below).                                                                                                                                                                       |
+| `delayMinutes`                | no   | How late the order was, in whole minutes (>= 0). Used only by the CRM's compensation rules.                                                                                                                                                               |
 | `coupon`                      | no   | One coupon for this ticket (optional). The ticket is created whether or not the coupon is valid (see below).                                                                                                                                              |
 
 **Coupon object** (same body for `POST /tickets/{externalId}/coupons`):
@@ -168,6 +170,15 @@ created - shown as _Not Compensated_ - and the reply's `coupon` says why:
 Fix the coupon and send it with `POST /tickets/{externalId}/coupons` (or resend this request with
 the same ticket `externalId` - you get the same ticket back with the coupon added). A coupon is
 always pending a WeCare supervisor's approval, exactly like one raised by an agent in the CRM.
+
+**No coupon? The CRM's compensation rules decide (2026-10-27).** When a ticket is sent **without**
+a `coupon`, the CRM matches it against its compensation rules (complaint type, and optionally
+`serviceType`, `delayMinutes`, `orderValue`). If a rule matches, the CRM raises that rule's coupon
+for the ticket - **pending** a WeCare supervisor's approval, like every other - and the reply's
+`coupon` carries `"source": "rule"` and no `externalId`. If you send a `coupon` (even an invalid
+one), the rules are not applied and no second coupon is added. One rule coupon per ticket at most;
+a rule problem never blocks the ticket. A rule coupon shows in `GET /tickets/{externalId}` like
+any other coupon.
 
 **201 Created**
 

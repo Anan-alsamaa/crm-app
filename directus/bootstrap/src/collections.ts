@@ -1028,6 +1028,92 @@ export const collections: CollectionSpec[] = [
         type: 'text',
         note: 'Why an approved coupon was edited (on the replacement row; the workers copy it onto the row it replaced).',
       },
+      /*
+       * THE COMPENSATION RULES ENGINE (owner, 2026-10-27). `policy_rule` (the
+       * relation below) names the rule a coupon came from - set when a rule
+       * suggested it (agent pre-fill) or raised it (a Yiji ticket with no
+       * coupon of its own). `differs_from_policy` = the agent changed the
+       * suggested terms, shown as a pill on the approval card.
+       *
+       * Needs a manual `apply:fields` on staging and prod BEFORE the deploy
+       * that reads them - a missing field 403s the whole Directus query.
+       */
+      {
+        field: 'differs_from_policy',
+        type: 'boolean',
+        defaultValue: false,
+        note: 'True when the agent changed the terms its compensation rule suggested. The supervisor sees a "Differs from policy" pill.',
+      },
+    ],
+  },
+  {
+    collection: 'compensation_rules',
+    note: 'Operations’ compensation policy as data (owner, 2026-10-27): for a complaint (type, optionally service type, delay, order value), the coupon to offer by default. A rule only SUGGESTS - every coupon it produces is a pending request a WeCare supervisor approves. When several match, the most specific wins, then the highest priority. Edited on the admin portal (manage_compensation_rules).',
+    fields: [
+      { field: 'name', type: 'string', required: true },
+      { field: 'active', type: 'boolean', defaultValue: true, index: true },
+      {
+        field: 'priority',
+        type: 'integer',
+        defaultValue: 0,
+        note: 'Higher wins between two equally specific rules.',
+      },
+      {
+        field: 'complaint_type',
+        type: 'string',
+        required: true,
+        index: true,
+        note: 'The ticket type this rule is for (option_lists.complaint_type).',
+      },
+      {
+        field: 'service_type',
+        type: 'string',
+        note: 'Empty = any service type.',
+      },
+      {
+        field: 'min_delay_minutes',
+        type: 'integer',
+        note: 'Empty = any. Set = the order must be known to be at least this late.',
+      },
+      {
+        field: 'min_order_value',
+        type: 'float',
+        note: 'Empty = no floor (SAR). Set = the order value must be known.',
+      },
+      {
+        field: 'max_order_value',
+        type: 'float',
+        note: 'Empty = no ceiling (SAR). Set = the order value must be known.',
+      },
+      {
+        field: 'discount_category',
+        type: 'string',
+        required: true,
+        note: 'Amount or Percentage.',
+      },
+      { field: 'coupon_value', type: 'float', note: 'SAR off, for an Amount rule.' },
+      { field: 'coupon_percent', type: 'float', note: 'Percent off, for a Percentage rule.' },
+      {
+        field: 'max_discount',
+        type: 'float',
+        note: 'Ceiling in SAR. Required for a Percentage rule; an Amount’s cap is its value.',
+      },
+      {
+        field: 'validity_days',
+        type: 'integer',
+        note: 'Whole days, inclusive. Empty = one month (the standard).',
+      },
+      { field: 'usage_limit', type: 'integer', defaultValue: 1 },
+      {
+        field: 'delivery_type',
+        type: 'string',
+        defaultValue: 'All',
+        note: 'Comma-joined, like coupon_approvals.delivery_type.',
+      },
+      { field: 'coupon_type', type: 'string', defaultValue: 'Private' },
+      { field: 'issuing_side', type: 'string', defaultValue: 'Customer Care' },
+      { field: 'no_other_discounts', type: 'boolean', defaultValue: false },
+      { field: 'note', type: 'text', note: 'Why this rule exists - for the next editor.' },
     ],
   },
   {
@@ -1608,6 +1694,16 @@ export const relations: RelationSpec[] = [
     onDelete: 'SET NULL',
     index: true,
     note: 'The approved coupon this one REPLACED when it was edited after approval.',
+  },
+  /* The rule a coupon came from (owner, 2026-10-27). SET NULL: deleting a rule
+     must never take the coupons it produced with it. */
+  {
+    collection: 'coupon_approvals',
+    field: 'policy_rule',
+    related: 'compensation_rules',
+    onDelete: 'SET NULL',
+    index: true,
+    note: 'The compensation rule that suggested or raised this coupon. Empty = not from a rule.',
   },
   {
     collection: 'coupon_approvals',

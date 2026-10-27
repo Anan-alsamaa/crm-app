@@ -20,8 +20,14 @@ import {
   matchStore,
   normaliseTicketStatus,
   normalizePhone,
+  pickCompensationRule,
+  ruleCouponDraft,
+  ruleLimitReached,
+  ruleLimitSince,
   toStoreSnapshot,
+  type CompensationRule,
   type CouponRequestDraft,
+  type RuleCouponLimit,
   type StoreRecord,
   type StoreSnapshot,
 } from '@yiji/shared-types';
@@ -110,6 +116,8 @@ export interface InboundCoupon {
   removalStatus: string | null;
   replacedBy: string | null;
   dateCreated: string | null;
+  /** The compensation rule this coupon came from, when it did (read best-effort). */
+  policyRule?: string | null;
 }
 
 export interface NewTicketRow {
@@ -136,7 +144,8 @@ export interface NewTicketRow {
 export interface NewCouponRow {
   id: string;
   vendor: string;
-  external_id: string;
+  /** Yiji's coupon id; null for a coupon a CRM compensation RULE raised. */
+  external_id: string | null;
   ticket: string;
   contact: string | null;
   customer_phone: string | null;
@@ -163,6 +172,8 @@ export interface NewCouponRow {
   item_sku: string | null;
   no_other_discounts: boolean;
   delivery_excluded: false;
+  /** Set only on a rule coupon - the column needs the 2026-10-27 schema. */
+  policy_rule?: string;
 }
 
 export interface YijiInboundStore {
@@ -190,6 +201,16 @@ export interface YijiInboundStore {
   ): Promise<void>;
   /** Who a Yiji request is recorded as (the "Yiji" system user), or null. */
   actorId(): Promise<string | null>;
+  /*
+   * THE COMPENSATION RULES (owner, 2026-10-27). Optional: a store without them
+   * simply never raises a rule coupon.
+   */
+  /** Every rule (the matcher skips inactive ones). */
+  compensationRules?(): Promise<CompensationRule[]>;
+  /** The optional per-customer limit; null = off. */
+  ruleCouponLimit?(): Promise<RuleCouponLimit | null>;
+  /** Rule coupons this customer got since `sinceIso`, counted up to `max`. */
+  ruleCouponsSince?(contactId: string, sinceIso: string, max: number): Promise<number>;
 }
 
 /* ── The CRM-side compensation policy (OFF by default) ────────────────────── */
@@ -369,6 +390,15 @@ export const TicketBody = z.object({
   description: optionalText(5000),
   complaintType: z.string({ required_error: 'Required.' }).trim().min(1, 'Required.'),
   serviceType: optionalText(40),
+  /** Optional, for the compensation rules: the order's value in SAR. */
+  orderValue: z.number().nonnegative('Cannot be negative.').max(1_000_000).nullish(),
+  /** Optional, for the compensation rules: how late the order was, in minutes. */
+  delayMinutes: z
+    .number()
+    .int('Must be a whole number.')
+    .nonnegative('Cannot be negative.')
+    .max(100_000)
+    .nullish(),
   attachments: z
     .array(
       z
@@ -455,9 +485,15 @@ const DRAFT_TO_API: Record<string, string> = {
 const CODE_PLACEHOLDER = 'PENDING-CODE';
 
 export interface CouponPlan {
-  externalId: string;
+  /** Yiji's coupon id; null for a coupon a compensation RULE raised. */
+  externalId: string | null;
   draft: CouponRequestDraft;
+  /** The rule this coupon came from, when it did. */
+  rule?: { id: string; name: string } | null;
 }
+
+/** A coupon Yiji sent: always carries Yiji's own id. */
+export type YijiCouponPlan = CouponPlan & { externalId: string };
 
 /**
  * Validate a coupon exactly as the agent's form does (`CouponRequestDraftChecked`
@@ -473,7 +509,7 @@ export function planCoupon(
     brandId: string | null;
     today: Date;
   },
-): CouponPlan {
+): YijiCouponPlan {
   const fields: Record<string, string> = {};
   const pct = c.type === 'percentage';
   if (pct && c.value != null) fields['coupon.value'] = 'Use "percent" for a percentage coupon.';
@@ -559,6 +595,22 @@ export function planCoupon(
 }
 
 /* ── The service ──────────────────────────────────────────────────────────── */
+
+/** What a compensation rule is matched on, plus what its coupon carries. */
+export interface RuleInputs {
+  complaintType: string;
+  serviceType: string | null;
+  orderValue: number | null;
+  delayMinutes: number | null;
+  /** The complaint, without Yiji's attachment list: the coupon's reason. */
+  description: string | null;
+  restaurantId: string | null;
+  brandId: string | null;
+}
+
+/** A coupon in a reply; a rule coupon says so, so Yiji can tell it is not theirs. */
+const replyCoupon = (c: InboundCoupon) =>
+  c.policyRule ? { ...couponSummary(c), source: 'rule' } : couponSummary(c);
 
 export interface InboundLogger {
   info: (obj: object, msg: string) => void;
@@ -799,6 +851,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       item_sku: d.item_sku ?? null,
       no_other_discounts: d.no_other_discounts,
       delivery_excluded: false,
+      ...(plan.rule ? { policy_rule: plan.rule.id } : {}),
     };
     const exists = async (): Promise<boolean> => {
       try {
@@ -815,9 +868,14 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         const e = asStoreError(err);
         if (await exists()) break; // an earlier attempt landed; only the answer was lost
         if (e.kind === 'duplicate') {
-          const raced = await store.findCoupon(vendorId, plan.externalId).catch(() => null);
+          /* A rule coupon has no external id: its uniqueness is ONE PER TICKET
+             (uq_coupon_approvals_ticket_policy_rule), so look there. */
+          const raced =
+            plan.externalId === null
+              ? await ruleCouponOf(ticket.id)
+              : await store.findCoupon(vendorId, plan.externalId).catch(() => null);
           if (raced) {
-            if (raced.ticketId !== ticket.id) throw couponConflict(plan.externalId);
+            if (raced.ticketId !== ticket.id) throw couponConflict(plan.externalId ?? '');
             return { coupon: raced, created: false };
           }
           if (attempt < delays.length) {
@@ -850,8 +908,130 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         removalStatus: null,
         replacedBy: null,
         dateCreated: now().toISOString(),
+        policyRule: plan.rule?.id ?? null,
       },
     };
+  }
+
+  /** The rule coupon already on this ticket, if any (best-effort). */
+  async function ruleCouponOf(ticketId: string): Promise<InboundCoupon | null> {
+    const all = await store.ticketCoupons(ticketId).catch(() => [] as InboundCoupon[]);
+    return all.find((c) => !!c.policyRule) ?? null;
+  }
+
+  /**
+   * THE RULE-BASED DEFAULT (owner, 2026-10-27): a Yiji ticket sent WITHOUT a
+   * coupon gets the coupon its matching compensation rule names - a PENDING
+   * request, exactly like Yiji's own or an agent's, so a WeCare supervisor
+   * still decides. Never throws: a rule problem is logged and written to the
+   * ticket's history, and the ticket stands (owner: a coupon problem never
+   * blocks the ticket).
+   *
+   * One rule coupon per ticket: a ticket that already carries ANY coupon is
+   * left alone, and the database refuses a second rule coupon even in a race.
+   * No Yiji call: delivery is the workers' job after a supervisor approves.
+   */
+  async function applyRule(
+    vendorId: string,
+    ticket: InboundTicket,
+    inputs: RuleInputs,
+  ): Promise<InboundCoupon | null> {
+    if (!store.compensationRules) return null;
+    let rule: CompensationRule | null;
+    try {
+      rule = pickCompensationRule(await store.compensationRules(), {
+        complaintType: inputs.complaintType,
+        serviceType: inputs.serviceType,
+        orderValue: inputs.orderValue,
+        delayMinutes: inputs.delayMinutes,
+      });
+    } catch (err) {
+      logger.warn(
+        { ticketId: ticket.id, err: (err as Error)?.message },
+        'yiji inbound: compensation rules not read - no rule coupon',
+      );
+      return null;
+    }
+    if (!rule) {
+      logger.info(
+        { ticketId: ticket.id, complaintType: inputs.complaintType },
+        'yiji inbound: no compensation rule matched',
+      );
+      return null;
+    }
+    try {
+      const existing = await store.ticketCoupons(ticket.id);
+      if (existing.length > 0) return existing.find((c) => !!c.policyRule) ?? null;
+
+      /* The optional per-customer limit (default off). One bounded count. */
+      const limit = store.ruleCouponLimit ? await store.ruleCouponLimit() : null;
+      if (limit && ticket.contactId && store.ruleCouponsSince) {
+        const count = await store.ruleCouponsSince(
+          ticket.contactId,
+          ruleLimitSince(limit, now()),
+          limit.maxPerCustomer,
+        );
+        if (ruleLimitReached(count, limit)) {
+          await history(
+            ticket.id,
+            `Compensation rule "${rule.name}" matched, but this customer already had ${limit.maxPerCustomer} rule coupon(s) in the last ${limit.windowDays} days - no coupon was added.`,
+            { compensation_rule: { id: rule.id, outcome: 'limit_reached', limit } },
+          );
+          return null;
+        }
+      }
+
+      const draft = ruleCouponDraft(rule, {
+        today: now(),
+        title: ticket.customerPhone ?? '',
+        code: CODE_PLACEHOLDER,
+        reason: inputs.description,
+        brandId: inputs.brandId,
+        restaurantId: inputs.restaurantId,
+      });
+      const checked = CouponRequestDraftChecked.safeParse(draft);
+      if (!checked.success) {
+        const why = checked.error.issues[0]?.message ?? 'invalid terms';
+        logger.warn(
+          { ticketId: ticket.id, rule: rule.id, why },
+          'yiji inbound: compensation rule is not a valid coupon - no rule coupon',
+        );
+        await history(
+          ticket.id,
+          `Compensation rule "${rule.name}" matched but is not a valid coupon (${why}) - no coupon was added.`,
+          { compensation_rule: { id: rule.id, outcome: 'invalid', why } },
+        );
+        return null;
+      }
+      const out = await storeCoupon(vendorId, ticket, {
+        externalId: null,
+        draft: checked.data,
+        rule: { id: rule.id, name: rule.name },
+      });
+      if (out.created) {
+        await history(
+          ticket.id,
+          `Coupon from rule "${rule.name}" (code ${out.coupon.code}) - waiting for a WeCare supervisor.`,
+          {
+            coupon_request: { id: out.coupon.id, outcome: 'sent', source: 'rule' },
+            compensation_rule: { id: rule.id, name: rule.name, outcome: 'coupon' },
+          },
+        );
+      }
+      await syncCompensation(ticket, [out.coupon]);
+      return out.coupon;
+    } catch (err) {
+      logger.warn(
+        { ticketId: ticket.id, rule: rule.id, err: (err as Error)?.message },
+        'yiji inbound: rule coupon not stored - ticket kept',
+      );
+      await history(
+        ticket.id,
+        `Compensation rule "${rule.name}" matched but its coupon could not be stored - no coupon was added. A supervisor can assign one by hand.`,
+        { compensation_rule: { id: rule.id, outcome: 'failed' } },
+      );
+      return null;
+    }
   }
 
   const couponConflict = (ext: string) =>
@@ -869,7 +1049,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
   async function ensureCoupon(
     vendorId: string,
     ticket: InboundTicket,
-    plan: CouponPlan,
+    plan: YijiCouponPlan,
   ): Promise<{ coupon: InboundCoupon; created: boolean }> {
     const existing = await store.findCoupon(vendorId, plan.externalId);
     if (existing) {
@@ -926,7 +1106,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
      * reported as the COUPON's outcome; the ticket stays (Not Compensated) and
      * Yiji fixes and resends the coupon via POST .../tickets/{externalId}/coupons.
      */
-    let plan: CouponPlan | null = null;
+    let plan: YijiCouponPlan | null = null;
     let couponError: CouponOutcomeError | null = null;
     try {
       let couponIn: CouponBody | null = null;
@@ -963,8 +1143,24 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     /* IDEMPOTENT REPLAY: the ticket is already here. Return it - and, if this
        call carries a coupon the ticket does not have yet (a retry after a
        rolled-back or half-finished call), finish the job. */
+    /* The compensation rules decide only when Yiji sent NO coupon (owner,
+       2026-10-27): a coupon of Yiji's own - even an invalid one - is Yiji's
+       decision, and a rule never adds a second. */
+    const ruleInputs: RuleInputs | null =
+      b.coupon == null
+        ? {
+            complaintType: complaintType!,
+            serviceType,
+            orderValue: b.orderValue ?? null,
+            delayMinutes: b.delayMinutes ?? null,
+            description: b.description,
+            restaurantId: b.restaurantId,
+            brandId: b.brandId ?? null,
+          }
+        : null;
+
     const existing = await store.findTicket(vendorId, b.externalId);
-    if (existing) return replay(vendorId, existing, plan);
+    if (existing) return replay(vendorId, existing, plan, ruleInputs);
 
     /* THE BRANCH, before anything is written. */
     let stores: StoreRecord[];
@@ -1045,7 +1241,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       const e = asStoreError(err);
       /* A racing request with the same external id won: answer with its ticket. */
       const raced = await store.findTicket(vendorId, b.externalId).catch(() => null);
-      if (raced && raced.id !== row.id) return replay(vendorId, raced, plan);
+      if (raced && raced.id !== row.id) return replay(vendorId, raced, plan, ruleInputs);
       if (raced) {
         /* Ours landed and only the answer was lost. */
       } else {
@@ -1120,6 +1316,9 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         },
       );
     }
+    /* No coupon from Yiji: the matching compensation rule's, if any. AFTER the
+       ticket is written and never able to undo it. */
+    if (ruleInputs) coupon = await applyRule(vendorId, ticket, ruleInputs);
     logger.info(
       { externalId: b.externalId, ticketId: ticket.id, coupon: coupon?.id ?? null },
       'yiji inbound: ticket created',
@@ -1129,7 +1328,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       body: {
         ...ticketBody(ticket),
         ...(coupon
-          ? { coupon: couponSummary(coupon) }
+          ? { coupon: replyCoupon(coupon) }
           : couponError
             ? { coupon: couponFailure(couponError) }
             : {}),
@@ -1140,10 +1339,14 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
   async function replay(
     vendorId: string,
     ticket: InboundTicket,
-    plan: CouponPlan | null,
+    plan: YijiCouponPlan | null,
+    ruleInputs: RuleInputs | null = null,
   ): Promise<InboundResult> {
     let coupon: InboundCoupon | null = null;
     let couponError: CouponOutcomeError | null = null;
+    /* A retry of a ticket sent without a coupon: finish the rule's job if the
+       first call could not (a ticket with any coupon is left alone). */
+    if (!plan && ruleInputs) coupon = await applyRule(vendorId, ticket, ruleInputs);
     if (plan) {
       try {
         const found = await store.findCoupon(vendorId, plan.externalId);
@@ -1171,7 +1374,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       body: {
         ...ticketBody(ticket),
         ...(coupon
-          ? { coupon: couponSummary(coupon) }
+          ? { coupon: replyCoupon(coupon) }
           : couponError
             ? { coupon: couponFailure(couponError) }
             : {}),

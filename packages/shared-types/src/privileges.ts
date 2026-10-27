@@ -150,6 +150,13 @@ export const OWNER_PRIVILEGES = [
    * by default.
    */
   'edit_approved_coupons',
+  /**
+   * THE COMPENSATION RULES (owner, 2026-10-27): the admin portal's
+   * "Compensation rules" page - which complaint gets which coupon by default,
+   * and the optional per-customer limit. Administrator and WeCare Admin by
+   * default. Every coupon a rule produces still needs a supervisor.
+   */
+  'manage_compensation_rules',
   // ── reporting ───────────────────────────────────────────────────────────
   /** The Agent tab of the Dashboard (owner, 2026-10-12: its own line). */
   'view_agent_dashboard',
@@ -264,6 +271,8 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   // Owner, 2026-10-27: exactly these three roles until the owner ticks it
   // for another.
   edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
+  // Owner, 2026-10-27: the Administrator and WeCare Admin until ticked for another.
+  manage_compensation_rules: nameIn('administrator', 'wecare admin'),
   // The Dashboard page showed its Agent tab to whoever could open the page
   // AND see all chats.
   view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
@@ -376,6 +385,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   delete_compensation: 'coupons',
   manage_ticket_compensation: 'coupons',
   edit_approved_coupons: 'coupons',
+  manage_compensation_rules: 'coupons',
   view_agent_dashboard: 'reporting',
   view_agent_reports: 'reporting',
   view_sla_report: 'reporting',
@@ -533,6 +543,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   // Offered on the ticket's coupon list AND the admin Coupon approvals card;
   // listed with the coupon queue it changes.
   edit_approved_coupons: 'admin',
+  manage_compensation_rules: 'admin',
   view_own_performance: 'agent',
   view_preferences: 'agent',
   manage_notification_defaults: 'agent',

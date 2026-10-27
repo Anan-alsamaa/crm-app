@@ -58,7 +58,9 @@ describe('every path that raises a coupon uses the shared mapping', () => {
 
   it('the new-ticket dialog', () => {
     const src = read('tickets/CreateTicketDialog.tsx');
-    expect(src).toMatch(/couponTermsFromDraft\(collectedCoupon\)/);
+    // `toSend` = the collected coupon, with a rule pre-fill's customer/branch
+    // refreshed at send time (2026-10-27) - still through the shared mapping.
+    expect(src).toMatch(/couponTermsFromDraft\((collectedCoupon|toSend)\)/);
     // No private field-by-field copy left to fall behind again.
     expect(src).not.toMatch(/coupon_code: collectedCoupon\.code/);
   });

@@ -91,6 +91,13 @@ export interface CouponApprovalRow {
    * Optional like the customer check: absent when the field is not applied.
    */
   removal_status?: string | null;
+  /**
+   * THE COMPENSATION RULE this coupon came from (owner, 2026-10-27), and
+   * whether the agent changed its suggested terms. Optional: absent until the
+   * fields are applied on the environment.
+   */
+  policy_rule?: { id: string; name: string | null } | string | null;
+  differs_from_policy?: boolean | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -141,6 +148,17 @@ export const COUPON_CUSTOMER_CHECK_FIELDS = [
 /** Optional too (EMA-80, manual apply:fields): read with the check fields. */
 export const COUPON_OPTIONAL_FIELDS = [...COUPON_CUSTOMER_CHECK_FIELDS, 'removal_status'] as const;
 
+/**
+ * The compensation-rule columns (2026-10-27, manual apply:fields) - newest of
+ * all, so tried FIRST together with the rest and dropped on their own when
+ * missing: an environment without them still shows the customer check.
+ */
+export const COUPON_POLICY_FIELDS = [
+  'differs_from_policy',
+  'policy_rule.id',
+  'policy_rule.name',
+] as const;
+
 export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pending') {
   return useQuery({
     queryKey: ['coupon-approvals', status],
@@ -169,6 +187,11 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
             } as never,
           ),
         )) as unknown as CouponApprovalRow[];
+      try {
+        return await read([...COUPON_OPTIONAL_FIELDS, ...COUPON_POLICY_FIELDS]);
+      } catch {
+        /* The rule columns not applied here yet: without them. */
+      }
       try {
         return await read(COUPON_OPTIONAL_FIELDS);
       } catch {

@@ -70,17 +70,36 @@ describe('useCouponApprovals - the stored customer check', () => {
   });
 
   it('falls back to reading WITHOUT them when Directus refuses (field not applied)', async () => {
+    /* The compensation-rule columns (2026-10-27) are tried first and dropped
+       first; then these. */
     request
+      .mockRejectedValueOnce(Object.assign(new Error('forbidden'), { status: 403 }))
       .mockRejectedValueOnce(Object.assign(new Error('forbidden'), { status: 403 }))
       .mockResolvedValueOnce([{ id: 'ca1', status: 'pending' }]);
     const { result } = renderHook(() => useCouponApprovals('pending'), { wrapper: wrapper() });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(request).toHaveBeenCalledTimes(2);
-    const second = fieldsOf(request.mock.calls[1]![0]);
+    expect(request).toHaveBeenCalledTimes(3);
+    const second = fieldsOf(request.mock.calls[2]![0]);
     expect(second).not.toContain('yiji_customer_found');
     expect(second).not.toContain('yiji_customer_checked_at');
     expect(second).toContain('delivery_excluded');
     expect(result.current.data).toEqual([{ id: 'ca1', status: 'pending' }]);
+    expect(commerceCalls).toEqual([]);
+  });
+
+  it('reads the compensation-rule columns, and drops ONLY them when they are missing', async () => {
+    request
+      .mockRejectedValueOnce(Object.assign(new Error('forbidden'), { status: 403 }))
+      .mockResolvedValueOnce([{ id: 'ca1', status: 'pending', yiji_customer_found: true }]);
+    const { result } = renderHook(() => useCouponApprovals('pending'), { wrapper: wrapper() });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const first = fieldsOf(request.mock.calls[0]![0]);
+    expect(first).toEqual(
+      expect.arrayContaining(['differs_from_policy', 'policy_rule.id', 'policy_rule.name']),
+    );
+    const second = fieldsOf(request.mock.calls[1]![0]);
+    expect(second).not.toContain('differs_from_policy');
+    expect(second).toContain('yiji_customer_found');
     expect(commerceCalls).toEqual([]);
   });
 });

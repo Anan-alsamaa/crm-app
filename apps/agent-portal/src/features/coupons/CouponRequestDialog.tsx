@@ -23,6 +23,7 @@ import {
   parseDeliveryTypes,
   toggleDeliveryType,
   type CouponRequestDraft,
+  differsFromPolicy,
   normalizePhone,
 } from '@yiji/shared-types';
 import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
@@ -128,6 +129,18 @@ export interface CouponRequestDialogProps {
   replaceOf?: { code: string | null; expiredOn: string | null } | null;
   /** True while the replacement is being applied (the Save button spins). */
   saving?: boolean;
+  /**
+   * A COLLECTED coupon to show when the dialog opens (owner, 2026-10-27): on
+   * the Add-ticket form, the compensation rule's PRE-FILLED suggestion - or the
+   * agent's adjustment of it - so "Adjust" opens on exactly what will be sent.
+   * Applied on the opening edge only; ignored in edit mode (`initial`).
+   */
+  prefill?: CouponRequestDraft | null;
+  /**
+   * The compensation rule behind `prefill`, and what it suggested: the form
+   * names the rule and says so the moment the terms depart from it.
+   */
+  policy?: { name: string; suggested: CouponRequestDraft } | null;
   /**
    * The request being edited, so the duplicate-code check does not flag the
    * row against ITSELF — which would leave Save permanently disabled on a
@@ -337,6 +350,8 @@ export function CouponRequestDialog({
   editingId,
   replaceOf,
   saving,
+  prefill,
+  policy,
 }: CouponRequestDialogProps) {
   const { t } = useTranslation();
   /* Replace mode (owner, 2026-10-27): editing an APPROVED coupon. */
@@ -454,8 +469,13 @@ export function CouponRequestDialog({
     if (initial) return;
     setDraft((d) => ({
       ...d,
-      title: d.title || (customerPhone ?? ''),
-      compensation_reason: reasonTouched ? d.compensation_reason : (description ?? ''),
+      /* The pre-filled (rule) coupon, when there is one: the dialog opens on
+         what will actually be sent. */
+      ...(prefill ?? {}),
+      title: prefill?.title || d.title || (customerPhone ?? ''),
+      compensation_reason: reasonTouched
+        ? d.compensation_reason
+        : prefill?.compensation_reason || (description ?? ''),
       brand_id: brandId,
       restaurant_id: restaurantId,
     }));
@@ -647,6 +667,27 @@ export function CouponRequestDialog({
       }
     >
       <DrawerSection title={t('coupons.theCoupon', { defaultValue: 'The coupon' })}>
+        {/* THE POLICY behind a pre-filled coupon (owner, 2026-10-27). */}
+        {policy && (
+          <p
+            data-testid="coupon-policy-note"
+            className="flex flex-wrap items-center gap-2 rounded-2xl bg-primary/[0.06] px-3.5 py-2.5 text-xs leading-relaxed text-foreground"
+          >
+            <span>
+              {t('coupons.policyFrom', {
+                defaultValue: 'Suggested by the rule "{{name}}".',
+                name: policy.name,
+              })}
+            </span>
+            {differsFromPolicy(policy.suggested, draft) && (
+              <span className="font-semibold text-warning-foreground">
+                {t('coupons.differsFromPolicy', {
+                  defaultValue: 'Differs from policy - the supervisor will see that.',
+                })}
+              </span>
+            )}
+          </p>
+        )}
         <FormField label={t('coupons.titleField', { defaultValue: 'Coupon title' })}>
           <Input
             value={draft.title}

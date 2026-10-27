@@ -72,6 +72,11 @@ const StoresPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
+const CompensationRulesPage = lazy(() =>
+  import('./features/compensation-rules/CompensationRulesPage.js').then((m) => ({
+    default: m.CompensationRulesPage,
+  })),
+);
 const AllCompensationPage = lazy(() =>
   import('./features/coupon-approvals/AllCompensationPage.js').then((m) => ({
     default: m.AllCompensationPage,
@@ -393,6 +398,13 @@ function Shell({ children }: { children: React.ReactNode }) {
           requires: 'view_compensation_reports' as const,
           label: t('nav.couponReport', { defaultValue: 'Admin statistics' }),
           icon: ShieldIcon,
+        },
+        {
+          // Owner, 2026-10-27: the policy that pre-fills coupons.
+          to: '/compensation-rules',
+          requires: 'manage_compensation_rules' as const,
+          label: t('nav.compensationRules', { defaultValue: 'Compensation rules' }),
+          icon: SettingsIcon,
         },
       ],
     },
@@ -939,6 +951,16 @@ export function App() {
             }
           />
           <Route path="/compensation" element={<Navigate to={COMPENSATION_PATH} replace />} />
+          <Route
+            path="/compensation-rules"
+            element={
+              <ProtectedRoute requires="manage_compensation_rules">
+                <Shell>
+                  <CompensationRulesPage />
+                </Shell>
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/coupon-report"
             element={

@@ -1,4 +1,5 @@
 import type { CouponRequestDraft, Priority } from '@yiji/shared-types';
+import type { AppliedRule } from '../coupons/rule-prefill.js';
 import type { ContactRow } from '../contacts/api.js';
 import type { ComplaintValues } from './ComplaintFields.js';
 
@@ -43,6 +44,10 @@ export interface TicketFormDraft {
   storeId: string;
   assignCoupon: boolean;
   collectedCoupon: CouponRequestDraft | null;
+  /** The compensation rule the coupon was pre-filled from (2026-10-27). */
+  couponRule?: AppliedRule | null;
+  /** The agent switched the rule's suggestion off. */
+  couponRuleDeclined?: boolean;
   includeOrder: boolean;
   includeFiles: boolean;
 }
