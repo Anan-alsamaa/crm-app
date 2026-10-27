@@ -1517,7 +1517,8 @@ textarea.input {
 [data-menu-panel] li > button.bg-secondary {
   background-color: oklch(var(--primary) / 0.08);
 }
-[data-menu-panel] li > input {
+[data-menu-panel] li > input,
+[data-menu-panel] input[data-menu-search] {
   height: 2.25rem;
   border-radius: 0.75rem;
 }

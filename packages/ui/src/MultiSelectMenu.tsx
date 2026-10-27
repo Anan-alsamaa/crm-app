@@ -2,6 +2,8 @@ import type { JSX } from 'react';
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from './cn.js';
+import { matchesQuery, searchStrings } from './optionSearch.js';
+import { SELECT_SEARCH_MIN_OPTIONS } from './SelectMenu.js';
 
 /*
  * PICK SEVERAL — a filter where one answer is not enough.
@@ -48,11 +50,33 @@ export function MultiSelectMenu({
   const wrap = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listId = useId();
+  const searchRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState('');
+  /* Type-to-filter, the same rule as `SelectMenu` (owner, 2026-10-26). */
+  const withSearch = options.length >= SELECT_SEARCH_MIN_OPTIONS;
+  const strings = searchStrings();
+  const shown =
+    withSearch && query.trim() ? options.filter((o) => matchesQuery(o.label, query)) : options;
+
+  // A fresh search each time it opens, with the caret already in the box.
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      return;
+    }
+    if (!withSearch) return;
+    const id = window.setTimeout(() => searchRef.current?.focus({ preventScroll: true }), 0);
+    return () => window.clearTimeout(id);
+  }, [open, withSearch]);
 
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
-      if (wrap.current && !wrap.current.contains(e.target as Node)) setOpen(false);
+      const t = e.target as Node;
+      // The panel is portalled out of `wrap`, so it is checked on its own.
+      if (wrap.current && !wrap.current.contains(t) && !panelRef.current?.contains(t))
+        setOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -116,6 +140,7 @@ export function MultiSelectMenu({
         typeof document !== 'undefined' &&
         createPortal(
           <div
+            ref={panelRef}
             id={listId}
             role="listbox"
             aria-multiselectable
@@ -126,8 +151,28 @@ export function MultiSelectMenu({
               minWidth: rect()?.width ?? 180,
             }}
             data-menu-panel=""
+            data-dismiss-first=""
             className="z-50 max-h-72 overflow-auto rounded-xl bg-card p-1.5 shadow-float ring-1 ring-foreground/10"
           >
+            {withSearch && (
+              <div className="p-1 pb-1.5">
+                <input
+                  ref={searchRef}
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.currentTarget.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') e.preventDefault();
+                  }}
+                  placeholder={strings.placeholder}
+                  aria-label={strings.label}
+                  data-menu-search=""
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-8 w-full rounded-lg bg-input px-2.5 text-xs text-foreground ring-1 ring-inset ring-foreground/[0.08] placeholder:text-muted-foreground/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
+                />
+              </div>
+            )}
             {/* CLEARS rather than ticking every box: the two give the same rows,
                 and this one keeps meaning "all" when a new status appears
                 upstream that nobody has ticked. */}
@@ -143,10 +188,12 @@ export function MultiSelectMenu({
             >
               {allLabel ?? label}
             </button>
-            {options.length === 0 ? (
-              <p className="px-2.5 py-1.5 text-2xs text-muted-foreground">—</p>
+            {shown.length === 0 ? (
+              <p className="px-2.5 py-1.5 text-2xs text-muted-foreground">
+                {options.length === 0 ? '—' : strings.empty}
+              </p>
             ) : (
-              options.map((o) => {
+              shown.map((o) => {
                 const on = selected.has(o.value);
                 return (
                   <button

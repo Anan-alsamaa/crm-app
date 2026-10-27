@@ -20,6 +20,7 @@ import {
   ReportKpi,
   ReportKpiStrip,
   Select,
+  SelectMenu,
   ShieldIcon,
   Skeleton,
   Textarea,
@@ -993,17 +994,13 @@ function HoursEditor({
         <div className="space-y-2 rounded-xl bg-secondary/40 p-3 ring-1 ring-inset ring-foreground/[0.05]">
           <label className="flex items-center gap-2 text-xs text-muted-foreground">
             <span className="w-24 shrink-0">{t('sla.timezone', { defaultValue: 'Timezone' })}</span>
-            <select
+            <SelectMenu
+              size="sm"
               value={value.timezone}
-              onChange={(e) => onChange({ ...value, timezone: e.target.value })}
-              className="h-8 rounded-md border border-border-strong bg-input px-2 text-xs text-foreground"
-            >
-              {TIMEZONES.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
-                </option>
-              ))}
-            </select>
+              onChange={(tz) => onChange({ ...value, timezone: tz })}
+              options={TIMEZONES.map((tz) => ({ value: tz, label: tz }))}
+              aria-label={t('sla.timezone', { defaultValue: 'Timezone' })}
+            />
           </label>
 
           {value.days.map((d, i) => (

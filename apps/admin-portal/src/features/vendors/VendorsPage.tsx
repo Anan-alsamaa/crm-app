@@ -14,6 +14,7 @@ import {
   Input,
   Pill,
   ProgressRing,
+  Select,
   Skeleton,
   Spinner,
   StatCard,
@@ -561,14 +562,13 @@ function IntegrationSection({ form }: { form: ReturnType<typeof useForm<FormValu
       })}
     >
       <FormField label={t('vendors.platform', { defaultValue: 'Platform' })}>
-        <select
-          className="h-10 w-full rounded-xl border border-input bg-background px-3 text-sm"
+        <Select
           aria-label={t('vendors.platform', { defaultValue: 'Platform' })}
           {...form.register('platform')}
         >
           <option value="yiji">Yiji</option>
           <option value="mock">Mock (test only - never calls any platform)</option>
-        </select>
+        </Select>
       </FormField>
       {text(
         'api_base_url',

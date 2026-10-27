@@ -424,17 +424,16 @@ export function ReportsPage() {
               />
             </FormField>
             <FormField label={t('reports.type', { defaultValue: 'Type' })}>
-              <select
-                className="block w-full rounded-xl bg-secondary/40 text-foreground placeholder:text-muted-foreground/70 ring-1 ring-inset ring-foreground/[0.06] transition-[box-shadow,background-color,ring-color] duration-fast ease-out hover:bg-secondary/60 focus:outline-none focus:bg-card focus:ring-2 focus:ring-primary/40 h-10 ps-3.5 pe-9 text-sm text-start appearance-none cursor-pointer"
+              <SelectMenu
+                fullWidth
+                aria-label={t('reports.type', { defaultValue: 'Type' })}
                 value={draft.type}
-                onChange={(e) => setDraft({ ...draft, type: e.target.value as ReportType })}
-              >
-                {TYPES.map((tp) => (
-                  <option key={tp} value={tp}>
-                    {t(`reports.type_${tp}`, { defaultValue: TYPE_LABELS[tp] })}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setDraft({ ...draft, type: v as ReportType })}
+                options={TYPES.map((tp) => ({
+                  value: tp,
+                  label: t(`reports.type_${tp}`, { defaultValue: TYPE_LABELS[tp] }),
+                }))}
+              />
             </FormField>
           </DrawerSection>
 

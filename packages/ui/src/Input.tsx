@@ -1,6 +1,23 @@
-import type { InputHTMLAttributes, JSX, SelectHTMLAttributes, TextareaHTMLAttributes } from 'react';
-import { forwardRef } from 'react';
+import type {
+  InputHTMLAttributes,
+  JSX,
+  ReactNode,
+  SelectHTMLAttributes,
+  TextareaHTMLAttributes,
+} from 'react';
+import {
+  Children,
+  Fragment,
+  forwardRef,
+  isValidElement,
+  useCallback,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { cn } from './cn.js';
+import { nodeText } from './optionSearch.js';
+import { SelectMenu, type SelectMenuOption } from './SelectMenu.js';
 
 /*
  * Field base — inset dark well + inset hairline + real focus ring. Fields read
@@ -74,28 +91,112 @@ export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & {
   invalid?: boolean;
 };
 
+/** The `<option>`s a caller wrote, flattened out of fragments and optgroups. */
+function collectOptions(children: ReactNode): SelectMenuOption[] {
+  const out: SelectMenuOption[] = [];
+  Children.forEach(children, (child) => {
+    if (!isValidElement<{ value?: unknown; children?: ReactNode; disabled?: boolean }>(child))
+      return;
+    if (child.type === Fragment || child.type === 'optgroup') {
+      out.push(...collectOptions(child.props.children));
+      return;
+    }
+    if (child.type !== 'option') return;
+    const text = nodeText(child.props.children);
+    out.push({
+      value: child.props.value === undefined ? text : String(child.props.value),
+      label: text,
+      disabled: child.props.disabled,
+    });
+  });
+  return out;
+}
+
+/*
+ * A form select that behaves like every other dropdown in the product: the
+ * styled `SelectMenu` with type-to-filter (owner, 2026-10-26), instead of the
+ * OS's own pop-up list.
+ *
+ * The real `<select>` is still rendered — visually hidden — and stays the
+ * source of truth, so every existing caller keeps working unchanged: React Hook
+ * Form's `register()` (ref + onChange + onBlur + name), a controlled
+ * `value`/`onChange`, `<FormField>`'s label association, `required`, form
+ * submission, and tests that drive it with `fireEvent.change`. Picking from the
+ * menu sets the native value and fires a real `change` event on it.
+ */
 export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { className, invalid, children, ...rest },
+  { className, invalid, children, disabled, ...rest },
   ref,
 ): JSX.Element {
+  const nativeRef = useRef<HTMLSelectElement | null>(null);
+  const setRefs = useCallback(
+    (el: HTMLSelectElement | null) => {
+      nativeRef.current = el;
+      if (typeof ref === 'function') ref(el);
+      else if (ref) ref.current = el;
+    },
+    [ref],
+  );
+  const options = collectOptions(children);
+  const controlled = rest.value !== undefined;
+  const [domValue, setDomValue] = useState(() =>
+    String(rest.defaultValue ?? options[0]?.value ?? ''),
+  );
+  const [labelText, setLabelText] = useState<string | undefined>(undefined);
+
+  /*
+   * An uncontrolled select (react-hook-form) can change under us — `reset()`
+   * writes the DOM value directly — so read it back after every render. The
+   * <FormField> label names the menu's trigger too — through `title`, not
+   * `aria-label`: the label already points at the hidden select, and a second
+   * element answering to the same label would make `getByLabelText` (and
+   * Playwright's `getByLabel`) ambiguous for every existing test.
+   */
+  useLayoutEffect(() => {
+    const el = nativeRef.current;
+    if (!el) return;
+    if (el.value !== domValue) setDomValue(el.value);
+    const name = el.labels?.[0]?.textContent?.trim() || undefined;
+    if (name !== labelText) setLabelText(name);
+  });
+
+  const pick = (v: string) => {
+    const el = nativeRef.current;
+    if (!el) return;
+    // The prototype setter, so React's own value bookkeeping sees the change.
+    const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value')?.set;
+    if (setter) setter.call(el, v);
+    else el.value = v;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    // react-hook-form marks a field touched on blur; the hidden select never
+    // gets real focus, so tell it the interaction is over.
+    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+    setDomValue(el.value);
+  };
+
   return (
-    <select
-      ref={ref}
-      aria-invalid={invalid || undefined}
-      className={cn(
-        fieldBase,
-        'h-10 ps-3.5 pe-9 text-sm text-start appearance-none cursor-pointer',
-        // NB: keep this data URI free of ';' and raw quotes. A ';charset=utf-8'
-        // here gets the declaration cut short once the prod CSS minifier strips
-        // the url() quotes, which corrupts the following rule. Quotes are %27.
-        'bg-[length:10px_10px] bg-no-repeat bg-[right_0.75rem_center] [background-image:url("data:image/svg+xml,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20viewBox=%270%200%2010%206%27%3E%3Cpath%20fill=%27none%27%20stroke=%27%23a8a8a4%27%20stroke-width=%271.5%27%20stroke-linecap=%27round%27%20stroke-linejoin=%27round%27%20d=%27M1%201l4%204%204-4%27/%3E%3C/svg%3E")]',
-        '[dir=rtl]:bg-[left_0.75rem_center]',
-        fieldRing(invalid),
-        className,
-      )}
-      {...rest}
-    >
-      {children}
-    </select>
+    <>
+      <select
+        ref={setRefs}
+        disabled={disabled}
+        aria-invalid={invalid || undefined}
+        tabIndex={-1}
+        aria-hidden
+        className="sr-only"
+        {...rest}
+      >
+        {children}
+      </select>
+      <SelectMenu
+        value={controlled ? String(rest.value) : domValue}
+        onChange={pick}
+        options={options}
+        invalid={invalid}
+        disabled={disabled}
+        fullWidth
+        title={rest['aria-label'] ?? labelText}
+        className={className}
+      />
+    </>
   );
 });

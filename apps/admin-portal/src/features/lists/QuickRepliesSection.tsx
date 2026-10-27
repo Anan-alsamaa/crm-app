@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { createItem, deleteItem, readItems, updateItem } from '@directus/sdk';
-import { Button, ConfirmDialog, Input, Pill, SavedTick, cn, toast } from '@yiji/ui';
+import { Button, ConfirmDialog, Input, Pill, SavedTick, SelectMenu, cn, toast } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -42,6 +42,10 @@ import { directus } from '../../lib/directus.js';
  * third copy. Changing one means changing all three.
  */
 const KINDS = ['chat', 'late_order_reason', 'late_order_action'] as const;
+const LANG_OPTIONS = [
+  { value: 'en', label: 'EN' },
+  { value: 'ar', label: 'AR' },
+];
 type ReplyKind = (typeof KINDS)[number];
 
 /**
@@ -449,15 +453,12 @@ export function QuickRepliesSection() {
             aria-label={t('replies.text', { defaultValue: 'Reply text' })}
             className="w-full resize-y rounded-xl bg-secondary/40 px-3 py-2 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/40"
           />
-          <select
+          <SelectMenu
             value={lang}
-            onChange={(e) => setLang(e.target.value)}
+            onChange={setLang}
+            options={LANG_OPTIONS}
             aria-label={t('replies.lang', { defaultValue: 'Language' })}
-            className="h-10 rounded-xl bg-secondary/40 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <option value="en">EN</option>
-            <option value="ar">AR</option>
-          </select>
+          />
           <Button type="button" onClick={submit} disabled={!label.trim() || !text.trim()}>
             {t('actions.add', { ns: 'common', defaultValue: 'Add' })}
           </Button>
@@ -589,14 +590,13 @@ export function QuickRepliesSection() {
               <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('replies.lang', { defaultValue: 'Language' })}
               </span>
-              <select
+              <SelectMenu
+                fullWidth
                 value={editLang}
-                onChange={(e) => setEditLang(e.target.value)}
-                className="h-10 w-full rounded-xl bg-secondary/40 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                <option value="en">EN</option>
-                <option value="ar">AR</option>
-              </select>
+                onChange={setEditLang}
+                options={LANG_OPTIONS}
+                aria-label={t('replies.lang', { defaultValue: 'Language' })}
+              />
             </label>
             {/* THE LIBRARY — last, because it is the field nobody changes. It is
                 here so a wording filed under the wrong tab can be moved instead
@@ -606,17 +606,13 @@ export function QuickRepliesSection() {
               <span className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('replies.kindFilter', { defaultValue: 'Which library' })}
               </span>
-              <select
+              <SelectMenu
+                fullWidth
                 value={editKind}
-                onChange={(e) => setEditKind(e.target.value as ReplyKind)}
-                className="h-10 w-full rounded-xl bg-secondary/40 px-3 text-sm text-foreground ring-1 ring-inset ring-foreground/[0.06] focus:bg-card focus:outline-none focus:ring-2 focus:ring-primary/40"
-              >
-                {KINDS.map((k) => (
-                  <option key={k} value={k}>
-                    {kindLabel(k)}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setEditKind(v as ReplyKind)}
+                options={KINDS.map((k) => ({ value: k, label: kindLabel(k) }))}
+                aria-label={t('replies.kindFilter', { defaultValue: 'Which library' })}
+              />
             </label>
           </div>
         }
