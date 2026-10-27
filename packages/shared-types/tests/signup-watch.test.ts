@@ -9,12 +9,11 @@ const now = new Date('2026-10-07T12:00:00Z');
 const ago = (ms: number) => new Date(now.getTime() - ms);
 
 describe('signupCheckInterval', () => {
-  it('is 10 minutes on the first day, hourly for a week, then daily', () => {
-    expect(signupCheckInterval(0)).toBe(10 * MIN);
-    expect(signupCheckInterval(DAY - 1)).toBe(10 * MIN);
-    expect(signupCheckInterval(DAY)).toBe(HOUR);
-    expect(signupCheckInterval(7 * DAY - 1)).toBe(HOUR);
-    expect(signupCheckInterval(7 * DAY)).toBe(DAY);
+  // Owner, 2026-10-27: every 5 hours, flat - no 10-minute first day.
+  it('is every 5 hours, however long the coupon has waited', () => {
+    expect(signupCheckInterval(0)).toBe(5 * HOUR);
+    expect(signupCheckInterval(DAY)).toBe(5 * HOUR);
+    expect(signupCheckInterval(30 * DAY)).toBe(5 * HOUR);
   });
 });
 
@@ -27,11 +26,9 @@ describe('signupCheck', () => {
 
   it('waits until the interval for its age has passed', () => {
     const base = { awaitingSince: ago(2 * HOUR), validTo: null, now };
-    expect(signupCheck({ ...base, lastChecked: ago(9 * MIN) })).toBe('wait');
-    expect(signupCheck({ ...base, lastChecked: ago(10 * MIN) })).toBe('due');
-    const older = { awaitingSince: ago(3 * DAY), validTo: null, now };
-    expect(signupCheck({ ...older, lastChecked: ago(59 * MIN) })).toBe('wait');
-    expect(signupCheck({ ...older, lastChecked: ago(HOUR) })).toBe('due');
+    expect(signupCheck({ ...base, lastChecked: ago(10 * MIN) })).toBe('wait');
+    expect(signupCheck({ ...base, lastChecked: ago(5 * HOUR - MIN) })).toBe('wait');
+    expect(signupCheck({ ...base, lastChecked: ago(5 * HOUR) })).toBe('due');
   });
 
   it('expires when the coupon can no longer be used', () => {
@@ -55,7 +52,7 @@ describe('signupCheck', () => {
     expect(
       signupCheck({
         awaitingSince: ago(DAY / 2),
-        lastChecked: ago(20 * MIN),
+        lastChecked: ago(5 * HOUR),
         validTo: new Date(now.getTime() + DAY),
         now,
       }),
