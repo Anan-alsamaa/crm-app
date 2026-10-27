@@ -5,6 +5,7 @@ import { readItems } from '@directus/sdk';
 import { couponWorth, type CouponValueFact } from '@yiji/reports';
 import { formatDate, HBarChart, ProgressRing, SplitBar, TrendChart, SparkleIcon } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { readSupersededCouponIds } from '../coupon-approvals/replacements.js';
 import { BentoCard, CountUp } from '../../components/dash/Dash.js';
 import { useReportVendorFilter } from '../../lib/report-vendor.js';
 import { businessDayWindow } from '../../lib/date-range.js';
@@ -92,11 +93,15 @@ export function useCouponSpend(from: string, to: string, enabled: boolean) {
           _lte: w.toIso,
         };
       }
-      const rows = (await directus.request(
+      /* Edited-after-approval: the replaced coupon is not spent twice (owner,
+         2026-10-27). Its own best-effort read - see replacements.ts. */
+      const superseded = await readSupersededCouponIds();
+      const all = (await directus.request(
         readItems(
           'coupon_approvals' as never,
           {
             fields: [
+              'id',
               'status',
               'issuing_side',
               'discount_category',
@@ -108,7 +113,8 @@ export function useCouponSpend(from: string, to: string, enabled: boolean) {
             limit: -1,
           } as never,
         ),
-      )) as unknown as CouponRow[];
+      )) as unknown as Array<CouponRow & { id?: string | number }>;
+      const rows = all.filter((r) => !superseded.has(String(r.id)));
 
       return rows.map((r) => ({
         status: r.status,

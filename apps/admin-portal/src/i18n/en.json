@@ -1215,7 +1215,25 @@
     "sectionRequest": "Request",
     "sectionCoupon": "Coupon",
     "correctedBy": "Corrected by {{who}} · {{when}}",
-    "brandBranch": "Brand / branch"
+    "brandBranch": "Brand / branch",
+    "cannotEditUsed": "The customer already used this coupon, so it cannot be edited.",
+    "replaceApplying": "Applying…",
+    "replaceHint": "Saving applies at once: a new coupon with a new code replaces this one, and if this one is already in the customer’s Yiji app it is taken out first. A coupon the customer already used cannot be edited. This one is kept as history.",
+    "replaceNewCode": "A new code is generated",
+    "replaceReasonPlaceholder": "Why is this approved coupon being changed?",
+    "replaceWorking": "Edit sent — still swapping the coupon in the customer’s app. This card updates when it is done.",
+    "replacedNote": "Edited after approval: {{code}} replaced this coupon, which is kept as history and no longer counts in any total.",
+    "replacesNote": "Edited after approval: this coupon replaces {{code}}.",
+    "replaceAbandoned": "Edit of {{code}} not applied",
+    "replaceDone": "Coupon edited — {{code}} replaces {{old}} and is on its way to the customer.",
+    "replaceExpired": "This coupon expired on {{date}}. Editing it creates a fresh, valid coupon — check the new dates.",
+    "replaceFailed": "Could not edit this coupon",
+    "replaceRefused": "The coupon was not changed",
+    "replaceSave": "Save and replace",
+    "replaceTitle": "Edit this approved coupon",
+    "replacedBy": "Replaced by {{code}}",
+    "replaces": "Replaces {{code}}",
+    "editCoupon": "Edit coupon"
   },
   "complaintReport": {
     "any": "Any",
@@ -1417,7 +1435,8 @@
       "viewCouponQueue": "See the Compensation page (read-only without Request coupons)",
       "viewCouponApprovals": "See Coupon approvals (read-only without Approve coupons)",
       "manageTicketCompensation": "Manage a ticket's compensation (assign a coupon; Not Compensated removes it, also from the customer's Yiji app)",
-      "deleteCompensation": "Delete a compensation record"
+      "deleteCompensation": "Delete a compensation record",
+      "editApprovedCoupons": "Edit an approved coupon (applies at once: a new coupon replaces it, also in the customer's Yiji app; a used coupon cannot be edited)"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1463,7 +1482,10 @@
     "deleteTitle": "Delete this coupon record?",
     "deleteConfirm": "Delete “{{label}}”? The record goes; who deleted it stays in the change history. A coupon already issued to a customer is NOT recalled by this.",
     "deleted": "Coupon record deleted.",
-    "deleteFailed": "Could not delete that record."
+    "deleteFailed": "Could not delete that record.",
+    "replacedBy": "Replaced by {{code}}",
+    "editNotApplied": "Edit of {{code}} not applied",
+    "replaces": "replaces {{code}}"
   },
   "auth": {
     "noPortalAccess": "This portal is not for your role",
@@ -1643,7 +1665,8 @@
       "removalFailed": "Removal failed",
       "funnel": "From request to Yiji",
       "decisions": "Decisions",
-      "removals": "Removals"
+      "removals": "Removals",
+      "replaced": "Edited after approval"
     },
     "late": {
       "title": "Late orders",

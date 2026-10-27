@@ -388,3 +388,25 @@ export const CouponRemoveJob = z.object({
   reason: z.string().trim().min(1).max(1000),
 });
 export type CouponRemoveJob = z.infer<typeof CouponRemoveJob>;
+
+/**
+ * "This approved coupon was edited - swap it" (owner, 2026-10-27), on the
+ * `coupons` queue under the job NAME `replace`.
+ *
+ * The REPLACEMENT row already exists: the editor's portal created it (a
+ * person's decision, their token). This job only carries the pair, the reason
+ * and WHO - `editedBy` is set by the GATEWAY from the caller's verified token,
+ * never taken from the request body. The worker re-reads both rows, refuses a
+ * coupon the customer already used, takes the old one off their Yiji app and
+ * only then releases the new one for delivery.
+ */
+export const COUPON_REPLACE_JOB_NAME = 'replace';
+export const CouponReplaceJob = z.object({
+  /** The APPROVED coupon being edited. */
+  couponApprovalId: z.string().min(1),
+  /** The new row the editor created (`replaces` -> couponApprovalId). */
+  replacementId: z.string().min(1),
+  editedBy: z.string().min(1),
+  reason: z.string().trim().min(1).max(1000),
+});
+export type CouponReplaceJob = z.infer<typeof CouponReplaceJob>;

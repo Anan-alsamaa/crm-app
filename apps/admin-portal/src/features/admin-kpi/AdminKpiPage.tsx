@@ -652,6 +652,12 @@ export function AdminKpiPage() {
                     value: n(cp?.withheld ?? 0),
                   },
                   {
+                    label: t('adminKpi.coupons.replaced', {
+                      defaultValue: 'Edited after approval',
+                    }),
+                    value: n(cp?.replaced ?? 0),
+                  },
+                  {
                     label: t('adminKpi.coupons.removalFailed', { defaultValue: 'Removal failed' }),
                     value: n(removalOf('failed')),
                     tone: 'bad',

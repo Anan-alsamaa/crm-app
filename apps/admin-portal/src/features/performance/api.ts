@@ -3,6 +3,7 @@ import { readItems } from '@directus/sdk';
 import { normaliseConversationStatus, displayContactName } from '@yiji/shared-types';
 import { chatHandoffs, conversationTimestamps, readChunked, type ChatTiming } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
+import { readSupersededCouponIds } from '../coupon-approvals/replacements.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 import { loadTicketSolveContext } from '../../lib/ticket-solve.js';
 
@@ -519,20 +520,26 @@ export function useCouponPerformance(filters: PerformanceFilters, enabled = true
         extra('ticket'),
       ]);
       if (rows.length === 0) return [];
+      /* An approved coupon EDITED after approval is one request, not two
+         (owner, 2026-10-27): the replaced row and an abandoned edit drop out.
+         Best-effort, like the extras above. */
+      const superseded = await readSupersededCouponIds();
       const pick = <T>(m: Map<string, unknown> | null, id: string): T | null | undefined =>
         m ? ((m.get(id) as T | null | undefined) ?? null) : undefined;
-      return rows.map((r) => {
-        const stored = pick<string | number | { id: string | number }>(rawTicket, String(r.id));
-        const storedId =
-          stored == null ? null : typeof stored === 'object' ? String(stored.id) : String(stored);
-        return {
-          ...r,
-          delivery_excluded: pick<boolean>(excluded, String(r.id)),
-          yiji_coupon_id: pick<string>(yijiId, String(r.id)),
-          awaiting_signup_at: pick<string>(awaiting, String(r.id)),
-          ticketId: r.ticket?.id != null ? String(r.ticket.id) : storedId,
-        };
-      });
+      return rows
+        .filter((r) => !superseded.has(String(r.id)))
+        .map((r) => {
+          const stored = pick<string | number | { id: string | number }>(rawTicket, String(r.id));
+          const storedId =
+            stored == null ? null : typeof stored === 'object' ? String(stored.id) : String(stored);
+          return {
+            ...r,
+            delivery_excluded: pick<boolean>(excluded, String(r.id)),
+            yiji_coupon_id: pick<string>(yijiId, String(r.id)),
+            awaiting_signup_at: pick<string>(awaiting, String(r.id)),
+            ticketId: r.ticket?.id != null ? String(r.ticket.id) : storedId,
+          };
+        });
     },
   });
 }

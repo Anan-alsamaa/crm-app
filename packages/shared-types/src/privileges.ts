@@ -141,6 +141,15 @@ export const OWNER_PRIVILEGES = [
    * too. WeCare Admin / WeCare Supervisor by default.
    */
   'manage_ticket_compensation',
+  /**
+   * EDIT AN ALREADY-APPROVED COUPON (owner, 2026-10-27) - including one already
+   * in the customer's Yiji wallet. Applied at once (no second approval) as a
+   * REPLACEMENT: a new approved coupon with the edited terms, the old one taken
+   * back off the customer's app and kept as history. A coupon the customer
+   * already USED is refused. WeCare Supervisor / WeCare Admin / Administrator
+   * by default.
+   */
+  'edit_approved_coupons',
   // ── reporting ───────────────────────────────────────────────────────────
   /** The Agent tab of the Dashboard (owner, 2026-10-12: its own line). */
   'view_agent_dashboard',
@@ -252,6 +261,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   // New in EMA-80: the roles that already decide coupons (WeCare Admin and
   // WeCare Supervisor); nobody else until the owner ticks it.
   manage_ticket_compensation: holds('approve_coupons'),
+  // Owner, 2026-10-27: exactly these three roles until the owner ticks it
+  // for another.
+  edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
   // The Dashboard page showed its Agent tab to whoever could open the page
   // AND see all chats.
   view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
@@ -363,6 +375,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_coupon_spend: 'coupons',
   delete_compensation: 'coupons',
   manage_ticket_compensation: 'coupons',
+  edit_approved_coupons: 'coupons',
   view_agent_dashboard: 'reporting',
   view_agent_reports: 'reporting',
   view_sla_report: 'reporting',
@@ -517,6 +530,9 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   view_order_details: 'agent',
   request_coupons: 'agent',
   manage_ticket_compensation: 'agent',
+  // Offered on the ticket's coupon list AND the admin Coupon approvals card;
+  // listed with the coupon queue it changes.
+  edit_approved_coupons: 'admin',
   view_own_performance: 'agent',
   view_preferences: 'agent',
   manage_notification_defaults: 'agent',

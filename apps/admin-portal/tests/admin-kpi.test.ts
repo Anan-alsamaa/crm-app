@@ -106,7 +106,40 @@ describe('coupons', () => {
       pushFailures: 1,
       withheld: 2,
       removal: { removed: 1, failed: 2 },
+      replaced: 0,
     });
+  });
+
+  it('leaves EDITED coupons out once: the replaced row and an abandoned edit (owner, 2026-10-27)', () => {
+    const s = couponSummary({
+      byStatus: [
+        { status: 'assigned', count: 5 },
+        { status: 'approved', count: 2 },
+        { status: 'rejected', count: 3 },
+      ],
+      pushed: [],
+      pushFailures: [],
+      withheld: [],
+      byRemoval: [],
+      // 2 delivered coupons were edited (replaced), 1 edit was not applied.
+      superseded: [
+        { status: 'assigned', count: 2 },
+        { status: 'rejected', count: 1 },
+      ],
+    });
+    expect(s).toMatchObject({ requested: 7, approved: 5, rejected: 2, pending: 0, replaced: 2 });
+  });
+
+  it('without the fields applied (null), every figure is as before', () => {
+    const s = couponSummary({
+      byStatus: [{ status: 'assigned', count: 4 }],
+      pushed: [],
+      pushFailures: [],
+      withheld: [],
+      byRemoval: [],
+      superseded: null,
+    });
+    expect(s).toMatchObject({ requested: 4, approved: 4, replaced: 0 });
   });
 });
 

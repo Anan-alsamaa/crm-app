@@ -24,7 +24,13 @@ import {
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
-import { couponOrderId, signupCheck } from '@yiji/shared-types';
+import {
+  couponOrderId,
+  refId,
+  replacementReleased,
+  signupCheck,
+  type RelationRef,
+} from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
 
@@ -983,6 +989,12 @@ export type PushOutcome =
   /** Removed from its ticket before it reached Yiji (EMA-80) - never sent. */
   | 'removed'
   /**
+   * One side of an edit-after-approval that has not settled (2026-10-27): the
+   * old coupon (never sent again) or its replacement (sent once the old one is
+   * out of the customer's app).
+   */
+  | 'awaiting-replacement'
+  /**
    * The customer has no Yiji account YET (owner, 2026-10-07, EMA-49). The
    * coupon is held in the CRM — `awaiting_signup_at` — and the delivery sweep
    * looks the number up again on a tapering schedule (`signupCheck`), delivering
@@ -1303,6 +1315,47 @@ export async function removalBlocksPush(
 }
 
 /**
+ * Is this coupon one side of an EDIT that has not settled (owner, 2026-10-27)?
+ *
+ *  - an OLD coupon an edit replaced (`replaced_by` set): never delivered again;
+ *  - a REPLACEMENT (`replaces` set): held until the workers have claimed the
+ *    old row for it AND taken the old coupon off the customer's app - so a
+ *    sweep or a Retry click can never leave the customer holding both.
+ *
+ * A SEPARATE read, like `removalBlocksPush`: the columns need a manual
+ * `apply:fields`, and until they exist nothing can be a replacement, so a
+ * FORBIDDEN answer means "no". Any other failure throws (BullMQ retries).
+ */
+export async function replacementBlocksPush(
+  directus: YijiDirectusClient,
+  id: string,
+  logger: Logger,
+): Promise<boolean> {
+  let r: { replaces?: RelationRef; replaced_by?: RelationRef } | null;
+  try {
+    r = (await directus.request(
+      readItem('coupon_approvals' as never, id, { fields: ['replaces', 'replaced_by'] } as never),
+    )) as unknown as { replaces?: RelationRef; replaced_by?: RelationRef } | null;
+  } catch (err) {
+    const text = describeError(err);
+    if (/FORBIDDEN|permission/i.test(text)) {
+      logger.warn({ id, err: text }, 'replaces/replaced_by not readable — fields not applied yet?');
+      return false;
+    }
+    throw new Error(`could not read replaces/replaced_by: ${text}`);
+  }
+  if (refId(r?.replaced_by)) return true;
+  const prior = refId(r?.replaces);
+  if (!prior) return false;
+  const old = (await directus.request(
+    readItem('coupon_approvals' as never, prior, {
+      fields: ['replaced_by', 'removal_status'],
+    } as never),
+  )) as unknown as { replaced_by?: RelationRef; removal_status?: string | null } | null;
+  return !replacementReleased(id, old);
+}
+
+/**
  * Create a WITHHELD coupon on Yiji: Private, `assignee: []`, held by nobody.
  *
  * THE CASE (owner, 2026-10-06): the agent or supervisor ticked "do not send
@@ -1542,6 +1595,14 @@ export async function processCouponPushJob(
   if (await removalBlocksPush(directus, id, logger)) {
     logger.info({ id, code: row.coupon_code }, 'coupon was removed from its ticket — not pushed');
     return 'removed';
+  }
+  /* EDITED AFTER APPROVAL (owner, 2026-10-27): an old coupon that was replaced
+     is never sent again, and its replacement waits until the old one is out
+     of the customer's app. Not recorded as a failure - the edit job queues the
+     push itself once it is released, and the sweep would find it anyway. */
+  if (await replacementBlocksPush(directus, id, logger)) {
+    logger.info({ id, code: row.coupon_code }, 'coupon edit not settled — not pushed (yet)');
+    return 'awaiting-replacement';
   }
   if (row.status !== 'approved' && row.status !== 'edited') {
     logger.warn({ id, status: row.status }, 'coupon is not approved — refusing to push');

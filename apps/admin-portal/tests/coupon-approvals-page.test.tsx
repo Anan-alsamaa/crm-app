@@ -42,6 +42,11 @@ const api = vi.hoisted(() => ({
   useRetryCouponDelivery: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
+/* Edit-after-approval links (owner, 2026-10-27): none in these tests. */
+vi.mock('../src/features/coupon-approvals/replacements.js', () => ({
+  useCouponReplacements: () => ({ data: new Map() }),
+  useReplaceCoupon: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 /* THE PAGE NEVER CALLS YIJI (incident 2026-10-26). Every commerce-client
    method is a recorded spy, so any call from the card would show up here. */
 const commerceCalls = vi.hoisted(() => [] as string[]);

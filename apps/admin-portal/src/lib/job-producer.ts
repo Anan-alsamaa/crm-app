@@ -148,6 +148,19 @@ export const jobProducer = {
     return post<EnqueueResult>('/jobs/coupon-push', { couponApprovalId });
   },
 
+  /**
+   * Owner, 2026-10-27: an APPROVED coupon was edited - its replacement row is
+   * already created. The gateway checks `edit_approved_coupons` and stamps who
+   * asked; the workers check it was not used and swap the two.
+   */
+  replaceCoupon(body: {
+    couponApprovalId: string;
+    replacementId: string;
+    reason: string;
+  }): Promise<EnqueueResult> {
+    return post<EnqueueResult>('/jobs/coupon-replace', body);
+  },
+
   /*
    * RELEASES — a deploy publishes a build; the administrator releases it.
    *

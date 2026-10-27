@@ -120,6 +120,12 @@ export interface CouponSummary {
   withheld: number;
   /** `removal_status` -> count, only coupons that have one. */
   removal: Record<string, number>;
+  /**
+   * Approved coupons EDITED after approval (owner, 2026-10-27): each one was
+   * replaced by a new coupon, which is the one counted above - the old row is
+   * history and is NOT in requested/approved/rejected/pending.
+   */
+  replaced: number;
 }
 
 export function couponSummary(input: {
@@ -128,13 +134,25 @@ export function couponSummary(input: {
   pushFailures: readonly GroupRow[] | null | undefined;
   withheld: readonly GroupRow[] | null | undefined;
   byRemoval: readonly GroupRow[] | null | undefined;
+  /**
+   * The rows to leave OUT, by status (`couponIsSuperseded`): old coupons an
+   * edit replaced, and edits that were abandoned. Null when the fields are not
+   * applied yet - then nothing can have been replaced.
+   */
+  superseded?: readonly GroupRow[] | null | undefined;
 }): CouponSummary {
   const out = { requested: 0, approved: 0, rejected: 0, pending: 0 };
-  for (const [status, n] of Object.entries(countsBy(input.byStatus, 'status'))) {
+  const left = countsBy(input.superseded, 'status');
+  let replaced = 0;
+  for (const [status, all] of Object.entries(countsBy(input.byStatus, 'status'))) {
+    /* Never below zero, whatever the two reads saw between them. */
+    const gone = Math.min(all, left[status] ?? 0);
+    const n = all - gone;
     out.requested += n;
     /* THROUGH couponDecision: 'approved', 'edited' and 'assigned' are all an
        approval - comparing to the literal 'approved' once halved a total. */
     out[couponDecision(status)] += n;
+    if (couponDecision(status) === 'approved') replaced += gone;
   }
   const removal = countsBy(input.byRemoval, 'removal_status');
   delete removal[''];
@@ -144,6 +162,7 @@ export function couponSummary(input: {
     pushFailures: totalOf(input.pushFailures),
     withheld: totalOf(input.withheld),
     removal,
+    replaced,
   };
 }
 

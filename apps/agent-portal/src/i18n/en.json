@@ -999,7 +999,22 @@
     "amended": "Amended",
     "amountLabel": "Amount",
     "maxShort": "Max discount",
-    "usesShort": "Uses"
+    "usesShort": "Uses",
+    "replaceHint": "Saving applies at once: a new coupon with a new code replaces {{code}}, and if it is already in the customer’s Yiji app it is taken out first. A coupon the customer already used cannot be edited.",
+    "replaceNewCode": "A new code is generated when you save.",
+    "replaceReason": "Why is this approved coupon being changed?",
+    "replaceReasonTitle": "Reason for the change",
+    "replaceWorking": "Edit sent — still swapping the coupon in the customer’s app. The ticket updates when it is done.",
+    "replaceAbandoned": "Edit of {{code}} not applied",
+    "replaceDone": "Coupon edited — {{code}} replaces {{old}} and is on its way to the customer.",
+    "replaceExpired": "This coupon expired on {{date}}. Editing it creates a fresh, valid coupon — check the new dates.",
+    "replaceFailed": "Could not edit this coupon",
+    "replaceRefused": "The coupon was not changed",
+    "replaceSave": "Save and replace",
+    "replaceTitle": "Edit this approved coupon",
+    "replacedBy": "Replaced by {{code}}",
+    "replaces": "Replaces {{code}}",
+    "editCoupon": "Edit coupon"
   },
   "busy": {
     "on": "Busy",

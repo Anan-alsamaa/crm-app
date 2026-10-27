@@ -81,7 +81,13 @@ async function vendorsLoaded(show: boolean) {
   }
 }
 
-const callsTo = (collection: string) => db.calls.filter((c) => c.collection === collection);
+/* The edit-after-approval links read (owner, 2026-10-27) is its own small,
+   unscoped read of the rows taking part in an edit - by id, so a vendor clause
+   would change nothing. It is not one of the REPORT reads counted here. */
+const isReplacementLinks = (c: { query?: { filter?: unknown } }) =>
+  JSON.stringify(c.query?.filter ?? null).includes('"replaced_by":{"_nnull":true}');
+const callsTo = (collection: string) =>
+  db.calls.filter((c) => c.collection === collection && !isReplacementLinks(c));
 
 /* The choice is module state shared across files in one fork: leave none behind. */
 afterAll(() => resetReportVendor());

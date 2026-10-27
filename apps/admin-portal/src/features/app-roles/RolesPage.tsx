@@ -458,6 +458,10 @@ export function RolesPage() {
       defaultValue:
         "Manage a ticket's compensation (assign a coupon; Not Compensated removes it, also from the customer's Yiji app)",
     }),
+    edit_approved_coupons: t('roles.p.editApprovedCoupons', {
+      defaultValue:
+        "Edit an approved coupon (applies at once: a new coupon replaces it, also in the customer's Yiji app; a used coupon cannot be edited)",
+    }),
     view_agent_reports: t('roles.p.viewAgentReports', {
       defaultValue:
         'View agent summary reports (Agent summary, Chat status, Busy time, Agent performance)',

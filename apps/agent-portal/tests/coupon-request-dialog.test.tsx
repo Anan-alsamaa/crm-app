@@ -628,3 +628,61 @@ describe('the items a coupon compensates', () => {
     expect(onCollect.mock.calls[0]![0]!.item_name ?? null).toBeNull();
   });
 });
+
+/**
+ * REPLACE MODE (owner, 2026-10-27): the same form edits an APPROVED coupon.
+ * A new code is generated (the old one is not offered for typing), a reason is
+ * required, and the old code - already on the ticket - never blocks Save as a
+ * "duplicate".
+ */
+describe('CouponRequestDialog - editing an approved coupon', () => {
+  const initial = {
+    title: '0501234567',
+    code: TAKEN_CODE,
+    issuing_side: 'Operations',
+    delivery_type: 'All',
+    coupon_type: 'Private',
+    discount_category: 'Amount',
+    valid_from: '2026-10-27',
+    valid_to: '2099-11-27',
+    coupon_value: 25,
+    coupon_percent: null,
+    max_discount: 25,
+    usage_limit: 1,
+    compensation_reason: 'Missing items',
+  };
+
+  it('needs a reason, hides the code, and hands the reason over with the terms', async () => {
+    const onSave = vi.fn();
+    renderDialog({
+      initial,
+      onSave,
+      editingId: 'old-1',
+      replaceOf: { code: TAKEN_CODE, expiredOn: null },
+    });
+    expect(screen.getByText('A new code is generated when you save.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /new code/i })).not.toBeInTheDocument();
+    const save = screen.getByRole('button', { name: 'Save and replace' });
+    expect(save).toBeDisabled();
+    await userEvent.type(
+      screen.getByLabelText('Why is this approved coupon being changed?'),
+      'Wrong amount',
+    );
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ coupon_value: 25 }), {
+      changeReason: 'Wrong amount',
+    });
+  });
+
+  it('says when the coupon being edited has expired', () => {
+    renderDialog({
+      initial,
+      onSave: vi.fn(),
+      editingId: 'old-1',
+      replaceOf: { code: TAKEN_CODE, expiredOn: '2026-10-01' },
+    });
+    // No i18n instance in this file, so the template is not interpolated here.
+    expect(screen.getByText(/This coupon expired on/)).toBeInTheDocument();
+  });
+});

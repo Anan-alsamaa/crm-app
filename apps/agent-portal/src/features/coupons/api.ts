@@ -1,6 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createItem, readItems, updateItems } from '@directus/sdk';
-import type { CouponApprovalStatus, CouponFields } from '@yiji/shared-types';
+import { createItem, readItems, updateItem, updateItems } from '@directus/sdk';
+import {
+  couponPrefix,
+  generateCouponCode,
+  startCouponReplacement,
+  waitForCouponReplacement,
+  type CouponApprovalStatus,
+  type CouponFields,
+  type CouponReplacementTerms,
+  type CouponReplaceState,
+} from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { vendorField } from '../../lib/record-vendor.js';
 import { jobProducer } from '../../lib/job-producer.js';
@@ -65,6 +74,17 @@ export interface CouponRequestRow {
   removed_reason?: string | null;
   removal_detail?: string | null;
   removed_by?: { id: string; first_name: string | null; email: string | null } | null;
+  /* Owner, 2026-10-27: an APPROVED coupon edited = replaced. Read only by the
+     ticket's coupon list, and ABSENT (undefined) where the fields are not
+     applied - the Edit action is then not offered. */
+  replaces?: { id: string; coupon_code: string | null } | null;
+  replaced_by?: { id: string; coupon_code: string | null } | null;
+  replace_reason?: string | null;
+  vendor?: string | null;
+  brand_id?: string | null;
+  restaurant_id?: string | null;
+  delivery_excluded?: boolean | null;
+  delivery_excluded_reason?: string | null;
 }
 
 export const COUPON_REQUEST_FIELDS = [
@@ -425,6 +445,13 @@ export function useTicketCoupons(
           ),
         ) as unknown as Promise<CouponRequestRow[]>;
       try {
+        return await read(TICKET_COUPON_REPLACE_FIELDS);
+      } catch {
+        /* The edit-after-approval fields (owner, 2026-10-27) need a manual
+           apply:fields too: read without them, and the Edit action is simply
+           not offered. */
+      }
+      try {
         return await read(TICKET_COUPON_FIELDS);
       } catch {
         /* The removal fields need a manual apply:fields. Until then Directus
@@ -445,6 +472,107 @@ export const TICKET_COUPON_FIELDS = [
   'removal_detail',
   { removed_by: ['id', 'first_name', 'email'] },
 ] as const;
+
+/**
+ * Plus what editing an APPROVED coupon needs (owner, 2026-10-27): both sides of
+ * a replacement, and the fields the replacement copies from the original.
+ */
+export const TICKET_COUPON_REPLACE_FIELDS = [
+  ...TICKET_COUPON_FIELDS,
+  'vendor',
+  'brand_id',
+  'restaurant_id',
+  'delivery_excluded',
+  'delivery_excluded_reason',
+  'replace_reason',
+  { replaces: ['id', 'coupon_code'] },
+  { replaced_by: ['id', 'coupon_code'] },
+] as const;
+
+/**
+ * EDIT AN APPROVED COUPON from its ticket (owner, 2026-10-27).
+ *
+ * The replacement is created with THIS user's token; the gateway checks
+ * `edit_approved_coupons`; the workers check the old coupon was not used, take
+ * it out of the customer's Yiji app and only then send the new one. Waits
+ * (bounded) on the two rows for the outcome - no Yiji call from the browser.
+ */
+export function useReplaceTicketCoupon() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      old: CouponRequestRow;
+      terms: CouponReplacementTerms;
+      reason: string;
+      editorId: string | null;
+    }): Promise<{ code: string; state: CouponReplaceState; note: string | null }> => {
+      const { replacementId, code } = await startCouponReplacement(
+        {
+          /* Both homes of a code, like the request form's duplicate check. */
+          codeTaken: async (c) => {
+            const [a, b] = await Promise.all([
+              directus.request(
+                readItems(
+                  'coupon_approvals' as never,
+                  { filter: { coupon_code: { _eq: c } }, fields: ['id'], limit: 1 } as never,
+                ),
+              ) as Promise<unknown[]>,
+              directus.request(
+                readItems(
+                  'tickets' as never,
+                  { filter: { coupon_code: { _eq: c } }, fields: ['id'], limit: 1 } as never,
+                ),
+              ) as Promise<unknown[]>,
+            ]);
+            return a.length > 0 || b.length > 0;
+          },
+          create: (row) => directus.request(createItem('coupon_approvals' as never, row as never)),
+          enqueue: (body) => jobProducer.replaceCoupon(body),
+          abandon: (id, note) =>
+            directus.request(
+              updateItem('coupon_approvals' as never, id, {
+                status: 'rejected',
+                decision_note: note,
+              } as never),
+            ),
+          newId: () => newCouponRequestId(),
+          newCode: (side) => generateCouponCode(Math.random, couponPrefix(side)),
+        },
+        input,
+      );
+      void qc.invalidateQueries({ queryKey: ['ticket-coupons'] });
+      const settled = await waitForCouponReplacement(async () => {
+        const rows = (await directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              filter: { id: { _in: [input.old.id, replacementId] } },
+              fields: ['id', 'status', 'decision_note', 'removal_status', 'replaced_by'],
+              limit: 2,
+            } as never,
+          ),
+        )) as unknown as Array<{
+          id: string;
+          status: string | null;
+          decision_note: string | null;
+          removal_status: string | null;
+          replaced_by: string | null;
+        }>;
+        return {
+          replacement: rows.find((r) => String(r.id) === replacementId) ?? null,
+          old: rows.find((r) => String(r.id) === input.old.id) ?? null,
+        };
+      });
+      return { code, ...settled };
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['ticket-coupons'] });
+      void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
+      void qc.invalidateQueries({ queryKey: ['tickets'] });
+      void qc.invalidateQueries({ queryKey: ['ticket'] });
+    },
+  });
+}
 
 /**
  * TAKE A TICKET'S COUPONS BACK (owner, 2026-10-21, EMA-80).

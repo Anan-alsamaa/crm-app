@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { couponIsSuperseded } from '@yiji/shared-types';
 
 /**
  * AGENT PERFORMANCE, READ BY THE SERVER (owner, 2026-10-11).
@@ -76,6 +77,40 @@ function dateWindow(f: PerformanceQuery['filters'], field = 'date_created') {
   if (f.from) and.push({ [field]: { _gte: f.from } });
   if (f.to) and.push({ [field]: { _lte: endOfDay(f.to) } });
   return and;
+}
+
+/**
+ * Coupons an edit-after-approval left behind (owner, 2026-10-27): the replaced
+ * row and an abandoned edit. Their OWN best-effort read - the fields need a
+ * manual apply:fields, and naming a missing one 403s the whole query; failing,
+ * nothing has been replaced and the dataset is exactly what it was.
+ */
+async function supersededCouponIds(read: ServiceRead): Promise<Set<string>> {
+  try {
+    const rows = (await read('coupon_approvals', {
+      limit: -1,
+      filter: { _or: [{ replaced_by: { _nnull: true } }, { replaces: { _nnull: true } }] },
+      fields: ['id', 'status', 'replaces', 'replaced_by'],
+    })) as Array<{
+      id: string | number;
+      status: string | null;
+      replaces: unknown;
+      replaced_by: unknown;
+    }>;
+    return new Set(
+      rows
+        .filter((r) =>
+          couponIsSuperseded({
+            status: r.status,
+            replaces: (r.replaces as string | null) ?? null,
+            replaced_by: (r.replaced_by as string | null) ?? null,
+          }),
+        )
+        .map((r) => String(r.id)),
+    );
+  } catch {
+    return new Set();
+  }
 }
 
 /** Runs one named dataset. Throws on a bad request (the route answers 400). */
@@ -201,32 +236,38 @@ export async function readPerformanceDataset(
         if (!q.field) throw new Error('field is required');
         return read('coupon_approvals', { limit: -1, fields: ['id', q.field], ...filter });
       }
-      return read('coupon_approvals', {
-        limit: -1,
-        sort: ['-date_created'],
-        fields: [
-          'id',
-          'coupon_code',
-          'coupon_value',
-          'coupon_percent',
-          'discount_category',
-          'status',
-          'date_created',
-          'order_id',
-          'customer_phone',
-          'ticket.id',
-          'ticket.subject',
-          'ticket.order_id',
-          'ticket.complaint_type',
-          'contact.id',
-          'contact.name',
-          'contact.phone',
-          'requested_by.id',
-          'requested_by.first_name',
-          'requested_by.email',
-        ],
-        ...filter,
-      });
+      const [coupons, superseded] = await Promise.all([
+        read('coupon_approvals', {
+          limit: -1,
+          sort: ['-date_created'],
+          fields: [
+            'id',
+            'coupon_code',
+            'coupon_value',
+            'coupon_percent',
+            'discount_category',
+            'status',
+            'date_created',
+            'order_id',
+            'customer_phone',
+            'ticket.id',
+            'ticket.subject',
+            'ticket.order_id',
+            'ticket.complaint_type',
+            'contact.id',
+            'contact.name',
+            'contact.phone',
+            'requested_by.id',
+            'requested_by.first_name',
+            'requested_by.email',
+          ],
+          ...filter,
+        }),
+        supersededCouponIds(read),
+      ]);
+      return (coupons as Array<{ id?: string | number }>).filter(
+        (c) => !superseded.has(String(c.id)),
+      );
     }
   }
 }

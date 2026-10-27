@@ -114,8 +114,20 @@ export interface CouponRequestDialogProps {
    * terms are what they decided on, and the caller enforces that.
    */
   initial?: Partial<CouponRequestDraft> | null;
-  /** Save the edited draft. Present only in edit mode. */
-  onSave?: (draft: CouponRequestDraft) => Promise<void> | void;
+  /**
+   * Save the edited draft. Present only in edit mode. In REPLACE mode the
+   * second argument carries the required reason for the change.
+   */
+  onSave?: (draft: CouponRequestDraft, extra?: { changeReason: string }) => Promise<void> | void;
+  /**
+   * EDIT AN APPROVED COUPON (owner, 2026-10-27): the same form, seeded from the
+   * approved coupon, in REPLACE mode - a new coupon with a new code replaces it
+   * (also in the customer's Yiji app), and a reason is required. Pass with
+   * `initial` and `onSave`.
+   */
+  replaceOf?: { code: string | null; expiredOn: string | null } | null;
+  /** True while the replacement is being applied (the Save button spins). */
+  saving?: boolean;
   /**
    * The request being edited, so the duplicate-code check does not flag the
    * row against ITSELF — which would leave Save permanently disabled on a
@@ -323,8 +335,13 @@ export function CouponRequestDialog({
   initial,
   onSave,
   editingId,
+  replaceOf,
+  saving,
 }: CouponRequestDialogProps) {
   const { t } = useTranslation();
+  /* Replace mode (owner, 2026-10-27): editing an APPROVED coupon. */
+  const replaceMode = !!replaceOf && !!onSave;
+  const [changeReason, setChangeReason] = useState('');
   const lists = useOptionLists();
   const create = useRequestCouponApproval();
 
@@ -470,6 +487,11 @@ export function CouponRequestDialog({
     if (onSave) {
       /* EDIT MODE. The same validation as a new request — a correction must not
          be a way to save terms that could never have been raised. */
+      if (replaceMode) {
+        if (!changeReason.trim()) return;
+        void onSave(d, { changeReason: changeReason.trim() });
+        return;
+      }
       void onSave(d);
       return;
     }
@@ -567,20 +589,28 @@ export function CouponRequestDialog({
       onClose={onClose}
       width="md"
       title={
-        onSave
-          ? t('coupons.editTitle', { defaultValue: 'Edit this request' })
-          : t('coupons.requestTitle', { defaultValue: 'Request a coupon' })
+        replaceMode
+          ? t('coupons.replaceTitle', { defaultValue: 'Edit this approved coupon' })
+          : onSave
+            ? t('coupons.editTitle', { defaultValue: 'Edit this request' })
+            : t('coupons.requestTitle', { defaultValue: 'Request a coupon' })
       }
       description={
-        onSave
-          ? t('coupons.editHint', {
+        replaceMode
+          ? t('coupons.replaceHint', {
               defaultValue:
-                'Still waiting on a supervisor, so it can still be corrected. Once it is decided these terms are fixed.',
+                'Saving applies at once: a new coupon with a new code replaces {{code}}, and if it is already in the customer’s Yiji app it is taken out first. A coupon the customer already used cannot be edited.',
+              code: replaceOf?.code ?? '—',
             })
-          : t('coupons.requestHint', {
-              defaultValue:
-                'A supervisor approves this before anything reaches the customer. The branch comes from the order on this ticket.',
-            })
+          : onSave
+            ? t('coupons.editHint', {
+                defaultValue:
+                  'Still waiting on a supervisor, so it can still be corrected. Once it is decided these terms are fixed.',
+              })
+            : t('coupons.requestHint', {
+                defaultValue:
+                  'A supervisor approves this before anything reaches the customer. The branch comes from the order on this ticket.',
+              })
       }
       footer={
         <div className="flex w-full flex-wrap items-center justify-end gap-2.5">
@@ -594,17 +624,24 @@ export function CouponRequestDialog({
           </Button>
           <Button
             type="button"
-            loading={create.isPending}
+            loading={create.isPending || !!saving}
             /* A taken code blocks the send outright. Letting it through would
                hand Yiji a duplicate idempotency-key and deliver nothing. */
-            disabled={!parsed.success || codeTaken}
+            disabled={
+              !parsed.success ||
+              (codeTaken && !replaceMode) ||
+              (replaceMode && !changeReason.trim()) ||
+              !!saving
+            }
             onClick={submit}
           >
-            {onSave
-              ? t('actions.save', { ns: 'common', defaultValue: 'Save changes' })
-              : onCollect
-                ? t('coupons.attach', { defaultValue: 'Attach to this ticket' })
-                : t('coupons.send', { defaultValue: 'Send for approval' })}
+            {replaceMode
+              ? t('coupons.replaceSave', { defaultValue: 'Save and replace' })
+              : onSave
+                ? t('actions.save', { ns: 'common', defaultValue: 'Save changes' })
+                : onCollect
+                  ? t('coupons.attach', { defaultValue: 'Attach to this ticket' })
+                  : t('coupons.send', { defaultValue: 'Send for approval' })}
           </Button>
         </div>
       }
@@ -617,53 +654,73 @@ export function CouponRequestDialog({
             placeholder={t('coupons.titlePlaceholder', { defaultValue: "The customer's phone" })}
           />
         </FormField>
-        <FormField
-          label={t('coupons.code', { defaultValue: 'Coupon code' })}
-          hint={t('coupons.codeHint', {
-            defaultValue: 'Generated, and readable down a phone line. Type your own or regenerate.',
-          })}
-          error={
-            codeTaken
-              ? t('coupons.codeTaken', {
-                  defaultValue: 'That code is already in use. Pick another.',
-                })
-              : undefined
-          }
-        >
-          <div className="flex gap-2">
-            {/* Typed, not just generated — agents reuse a code a branch already
+        {replaceMode && replaceOf?.expiredOn && (
+          <p className="rounded-2xl bg-warning-tint px-3.5 py-3 text-xs leading-relaxed text-foreground">
+            {t('coupons.replaceExpired', {
+              defaultValue:
+                'This coupon expired on {{date}}. Editing it creates a fresh, valid coupon — check the new dates.',
+              date: replaceOf.expiredOn,
+            })}
+          </p>
+        )}
+        {replaceMode ? (
+          <FormField label={t('coupons.code', { defaultValue: 'Coupon code' })}>
+            <p className="text-sm text-muted-foreground">
+              {t('coupons.replaceNewCode', {
+                defaultValue: 'A new code is generated when you save.',
+              })}
+            </p>
+          </FormField>
+        ) : (
+          <FormField
+            label={t('coupons.code', { defaultValue: 'Coupon code' })}
+            hint={t('coupons.codeHint', {
+              defaultValue:
+                'Generated, and readable down a phone line. Type your own or regenerate.',
+            })}
+            error={
+              codeTaken
+                ? t('coupons.codeTaken', {
+                    defaultValue: 'That code is already in use. Pick another.',
+                  })
+                : undefined
+            }
+          >
+            <div className="flex gap-2">
+              {/* Typed, not just generated — agents reuse a code a branch already
                 printed, or match one from the ops sheet. Upper-cased as they
                 type because every stored code is, and a lower-case twin would
                 pass the duplicate check and then collide anyway. */}
-            <Input
-              value={draft.code}
-              invalid={codeTaken}
-              onChange={(e) => {
-                setCodeTouched(true);
-                set('code', e.target.value.toUpperCase().replace(/\s+/g, ''));
-              }}
-              aria-label={t('coupons.code', { defaultValue: 'Coupon code' })}
-              className="flex-1 font-mono"
-            />
-            <Button
-              type="button"
-              variant="ghost"
-              className="shrink-0"
-              // The prefix belongs to the issuing side, so a REGENERATED code
-              // has to carry it too. Without this the button handed back a
-              // SARA- code on an Operations coupon, and the prefix is how
-              // anyone reading a code aloud knows who issued it.
-              onClick={() => {
-                // Explicitly asking for a new code hands the field back to the
-                // generator, so the issuing side re-stamps it again after this.
-                setCodeTouched(false);
-                set('code', generateCouponCode(Math.random, couponPrefix(draft.issuing_side)));
-              }}
-            >
-              {t('coupons.regenerate', { defaultValue: 'New code' })}
-            </Button>
-          </div>
-        </FormField>
+              <Input
+                value={draft.code}
+                invalid={codeTaken}
+                onChange={(e) => {
+                  setCodeTouched(true);
+                  set('code', e.target.value.toUpperCase().replace(/\s+/g, ''));
+                }}
+                aria-label={t('coupons.code', { defaultValue: 'Coupon code' })}
+                className="flex-1 font-mono"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                className="shrink-0"
+                // The prefix belongs to the issuing side, so a REGENERATED code
+                // has to carry it too. Without this the button handed back a
+                // SARA- code on an Operations coupon, and the prefix is how
+                // anyone reading a code aloud knows who issued it.
+                onClick={() => {
+                  // Explicitly asking for a new code hands the field back to the
+                  // generator, so the issuing side re-stamps it again after this.
+                  setCodeTouched(false);
+                  set('code', generateCouponCode(Math.random, couponPrefix(draft.issuing_side)));
+                }}
+              >
+                {t('coupons.regenerate', { defaultValue: 'New code' })}
+              </Button>
+            </div>
+          </FormField>
+        )}
         <div className="grid gap-x-3 gap-y-4 sm:grid-cols-2">
           <FormField label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}>
             <SelectMenu
@@ -1067,6 +1124,23 @@ export function CouponRequestDialog({
           />
         </FormField>
       </DrawerSection>
+      {replaceMode && (
+        <DrawerSection
+          title={t('coupons.replaceReasonTitle', { defaultValue: 'Reason for the change' })}
+        >
+          <FormField
+            label={t('coupons.replaceReason', {
+              defaultValue: 'Why is this approved coupon being changed?',
+            })}
+          >
+            <Input
+              value={changeReason}
+              maxLength={1000}
+              onChange={(e) => setChangeReason(e.target.value)}
+            />
+          </FormField>
+        </DrawerSection>
+      )}
     </Drawer>
   );
 }

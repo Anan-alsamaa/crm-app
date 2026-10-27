@@ -54,7 +54,7 @@ export type RemoveOutcome =
   | 'used'
   | 'failed';
 
-interface RemoveRow {
+export interface RemoveRow {
   id: string;
   status: string | null;
   coupon_code: string | null;
@@ -71,6 +71,22 @@ const ticketIdOf = (t: RemoveRow['ticket']): string | null =>
 
 const grantOf = (v: string | number | null | undefined): string | null =>
   v === null || v === undefined || String(v).trim() === '' ? null : String(v).trim();
+
+/**
+ * The Yiji user who holds this coupon: the contact's own Yiji id when it is a
+ * real one, otherwise the phone looked up (staging: the redirect handset).
+ * Shared with the edit-by-replacement job, which asks "was it used?" first.
+ */
+export async function resolveCouponCustomer(
+  remover: YijiCouponRemover,
+  row: Pick<RemoveRow, 'customer_phone' | 'title' | 'contact'>,
+  redirectCouponsTo?: string,
+): Promise<string | null> {
+  const phone = redirectCouponsTo?.trim() || couponCustomerPhone(row) || '';
+  const ext = row.contact?.external_customer_id?.trim() || '';
+  if (!redirectCouponsTo && ext && !isPhoneDerivedCustomerId(ext)) return ext;
+  return phone ? await remover.findCustomer(phone) : null;
+}
 
 /** Make the ticket's Compensation match the coupons still linked to it. */
 export async function syncTicketCompensation(
@@ -218,14 +234,7 @@ export async function processCouponRemoveJob(
   };
 
   try {
-    const phone = redirectCouponsTo?.trim() || couponCustomerPhone(row) || '';
-    const ext = row.contact?.external_customer_id?.trim() || '';
-    const userId =
-      !redirectCouponsTo && ext && !isPhoneDerivedCustomerId(ext)
-        ? ext
-        : phone
-          ? await remover.findCustomer(phone)
-          : null;
+    const userId = await resolveCouponCustomer(remover, row, redirectCouponsTo);
     if (!userId) {
       return fail(
         'The customer’s Yiji account could not be found to check this coupon. It was NOT removed.',

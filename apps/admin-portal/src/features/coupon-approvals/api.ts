@@ -85,6 +85,12 @@ export interface CouponApprovalRow {
    */
   yiji_customer_found?: boolean | null;
   yiji_customer_checked_at?: string | null;
+  /**
+   * EMA-80's removal state - read here so the card knows an approved coupon
+   * that was taken back (or found USED) cannot be edited (owner, 2026-10-27).
+   * Optional like the customer check: absent when the field is not applied.
+   */
+  removal_status?: string | null;
   decided_at: string | null;
   decision_note: string | null;
   date_created: string | null;
@@ -132,6 +138,9 @@ export const COUPON_CUSTOMER_CHECK_FIELDS = [
   'yiji_customer_checked_at',
 ] as const;
 
+/** Optional too (EMA-80, manual apply:fields): read with the check fields. */
+export const COUPON_OPTIONAL_FIELDS = [...COUPON_CUSTOMER_CHECK_FIELDS, 'removal_status'] as const;
+
 export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pending') {
   return useQuery({
     queryKey: ['coupon-approvals', status],
@@ -161,7 +170,7 @@ export function useCouponApprovals(status: CouponApprovalStatus | 'all' = 'pendi
           ),
         )) as unknown as CouponApprovalRow[];
       try {
-        return await read(COUPON_CUSTOMER_CHECK_FIELDS);
+        return await read(COUPON_OPTIONAL_FIELDS);
       } catch {
         /* Fields not applied in this environment yet: read without them. The
            card then shows no "no Yiji account" notice - never a Yiji call. */

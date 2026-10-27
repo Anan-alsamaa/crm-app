@@ -23,6 +23,7 @@ import pino from 'pino';
 import {
   CouponPushJob,
   CouponRemoveJob,
+  CouponReplaceJob,
   ImportJob,
   normalizePhone,
   phoneCustomerId,
@@ -907,6 +908,36 @@ async function main(): Promise<void> {
     logger.info(
       { jobId, couponApprovalId: parsed.data.couponApprovalId, by: identity.id },
       'coupon removal enqueued',
+    );
+    return reply.send({ ok: true, jobId });
+  });
+  /**
+   * Owner, 2026-10-27: an APPROVED coupon was edited. Gated on the
+   * `edit_approved_coupons` permission (WeCare Supervisor / WeCare Admin /
+   * Administrator by default). The body names the old coupon, its replacement
+   * (already created by the caller) and the reason: WHO comes from the verified
+   * token. The worker re-reads both rows with its own service token, refuses a
+   * coupon already USED, and swaps them - nothing is decided here.
+   */
+  app.post('/jobs/coupon-replace', async (req, reply) => {
+    const identity = await requirePrivilege(req, reply, 'edit_approved_coupons');
+    if (!identity) return reply;
+    const parsed = CouponReplaceJob.omit({ editedBy: true }).safeParse(req.body);
+    if (!parsed.success || parsed.data.couponApprovalId === parsed.data.replacementId)
+      return reply.code(400).send({ ok: false, error: 'invalid coupon edit payload' });
+    const jobId = producer.enqueueCouponReplace
+      ? await producer.enqueueCouponReplace({ ...parsed.data, editedBy: identity.id })
+      : null;
+    if (jobId === null)
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    logger.info(
+      {
+        jobId,
+        couponApprovalId: parsed.data.couponApprovalId,
+        replacementId: parsed.data.replacementId,
+        by: identity.id,
+      },
+      'coupon edit (replacement) enqueued',
     );
     return reply.send({ ok: true, jobId });
   });

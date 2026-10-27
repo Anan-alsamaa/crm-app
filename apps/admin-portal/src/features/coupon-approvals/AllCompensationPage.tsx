@@ -45,6 +45,7 @@ import { ReportFilterBar } from '../../components/ReportFilterBar.js';
 import { useReportVendorFilter, withVendor } from '../../lib/report-vendor.js';
 import { TicketHistoryDrawer } from '../report-exports/TicketHistoryDrawer.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useCouponReplacements } from './replacements.js';
 import {
   compensatedItem,
   isUndecided,
@@ -408,6 +409,11 @@ export function AllCompensationPage() {
   const [dragKey, setDragKey] = useState<CompensationColumnKey | null>(null);
 
   const list = useMemo(() => rows.data ?? [], [rows.data]);
+  /* EDITED AFTER APPROVAL (owner, 2026-10-27): the replaced coupon stays in
+     the list as history ("Replaced by …") and leaves the totals; an edit that
+     was not applied leaves them too. Best-effort read - see replacements.ts. */
+  const replacements = useCouponReplacements();
+  const linkOf = useCallback((r: Row) => replacements.data?.get(String(r.id)), [replacements.data]);
   const lateKeys = useMemo(
     () => list.map(lateOrderKey).filter((k): k is string => k !== null),
     [list],
@@ -482,6 +488,7 @@ export function AllCompensationPage() {
     let approved = 0;
     let pending = 0;
     for (const r of filtered) {
+      if (linkOf(r)?.superseded) continue;
       // The DECISION, not the literal — `edited` is an approval with amended
       // terms and was being left out of this count.
       const decision = couponDecision(r.status);
@@ -495,7 +502,7 @@ export function AllCompensationPage() {
       }
     }
     return { sar, percentCoupons, approved, pending };
-  }, [filtered]);
+  }, [filtered, linkOf]);
 
   const pageCount = pageCountOf(filtered.length, pageSize);
   // Clamped rather than stored: narrowing a filter while on page 9 must not
@@ -516,8 +523,25 @@ export function AllCompensationPage() {
     return money(r.coupon_value);
   };
 
-  const statusLabel = (r: Row) =>
-    t(`status.${r.status ?? 'pending'}`, { ns: 'common', defaultValue: r.status ?? 'pending' });
+  const statusLabel = (r: Row) => {
+    const link = linkOf(r);
+    if (link?.replacedBy) {
+      return t('compensationAll.replacedBy', {
+        defaultValue: 'Replaced by {{code}}',
+        code: link.replacedBy.code ?? '—',
+      });
+    }
+    if (link?.superseded && link.replaces) {
+      return t('compensationAll.editNotApplied', {
+        defaultValue: 'Edit of {{code}} not applied',
+        code: link.replaces.code ?? '—',
+      });
+    }
+    return t(`status.${r.status ?? 'pending'}`, {
+      ns: 'common',
+      defaultValue: r.status ?? 'pending',
+    });
+  };
 
   const columnDefs: Column[] = [
     {
@@ -1065,11 +1089,23 @@ export function AllCompensationPage() {
                             return (
                               <td key={c.key} className="whitespace-nowrap px-4 py-3">
                                 <Pill
-                                  tone={TONE[(r.status ?? 'pending').toLowerCase()] ?? 'neutral'}
+                                  tone={
+                                    linkOf(r)?.superseded
+                                      ? 'neutral'
+                                      : (TONE[(r.status ?? 'pending').toLowerCase()] ?? 'neutral')
+                                  }
                                   size="sm"
                                 >
                                   {v}
                                 </Pill>
+                                {linkOf(r)?.replaces && !linkOf(r)?.superseded && (
+                                  <span className="ms-1.5 text-2xs text-muted-foreground">
+                                    {t('compensationAll.replaces', {
+                                      defaultValue: 'replaces {{code}}',
+                                      code: linkOf(r)?.replaces?.code ?? '—',
+                                    })}
+                                  </span>
+                                )}
                                 {r.edited_by_admin && (
                                   <span className="ms-1.5 text-2xs text-muted-foreground">
                                     {t('compensationAll.amended', { defaultValue: 'amended' })}

@@ -111,7 +111,20 @@ export function useCouponsKpi(w: Window) {
           'removal_status',
         ]),
       ]);
-      return couponSummary({ byStatus, pushed, pushFailures, withheld, byRemoval });
+      /* EDITED coupons (owner, 2026-10-27): the replaced row and an abandoned
+         edit are left out of every figure. Its OWN read - the fields need a
+         manual apply:fields, and a missing field must cost only this. */
+      const superseded = await count(
+        'coupon_approvals',
+        and(win, {
+          _or: [
+            { replaced_by: { _nnull: true } },
+            { _and: [{ replaces: { _nnull: true } }, { status: { _eq: 'rejected' } }] },
+          ],
+        }),
+        ['status'],
+      ).catch(() => null);
+      return couponSummary({ byStatus, pushed, pushFailures, withheld, byRemoval, superseded });
     },
   });
 }

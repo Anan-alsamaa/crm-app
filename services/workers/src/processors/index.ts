@@ -23,6 +23,8 @@ import {
   type CouponPushJob,
   type CouponRemoveJob,
   COUPON_REMOVE_JOB_NAME,
+  type CouponReplaceJob,
+  COUPON_REPLACE_JOB_NAME,
   type CustomerPushJob,
   errorText,
   fetchWithYijiUsage,
@@ -45,6 +47,7 @@ import { processReportJob, type ReportsDeps } from './reports.js';
 import { processCouponPushJob } from './coupon-push.js';
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
+import { processCouponReplaceJob } from './coupon-replace.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
 import { purgeYijiUsage, YIJI_USAGE_RETENTION_JOB } from './yiji-usage.js';
 import {
@@ -487,6 +490,26 @@ export const processors: Record<QueueName, Processor> = {
         logger: deps.logger,
         remover: couponRemover,
         ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
+      });
+      return;
+    }
+    /* Owner, 2026-10-27: an APPROVED coupon edited = replaced. Same queue, by
+       job NAME; reuses the removal's credentials (admin token for
+       RemoveUserCoupon) and queues the replacement's push itself. */
+    if (job.name === COUPON_REPLACE_JOB_NAME) {
+      await processCouponReplaceJob(job as Job<CouponReplaceJob>, {
+        directus: deps.directus,
+        logger: deps.logger,
+        remover: couponRemover,
+        ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
+        /* NO custom jobId (BullMQ ignores an add whose id still exists - see
+           the sweep); the push re-reads the row and its receipt instead. */
+        enqueuePush: (couponApprovalId) =>
+          deps.queues[QUEUES.coupons].add(
+            'push',
+            { couponApprovalId },
+            { removeOnComplete: true, removeOnFail: true },
+          ),
       });
       return;
     }

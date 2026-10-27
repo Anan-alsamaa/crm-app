@@ -26,6 +26,7 @@ import {
 } from '@yiji/reports';
 import { exportFileName } from '@yiji/shared-config';
 import { directus } from '../../lib/directus.js';
+import { readSupersededCouponIds } from './replacements.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
@@ -49,16 +50,29 @@ export function useCouponFacts() {
     queryKey: ['coupon-approval-facts', ...(vendor ? [vendor] : [])],
     staleTime: 60_000,
     queryFn: async (): Promise<CouponApprovalFact[]> => {
-      const rows = (await directus.request(
-        readItems(
-          'coupon_approvals' as never,
-          {
-            ...(vendor ? { filter: withVendor({}, vendor) } : {}),
-            limit: -1,
-            fields: ['status', 'edited_by_admin', { requested_by: ['id', 'first_name', 'email'] }],
-          } as never,
+      /* Edited-after-approval rows are left out (owner, 2026-10-27): the
+         replacement is the decision that counts. Its own best-effort read. */
+      const [all, superseded] = await Promise.all([
+        directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              ...(vendor ? { filter: withVendor({}, vendor) } : {}),
+              limit: -1,
+              fields: [
+                'id',
+                'status',
+                'edited_by_admin',
+                { requested_by: ['id', 'first_name', 'email'] },
+              ],
+            } as never,
+          ),
         ),
-      )) as unknown as Array<{
+        readSupersededCouponIds(),
+      ]);
+      const rows = (all as unknown as Array<{ id: string | number; status: string | null }>).filter(
+        (r) => !superseded.has(String(r.id)),
+      ) as unknown as Array<{
         status: string | null;
         edited_by_admin: boolean | null;
         requested_by: { id: string; first_name: string | null; email: string | null } | null;

@@ -998,6 +998,21 @@ export const collections: CollectionSpec[] = [
         type: 'text',
         note: 'What happened on Yiji: the order it was used on, or why removal failed.',
       },
+      /*
+       * EDITED AFTER APPROVAL (owner, 2026-10-27). An approved coupon is edited
+       * by REPLACING it: a new approved row with the edited terms (`replaces`
+       * -> the old row, both relations below) while the workers take the old
+       * one off the customer's Yiji app and mark it `replaced_by` -> the new
+       * one. The old row is kept as history and stops counting in totals.
+       *
+       * Needs a manual `apply:fields` on staging and prod BEFORE the deploy
+       * that reads them - a missing field 403s the whole Directus query.
+       */
+      {
+        field: 'replace_reason',
+        type: 'text',
+        note: 'Why an approved coupon was edited (on the replacement row; the workers copy it onto the row it replaced).',
+      },
     ],
   },
   {
@@ -1567,6 +1582,25 @@ export const relations: RelationSpec[] = [
     field: 'removed_by',
     related: 'directus_users',
     onDelete: 'SET NULL',
+  },
+  /* An approved coupon edited by replacement (owner, 2026-10-27): the new row
+     points at the one it replaces, the old row at its replacement. SET NULL:
+     deleting either record must never take the other with it. */
+  {
+    collection: 'coupon_approvals',
+    field: 'replaces',
+    related: 'coupon_approvals',
+    onDelete: 'SET NULL',
+    index: true,
+    note: 'The approved coupon this one REPLACED when it was edited after approval.',
+  },
+  {
+    collection: 'coupon_approvals',
+    field: 'replaced_by',
+    related: 'coupon_approvals',
+    onDelete: 'SET NULL',
+    index: true,
+    note: 'The coupon that replaced this one after an edit. Set = history only; no longer counted.',
   },
   {
     collection: 'routing_events',

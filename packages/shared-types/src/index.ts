@@ -20,6 +20,7 @@ export * from './vendor-secrets.js';
 export * from './restaurants.js';
 export * from './store-notifications.js';
 export * from './coupon-approvals.js';
+export * from './coupon-replace.js';
 export * from './signup-watch.js';
 export * from './socket.js';
 export * from './ai.js';
