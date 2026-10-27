@@ -15,6 +15,7 @@ import {
   ConversationStatus,
   ServiceType,
   TicketStatus,
+  YIJI_COMPLAINT_SOURCE,
   YIJI_USAGE_ACCOUNTS,
   YIJI_USAGE_OUTCOMES,
   YIJI_USAGE_SERVICES,
@@ -648,8 +649,16 @@ export const collections: CollectionSpec[] = [
       {
         field: 'complaint_source',
         type: 'string',
-        choices: [...ComplaintSource.options],
-        note: 'Channel the complaint ARRIVED on.',
+        /* `Yiji` = raised by Yiji through the inbound API (2026-10-27). Not in
+           ComplaintSource on purpose: agents never pick it. */
+        choices: [...ComplaintSource.options, YIJI_COMPLAINT_SOURCE],
+        note: 'Channel the complaint ARRIVED on. "Yiji" = raised by Yiji itself through the inbound API.',
+      },
+      {
+        field: 'external_id',
+        type: 'string',
+        index: true,
+        note: 'The id of this ticket on the VENDOR platform that raised it (Yiji inbound API, 2026-10-27). Empty for every ticket raised in the CRM. Unique per vendor (uq_tickets_vendor_external_id) - it is what makes a retried request return the same ticket instead of a second one.',
       },
       {
         field: 'communication_method',
@@ -1008,6 +1017,12 @@ export const collections: CollectionSpec[] = [
        * Needs a manual `apply:fields` on staging and prod BEFORE the deploy
        * that reads them - a missing field 403s the whole Directus query.
        */
+      {
+        field: 'external_id',
+        type: 'string',
+        index: true,
+        note: 'The id of this coupon on the VENDOR platform that requested it (Yiji inbound API, 2026-10-27). Empty for every coupon an agent asked for. Unique per vendor (uq_coupon_approvals_vendor_external_id): a retried request returns the same coupon.',
+      },
       {
         field: 'replace_reason',
         type: 'text',

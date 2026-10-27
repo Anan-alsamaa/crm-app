@@ -14,6 +14,14 @@ export const constraintStatements: string[] = [
   `CREATE UNIQUE INDEX IF NOT EXISTS uq_contacts_vendor_email
      ON contacts (vendor, email) WHERE email IS NOT NULL;`,
 
+  // Yiji inbound API (2026-10-27): the vendor's own ticket / coupon id is the
+  // idempotency key, so a retried request finds the record it already wrote.
+  // Per vendor, and only where set (every CRM-raised row leaves it empty).
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_tickets_vendor_external_id
+     ON tickets (vendor, external_id) WHERE external_id IS NOT NULL;`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS uq_coupon_approvals_vendor_external_id
+     ON coupon_approvals (vendor, external_id) WHERE external_id IS NOT NULL;`,
+
   // Supporting lookup indexes.
   `CREATE INDEX IF NOT EXISTS idx_contacts_phone ON contacts (phone);`,
   `CREATE INDEX IF NOT EXISTS idx_contacts_email ON contacts (email);`,

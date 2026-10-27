@@ -748,7 +748,8 @@ export const roles: RoleSpec[] = [
       // READ-ONLY on tickets: POST /jobs/notify-assignment re-reads the assigned
       // entity server-side to derive the notification recipient (the caller's own
       // token can't — an agent loses ticket read access the moment they hand it
-      // to a colleague). The gateway never writes tickets.
+      // to a colleague). Its only ticket WRITES are the Yiji inbound API's,
+      // granted (and fenced to Yiji's own rows) at the end of this list.
       { collection: 'tickets', action: 'read' },
       /* The agent-performance report (POST /jobs/performance, owner
          2026-10-11) reads the routing ladder's outcomes and coupon requests
@@ -768,6 +769,38 @@ export const roles: RoleSpec[] = [
          (vendorKeyById, vendorByWebhookKey). */
       ...vendorsRead(['webhook_path_key']),
       ...readOnly('teams'),
+      /*
+       * THE YIJI INBOUND API (owner, 2026-10-27): Yiji raises tickets and
+       * coupon REQUESTS in the CRM (`/webhooks/yiji/tickets`, yiji-inbound.ts).
+       *
+       *  - tickets: CREATE, plus two narrow rights fenced to Yiji's own rows
+       *    (`external_id` set): UPDATE of `compensation` only (marked
+       *    Compensated once its coupon row exists), and DELETE - the rollback
+       *    when the coupon of a ticket+coupon call could not be stored, so a
+       *    ticket is never left behind half-made. Read is granted above.
+       *  - coupon_approvals: CREATE only (read above). The row arrives
+       *    `pending`; DECIDING stays a WeCare supervisor's act - the gateway
+       *    can never approve, exactly like an agent.
+       *  - ticket_events: append-only, for the "Created by Yiji" history line.
+       *  - stores / brands: read, to resolve Yiji's restaurant id to the
+       *    branch every ticket must carry (ticket-branch-mandatory).
+       */
+      { collection: 'tickets', action: 'create' },
+      {
+        collection: 'tickets',
+        action: 'update',
+        fields: ['compensation'],
+        permissions: { external_id: { _nnull: true } },
+      },
+      {
+        collection: 'tickets',
+        action: 'delete',
+        permissions: { external_id: { _nnull: true } },
+      },
+      { collection: 'coupon_approvals', action: 'create' },
+      ...appendOnly('ticket_events'),
+      ...readOnly('stores'),
+      ...readOnly('brands'),
     ],
   },
   {

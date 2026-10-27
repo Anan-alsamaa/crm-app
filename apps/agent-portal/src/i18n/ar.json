@@ -601,6 +601,8 @@
     "searchPlaceholder": "رقم الطلب، الجوال، الفرع…",
     "searchLabel": "بحث في التذاكر",
     "anyType": "أي نوع تذكرة",
+    "anySource": "أي مصدر",
+    "fromYiji": "من يجي",
     "anyStatus": "أي حالة",
     "statusLabel": "الحالة",
     "clearSearch": "مسح",

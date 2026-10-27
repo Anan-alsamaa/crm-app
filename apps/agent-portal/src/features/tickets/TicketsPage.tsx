@@ -33,6 +33,7 @@ import { QueueStat } from '../../components/QueueStat.js';
 import {
   couponDiffers,
   isCouponRequested,
+  isYijiInitiatedTicket,
   splitCouponForApproval,
   type Priority,
   normaliseTicketStatus,
@@ -137,6 +138,20 @@ const FILTER_ROW = 'grid grid-cols-[repeat(auto-fit,minmax(5.75rem,1fr))] gap-1.
  */
 const DATE_ROW = 'grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1.2fr)] gap-1.5';
 const COMPACT_DATE = '[&_input]:pe-7 [&_input]:ps-2.5 [&_button]:w-7';
+
+/**
+ * "From Yiji": the ticket was raised by Yiji itself, through the inbound API
+ * (owner, 2026-10-27). Small, beside the subject, like the vendor badge.
+ */
+function FromYijiTag({ source }: { source: string | null | undefined }) {
+  const { t } = useTranslation();
+  if (!isYijiInitiatedTicket({ complaintSource: source })) return null;
+  return (
+    <Pill tone="orange" size="sm" className="shrink-0" data-testid="from-yiji-tag">
+      {t('tickets.fromYiji', { defaultValue: 'From Yiji' })}
+    </Pill>
+  );
+}
 
 /** A filter control under its micro-label. */
 function FilterSlot({ label, children }: { label: string; children: ReactNode }) {
@@ -398,6 +413,9 @@ export function TicketsPage() {
     return vendorFilter ? rows.filter((r) => r.vendor === vendorFilter) : rows;
   }, [list, criteria, vendorFilter]);
   const typesInRange = useMemo(() => distinctValues(list, 'complaintType'), [list]);
+  /* Where the tickets in range came from - including "Yiji" for the ones Yiji
+     raised through its API (owner, 2026-10-27). From the data, like the types. */
+  const sourcesInRange = useMemo(() => distinctValues(list, 'complaintSource'), [list]);
 
   const filtered = useMemo(() => {
     const byNewest = (rows: AgentComplaintRow[]) =>
@@ -634,6 +652,27 @@ export function TicketsPage() {
                       ]}
                     />
                   </FilterSlot>
+                  <FilterSlot label={t('complaint.source', { defaultValue: 'Ticket source' })}>
+                    <SelectMenu
+                      size="sm"
+                      className="w-full"
+                      value={criteria.source ?? ''}
+                      onChange={(v) => setCriteria((c) => ({ ...c, source: v }))}
+                      aria-label={t('complaint.source', { defaultValue: 'Ticket source' })}
+                      options={[
+                        {
+                          value: '',
+                          label: t('tickets.anySource', { defaultValue: 'Any source' }),
+                        },
+                        ...sourcesInRange.map((v) => ({
+                          value: v,
+                          label: isYijiInitiatedTicket({ complaintSource: v })
+                            ? t('tickets.fromYiji', { defaultValue: 'From Yiji' })
+                            : optionLabel(v),
+                        })),
+                      ]}
+                    />
+                  </FilterSlot>
                 </div>
                 <div className={DATE_ROW}>
                   {/*
@@ -767,6 +806,7 @@ export function TicketsPage() {
                                   {r.subject}
                                 </span>
                                 <VendorBadge vendor={r.vendor} directory={vendors} />
+                                <FromYijiTag source={r.complaintSource} />
                               </span>
                               <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
                                 {r.date}
@@ -1309,6 +1349,7 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
               <Pill tone={statusTone[tkStatus]} dot>
                 {t(`status.${tkStatus}`, { ns: 'common' })}
               </Pill>
+              <FromYijiTag source={tk.complaint_source} />
               {tk.priority !== 'medium' && tk.priority !== 'low' && (
                 <Pill tone={tk.priority === 'urgent' ? 'destructive' : 'orange'}>
                   {t(`priority.${tk.priority}`, { ns: 'common' })}

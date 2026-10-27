@@ -97,6 +97,29 @@ const schema = z
     YIJI_WEBHOOK_SECRET: z.string().default(''),
     // Replay-protection window for webhook timestamps (seconds).
     WEBHOOK_TOLERANCE_SEC: numericEnv(300),
+    /*
+     * THE YIJI INBOUND API (owner, 2026-10-27): Yiji raises tickets and coupon
+     * requests in the CRM (`/webhooks/yiji/tickets…`, yiji-inbound.ts). Its OWN
+     * HMAC secret, separate from YIJI_WEBHOOK_SECRET; empty = every route 503.
+     */
+    YIJI_INBOUND_API_SECRET: z.string().default(''),
+    /* The "Yiji" system user that requests are recorded as (requested_by,
+       ticket history). Empty = the gateway's own service account. */
+    YIJI_INBOUND_ACTOR_USER_ID: z.string().default(''),
+    /* Team a Yiji ticket lands on (`assigned_team`). Empty = none. */
+    YIJI_INBOUND_TEAM_ID: z.string().default(''),
+    /* Per-caller (IP) limit: burst, then a sustained rate per second. */
+    YIJI_INBOUND_RATE_CAPACITY: numericEnv(30),
+    YIJI_INBOUND_RATE_PER_SEC: numericEnv(2),
+    /*
+     * CRM-side compensation policy. Yiji applies the policy on its side; this
+     * hook is OFF by default (it only LOGS what it would refuse) and can be
+     * switched on later without a rebuild.
+     */
+    YIJI_INBOUND_POLICY_ENFORCE: booleanEnv(false),
+    YIJI_INBOUND_POLICY_MAX_SAR: numericEnv(200),
+    YIJI_INBOUND_POLICY_MAX_PERCENT: numericEnv(100),
+    YIJI_INBOUND_POLICY_MAX_DAYS: numericEnv(90),
     // Attachment validation: max size + allowed MIME types (comma-separated).
     ATTACHMENT_MAX_BYTES: numericEnv(10 * 1024 * 1024),
     /*

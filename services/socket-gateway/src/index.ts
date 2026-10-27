@@ -50,6 +50,9 @@ import { loadConfig } from './config.js';
 import { GatewayDirectus } from './directus.js';
 import { createVendorVerifier, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
 import { createVendorJwtSecrets, registerVendorWebhooks } from './vendor-auth.js';
+import { createYijiInboundService, registerYijiInboundApi } from './yiji-inbound.js';
+import { YijiInboundDirectus } from './yiji-inbound-directus.js';
+import { createServiceClient } from '@yiji/shared-config';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
 import { createTokenBucket } from './rate-limit.js';
@@ -701,6 +704,35 @@ async function main(): Promise<void> {
     findVendorByKey: (key) => directus.vendorByWebhookKey(key),
     toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
     logger,
+  });
+  /*
+   * THE YIJI INBOUND API (owner, 2026-10-27): Yiji raises tickets (and coupon
+   * REQUESTS that a WeCare supervisor still approves) and reads them back.
+   * Under `/webhooks/yiji/…` so the ALB's existing `/webhooks/*` rule routes
+   * it here. Its own secret; 503 until YIJI_INBOUND_API_SECRET is set.
+   */
+  registerYijiInboundApi(app, {
+    secret: config.YIJI_INBOUND_API_SECRET,
+    toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
+    rate: { capacity: config.YIJI_INBOUND_RATE_CAPACITY, perSec: config.YIJI_INBOUND_RATE_PER_SEC },
+    logger,
+    service: createYijiInboundService({
+      store: new YijiInboundDirectus(
+        createServiceClient({ url: config.DIRECTUS_INTERNAL_URL, token: config.SVC_GATEWAY_TOKEN }),
+        {
+          yijiVendorExternalId: DEFAULT_VENDOR_ID,
+          actorUserId: config.YIJI_INBOUND_ACTOR_USER_ID || null,
+        },
+      ),
+      policy: {
+        enforce: config.YIJI_INBOUND_POLICY_ENFORCE,
+        maxExposureSar: config.YIJI_INBOUND_POLICY_MAX_SAR,
+        maxPercent: config.YIJI_INBOUND_POLICY_MAX_PERCENT,
+        maxValidityDays: config.YIJI_INBOUND_POLICY_MAX_DAYS,
+      },
+      teamId: config.YIJI_INBOUND_TEAM_ID || null,
+      logger,
+    }),
   });
 
   // Admin-triggered job enqueue (admin portal → gateway). "Import CSV" and

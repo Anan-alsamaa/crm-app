@@ -164,6 +164,28 @@ export const ComplaintSource = z.enum([
 export type ComplaintSource = z.infer<typeof ComplaintSource>;
 
 /**
+ * A ticket YIJI raised itself, through the inbound API (owner, 2026-10-27:
+ * "initiated from Yiji", filterable in the Tickets queue and the Ticket
+ * breakdown, with a small "From Yiji" tag).
+ *
+ * Deliberately NOT a member of `ComplaintSource`: that enum is what an agent
+ * may PICK (it is the dropdown's fallback list), and no agent raises a ticket
+ * "from Yiji" by hand. It rides in the same `complaint_source` column so every
+ * report that already groups or filters by source shows it with no new field.
+ * The ticket's `external_id` (Yiji's own ticket id) is the durable proof.
+ */
+export const YIJI_COMPLAINT_SOURCE = 'Yiji' as const;
+
+/** Was this ticket raised by Yiji through the inbound API? */
+export function isYijiInitiatedTicket(row: {
+  complaint_source?: string | null;
+  complaintSource?: string | null;
+}): boolean {
+  const v = (row.complaint_source ?? row.complaintSource ?? '').trim().toLowerCase();
+  return v === YIJI_COMPLAINT_SOURCE.toLowerCase();
+}
+
+/**
  * What a ticket raised in this portal came in through, unless the agent says
  * otherwise.
  *

@@ -102,6 +102,18 @@ const UNSCOPED_TICKET_ROLES = [
 const EXPECTED = [
   { role: 'svc-socket-gateway', collection: 'app_settings', actions: ['read', 'create', 'update'] },
   { role: 'svc-socket-gateway', collection: 'contacts', actions: ['create', 'read', 'update'] },
+  /* The Yiji inbound API (2026-10-27, yiji-inbound.ts). Without these the
+     endpoints answer 503 to every call - nothing is written, nothing breaks
+     elsewhere, but Yiji's tickets never arrive. */
+  {
+    role: 'svc-socket-gateway',
+    collection: 'tickets',
+    actions: ['read', 'create', 'update', 'delete'],
+  },
+  { role: 'svc-socket-gateway', collection: 'coupon_approvals', actions: ['read', 'create'] },
+  { role: 'svc-socket-gateway', collection: 'ticket_events', actions: ['create', 'read'] },
+  { role: 'svc-socket-gateway', collection: 'stores', actions: ['read'] },
+  { role: 'svc-socket-gateway', collection: 'brands', actions: ['read'] },
   { role: 'Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'tickets', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'app_settings', actions: ['read'] },

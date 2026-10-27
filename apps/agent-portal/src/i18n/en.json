@@ -505,6 +505,8 @@
     "searchPlaceholder": "Order number, phone, branch…",
     "searchLabel": "Search tickets",
     "anyType": "Any ticket type",
+    "anySource": "Any source",
+    "fromYiji": "From Yiji",
     "anyStatus": "Any status",
     "statusLabel": "Status",
     "clearSearch": "Clear",
