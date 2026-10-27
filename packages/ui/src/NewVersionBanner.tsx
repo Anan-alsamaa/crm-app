@@ -46,19 +46,33 @@ export interface NewVersionBannerProps {
 }
 
 /**
- * Text the person has typed and not sent: any non-empty textarea or
- * contenteditable, or the focused text input. A reload would lose it, so the
- * automatic reload waits while there is any.
+ * WORK IN PROGRESS - the automatic reload never happens while there is any
+ * (owner, 2026-10-27: an agent half-way through a ticket must never lose it,
+ * even if they step to another tab to look an order up):
+ *   - any open dialog or drawer (a ticket, coupon or note being made);
+ *   - the Add ticket page (`/new-ticket`) at all;
+ *   - any filled text field, text box or editable area, focused or not;
+ *   - any form on the page that holds a value.
+ * Errs on the side of waiting: the Reload strip is always there to update at once.
  */
 export function hasUnsavedText(doc: Document = document): boolean {
+  if (doc.querySelector('[role="dialog"], [aria-modal="true"], dialog[open]')) return true;
+  const path = doc.defaultView?.location?.pathname ?? '';
+  if (/^\/new-ticket(\/|$)/.test(path)) return true;
   for (const el of Array.from(doc.querySelectorAll('textarea'))) {
     if ((el as HTMLTextAreaElement).value.trim()) return true;
   }
   for (const el of Array.from(doc.querySelectorAll('[contenteditable="true"]'))) {
     if ((el.textContent ?? '').trim()) return true;
   }
-  const active = doc.activeElement as HTMLInputElement | null;
-  if (active && active.tagName === 'INPUT' && active.value && active.value.trim()) return true;
+  const typed = Array.from(
+    doc.querySelectorAll(
+      'form input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=search]), input[type=text], input[type=tel], input[type=email], input[type=number], input:not([type])',
+    ),
+  ) as HTMLInputElement[];
+  for (const el of typed) {
+    if (el.value && el.value.trim() && !el.closest('[data-reload-safe]')) return true;
+  }
   return false;
 }
 

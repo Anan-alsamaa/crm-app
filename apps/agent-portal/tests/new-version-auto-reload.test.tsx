@@ -106,3 +106,48 @@ describe('hasUnsavedText', () => {
     expect(hasUnsavedText()).toBe(true);
   });
 });
+
+/*
+ * A HALF-MADE TICKET IS NEVER LOST (owner, 2026-10-27): the agent may step to
+ * another tab to look an order up mid-ticket - the tab goes to the background,
+ * and must still not reload.
+ */
+describe('hasUnsavedText — work in progress', () => {
+  it('blocks while a dialog is open', () => {
+    const d = document.createElement('div');
+    d.setAttribute('role', 'dialog');
+    document.body.appendChild(d);
+    expect(hasUnsavedText()).toBe(true);
+  });
+
+  it('blocks while any form field holds a value, focused or not', () => {
+    const f = document.createElement('form');
+    const i = document.createElement('input');
+    i.value = '1355180';
+    f.appendChild(i);
+    document.body.appendChild(f);
+    expect(hasUnsavedText()).toBe(true);
+  });
+
+  it('blocks a background reload of a half-filled ticket', async () => {
+    const f = document.createElement('form');
+    const i = document.createElement('input');
+    i.setAttribute('type', 'tel');
+    i.value = '0551234567';
+    f.appendChild(i);
+    document.body.appendChild(f);
+    await becomeStale();
+    setVisibility('hidden');
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(reload).not.toHaveBeenCalled();
+  });
+
+  it('is clear on an idle page with empty fields', () => {
+    const f = document.createElement('form');
+    f.appendChild(document.createElement('input'));
+    document.body.appendChild(f);
+    expect(hasUnsavedText()).toBe(false);
+  });
+});
