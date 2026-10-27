@@ -123,7 +123,7 @@ Send the same string you signed (`body`), not a re-serialised object.
 | `serviceType`                 | no   | Delivery, Dinning (dine-in), Drive Thru, Pickup, TakeOut.                                                                                                                                                                                                 |
 | `attachments`                 | no   | Up to 10 `https://` URLs. Listed on the ticket as links; the CRM does not download them.                                                                                                                                                                  |
 | `occurredAt`                  | no   | ISO 8601 date-time of the incident.                                                                                                                                                                                                                       |
-| `coupon`                      | no   | One coupon, created **together** with the ticket (see below).                                                                                                                                                                                             |
+| `coupon`                      | no   | One coupon for this ticket (optional). The ticket is created whether or not the coupon is valid (see below).                                                                                                                                              |
 
 **Coupon object** (same body for `POST /tickets/{externalId}/coupons`):
 
@@ -143,8 +143,31 @@ Send the same string you signed (`body`), not a re-serialised object.
 | `usageLimit`           | no         | Times it can be used, default 1.                                            |
 | `noOtherDiscounts`     | no         | `true` = cannot be combined with other offers. Default `false`.             |
 
-**All or nothing:** when `coupon` is present, the ticket and the coupon are created together. If
-the coupon cannot be stored, the ticket is not kept and you get a `503` — retry the same request.
+**The ticket never depends on its coupon.** A ticket is always created when its own fields are
+valid; tickets without a coupon are normal. If a `coupon` is sent but cannot be created (invalid
+terms, a policy rule, an `externalId` already used, or a temporary error), the ticket is still
+created - shown as _Not Compensated_ - and the reply's `coupon` says why:
+
+```json
+{
+  "ticketId": "…",
+  "ticketNumber": "1E5C5323",
+  "externalId": "YT-1001",
+  "coupon": {
+    "status": "not_created",
+    "error": {
+      "code": "invalid_coupon",
+      "message": "The coupon is invalid.",
+      "fields": { "coupon.maxDiscount": "A percentage coupon needs a maximum discount." },
+      "retryable": false
+    }
+  }
+}
+```
+
+Fix the coupon and send it with `POST /tickets/{externalId}/coupons` (or resend this request with
+the same ticket `externalId` - you get the same ticket back with the coupon added). A coupon is
+always pending a WeCare supervisor's approval, exactly like one raised by an agent in the CRM.
 
 **201 Created**
 
@@ -213,15 +236,15 @@ Body: one coupon object. `201` with `{ ticketId, ticketNumber, externalId, coupo
 
 All errors are JSON: `{ "error": "<code>", "message": "…", "fields": { "<field>": "<message>" } }`.
 
-| HTTP | `error`                          | Meaning                                                                                      |
-| ---- | -------------------------------- | -------------------------------------------------------------------------------------------- |
-| 400  | `validation_failed`              | See `fields`, e.g. `{"coupon.maxDiscount": "A percentage coupon needs a maximum discount…"}` |
-| 400  | `invalid_request`                | Body is not valid JSON.                                                                      |
-| 401  | `invalid_signature`              | Bad/missing signature, or timestamp outside ±300 s.                                          |
-| 404  | `ticket_not_found`               | No ticket with that `externalId`.                                                            |
-| 409  | `coupon_external_id_conflict`    | That coupon `externalId` already belongs to another ticket.                                  |
-| 415  | `invalid_request`                | Missing `Content-Type: application/json`.                                                    |
-| 422  | `unknown_restaurant`             | `restaurantId` maps to no CRM branch. Ask the CRM team to map it.                            |
-| 422  | `policy_violation`               | Coupon outside the CRM's compensation policy (only when enabled).                            |
-| 429  | `rate_limited`                   | Too many requests; honour `Retry-After`.                                                     |
-| 503  | `not_configured` / `unavailable` | Temporarily unable to process. Safe to retry the same request.                               |
+| HTTP | `error`                          | Meaning                                                                                                                                                              |
+| ---- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400  | `validation_failed`              | See `fields`, e.g. `{"coupon.maxDiscount": "A percentage coupon needs a maximum discount…"}`                                                                         |
+| 400  | `invalid_request`                | Body is not valid JSON.                                                                                                                                              |
+| 401  | `invalid_signature`              | Bad/missing signature, or timestamp outside ±300 s.                                                                                                                  |
+| 404  | `ticket_not_found`               | No ticket with that `externalId`.                                                                                                                                    |
+| 409  | `coupon_external_id_conflict`    | (Add-coupon call) that coupon `externalId` already belongs to another ticket. On ticket creation this is reported in `coupon.error` and the ticket is still created. |
+| 415  | `invalid_request`                | Missing `Content-Type: application/json`.                                                                                                                            |
+| 422  | `unknown_restaurant`             | `restaurantId` maps to no CRM branch. Ask the CRM team to map it.                                                                                                    |
+| 422  | `policy_violation`               | (Add-coupon call) coupon outside the CRM's compensation policy, only when enabled. On ticket creation it is reported in `coupon.error`.                              |
+| 429  | `rate_limited`                   | Too many requests; honour `Retry-After`.                                                                                                                             |
+| 503  | `not_configured` / `unavailable` | Temporarily unable to process. Safe to retry the same request.                                                                                                       |

@@ -1,4 +1,4 @@
-import { createItem, deleteItem, readItems, readMe, updateItem } from '@directus/sdk';
+import { createItem, readItems, readMe, updateItem } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import {
   cleanContactName,
@@ -431,10 +431,6 @@ export class YijiInboundDirectus implements YijiInboundStore {
 
   async createTicket(row: NewTicketRow): Promise<void> {
     await this.req(createItem('tickets' as never, row as never));
-  }
-
-  async deleteTicket(id: string): Promise<void> {
-    await this.req(deleteItem('tickets' as never, id));
   }
 
   async createCoupon(row: NewCouponRow): Promise<void> {

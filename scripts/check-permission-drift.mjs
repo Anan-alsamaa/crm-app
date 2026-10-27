@@ -105,11 +105,8 @@ const EXPECTED = [
   /* The Yiji inbound API (2026-10-27, yiji-inbound.ts). Without these the
      endpoints answer 503 to every call - nothing is written, nothing breaks
      elsewhere, but Yiji's tickets never arrive. */
-  {
-    role: 'svc-socket-gateway',
-    collection: 'tickets',
-    actions: ['read', 'create', 'update', 'delete'],
-  },
+  /* No delete: a ticket from Yiji is never undone when its coupon fails (owner, 2026-10-27). */
+  { role: 'svc-socket-gateway', collection: 'tickets', actions: ['read', 'create', 'update'] },
   { role: 'svc-socket-gateway', collection: 'coupon_approvals', actions: ['read', 'create'] },
   { role: 'svc-socket-gateway', collection: 'ticket_events', actions: ['create', 'read'] },
   { role: 'svc-socket-gateway', collection: 'stores', actions: ['read'] },

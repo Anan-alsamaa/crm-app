@@ -180,7 +180,6 @@ export interface YijiInboundStore {
   ): Promise<string>;
   couponCodeTaken(code: string): Promise<boolean>;
   createTicket(row: NewTicketRow): Promise<void>;
-  deleteTicket(id: string): Promise<void>;
   createCoupon(row: NewCouponRow): Promise<void>;
   setTicketCompensation(id: string, value: 'Compensated' | 'Not Compensated'): Promise<void>;
   addTicketEvent(
@@ -389,7 +388,8 @@ export const TicketBody = z.object({
       'Use an ISO 8601 date-time, e.g. 2026-10-27T14:30:00+03:00.',
     )
     .nullish(),
-  coupon: CouponBody.nullish(),
+  /* Validated on its own (CouponBody) so a malformed coupon never blocks the ticket. */
+  coupon: z.unknown().optional(),
 });
 export type TicketBody = z.infer<typeof TicketBody>;
 
@@ -583,6 +583,28 @@ export interface YijiInboundOptions {
 export interface InboundResult {
   status: number;
   body: Record<string, unknown>;
+}
+
+/** Why a coupon sent with a ticket was not stored - the ticket still was. */
+export interface CouponOutcomeError {
+  code: string;
+  message: string;
+  fields?: Record<string, string>;
+  retryable?: boolean;
+}
+
+function outcomeOf(err: InboundHttpError): CouponOutcomeError {
+  return {
+    code: err.code,
+    message: err.message,
+    ...(err.fields ? { fields: err.fields } : {}),
+    retryable: err.status >= 500,
+  };
+}
+
+/** The `coupon` part of a reply when the coupon was not stored. */
+function couponFailure(e: CouponOutcomeError): Record<string, unknown> {
+  return { status: 'not_created', error: e };
 }
 
 /** A short, human reference for a ticket: the first 8 characters of its id. */
@@ -896,10 +918,33 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       }
     }
     const phone = normalizePhone(b.customer.phone);
+    /*
+     * THE TICKET NEVER DEPENDS ON THE COUPON (owner, 2026-10-27).
+     *
+     * A complaint is created whenever its own data is valid. A coupon problem -
+     * invalid terms, a policy rule, a clashing id, a storage error - is
+     * reported as the COUPON's outcome; the ticket stays (Not Compensated) and
+     * Yiji fixes and resends the coupon via POST .../tickets/{externalId}/coupons.
+     */
     let plan: CouponPlan | null = null;
+    let couponError: CouponOutcomeError | null = null;
     try {
-      plan = b.coupon
-        ? planCoupon(b.coupon, {
+      let couponIn: CouponBody | null = null;
+      if (b.coupon != null) {
+        const pc = CouponBody.safeParse(b.coupon);
+        if (!pc.success) {
+          const f = zodFieldErrors(pc.error);
+          throw new InboundHttpError(
+            400,
+            'invalid_coupon',
+            'The coupon is invalid.',
+            Object.fromEntries(Object.entries(f).map(([k, v]) => [`coupon.${k}`, v])),
+          );
+        }
+        couponIn = pc.data;
+      }
+      plan = couponIn
+        ? planCoupon(couponIn, {
             phone,
             description: b.description,
             restaurantId: b.restaurantId,
@@ -908,8 +953,8 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
           })
         : null;
     } catch (err) {
-      if (!(err instanceof InboundHttpError) || !err.fields) throw err;
-      Object.assign(fields, err.fields);
+      if (!(err instanceof InboundHttpError)) throw err;
+      couponError = outcomeOf(err);
     }
     if (Object.keys(fields).length > 0) throw invalid(fields);
 
@@ -942,9 +987,15 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       );
     }
     if (plan) {
-      checkPolicy(plan, b.externalId);
-      const taken = await store.findCoupon(vendorId, plan.externalId);
-      if (taken) throw couponConflict(plan.externalId);
+      try {
+        checkPolicy(plan, b.externalId);
+        const taken = await store.findCoupon(vendorId, plan.externalId);
+        if (taken) throw couponConflict(plan.externalId);
+      } catch (err) {
+        if (!(err instanceof InboundHttpError)) throw err;
+        couponError = outcomeOf(err);
+        plan = null;
+      }
     }
 
     const contactId = await retrying(() =>
@@ -1025,33 +1076,23 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       try {
         coupon = (await storeCoupon(vendorId, ticket, plan)).coupon;
       } catch (err) {
-        /* ALL OR NOTHING: no coupon row, so no ticket either. */
-        const reason = err instanceof Error ? err.message : String(err);
-        try {
-          await retrying(() => store.deleteTicket(ticket.id));
-          logger.warn(
-            { externalId: b.externalId, ticketId: ticket.id, reason },
-            'yiji inbound: coupon not stored - ticket rolled back',
-          );
-        } catch (delErr) {
-          /* The ticket stays, Not Compensated and couponless - never a false
-             "Compensated". A retry of this request completes it (replay). */
-          logger.error(
-            {
-              externalId: b.externalId,
-              ticketId: ticket.id,
-              reason,
-              err: (delErr as Error)?.message,
-            },
-            'yiji inbound: coupon not stored AND rollback failed - ticket left Not Compensated',
-          );
-        }
-        if (err instanceof InboundHttpError) throw err;
-        throw unavailable(
-          'The coupon could not be stored, so the ticket was not created. Retry the same request.',
+        /* The ticket STAYS (Not Compensated, couponless) - never a false
+           "Compensated". Yiji resends the coupon with the add-coupon call. */
+        logger.warn(
+          { externalId: b.externalId, ticketId: ticket.id, err: (err as Error)?.message },
+          'yiji inbound: coupon not stored - ticket kept, coupon reported as failed',
         );
+        couponError =
+          err instanceof InboundHttpError
+            ? outcomeOf(err)
+            : {
+                code: 'coupon_not_stored',
+                message:
+                  'The coupon could not be stored (temporary). The ticket was created; resend the coupon with POST /webhooks/yiji/tickets/{externalId}/coupons.',
+                retryable: true,
+              };
       }
-      await syncCompensation(ticket, [coupon]);
+      if (coupon) await syncCompensation(ticket, [coupon]);
     }
 
     await history(ticket.id, `Created by Yiji (externalId ${b.externalId}).`, {
@@ -1062,6 +1103,13 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         attachments,
       },
     });
+    if (couponError) {
+      await history(
+        ticket.id,
+        `Yiji sent a coupon with this ticket but it was not created: ${couponError.message}`,
+        { yiji_inbound: { couponError } },
+      );
+    }
     if (coupon && plan) {
       await history(
         ticket.id,
@@ -1078,7 +1126,14 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     );
     return {
       status: 201,
-      body: { ...ticketBody(ticket), ...(coupon ? { coupon: couponSummary(coupon) } : {}) },
+      body: {
+        ...ticketBody(ticket),
+        ...(coupon
+          ? { coupon: couponSummary(coupon) }
+          : couponError
+            ? { coupon: couponFailure(couponError) }
+            : {}),
+      },
     };
   }
 
@@ -1088,25 +1143,39 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     plan: CouponPlan | null,
   ): Promise<InboundResult> {
     let coupon: InboundCoupon | null = null;
+    let couponError: CouponOutcomeError | null = null;
     if (plan) {
-      const found = await store.findCoupon(vendorId, plan.externalId);
-      if (found && found.ticketId !== ticket.id) throw couponConflict(plan.externalId);
-      if (found) coupon = found;
-      else {
-        checkPolicy(plan, ticket.externalId ?? '');
-        try {
+      try {
+        const found = await store.findCoupon(vendorId, plan.externalId);
+        if (found && found.ticketId !== ticket.id) throw couponConflict(plan.externalId);
+        if (found) coupon = found;
+        else {
+          checkPolicy(plan, ticket.externalId ?? '');
           coupon = (await ensureCoupon(vendorId, ticket, plan)).coupon;
-        } catch (err) {
-          if (err instanceof InboundHttpError) throw err;
-          throw unavailable('The coupon could not be stored. Retry the same request.');
         }
+      } catch (err) {
+        couponError =
+          err instanceof InboundHttpError
+            ? outcomeOf(err)
+            : {
+                code: 'coupon_not_stored',
+                message: 'The coupon could not be stored (temporary). Resend it.',
+                retryable: true,
+              };
       }
     }
     const coupons = await store.ticketCoupons(ticket.id).catch(() => (coupon ? [coupon] : []));
     await syncCompensation(ticket, coupons);
     return {
       status: 200,
-      body: { ...ticketBody(ticket), ...(coupon ? { coupon: couponSummary(coupon) } : {}) },
+      body: {
+        ...ticketBody(ticket),
+        ...(coupon
+          ? { coupon: couponSummary(coupon) }
+          : couponError
+            ? { coupon: couponFailure(couponError) }
+            : {}),
+      },
     };
   }
 

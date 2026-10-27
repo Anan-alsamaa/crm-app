@@ -792,11 +792,6 @@ export const roles: RoleSpec[] = [
         fields: ['compensation'],
         permissions: { external_id: { _nnull: true } },
       },
-      {
-        collection: 'tickets',
-        action: 'delete',
-        permissions: { external_id: { _nnull: true } },
-      },
       { collection: 'coupon_approvals', action: 'create' },
       ...appendOnly('ticket_events'),
       ...readOnly('stores'),
