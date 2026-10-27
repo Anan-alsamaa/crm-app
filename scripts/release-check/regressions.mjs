@@ -299,17 +299,21 @@ await check('EMA-48', 'inbox previews load for the newest conversations', async 
   const ids = convs.map((c) => c.id);
   let covered = new Set();
   for (let i = 0; i < ids.length; i += 25) {
+    /* GROUPED, one row per conversation (2026-10-27). Reading the newest
+       1,000 messages of each 25-chat batch let a few busy test chats fill the
+       page, so quieter chats with messages were counted as "no preview" and
+       the check failed on data volume, not on a fault (78/100). */
     const r = await items('messages', {
       filter: JSON.stringify({
         conversation: { _in: ids.slice(i, i + 25) },
         is_internal_note: { _eq: false },
       }),
-      fields: 'conversation',
-      sort: '-date_created',
-      limit: '1000',
+      'aggregate[count]': 'id',
+      'groupBy[]': 'conversation',
+      limit: '-1',
     });
     if (r.status !== 200) return { ok: false, detail: `HTTP ${r.status}` };
-    for (const m of r.data) covered.add(m.conversation);
+    for (const m of r.data) if (Number(m.count?.id ?? m.count) > 0) covered.add(m.conversation);
   }
   return {
     ok: covered.size > 0 && covered.size >= ids.length * 0.8,
