@@ -910,7 +910,11 @@
     "yijiRestaurantIdLocked": "Only the Administrator can change this. It is the join key to the order feed: a wrong value does not error, it silently reports tickets against the wrong branch.",
     "importUpdated": "{{n}} updated",
     "importExisting": "{{n}} unchanged",
-    "colVendor": "Vendor"
+    "colVendor": "Vendor",
+    "colSaraposId": "SaraPOS ID",
+    "saraposOutletId": "SaraPOS ID",
+    "saraposOutletIdHint": "The branch's outlet id in SaraPOS - not the Yiji restaurant ID. Branch notifications go to this outlet.",
+    "saraposOutletIdLocked": "Only the Administrator can change this. A wrong value sends this branch’s notifications to another branch."
   },
   "complaintDash": {
     "tableTotal": "Total",

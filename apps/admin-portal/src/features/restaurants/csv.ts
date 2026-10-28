@@ -54,6 +54,7 @@ export interface ParsedStoreRow {
   chainManager: string | null;
   brandCode: string | null;
   yijiRestaurantId: string | null;
+  saraposOutletId: string | null;
 }
 
 export interface ParseStoresResult {
@@ -83,6 +84,10 @@ const HEADER_ALIASES: Record<string, keyof ParsedStoreRow | 'ignore'> = {
   'yiji restaurant id': 'yijiRestaurantId',
   'restaurant id': 'yijiRestaurantId',
   yiji_restaurant_id: 'yijiRestaurantId',
+  'sarapos outlet id': 'saraposOutletId',
+  'sarapos id': 'saraposOutletId',
+  'outlet id': 'saraposOutletId',
+  sarapos_outlet_id: 'saraposOutletId',
   code: 'code',
   'store code': 'code',
 };
@@ -130,6 +135,7 @@ export function parseStoresCsv(text: string): ParseStoresResult {
       chainManager: null,
       brandCode: null,
       yijiRestaurantId: null,
+      saraposOutletId: null,
     };
     colOf.forEach((key, c) => {
       if (!key || key === 'ignore') return;
@@ -142,6 +148,7 @@ export function parseStoresCsv(text: string): ParseStoresResult {
       else if (key === 'chainManager') rec.chainManager = v;
       else if (key === 'brandCode') rec.brandCode = v;
       else if (key === 'yijiRestaurantId') rec.yijiRestaurantId = v;
+      else if (key === 'saraposOutletId') rec.saraposOutletId = v;
     });
 
     if (!rec.name) {

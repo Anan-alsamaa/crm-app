@@ -244,16 +244,26 @@ describe('StoresPage', () => {
     expect(screen.queryByText('Orphan Branch')).not.toBeInTheDocument();
   });
 
-  it('locks the Yiji restaurant id for anyone below Administrator', async () => {
-    // The CRM "Admin" role maintains stores but must not touch the join key:
-    // a wrong id does not error, it silently reports against the wrong branch.
+  it('locks the Yiji restaurant id and SaraPOS id for anyone below Administrator', async () => {
+    // The CRM "Admin" role maintains stores but must not touch the join keys:
+    // a wrong id does not error, it silently reports against (or notifies) the
+    // wrong branch.
     session.user = { admin_access: false };
     const user = userEvent.setup({ delay: null });
     renderPage(<StoresPage />);
     await user.click(screen.getByText('Masief Plaza'));
     await screen.findByRole('dialog');
     expect(screen.getByLabelText(/Restaurant ID/)).toBeDisabled();
-    expect(screen.getByText(/Only the Administrator can change this/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/SaraPOS ID/)).toBeDisabled();
+    expect(screen.getAllByText(/Only the Administrator can change this/)).toHaveLength(2);
+  });
+
+  it('lets the Administrator set the SaraPOS id, separate from the Yiji id', async () => {
+    const user = userEvent.setup({ delay: null });
+    renderPage(<StoresPage />);
+    await user.click(screen.getByText('Masief Plaza'));
+    await screen.findByRole('dialog');
+    expect(screen.getByLabelText(/SaraPOS ID/)).toBeEnabled();
   });
 
   it('opens the edit drawer prefilled from a row', async () => {

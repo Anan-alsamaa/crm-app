@@ -483,7 +483,7 @@ export function RolesPage() {
     }),
     manage_teams: t('roles.p.manageTeams', { defaultValue: 'Manage teams' }),
     edit_yiji_branch_id: t('roles.p.editYijiBranchId', {
-      defaultValue: "Edit a branch's Yiji restaurant ID",
+      defaultValue: "Edit a branch's Yiji restaurant ID and SaraPOS ID",
     }),
     manage_store_notifications: t('roles.p.manageStoreNotifications', {
       defaultValue: 'Branch notifications',
