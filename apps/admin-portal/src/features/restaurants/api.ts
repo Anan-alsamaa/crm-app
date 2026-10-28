@@ -34,6 +34,7 @@ export interface Store {
   area_manager: string | null;
   chain_manager: string | null;
   yiji_restaurant_id: string | null;
+  sarapos_outlet_id: string | null;
   status: 'active' | 'inactive';
   brand: { id: string; code: string; name: string; yiji_brand_name?: string | null } | null;
 }
@@ -47,6 +48,7 @@ const STORE_FIELDS = [
   'area_manager',
   'chain_manager',
   'yiji_restaurant_id',
+  'sarapos_outlet_id',
   'status',
   'brand.id',
   'brand.code',
@@ -183,6 +185,7 @@ export interface StoreInput {
   area_manager?: string | null;
   chain_manager?: string | null;
   yiji_restaurant_id?: string | null;
+  sarapos_outlet_id?: string | null;
   status?: 'active' | 'inactive';
   /** Brand id (the Directus relation). */
   brand?: string | null;
@@ -249,6 +252,8 @@ const UPDATABLE = [
   // field entirely for anyone else, because it is the join key to the order
   // feed and a wrong value reports tickets against the wrong branch.
   'yiji_restaurant_id',
+  // Same rule: the SaraPOS outlet id, Administrator uploads only.
+  'sarapos_outlet_id',
 ] as const;
 
 /**
@@ -298,6 +303,7 @@ export function useBulkCreateStores() {
             'chain_manager',
             'status',
             'yiji_restaurant_id',
+            'sarapos_outlet_id',
             'brand.id',
             'brand.code',
           ] as never,

@@ -49,6 +49,7 @@ const schema = z.object({
   area_manager: z.string().optional(),
   chain_manager: z.string().optional(),
   yiji_restaurant_id: z.string().optional(),
+  sarapos_outlet_id: z.string().optional(),
   brand: z.string().optional(),
   status: z.enum(['active', 'inactive']),
 });
@@ -61,6 +62,7 @@ const EMPTY: FormValues = {
   area_manager: '',
   chain_manager: '',
   yiji_restaurant_id: '',
+  sarapos_outlet_id: '',
   brand: '',
   status: 'active',
 };
@@ -153,6 +155,7 @@ export function StoresPage() {
       area_manager: s.area_manager ?? '',
       chain_manager: s.chain_manager ?? '',
       yiji_restaurant_id: s.yiji_restaurant_id ?? '',
+      sarapos_outlet_id: s.sarapos_outlet_id ?? '',
       brand: s.brand?.id ?? '',
       status: s.status,
     });
@@ -167,6 +170,7 @@ export function StoresPage() {
       area_manager: blank(values.area_manager),
       chain_manager: blank(values.chain_manager),
       yiji_restaurant_id: blank(values.yiji_restaurant_id),
+      sarapos_outlet_id: blank(values.sarapos_outlet_id),
       brand: blank(values.brand),
       status: values.status,
     };
@@ -252,7 +256,9 @@ export function StoresPage() {
           // Omit the field entirely for anyone but the Administrator. Sending
           // it — even as null — is rejected by the field-scoped permission and
           // would fail the whole import rather than just that column.
-          ...(canEditYijiId ? { yiji_restaurant_id: r.yijiRestaurantId } : {}),
+          ...(canEditYijiId
+            ? { yiji_restaurant_id: r.yijiRestaurantId, sarapos_outlet_id: r.saraposOutletId }
+            : {}),
           brand: r.brandCode ? (brandIdByKey.get(r.brandCode.trim().toLowerCase()) ?? null) : null,
           // Matching only — stripped before the insert. Lets a codeless row be
           // told apart from a same-named branch of a different brand.
@@ -349,6 +355,7 @@ export function StoresPage() {
       if (!q) return true;
       return [
         s.yiji_restaurant_id,
+        s.sarapos_outlet_id,
         s.code,
         s.name,
         s.city,
@@ -381,6 +388,7 @@ export function StoresPage() {
     const out = scope === 'all' ? list : filtered;
     const header = [
       t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' }),
+      t('stores.colSaraposId', { defaultValue: 'SaraPOS ID' }),
       t('stores.colCode', { defaultValue: 'Code' }),
       t('stores.colName', { defaultValue: 'Store' }),
       t('stores.colBrand', { defaultValue: 'Brand' }),
@@ -391,6 +399,7 @@ export function StoresPage() {
     ];
     const rows = out.map((s) => [
       s.yiji_restaurant_id,
+      s.sarapos_outlet_id,
       s.code,
       s.name,
       s.brand?.name,
@@ -621,6 +630,9 @@ export function StoresPage() {
                     {t('stores.colRestaurantId', { defaultValue: 'Restaurant ID' })}
                   </th>
                   <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
+                    {t('stores.colSaraposId', { defaultValue: 'SaraPOS ID' })}
+                  </th>
+                  <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
                     {t('stores.colStore', { defaultValue: 'Store' })}
                   </th>
                   <th className="h-12 whitespace-nowrap px-4 text-start align-middle font-semibold first:ps-6">
@@ -662,6 +674,15 @@ export function StoresPage() {
                       ) : (
                         // Blank, not "0" or "—" in the same weight as a real id:
                         // an unmapped store must not read as a mapped one at a glance.
+                        <span className="font-mono text-xs text-muted-foreground/60">—</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2">
+                      {s.sarapos_outlet_id ? (
+                        <Ltr className="font-mono text-xs tabular-nums text-foreground">
+                          {s.sarapos_outlet_id}
+                        </Ltr>
+                      ) : (
                         <span className="font-mono text-xs text-muted-foreground/60">—</span>
                       )}
                     </td>
@@ -811,6 +832,25 @@ export function StoresPage() {
               }
             >
               <Input {...register('yiji_restaurant_id')} disabled={!canEditYijiId} />
+            </FormField>
+            {/* The POS's own branch number - where a branch notification is
+                delivered. Same gate as the Yiji id: a wrong value sends one
+                branch's complaints to another. */}
+            <FormField
+              label={t('stores.saraposOutletId', { defaultValue: 'SaraPOS ID' })}
+              hint={
+                canEditYijiId
+                  ? t('stores.saraposOutletIdHint', {
+                      defaultValue:
+                        "The branch's outlet id in SaraPOS - not the Yiji restaurant ID. Branch notifications go to this outlet.",
+                    })
+                  : t('stores.saraposOutletIdLocked', {
+                      defaultValue:
+                        'Only the Administrator can change this. A wrong value sends this branch’s notifications to another branch.',
+                    })
+              }
+            >
+              <Input {...register('sarapos_outlet_id')} disabled={!canEditYijiId} />
             </FormField>
             <FormField
               label={t('stores.name', { defaultValue: 'Store name' })}

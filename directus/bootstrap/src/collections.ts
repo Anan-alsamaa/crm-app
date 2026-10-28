@@ -181,6 +181,12 @@ export const collections: CollectionSpec[] = [
         note: "Yiji's own restaurant id. Optional: the ops sheets do not carry it today, and matching falls back to a normalised name compare. Set it and this store matches exactly, regardless of naming drift.",
       },
       {
+        field: 'sarapos_outlet_id',
+        type: 'string',
+        index: true,
+        note: "SaraPOS's own outlet id (the `outlet_id` its complain-order API takes). NOT the Yiji restaurant id - the two systems number branches independently. Where a branch notification is delivered to.",
+      },
+      {
         field: 'status',
         type: 'string',
         choices: ['active', 'inactive'],

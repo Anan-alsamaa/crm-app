@@ -1407,7 +1407,7 @@
       "viewSlaReport": "عرض تقرير مواعيد التذاكر",
       "deleteUsers": "حذف المستخدمين",
       "manageTeams": "إدارة الفرق",
-      "editYijiBranchId": "تعديل رقم مطعم الفرع في ييجي",
+      "editYijiBranchId": "تعديل رقم مطعم الفرع في ييجي ومعرّف SaraPOS",
       "manageStoreNotifications": "تنبيهات الفروع",
       "manageNotificationDefaults": "إعدادات التنبيهات الافتراضية للمنشأة",
       "viewAgentDashboard": "عرض لوحة الوكلاء",
@@ -1683,7 +1683,11 @@
     "branch": "الفرع",
     "exportFiltered": "تصدير {{count}} المعروضة",
     "exportAll": "تصدير الكل ({{count}})",
-    "colVendor": "التاجر"
+    "colVendor": "التاجر",
+    "colSaraposId": "معرّف SaraPOS",
+    "saraposOutletId": "معرّف SaraPOS",
+    "saraposOutletIdHint": "معرّف الفرع في نظام SaraPOS - وليس معرّف مطعم Yiji. تُرسل إشعارات الفرع إلى هذا الفرع.",
+    "saraposOutletIdLocked": "يمكن لمسؤول النظام وحده تغيير هذا الحقل. القيمة الخاطئة ترسل إشعارات هذا الفرع إلى فرع آخر."
   },
   "teams": {
     "title": "الفرق",

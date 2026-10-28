@@ -103,6 +103,7 @@ describe('parseStoresCsv', () => {
       chainManager: 'Aly AbdulRahman',
       brandCode: 'CND Express',
       yijiRestaurantId: null,
+      saraposOutletId: null,
     });
     expect(rows[1]!.code).toBe('LCP-002');
     expect(rows[1]!.city).toBe('Dammam');
@@ -117,6 +118,12 @@ describe('parseStoresCsv', () => {
   it('picks up an optional Yiji restaurant id column', () => {
     const { rows } = parseStoresCsv('Restaurant,Yiji Restaurant ID\nLCP-004 X,312');
     expect(rows[0]!.yijiRestaurantId).toBe('312');
+  });
+
+  it('keeps the SaraPOS outlet id apart from the Yiji restaurant id', () => {
+    const { rows } = parseStoresCsv('Restaurant,Yiji Restaurant ID,SaraPOS ID\nLCP-004 X,312,49');
+    expect(rows[0]!.yijiRestaurantId).toBe('312');
+    expect(rows[0]!.saraposOutletId).toBe('49');
   });
 
   it('skips nameless rows instead of importing blanks', () => {

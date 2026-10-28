@@ -623,7 +623,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     // restaurants without Delete.
     delete_restaurants: [g('brands', 'delete'), g('stores', 'delete')],
     manage_teams: [...crud('teams')],
-    edit_yiji_branch_id: [g('stores', 'update', {}, ['yiji_restaurant_id'])],
+    // The SaraPOS outlet id rides on the same switch: both are join keys to an
+    // outside system, and a wrong one silently misroutes rather than errors.
+    edit_yiji_branch_id: [g('stores', 'update', {}, ['yiji_restaurant_id', 'sarapos_outlet_id'])],
     manage_store_notifications: [...crud('store_notify_rules')],
     manage_notification_defaults: [
       g('app_settings', 'create', {}, null, ORG_NOTIFICATION_DEFAULTS),
