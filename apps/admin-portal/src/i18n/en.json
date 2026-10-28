@@ -1237,7 +1237,8 @@
     "editCoupon": "Edit coupon",
     "fromRule": "Rule: {{name}}",
     "fromRuleUnnamed": "From a compensation rule",
-    "differsFromPolicy": "Differs from policy"
+    "differsFromPolicy": "Differs from policy",
+    "noRule": "No rule"
   },
   "complaintReport": {
     "any": "Any",

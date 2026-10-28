@@ -1023,7 +1023,8 @@
     "policyFrom": "Suggested by the rule \"{{name}}\".",
     "differsFromPolicy": "Differs from policy - the supervisor will see that.",
     "prefilledFrom": "Pre-filled from the rule \"{{name}}\". Accept it, adjust it with Create coupon, or untick to send none.",
-    "ruleLimitReached": "This customer already had {{max}} rule coupon(s) in the last {{days}} days, so nothing was pre-filled. You can still create one by hand."
+    "ruleLimitReached": "This customer already had {{max}} rule coupon(s) in the last {{days}} days, so nothing was pre-filled. You can still create one by hand.",
+    "noRule": "No rule"
   },
   "busy": {
     "on": "Busy",

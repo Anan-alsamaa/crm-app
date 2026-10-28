@@ -1407,6 +1407,31 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       if (found.ticketId !== ticket.id) throw couponConflict(plan.externalId);
       return { status: 200, body: { ...ticketBody(ticket), coupon: couponSummary(found) } };
     }
+    /* ONE COUPON PER TICKET FROM THE RULES (owner, 2026-10-27): the ticket
+       already has its rule coupon, so Yiji's is not added - a warning, not an
+       error, and nothing is written. */
+    const existing = await store.ticketCoupons(ticket.id).catch(() => [] as InboundCoupon[]);
+    const ruleCoupon = existing.find(
+      (c) => c.policyRule && c.status !== 'rejected' && !c.replacedBy,
+    );
+    if (ruleCoupon) {
+      return {
+        status: 200,
+        body: {
+          ...ticketBody(ticket),
+          coupon: {
+            status: 'not_created',
+            error: {
+              code: 'rule_coupon_exists',
+              message: `This ticket already has a coupon from the compensation rules (code ${ruleCoupon.code ?? ruleCoupon.id}); yours was not added.`,
+              retryable: false,
+            },
+          },
+          warning: 'rule_coupon_exists',
+          existingCoupon: replyCoupon(ruleCoupon),
+        },
+      };
+    }
     checkPolicy(plan, ticketExternalId);
     let out: { coupon: InboundCoupon; created: boolean };
     try {

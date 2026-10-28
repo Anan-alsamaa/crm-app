@@ -332,6 +332,22 @@ describe('one rule coupon per ticket', () => {
   });
 });
 
+describe('Yiji adds a coupon to a ticket that already has its rule coupon', () => {
+  // Owner, 2026-10-27: not added - a warning, never a second coupon.
+  it('is not created; the reply warns and names the existing coupon', async () => {
+    store.rules = [rule()];
+    await svc.createTicket(body());
+    const res = await svc.addCoupon('YT-1', { externalId: 'YC-8', type: 'amount', value: 20 });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      warning: 'rule_coupon_exists',
+      coupon: { status: 'not_created', error: { code: 'rule_coupon_exists' } },
+      existingCoupon: { source: 'rule' },
+    });
+    expect(store.coupons.size).toBe(1);
+  });
+});
+
 describe('the optional per-customer limit', () => {
   it('off by default: a rule coupon is created', async () => {
     store.rules = [rule()];

@@ -777,7 +777,9 @@ function CreateTicketForm({
             null,
           /* The rule it came from and whether the agent changed it - only when
              a rule was involved (owner, 2026-10-27). */
-          ...(fullCoupon ? policyFields(couponRule, collectedCoupon) : {}),
+          ...(fullCoupon
+            ? policyFields(couponRule, collectedCoupon, (rules.data?.length ?? 0) > 0)
+            : {}),
         };
         const outcome = await sendTicketCoupon(created.id, input);
         if (!outcome.ok) {

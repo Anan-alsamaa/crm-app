@@ -90,6 +90,8 @@ describe('policyFields', () => {
     expect(policyFields(null, null)).toEqual({});
     const s = nextRuleCoupon(empty, rule(), build);
     expect(policyFields(null, s.collectedCoupon)).toEqual({});
+    // Rules exist but none matched: marked, quietly, as outside the rules.
+    expect(policyFields(null, s.collectedCoupon, true)).toEqual({ differs_from_policy: true });
   });
 
   it('accepted -> the rule, not differing; adjusted -> differing', () => {

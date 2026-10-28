@@ -18,7 +18,15 @@ export function PolicyPills({
   differs: boolean | null | undefined;
 }): JSX.Element | null {
   const { t } = useTranslation();
-  if (!rule) return null;
+  /* QUIET by design (owner, 2026-10-27): small muted marks while the rules
+     are still being set up. No rule matched -> "No rule". */
+  if (!rule) {
+    return differs === true ? (
+      <Pill tone="muted" size="sm" data-testid="no-rule-pill">
+        {t('couponApprovals.noRule', { defaultValue: 'No rule' })}
+      </Pill>
+    ) : null;
+  }
   const name = typeof rule === 'object' ? rule.name?.trim() : '';
   return (
     <>
@@ -28,7 +36,7 @@ export function PolicyPills({
           : t('couponApprovals.fromRuleUnnamed', { defaultValue: 'From a compensation rule' })}
       </Pill>
       {differs === true && (
-        <Pill tone="warning" size="sm" dot data-testid="differs-from-policy-pill">
+        <Pill tone="muted" size="sm" data-testid="differs-from-policy-pill">
           {t('couponApprovals.differsFromPolicy', { defaultValue: 'Differs from policy' })}
         </Pill>
       )}

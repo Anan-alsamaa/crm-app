@@ -114,8 +114,12 @@ export function nextRuleCoupon(
 export function policyFields(
   rule: AppliedRule | null,
   collected: CouponRequestDraft | null,
+  /** Active rules exist (so the columns do too). With no matching rule, the
+      request is marked - quietly - as made outside the rules (owner, 2026-10-27). */
+  rulesActive = false,
 ): { policy_rule?: string; differs_from_policy?: boolean } {
-  if (!rule || !collected) return {};
+  if (!collected) return {};
+  if (!rule) return rulesActive ? { differs_from_policy: true } : {};
   return {
     policy_rule: rule.id,
     differs_from_policy: differsFromPolicy(rule.suggested, collected),

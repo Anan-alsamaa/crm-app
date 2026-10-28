@@ -769,7 +769,8 @@
     "editCoupon": "تعديل الكوبون",
     "fromRule": "القاعدة: {{name}}",
     "fromRuleUnnamed": "من قاعدة تعويض",
-    "differsFromPolicy": "مختلف عن السياسة"
+    "differsFromPolicy": "مختلف عن السياسة",
+    "noRule": "بدون قاعدة"
   },
   "couponReport": {
     "noDecisions": "لم يُحسم شيء بعد",
