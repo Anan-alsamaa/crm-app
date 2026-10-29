@@ -206,6 +206,45 @@ export function lateOrderSummary(
   return { decisions: (rows ?? []).length, orders: newest.size, commented, compensated };
 }
 
+/* ── Branch notifications ──────────────────────────────────────────── */
+
+export interface BranchNotificationSummary {
+  /** Every notification queued in the window. */
+  total: number;
+  sent: number;
+  failed: number;
+  /** Not yet delivered (waiting, or between retries). */
+  queued: number;
+  /** Distinct branches that received at least one. */
+  branchesNotified: number;
+  /** The branches told most often, store id and count. */
+  topBranches: Array<{ store: string; count: number }>;
+}
+
+/**
+ * Branch notifications to SaraPOS (owner, 2026-10-29): what was queued, what
+ * reached the branch, what failed - and how many branches heard at all.
+ * `sentByStore` is the SENT rows grouped by `store`.
+ */
+export function branchNotificationSummary(
+  byStatus: readonly GroupRow[] | null | undefined,
+  sentByStore: readonly GroupRow[] | null | undefined,
+): BranchNotificationSummary {
+  const s = countsBy(byStatus, 'status');
+  const stores = Object.entries(countsBy(sentByStore, 'store'))
+    .filter(([store, n]) => store && n > 0)
+    .map(([store, count]) => ({ store, count }))
+    .sort((a, b) => b.count - a.count);
+  return {
+    total: Object.values(s).reduce((x, y) => x + y, 0),
+    sent: s.sent ?? 0,
+    failed: s.failed ?? 0,
+    queued: s.queued ?? 0,
+    branchesNotified: stores.length,
+    topBranches: stores.slice(0, 3),
+  };
+}
+
 /* ── AI calls ──────────────────────────────────────────────────────── */
 
 export interface AiSummary {

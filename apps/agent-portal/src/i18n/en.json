@@ -1083,7 +1083,8 @@
       "moveDown": "Move {{col}} later"
     },
     "resizeColumn": "Drag to resize; double-click to reset",
-    "staleNotice": "Reconnecting… showing the list as of {{time}}."
+    "staleNotice": "Reconnecting… showing the list as of {{time}}.",
+    "branchNotifyFailed": "Ticket saved, but the branch could not be notified."
   },
   "chatAlerts": {
     "waitingTitle": "New chat waiting — {{name}}",

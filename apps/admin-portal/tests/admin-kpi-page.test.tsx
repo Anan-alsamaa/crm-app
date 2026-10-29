@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
   useLateOrdersKpi: vi.fn(),
   usePeopleKpi: vi.fn(),
   useNotificationsKpi: vi.fn(),
+  useBranchNotificationsKpi: vi.fn(),
   useAiKpi: vi.fn(),
   useYijiUsageKpi: vi.fn(),
   RECENT_USAGE_LIMIT: 500,
@@ -74,6 +75,16 @@ beforeEach(() => {
   );
   api.useNotificationsKpi.mockReturnValue(
     ok({ total: 30, unread: 4, byType: [{ type: 'assignment', count: 20 }] }),
+  );
+  api.useBranchNotificationsKpi.mockReturnValue(
+    ok({
+      total: 9,
+      sent: 7,
+      failed: 1,
+      queued: 1,
+      branchesNotified: 3,
+      topBranches: [{ store: 's1', name: 'Dhahran Mall', count: 4 }],
+    }),
   );
   api.useAiKpi.mockReturnValue(
     ok({ calls: 40, errors: 1, costUsd: 0.42, tokens: 9000, avgLatencyMs: 800 }),

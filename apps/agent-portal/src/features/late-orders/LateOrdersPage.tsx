@@ -83,6 +83,7 @@ import {
   useOrderEventTimes,
   useUpdateLateDecision,
   lateOrderTicket,
+  queueLateOrderBranchNotification,
   FALLBACK_THRESHOLD,
 } from './api.js';
 import { useLateOrdersPush } from './live-push.js';
@@ -1200,21 +1201,39 @@ export function LateOrdersPage() {
             }),
           );
         }
+        const ticket = lateOrderTicket({
+          row: draft.row,
+          kind,
+          reason: text,
+          contactId,
+          vendorId: soleVendorId,
+          agentId: user?.id ?? null,
+          storeMatch,
+          complaintTypes: complaintTypes.data,
+        });
         const created = (await directus.request(
-          createItem(
-            'tickets' as never,
-            lateOrderTicket({
-              row: draft.row,
-              kind,
-              reason: text,
-              contactId,
-              vendorId: soleVendorId,
-              agentId: user?.id ?? null,
-              storeMatch,
-              complaintTypes: complaintTypes.data,
-            }) as never,
-          ),
+          createItem('tickets' as never, ticket as never),
         )) as { id: string };
+        /* LATE PREPARATION TELLS THE BRANCH (owner, 2026-10-29): a ticket from
+           this path is the branch's fault by definition (only an `operations`
+           cause raises one), so it is queued for the branch's SaraPOS outlet.
+           Best-effort: the ticket is saved and stays saved; the agent is told
+           when the branch could not be queued. */
+        if (created?.id) {
+          const queued = await queueLateOrderBranchNotification({
+            ticketId: created.id,
+            ticket,
+            orderId: draft.row.orderId,
+            actionTaken,
+          });
+          if (queued === 'failed') {
+            toast.warning(
+              t('lateOrders.branchNotifyFailed', {
+                defaultValue: 'Ticket saved, but the branch could not be notified.',
+              }),
+            );
+          }
+        }
         return created?.id ?? null;
       };
       /* ONE source for which branch this takes — `decisionOutcome` is exported

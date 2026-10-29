@@ -4,6 +4,7 @@ import { YIJI_GUARD_BREAKER_OPERATION } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import {
   aiSummary,
+  branchNotificationSummary,
   chatSummary,
   couponSummary,
   lateOrderSummary,
@@ -197,6 +198,38 @@ export function useNotificationsKpi(w: Window) {
         byType: Object.entries(types)
           .map(([type, n]) => ({ type, count: n }))
           .sort((a, b) => b.count - a.count),
+      };
+    },
+  });
+}
+
+/** Branch notifications to SaraPOS: by outcome, and which branches received one. */
+export function useBranchNotificationsKpi(w: Window) {
+  return useQuery({
+    queryKey: key('branch-notifications', w),
+    staleTime: STALE,
+    queryFn: async () => {
+      const [byStatus, sentByStore] = await Promise.all([
+        count('store_notifications', inWindow(w), ['status']),
+        count('store_notifications', and(inWindow(w), { status: { _eq: 'sent' } }), ['store']),
+      ]);
+      const summary = branchNotificationSummary(byStatus, sentByStore);
+      /* Names for the top three only - at most three ids, never the whole list. */
+      const ids = summary.topBranches.map((b) => b.store);
+      const names = ids.length
+        ? await rows<{ id: string; name: string | null; code: string | null }>('stores', {
+            fields: ['id', 'name', 'code'],
+            filter: { id: { _in: ids } },
+            limit: ids.length,
+          })
+        : [];
+      const nameOf = new Map(names.map((s) => [String(s.id), s.name || s.code || '']));
+      return {
+        ...summary,
+        topBranches: summary.topBranches.map((b) => ({
+          ...b,
+          name: nameOf.get(b.store) || b.store,
+        })),
       };
     },
   });

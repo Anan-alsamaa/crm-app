@@ -33,6 +33,7 @@ import { exportFileName } from '@yiji/shared-config';
 import { businessDayWindow, defaultReportRange, useRememberedRange } from '../../lib/date-range.js';
 import {
   useAiKpi,
+  useBranchNotificationsKpi,
   useChatsKpi,
   useCouponsKpi,
   useLateOrdersKpi,
@@ -358,6 +359,7 @@ export function AdminKpiPage() {
   const late = useLateOrdersKpi(w);
   const people = usePeopleKpi();
   const notes = useNotificationsKpi(w);
+  const branch = useBranchNotificationsKpi(w);
   const ai = useAiKpi(w);
   const yiji = useYijiUsageKpi(w);
 
@@ -411,6 +413,7 @@ export function AdminKpiPage() {
   const lo = late.data;
   const pp = people.data;
   const nt = notes.data;
+  const bn = branch.data;
   const aiS = ai.data;
   const y = yiji.data;
 
@@ -908,6 +911,63 @@ export function AdminKpiPage() {
                   ...(nt?.byType ?? [])
                     .slice(0, 2)
                     .map((x) => ({ label: x.type, value: n(x.count) })),
+                ]}
+              />
+            </Block>
+
+            {/* Branch notifications to SaraPOS (owner, 2026-10-29): what reached
+                the branch, what failed, and how many branches heard at all. */}
+            <Block error={branch.isError} onRetry={() => void branch.refetch()}>
+              <DomainCard
+                id="admin-kpi-branch-notifications"
+                title={t('adminKpi.branch.title', { defaultValue: 'Branch notifications' })}
+                note={t('adminKpi.branch.note', {
+                  defaultValue: 'Complaints sent to the branch in SaraPOS in this window.',
+                })}
+                loading={branch.isLoading}
+                empty={!!bn && bn.total === 0}
+                visual={
+                  bn && (
+                    <Split
+                      parts={[
+                        {
+                          label: t('adminKpi.branch.sent', { defaultValue: 'Delivered' }),
+                          value: bn.sent,
+                          tone: 'success',
+                        },
+                        {
+                          label: t('adminKpi.branch.failed', { defaultValue: 'Failed' }),
+                          value: bn.failed,
+                          tone: 'destructive',
+                        },
+                        {
+                          label: t('adminKpi.branch.queued', { defaultValue: 'Waiting' }),
+                          value: bn.queued,
+                          tone: 'warning',
+                        },
+                      ]}
+                    />
+                  )
+                }
+                stats={[
+                  {
+                    label: t('adminKpi.branch.sent', { defaultValue: 'Delivered' }),
+                    value: n(bn?.sent ?? 0),
+                  },
+                  {
+                    label: t('adminKpi.branch.failed', { defaultValue: 'Failed' }),
+                    value: n(bn?.failed ?? 0),
+                    tone: 'bad',
+                  },
+                  {
+                    label: t('adminKpi.branch.queued', { defaultValue: 'Waiting' }),
+                    value: n(bn?.queued ?? 0),
+                  },
+                  {
+                    label: t('adminKpi.branch.branches', { defaultValue: 'Branches notified' }),
+                    value: n(bn?.branchesNotified ?? 0),
+                  },
+                  ...(bn?.topBranches ?? []).map((b) => ({ label: b.name, value: n(b.count) })),
                 ]}
               />
             </Block>
