@@ -264,10 +264,26 @@ describe('the ticket timeline', () => {
 });
 
 describe('complaintMessage', () => {
-  it('never carries customer details - only order, items, complaint and action', () => {
+  it("a late order's body is exactly the agent's comment", () => {
+    const m = complaintMessage({
+      id: 'x',
+      complaint_type: 'Instore preparation late order',
+      order_id: '1339586',
+      description: 'Kitchen started the order 25 minutes late.',
+      resolution_notes: null,
+      order_items: null,
+    });
+    expect(m).toEqual({
+      message_heading: 'Instore preparation late order - Order 1339586',
+      customer_message: 'Kitchen started the order 25 minutes late.',
+    });
+  });
+
+  it('never carries customer details - only the comment, items and action', () => {
     const m = complaintMessage(row('n1'));
+    expect(m.message_heading).toBe('Missing item - Order 1339586');
     expect(m.customer_message).toBe(
-      'Order: 1339586\nItems: 2x Pasta, Fries\nComplaint: Fries were missing\nAction taken: Apologised, coupon offered',
+      'Fries were missing\nItems: 2x Pasta, Fries\nAction taken: Apologised, coupon offered',
     );
   });
 

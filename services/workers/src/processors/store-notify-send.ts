@@ -108,10 +108,15 @@ export function complaintMessage(row: OutboxRow): {
   const items = (row.order_items ?? [])
     .filter((i) => i?.name)
     .map((i) => `${i.qty && i.qty > 1 ? `${i.qty}x ` : ''}${String(i.name).trim()}`);
+  /*
+   * THE BODY IS WHAT THE AGENT WROTE (owner, 2026-10-29): for a late order,
+   * the comment typed after choosing the cause of the delay - verbatim, first,
+   * unlabelled. The order number is in the heading. Items and the action
+   * taken follow only when the row carries them (a late order carries neither).
+   */
   const lines = [
-    order ? `Order: ${order}` : null,
+    row.description?.trim() || null,
     items.length ? `Items: ${items.join(', ')}` : null,
-    row.description?.trim() ? `Complaint: ${row.description.trim()}` : null,
     row.resolution_notes?.trim() ? `Action taken: ${row.resolution_notes.trim()}` : null,
   ].filter((l): l is string => !!l);
   return {

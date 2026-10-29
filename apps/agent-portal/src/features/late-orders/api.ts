@@ -692,8 +692,9 @@ export function lateOrderTicket(opts: {
  * A late-order ticket is the branch's fault by definition - only an
  * `operations` cause raises one - so no notification rule is consulted: the
  * ticket's own complaint type is the enabled one. The workers deliver it to
- * the branch's SaraPOS outlet. What the branch gets is the order number, the
- * agent's reason and the action taken - never the customer.
+ * the branch's SaraPOS outlet. What the branch gets is the order number and
+ * the agent's comment (typed after choosing the cause), verbatim - never the
+ * customer.
  *
  * Never throws: the ticket is already saved and must stay saved.
  */
@@ -701,7 +702,6 @@ export async function queueLateOrderBranchNotification(opts: {
   ticketId: string;
   ticket: Record<string, unknown>;
   orderId: string;
-  actionTaken: string;
 }): Promise<'queued' | 'skipped' | 'failed'> {
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
   const complaintType = str(opts.ticket.complaint_type);
@@ -711,7 +711,7 @@ export async function queueLateOrderBranchNotification(opts: {
       storeId: str(opts.ticket.store),
       complaintType,
       description: str(opts.ticket.description),
-      resolutionNotes: opts.actionTaken,
+      resolutionNotes: null,
       orderId: opts.orderId,
       orderItems: null,
     },
