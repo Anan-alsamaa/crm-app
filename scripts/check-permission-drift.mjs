@@ -102,6 +102,11 @@ const UNSCOPED_TICKET_ROLES = [
 const EXPECTED = [
   { role: 'svc-socket-gateway', collection: 'app_settings', actions: ['read', 'create', 'update'] },
   { role: 'svc-socket-gateway', collection: 'contacts', actions: ['create', 'read', 'update'] },
+  /* Branch notifications to SaraPOS (2026-10-29, store-notify-send.ts). Without
+     these the sender cannot read the outbox: every row stays `queued` and the
+     branches are never told, with only a worker warning to show for it. */
+  { role: 'svc-workers', collection: 'store_notifications', actions: ['read', 'update'] },
+  { role: 'svc-workers', collection: 'stores', actions: ['read'] },
   { role: 'Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'tickets', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'app_settings', actions: ['read'] },
