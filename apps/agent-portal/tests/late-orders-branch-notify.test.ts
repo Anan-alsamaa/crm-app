@@ -33,13 +33,12 @@ beforeEach(() => {
 });
 
 describe('queueLateOrderBranchNotification', () => {
-  it("queues the branch's notification with the order, the reason and the action taken", async () => {
+  it("queues the branch's notification with the order and the agent's comment", async () => {
     request.mockResolvedValue({});
     const res = await queueLateOrderBranchNotification({
       ticketId: 't1',
       ticket,
       orderId: '1339586',
-      actionTaken: 'Apologised to the customer',
     });
     expect(res).toBe('queued');
     const [arg] = request.mock.calls[0]! as [{ collection: string; item: Record<string, unknown> }];
@@ -48,7 +47,9 @@ describe('queueLateOrderBranchNotification', () => {
     expect(sent).toContain('"ticket":"t1"');
     expect(sent).toContain('"store":"store-1"');
     expect(sent).toContain('"order_id":"1339586"');
-    expect(sent).toContain('"resolution_notes":"Apologised to the customer"');
+    // The body is the agent's comment (the ticket description), verbatim.
+    expect(sent).toContain('"description":"Kitchen was 25 minutes late"');
+    expect(sent).toContain('"resolution_notes":null');
     expect(sent).toContain('"status":"queued"');
     expect(sent).toContain('"vendor":"vendor-1"');
     // Never the customer.
@@ -60,7 +61,6 @@ describe('queueLateOrderBranchNotification', () => {
       ticketId: 't1',
       ticket: { ...ticket, store: null },
       orderId: '1',
-      actionTaken: '',
     });
     expect(res).toBe('skipped');
     expect(request).not.toHaveBeenCalled();
@@ -74,7 +74,6 @@ describe('queueLateOrderBranchNotification', () => {
       ticketId: 't1',
       ticket,
       orderId: '1',
-      actionTaken: '',
     });
     expect(res).toBe('failed');
   });

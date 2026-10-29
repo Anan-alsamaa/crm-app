@@ -1224,7 +1224,6 @@ export function LateOrdersPage() {
             ticketId: created.id,
             ticket,
             orderId: draft.row.orderId,
-            actionTaken,
           });
           if (queued === 'failed') {
             toast.warning(
