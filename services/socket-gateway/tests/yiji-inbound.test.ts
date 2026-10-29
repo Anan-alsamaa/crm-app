@@ -49,6 +49,8 @@ class FakeStore implements YijiInboundStore {
     { id: string; vendor: string; phone: string; name: string | null; yiji: string | null }
   >();
   events: Array<{ ticket: string; actor: string | null; text: string }> = [];
+  notifications: Array<Record<string, unknown>> = [];
+  notifyFails = false;
   deleted: string[] = [];
   /** Queue of failures for the next createCoupon calls. */
   couponFailures: InboundStoreError[] = [];
@@ -147,6 +149,10 @@ class FakeStore implements YijiInboundStore {
     this.deleted.push(id);
     this.tickets.delete(id);
     for (const [cid, c] of this.coupons) if (c.ticket === id) this.coupons.delete(cid);
+  }
+  async queueStoreNotification(draft: Record<string, unknown>) {
+    if (this.notifyFails) throw new InboundStoreError('refused', 'forbidden');
+    this.notifications.push(draft);
   }
   async createCoupon(row: NewCouponRow) {
     const fail = this.couponFailures.shift();
@@ -772,5 +778,50 @@ describe('helpers', () => {
     expect(
       classifyDirectusError({ errors: [{ message: 'no' }], response: { status: 403 } }).kind,
     ).toBe('refused');
+  });
+});
+
+/* Late preparation tells the branch, from Yiji too (owner, 2026-10-29). */
+describe('POST /webhooks/yiji/tickets - late preparation notifies the branch', () => {
+  const latePrep = () =>
+    ticketBody({
+      externalId: 'YT-LP-1',
+      complaintType: 'Instore preparation late order',
+      description: 'The kitchen was 25 minutes late.',
+    });
+
+  it('queues the branch notification for a new late-preparation ticket', async () => {
+    const res = await app.inject(signed('POST', '/webhooks/yiji/tickets', latePrep()));
+    expect(res.statusCode).toBe(201);
+    expect(store.notifications).toHaveLength(1);
+    expect(store.notifications[0]).toMatchObject({
+      ticket: res.json().ticketId,
+      store: 'store-1',
+      complaint_type: 'Instore preparation late order',
+      description: 'The kitchen was 25 minutes late.',
+      order_id: '1280043',
+      status: 'queued',
+      vendor: VENDOR,
+    });
+    // Never the customer.
+    expect(JSON.stringify(store.notifications[0])).not.toContain('501234567');
+  });
+
+  it('does not queue it again when Yiji repeats the same ticket', async () => {
+    await app.inject(signed('POST', '/webhooks/yiji/tickets', latePrep()));
+    await app.inject(signed('POST', '/webhooks/yiji/tickets', latePrep()));
+    expect(store.notifications).toHaveLength(1);
+  });
+
+  it('other types do not notify', async () => {
+    await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
+    expect(store.notifications).toHaveLength(0);
+  });
+
+  it('a notification that cannot be queued never blocks the ticket', async () => {
+    store.notifyFails = true;
+    const res = await app.inject(signed('POST', '/webhooks/yiji/tickets', latePrep()));
+    expect(res.statusCode).toBe(201);
+    expect(store.tickets.size).toBe(1);
   });
 });

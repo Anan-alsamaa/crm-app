@@ -802,6 +802,9 @@ export const roles: RoleSpec[] = [
       ...appendOnly('ticket_events'),
       ...readOnly('stores'),
       ...readOnly('brands'),
+      /* A late-preparation ticket from Yiji tells the branch (owner,
+         2026-10-29): queue only - the workers send it. */
+      { collection: 'store_notifications', action: 'create' },
       /*
        * THE COMPENSATION RULES (owner, 2026-10-27): a Yiji ticket sent WITHOUT
        * a coupon gets the matching rule's coupon REQUEST (pending, like every

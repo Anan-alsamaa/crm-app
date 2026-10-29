@@ -3,6 +3,7 @@ import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@dir
 import {
   displayContactName,
   storeNotificationDraft,
+  branchNotifyTypes,
   type Priority,
   type StoreNotificationSkip,
   type StoreSnapshot,
@@ -526,7 +527,8 @@ export function useCreateTicketFromConversation() {
               price: i.price,
             })) ?? null,
         },
-        storeNotifyTypes ?? [],
+        /* Late preparation always tells the branch (owner, 2026-10-29). */
+        branchNotifyTypes(storeNotifyTypes ?? []),
       );
       let storeNotify: StoreNotifyOutcome = 'skip' in decision ? decision.skip : 'queued';
       if ('draft' in decision) {

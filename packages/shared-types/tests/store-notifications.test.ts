@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
+  ALWAYS_NOTIFY_BRANCH_TYPES,
+  branchNotifyTypes,
   isNotifyingType,
   storeNotificationDraft,
   type StoreNotificationInput,
@@ -123,5 +125,29 @@ describe('storeNotificationDraft', () => {
     expect(out).toMatchObject({
       draft: { description: expect.any(String), resolution_notes: null },
     });
+  });
+});
+
+describe('late preparation always tells the branch (owner, 2026-10-29)', () => {
+  it('is notifying with no rule switched on', () => {
+    expect(ALWAYS_NOTIFY_BRANCH_TYPES).toEqual(['Instore preparation late order']);
+    const d = storeNotificationDraft(
+      input({ complaintType: 'Instore preparation late order' }),
+      branchNotifyTypes([]),
+    );
+    expect('draft' in d).toBe(true);
+  });
+
+  it("adds to operations' enabled types without duplicating", () => {
+    expect(branchNotifyTypes(['Missing item'])).toEqual([
+      'Missing item',
+      'Instore preparation late order',
+    ]);
+    expect(branchNotifyTypes(['instore preparation late order '])).toHaveLength(1);
+  });
+
+  it('other types still need their rule', () => {
+    const d = storeNotificationDraft(input({ complaintType: 'Order cold' }), branchNotifyTypes([]));
+    expect(d).toEqual({ skip: 'type-not-notifying' });
   });
 });

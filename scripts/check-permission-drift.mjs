@@ -116,6 +116,8 @@ const EXPECTED = [
      branches are never told, with only a worker warning to show for it. */
   { role: 'svc-workers', collection: 'store_notifications', actions: ['read', 'update'] },
   { role: 'svc-workers', collection: 'stores', actions: ['read'] },
+  /* A late-preparation ticket from Yiji queues its branch notification. */
+  { role: 'svc-socket-gateway', collection: 'store_notifications', actions: ['create'] },
   { role: 'Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'tickets', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'app_settings', actions: ['read'] },

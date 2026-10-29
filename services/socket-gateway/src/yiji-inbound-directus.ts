@@ -9,6 +9,7 @@ import {
   ruleCouponCountFilter,
   type CompensationRule,
   type RuleCouponLimit,
+  type StoreNotificationDraft,
   type StoreRecord,
 } from '@yiji/shared-types';
 import {
@@ -555,6 +556,10 @@ export class YijiInboundDirectus implements YijiInboundStore {
 
   async createTicket(row: NewTicketRow): Promise<void> {
     await this.req(createItem('tickets' as never, row as never));
+  }
+
+  async queueStoreNotification(draft: StoreNotificationDraft & { vendor: string }): Promise<void> {
+    await this.req(createItem('store_notifications' as never, draft as never));
   }
 
   async createCoupon(row: NewCouponRow): Promise<void> {

@@ -25,6 +25,9 @@ import {
   ruleLimitReached,
   ruleLimitSince,
   toStoreSnapshot,
+  branchNotifyTypes,
+  storeNotificationDraft,
+  type StoreNotificationDraft,
   type CompensationRule,
   type CouponRequestDraft,
   type RuleCouponLimit,
@@ -211,6 +214,8 @@ export interface YijiInboundStore {
   ruleCouponLimit?(): Promise<RuleCouponLimit | null>;
   /** Rule coupons this customer got since `sinceIso`, counted up to `max`. */
   ruleCouponsSince?(contactId: string, sinceIso: string, max: number): Promise<number>;
+  /** Queue a branch notification (late preparation, owner 2026-10-29). Optional. */
+  queueStoreNotification?(draft: StoreNotificationDraft & { vendor: string }): Promise<void>;
 }
 
 /* ── The CRM-side compensation policy (OFF by default) ────────────────────── */
@@ -1251,6 +1256,34 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         );
         throw unavailable();
       }
+    }
+
+    /*
+     * LATE PREPARATION TELLS THE BRANCH (owner, 2026-10-29), from Yiji like
+     * from anywhere else: only for a ticket created HERE (a replay returned
+     * above), best-effort - the ticket never depends on it.
+     */
+    const notify = storeNotificationDraft(
+      {
+        ticketId: row.id,
+        storeId: row.store,
+        complaintType: row.complaint_type,
+        description: b.description ?? null,
+        resolutionNotes: null,
+        orderId: row.order_id,
+        orderItems: null,
+      },
+      branchNotifyTypes(),
+    );
+    if ('draft' in notify && store.queueStoreNotification) {
+      await store
+        .queueStoreNotification({ ...notify.draft, vendor: vendorId })
+        .catch((err: unknown) =>
+          logger.warn(
+            { externalId: b.externalId, err: asStoreError(err).message },
+            'yiji inbound: branch notification not queued',
+          ),
+        );
     }
 
     const ticket: InboundTicket = {
