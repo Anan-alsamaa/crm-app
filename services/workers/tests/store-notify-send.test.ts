@@ -128,7 +128,13 @@ describe('runStoreNotifySend', () => {
     expect(h.patches).toEqual([
       {
         id: 'n1',
-        payload: { status: 'sent', sent_at: NOW.toISOString(), error: null, attempts: 1 },
+        payload: {
+          status: 'sent',
+          sent_at: NOW.toISOString(),
+          error: null,
+          attempts: 1,
+          response: `HTTP 200 ${JSON.stringify(OK)}`,
+        },
       },
     ]);
   });
