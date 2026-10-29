@@ -36,6 +36,8 @@ import {
   DEFAULT_YIJI_VOLUME_ALERT_MS,
   scheduleCouponCustomerCheck,
   DEFAULT_COUPON_CUSTOMER_CHECK_MS,
+  scheduleStoreNotifySend,
+  DEFAULT_STORE_NOTIFY_SEND_MS,
   setYijiUsageSink,
   yijiUsageWriter,
   DEFAULT_YIJI_USAGE_RETENTION_MS,
@@ -285,6 +287,22 @@ async function main(): Promise<void> {
     logger.info({ everyMs: couponCustomerCheckMs }, 'coupon customer check scheduled (0 = off)');
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'coupon customer check could not be scheduled');
+  }
+
+  /* Branch notifications to SaraPOS, every minute (owner, 2026-10-29). The job
+     itself does nothing until the SARAPOS_* settings exist.
+     `STORE_NOTIFY_SEND_MS=0` removes it. */
+  const storeNotifySendMs = Number(
+    process.env.STORE_NOTIFY_SEND_MS ?? DEFAULT_STORE_NOTIFY_SEND_MS,
+  );
+  try {
+    await scheduleStoreNotifySend(queues[QUEUES.automation], storeNotifySendMs);
+    logger.info({ everyMs: storeNotifySendMs }, 'branch notification sender scheduled (0 = off)');
+  } catch (err) {
+    logger.warn(
+      { err: (err as Error).message },
+      'branch notification sender could not be scheduled',
+    );
   }
 
   const lateOrdersPollMs = Number(process.env.LATE_ORDERS_POLL_MS ?? DEFAULT_LATE_ORDERS_POLL_MS);

@@ -58,6 +58,11 @@ import {
 } from './yiji-volume-alert.js';
 export { runCouponDeliverySweep } from './coupon-push.js';
 import { COUPON_CUSTOMER_CHECK_JOB, runCouponCustomerCheck } from './coupon-customer-check.js';
+import {
+  STORE_NOTIFY_SEND_JOB,
+  runStoreNotifySend,
+  saraposConfigFromEnv,
+} from './store-notify-send.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
 import {
@@ -162,6 +167,11 @@ function stagingOnlyPhone(varName: string): string | undefined {
 }
 
 const redirectCouponsTo = stagingOnlyPhone('COUPON_REDIRECT_PHONE');
+
+/* Branch notifications to SaraPOS (owner, 2026-10-29): off unless the three
+   SARAPOS_* settings are set. Read once - and a staging redirect on a worker
+   pointed at production fails the start, like the coupon redirect above. */
+const saraposConfig = saraposConfigFromEnv(process.env);
 
 /**
  * EVERY YIJI CALL THIS PROCESS MAKES IS RECORDED (`yiji_api_usage`, owner
@@ -377,6 +387,15 @@ export const processors: Record<QueueName, Processor> = {
     }
     /* "Has this customer a Yiji account?" for pending coupons, checked ONCE
        and stored, so the approval page never asks Yiji (incident 2026-10-26). */
+    /* Queued branch notifications, posted to the branch's SaraPOS outlet. */
+    if (job.name === STORE_NOTIFY_SEND_JOB) {
+      await runStoreNotifySend({
+        directus: deps.directus,
+        sarapos: saraposConfig,
+        logger: deps.logger,
+      });
+      return;
+    }
     if (job.name === COUPON_CUSTOMER_CHECK_JOB) {
       await runCouponCustomerCheck({
         directus: deps.directus,
@@ -670,6 +689,7 @@ export {
   scheduleCouponCustomerCheck,
   DEFAULT_COUPON_CUSTOMER_CHECK_MS,
 } from './coupon-customer-check.js';
+export { scheduleStoreNotifySend, DEFAULT_STORE_NOTIFY_SEND_MS } from './store-notify-send.js';
 export {
   scheduleYijiUsageRetention,
   yijiUsageWriter,

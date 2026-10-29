@@ -1163,6 +1163,12 @@ export const collections: CollectionSpec[] = [
       },
       { field: 'sent_at', type: 'dateTime' },
       { field: 'error', type: 'text', note: 'Why the last send attempt failed.' },
+      {
+        field: 'attempts',
+        type: 'integer',
+        defaultValue: 0,
+        note: 'Send attempts to SaraPOS. After 5 failures the row is marked failed and left alone.',
+      },
     ],
   },
   {

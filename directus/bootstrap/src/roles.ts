@@ -845,6 +845,12 @@ export const roles: RoleSpec[] = [
       /* Read-only: the coupon reports name the rule a coupon came from
          (owner, 2026-10-27). Nothing in the workers applies a rule. */
       ...readOnly('compensation_rules'),
+      /* Branch notifications (owner, 2026-10-29): the sender reads the outbox
+         and the branch's SaraPOS outlet, and records each outcome. No create,
+         no delete - the agent portal decides what is queued. */
+      { collection: 'store_notifications', action: 'read' },
+      { collection: 'store_notifications', action: 'update' },
+      ...readOnly('stores'),
       { collection: 'reports', action: 'read' },
       { collection: 'reports', action: 'update' },
       ...readOnly('sla_policies'),
