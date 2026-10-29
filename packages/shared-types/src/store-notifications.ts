@@ -57,6 +57,22 @@ export interface StoreNotificationDraft {
   status: 'queued';
 }
 
+/**
+ * TYPES THAT ALWAYS TELL THE BRANCH (owner, 2026-10-29): a NEW ticket of these
+ * types notifies its branch however it was raised - Add ticket, a chat, Late
+ * orders, the Yiji API - whether or not operations switched the type on under
+ * Branch notifications. Never an import, never an edit. The stored spelling is
+ * operations' own (shown as "Late preparation in store") - do not "fix" it.
+ */
+export const ALWAYS_NOTIFY_BRANCH_TYPES: readonly string[] = ['Instore preparation late order'];
+
+/** The types that notify: operations' enabled ones plus the always-notify ones. */
+export function branchNotifyTypes(enabled: readonly string[] = []): string[] {
+  const out = [...enabled];
+  for (const t of ALWAYS_NOTIFY_BRANCH_TYPES) if (!isNotifyingType(t, out)) out.push(t);
+  return out;
+}
+
 /** Why a ticket did not produce a notification. Reported, never guessed at. */
 export type StoreNotificationSkip = 'no-store' | 'no-complaint-type' | 'type-not-notifying';
 
