@@ -125,6 +125,15 @@ export function complaintMessage(row: OutboxRow): {
   };
 }
 
+/**
+ * SaraPOS's reply as we received it - status and body - kept on the outbox row
+ * (owner, 2026-10-29: "we did not receive any response"), so any send can be
+ * checked against SaraPOS's own records. Capped: a reply is evidence, not storage.
+ */
+function replyText(status: number, body: string): string {
+  return `HTTP ${status} ${body}`.trim().slice(0, 2_000);
+}
+
 export type SaraposFetch = (url: string, init: RequestInit) => Promise<Response>;
 
 /** SaraPOS's reply envelope: `{ status, success, message, statuscode, response }`. */
@@ -157,7 +166,7 @@ async function post(
   outletId: string,
   body: ReturnType<typeof complaintMessage>,
   doFetch: SaraposFetch,
-): Promise<{ error: string | null; status: number | null }> {
+): Promise<{ error: string | null; status: number | null; response: string | null }> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), cfg.timeoutMs ?? 15_000);
   try {
@@ -180,12 +189,16 @@ async function post(
     }
     /* SaraPOS answers 200 with success:1. A 200 that says otherwise is a refusal. */
     if (res.ok && (json?.success === undefined || Number(json.success) === 1)) {
-      return { error: null, status: res.status };
+      return { error: null, status: res.status, response: replyText(res.status, text) };
     }
     const why = typeof json?.message === 'string' ? json.message : text.slice(0, 300);
-    return { error: `SaraPOS ${res.status}: ${why || 'refused'}`, status: res.status };
+    return {
+      error: `SaraPOS ${res.status}: ${why || 'refused'}`,
+      status: res.status,
+      response: replyText(res.status, text),
+    };
   } catch (err) {
-    return { error: `SaraPOS unreachable: ${describeError(err)}`, status: null };
+    return { error: `SaraPOS unreachable: ${describeError(err)}`, status: null, response: null };
   } finally {
     clearTimeout(timer);
   }
@@ -290,12 +303,22 @@ export async function runStoreNotifySend(
     if (sarapos.redirectOutletId) {
       message.customer_message += `\n\n[Staging test - real branch: ${row.store?.code ?? ''} ${row.store?.name ?? ''} (SaraPOS ${branchOutlet})]`;
     }
-    const { error, status } = await post(sarapos, outlet, message, doFetch);
+    const { error, status, response } = await post(sarapos, outlet, message, doFetch);
     const attempts = (row.attempts ?? 0) + 1;
+    logger.info(
+      { id: row.id, ticket: row.ticket, outlet, branchOutlet, attempts, response, error },
+      'branch notifications: SaraPOS replied',
+    );
 
     if (!error) {
       if (
-        !(await mark(row.id, { status: 'sent', sent_at: now.toISOString(), error: null, attempts }))
+        !(await mark(row.id, {
+          status: 'sent',
+          sent_at: now.toISOString(),
+          error: null,
+          attempts,
+          response,
+        }))
       ) {
         return { ...result, stopped: 'write-failed' };
       }
@@ -311,7 +334,9 @@ export async function runStoreNotifySend(
     }
 
     const giveUp = attempts >= STORE_NOTIFY_MAX_ATTEMPTS;
-    if (!(await mark(row.id, { status: giveUp ? 'failed' : 'queued', error, attempts }))) {
+    if (
+      !(await mark(row.id, { status: giveUp ? 'failed' : 'queued', error, attempts, response }))
+    ) {
       return { ...result, stopped: 'write-failed' };
     }
     if (giveUp) {

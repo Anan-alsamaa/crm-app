@@ -1169,6 +1169,11 @@ export const collections: CollectionSpec[] = [
         defaultValue: 0,
         note: 'Send attempts to SaraPOS. After 5 failures the row is marked failed and left alone.',
       },
+      {
+        field: 'response',
+        type: 'text',
+        note: "SaraPOS's reply to the last attempt, as received (HTTP status + body), so a send can be checked against SaraPOS's records.",
+      },
     ],
   },
   {
