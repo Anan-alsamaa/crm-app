@@ -1,6 +1,6 @@
 import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { readItems, updateItem } from '@directus/sdk';
+import { createItem, readItems, updateItem } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
 
@@ -76,6 +76,7 @@ export function saraposConfigFromEnv(env: NodeJS.ProcessEnv): SaraposConfig | nu
 
 interface OutboxRow {
   id: string;
+  ticket?: string | null;
   complaint_type?: string | null;
   description?: string | null;
   resolution_notes?: string | null;
@@ -93,6 +94,7 @@ const FIELDS = [
   'order_id',
   'order_items',
   'attempts',
+  'ticket',
   { store: ['name', 'code', 'sarapos_outlet_id'] },
 ];
 
@@ -230,6 +232,40 @@ export async function runStoreNotifySend(
     }
   };
 
+  /*
+   * EVERY OUTCOME IS NOTED ON THE TICKET (owner, 2026-10-29): delivered, or
+   * given up on - never each retry. A timeline line, like a coupon edit
+   * (`commented` + a payload), so no new event type. Best-effort: the outbox
+   * row already holds the outcome, and a missing note must not resend.
+   */
+  const note = async (
+    row: OutboxRow,
+    text: string,
+    detail: Record<string, unknown>,
+  ): Promise<void> => {
+    if (!row.ticket) return;
+    try {
+      await directus.request(
+        createItem(
+          'ticket_events' as never,
+          {
+            ticket: row.ticket,
+            event_type: 'commented',
+            actor: null,
+            payload: { text, branch_notification: { notification: row.id, ...detail } },
+          } as never,
+        ) as never,
+      );
+    } catch (err) {
+      logger.warn(
+        { id: row.id, err: describeError(err) },
+        'branch notifications: could not note it on the ticket',
+      );
+    }
+  };
+  const branchLabel = (row: OutboxRow) =>
+    [row.store?.code, row.store?.name].filter((x) => x?.trim()).join(' ') || 'the branch';
+
   for (const row of rows ?? []) {
     const branchOutlet = row.store?.sarapos_outlet_id?.trim() || null;
     if (!branchOutlet) {
@@ -237,6 +273,10 @@ export async function runStoreNotifySend(
       if (!(await mark(row.id, { status: 'failed', error: 'This store has no SaraPOS ID.' }))) {
         return { ...result, stopped: 'write-failed' };
       }
+      await note(row, `Branch NOT notified: ${branchLabel(row)} has no SaraPOS ID.`, {
+        status: 'failed',
+        error: 'no_outlet',
+      });
       result.failed += 1;
       continue;
     }
@@ -254,6 +294,13 @@ export async function runStoreNotifySend(
       ) {
         return { ...result, stopped: 'write-failed' };
       }
+      await note(
+        row,
+        sarapos.redirectOutletId
+          ? `Branch notified in SaraPOS (staging test: sent to test outlet ${outlet}, real branch ${branchLabel(row)}).`
+          : `Branch notified in SaraPOS: ${branchLabel(row)}.`,
+        { status: 'sent', outlet, branch_outlet: branchOutlet, sent_at: now.toISOString() },
+      );
       result.sent += 1;
       continue;
     }
@@ -262,8 +309,14 @@ export async function runStoreNotifySend(
     if (!(await mark(row.id, { status: giveUp ? 'failed' : 'queued', error, attempts }))) {
       return { ...result, stopped: 'write-failed' };
     }
-    if (giveUp) result.failed += 1;
-    else result.retrying += 1;
+    if (giveUp) {
+      await note(
+        row,
+        `Branch NOT notified: SaraPOS refused ${attempts} times. Last reply: ${error}`,
+        { status: 'failed', outlet, attempts, error },
+      );
+      result.failed += 1;
+    } else result.retrying += 1;
     logger.warn({ id: row.id, outlet, attempts, error }, 'branch notifications: send failed');
     if (status === 401 || status === 403) {
       /* Our credentials were refused: every other row would be too. */

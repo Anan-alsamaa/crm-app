@@ -16,6 +16,7 @@ import {
   LATE_ORDER_CAUSE_LIST,
   type LateOrderGroup,
   type LateOrderSnapshot,
+  storeNotificationDraft,
 } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { directus } from '../../lib/directus.js';
@@ -682,6 +683,55 @@ export function lateOrderTicket(opts: {
      */
     status: 'solved',
   };
+}
+
+/**
+ * Queue the BRANCH NOTIFICATION for a late-preparation ticket (owner,
+ * 2026-10-29: on production this is the one reason a branch is notified).
+ *
+ * A late-order ticket is the branch's fault by definition - only an
+ * `operations` cause raises one - so no notification rule is consulted: the
+ * ticket's own complaint type is the enabled one. The workers deliver it to
+ * the branch's SaraPOS outlet. What the branch gets is the order number, the
+ * agent's reason and the action taken - never the customer.
+ *
+ * Never throws: the ticket is already saved and must stay saved.
+ */
+export async function queueLateOrderBranchNotification(opts: {
+  ticketId: string;
+  ticket: Record<string, unknown>;
+  orderId: string;
+  actionTaken: string;
+}): Promise<'queued' | 'skipped' | 'failed'> {
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
+  const complaintType = str(opts.ticket.complaint_type);
+  const decision = storeNotificationDraft(
+    {
+      ticketId: opts.ticketId,
+      storeId: str(opts.ticket.store),
+      complaintType,
+      description: str(opts.ticket.description),
+      resolutionNotes: opts.actionTaken,
+      orderId: opts.orderId,
+      orderItems: null,
+    },
+    complaintType ? [complaintType] : [],
+  );
+  if (!('draft' in decision)) return 'skipped';
+  try {
+    await directus.request(
+      createItem(
+        'store_notifications' as never,
+        {
+          ...decision.draft,
+          ...(str(opts.ticket.vendor) ? { vendor: opts.ticket.vendor } : {}),
+        } as never,
+      ),
+    );
+    return 'queued';
+  } catch {
+    return 'failed';
+  }
 }
 
 export const FALLBACK_THRESHOLD = DEFAULT_LATE_DELIVERY_MINUTES;

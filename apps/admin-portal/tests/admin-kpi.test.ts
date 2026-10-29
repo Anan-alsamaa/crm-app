@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   aiSummary,
+  branchNotificationSummary,
   chatSummary,
   countsBy,
   couponSummary,
@@ -119,6 +120,46 @@ describe('late orders', () => {
       { order_id: '', action: 'ignored', date_created: '2026-10-20T10:00:00Z' },
     ]);
     expect(s).toEqual({ decisions: 4, orders: 2, commented: 1, compensated: 1 });
+  });
+});
+
+describe('branch notifications', () => {
+  it('splits by outcome and counts the distinct branches that received one', () => {
+    const s = branchNotificationSummary(
+      [
+        { status: 'sent', count: '7' },
+        { status: 'failed', count: '1' },
+        { status: 'queued', count: '2' },
+      ],
+      [
+        { store: 's1', count: '4' },
+        { store: 's2', count: '2' },
+        { store: 's3', count: '1' },
+        { store: 's4', count: '0' },
+        { store: null, count: '3' },
+      ],
+    );
+    expect(s).toEqual({
+      total: 10,
+      sent: 7,
+      failed: 1,
+      queued: 2,
+      branchesNotified: 3,
+      topBranches: [
+        { store: 's1', count: 4 },
+        { store: 's2', count: 2 },
+        { store: 's3', count: 1 },
+      ],
+    });
+  });
+
+  it('is all zeros for an empty window', () => {
+    expect(branchNotificationSummary([], [])).toMatchObject({
+      total: 0,
+      sent: 0,
+      branchesNotified: 0,
+      topBranches: [],
+    });
   });
 });
 

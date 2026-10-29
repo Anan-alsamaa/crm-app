@@ -1725,7 +1725,15 @@
       "yijiLabel": "Yiji calls",
       "yijiHint": "{{failed}} failed · {{backup}} via backup"
     },
-    "emptySection": "Nothing in this window."
+    "emptySection": "Nothing in this window.",
+    "branch": {
+      "title": "Branch notifications",
+      "note": "Complaints sent to the branch in SaraPOS in this window.",
+      "sent": "Delivered",
+      "failed": "Failed",
+      "queued": "Waiting",
+      "branches": "Branches notified"
+    }
   },
   "shell": {
     "search": "Search (Ctrl+K)",

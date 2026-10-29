@@ -23,6 +23,7 @@ import {
 vi.mock('@directus/sdk', () => ({
   readItems: (collection: string, opts: unknown) => ({ collection, opts }),
   updateItem: (collection: string, id: string, payload: unknown) => ({ collection, id, payload }),
+  createItem: (collection: string, item: unknown) => ({ collection, item }),
 }));
 
 const NOW = new Date('2026-10-29T09:00:00Z');
@@ -47,17 +48,29 @@ function row(id: string, extra: Partial<Row> = {}): Row {
       { name: 'Fries', qty: 1 },
     ],
     attempts: 0,
+    ticket: `ticket-${id}`,
     store: { name: 'Dhahran Mall', code: 'LCP-002', sarapos_outlet_id: '54' },
     ...extra,
   };
 }
 
-function harness(rows: Row[], opts: { readFails?: boolean } = {}) {
+function harness(rows: Row[], opts: { readFails?: boolean; noteFails?: boolean } = {}) {
   const patches: Array<{ id: string; payload: Record<string, unknown> }> = [];
   const reads: unknown[] = [];
+  const notes: Array<Record<string, unknown>> = [];
   const directus = {
     request: vi.fn(
-      async (arg: { id?: string; payload?: Record<string, unknown>; opts?: unknown }) => {
+      async (arg: {
+        id?: string;
+        payload?: Record<string, unknown>;
+        item?: Record<string, unknown>;
+        opts?: unknown;
+      }) => {
+        if (arg.item) {
+          if (opts.noteFails) throw new Error('403 ticket_events');
+          notes.push(arg.item);
+          return {};
+        }
         if (arg.payload) {
           patches.push({ id: arg.id!, payload: arg.payload });
           return {};
@@ -68,7 +81,7 @@ function harness(rows: Row[], opts: { readFails?: boolean } = {}) {
       },
     ),
   };
-  return { directus: directus as never, patches, reads };
+  return { directus: directus as never, patches, reads, notes };
 }
 
 function reply(status: number, body: unknown) {
@@ -201,6 +214,52 @@ describe('runStoreNotifySend', () => {
     const res = await runStoreNotifySend({ directus: h.directus, sarapos: CFG, logger, fetch });
     expect(res.stopped).toBe('read-failed');
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('the ticket timeline', () => {
+  it('notes a delivery on the ticket', async () => {
+    const h = harness([row('n1')]);
+    const fetch = vi.fn(async () => reply(200, OK));
+    await runStoreNotifySend({ directus: h.directus, sarapos: CFG, logger, fetch, now: () => NOW });
+    expect(h.notes).toHaveLength(1);
+    expect(h.notes[0]).toMatchObject({
+      ticket: 'ticket-n1',
+      event_type: 'commented',
+      payload: {
+        text: 'Branch notified in SaraPOS: LCP-002 Dhahran Mall.',
+        branch_notification: { notification: 'n1', status: 'sent', outlet: '54' },
+      },
+    });
+  });
+
+  it('notes a final failure, but not each retry', async () => {
+    const h = harness([row('n1'), row('n2', { attempts: STORE_NOTIFY_MAX_ATTEMPTS - 1 })]);
+    const fetch = vi.fn(async () => reply(400, { success: false, message: 'bad outlet' }));
+    await runStoreNotifySend({ directus: h.directus, sarapos: CFG, logger, fetch });
+    expect(h.notes).toHaveLength(1);
+    expect(h.notes[0]).toMatchObject({ ticket: 'ticket-n2' });
+    expect(String((h.notes[0]!.payload as { text: string }).text)).toContain('NOT notified');
+  });
+
+  it('a missing SaraPOS ID is noted too', async () => {
+    const h = harness([row('n1', { store: { name: 'X', code: 'C-1', sarapos_outlet_id: null } })]);
+    await runStoreNotifySend({ directus: h.directus, sarapos: CFG, logger, fetch: vi.fn() });
+    expect((h.notes[0]!.payload as { text: string }).text).toBe(
+      'Branch NOT notified: C-1 X has no SaraPOS ID.',
+    );
+  });
+
+  it('a note that cannot be written never fails the delivery', async () => {
+    const h = harness([row('n1')], { noteFails: true });
+    const res = await runStoreNotifySend({
+      directus: h.directus,
+      sarapos: CFG,
+      logger,
+      fetch: vi.fn(async () => reply(200, OK)),
+    });
+    expect(res.sent).toBe(1);
+    expect(h.patches[0]!.payload.status).toBe('sent');
   });
 });
 
