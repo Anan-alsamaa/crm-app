@@ -27,6 +27,7 @@ import {
 import { couponOrderId, signupCheck } from '@yiji/shared-types';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
+import { brandIdForOrder } from './customer-push.js';
 
 /**
  * Tell Yiji about a coupon a supervisor approved.
@@ -339,7 +340,14 @@ export interface CouponApprovalRow {
    * no complaint behind it, so it carries `order_id` itself; `couponOrderId`
    * reads whichever is present, preferring the ticket's.
    */
-  ticket: { order_id: string | null } | null;
+  ticket: {
+    order_id: string | null;
+    /** The ticket's branch: Yiji's brand + restaurant when the row has none. */
+    store?: {
+      yiji_restaurant_id?: string | null;
+      brand?: { name?: string | null; yiji_brand_name?: string | null } | null;
+    } | null;
+  } | null;
   /** The order, when this coupon was raised without a ticket. */
   order_id?: string | null;
   yiji_coupon_user_id: string | null;
@@ -462,6 +470,35 @@ export function crmCouponDescription(reason: string | null | undefined): string 
  * supervisor approves 25 SAR and the customer receives whatever their default
  * happens to be.
  */
+/**
+ * YIJI'S BRAND AND RESTAURANT FOR A COUPON, FROM THE CRM'S OWN RECORD
+ * (owner, 2026-11-01: "the brand name and the restaurant name is not present"
+ * on every CRM coupon in Yiji's monthly export).
+ *
+ * They used to come only from Yiji's copy of the ORDER. Since coupons are
+ * granted by phone (2026-10-11) no order is read, so every coupon went out
+ * with neither. The row already holds both - `restaurant_id` is Yiji's own
+ * restaurant number, `brand_id` the brand NAME - and the ticket's branch backs
+ * them up. A brand is sent only when the name maps to a known Yiji brand id,
+ * a restaurant only when it is a real number: never a guess.
+ */
+export function couponBranchIds(row: CouponApprovalRow): {
+  restaurantId?: number;
+  brandId?: number;
+} {
+  const store = row.ticket?.store ?? null;
+  const restaurant = [row.restaurant_id, store?.yiji_restaurant_id]
+    .map((v) => (v === null || v === undefined ? NaN : Number(String(v).trim())))
+    .find((n) => Number.isInteger(n) && n > 0);
+  const brandName = [row.brand_id, store?.brand?.yiji_brand_name, store?.brand?.name].find(
+    (v) => typeof v === 'string' && v.trim() && brandIdForOrder(v).matched,
+  );
+  return {
+    ...(restaurant !== undefined ? { restaurantId: restaurant } : {}),
+    ...(brandName ? { brandId: brandIdForOrder(brandName).brandId } : {}),
+  };
+}
+
 export function yijiCouponPayload(
   row: CouponApprovalRow,
   /**
@@ -497,6 +534,7 @@ export function yijiCouponPayload(
   },
 ): Record<string, unknown> {
   const orderId = num(couponOrderId(row));
+  const branch = couponBranchIds(row);
   const window = row.valid_from && row.valid_to ? couponWindow(row.valid_from, row.valid_to) : null;
   const amount = num(row.coupon_value);
   const percent = num(row.coupon_percent);
@@ -790,9 +828,14 @@ export function yijiCouponPayload(
       wednesday: true,
       thursday: true,
       friday: true,
-      // Only ever THEIR ids, and only when the order supplied them.
-      ...(order?.restaurantId != null ? { restaurantId: order.restaurantId } : {}),
-      ...(order?.brandId != null ? { brandId: order.brandId } : {}),
+      // Only ever THEIR ids: the order's when it was read, else the CRM's own
+      // record of them (couponBranchIds) - never missing, never a guess.
+      ...((order?.restaurantId ?? branch.restaurantId) != null
+        ? { restaurantId: order?.restaurantId ?? branch.restaurantId }
+        : {}),
+      ...((order?.brandId ?? branch.brandId) != null
+        ? { brandId: order?.brandId ?? branch.brandId }
+        : {}),
       ...(window
         ? {
             activationDate: window.from,
@@ -1480,7 +1523,12 @@ export async function processCouponPushJob(
         { contact: ['id', 'name', 'phone', 'external_customer_id'] },
         // The order is the whole point of the endpoint, and the receipt tells
         // us whether a previous attempt already succeeded.
-        { ticket: ['order_id'] },
+        {
+          ticket: [
+            'order_id',
+            { store: ['yiji_restaurant_id', { brand: ['name', 'yiji_brand_name'] }] },
+          ],
+        },
         // The standalone order, for a coupon raised with no ticket at all.
         'order_id',
         /* The number for a coupon with NO contact row — every late-order one.

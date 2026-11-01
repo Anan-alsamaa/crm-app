@@ -385,7 +385,9 @@ describe('processCouponPushJob — a withheld coupon', () => {
     await expect(processCouponPushJob(job(), h.deps)).resolves.toBe('withheld');
     expect(readOrder).not.toHaveBeenCalled();
     const body = h.postCoupon.mock.calls[0]![1] as Record<string, unknown>;
+    // Not from an order: "store-4" is no Yiji restaurant, the brand name maps.
     expect(body).not.toHaveProperty('restaurantId');
+    expect(body.brandId).toBe(1);
     expect(body.name).toBe('+966508315325');
   });
 
