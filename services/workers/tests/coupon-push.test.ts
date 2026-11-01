@@ -443,16 +443,55 @@ describe('yijiCouponPayload', () => {
     }
   });
 
-  it('never sends OUR brand or branch ids, which are meaningless on their side', () => {
-    /*
-     * Their schema does have `brandId` and `restaurantId` — as numbers in THEIR
-     * namespace. Ours are CRM values ("Casa Pasta", "store-4"). Sending them
-     * would not merely be ignored: a number that happens to resolve would scope
-     * the coupon to somebody else's brand or branch.
-     */
+  /*
+   * YIJI'S NUMBERS, NEVER OUR TEXT (owner, 2026-11-01: every CRM coupon showed
+   * no brand and no restaurant in Yiji's export). Their schema wants numbers in
+   * THEIR namespace: a brand NAME maps to their brand id, a restaurant is sent
+   * only when it is their numeric id. "store-4" is not, so it is left out.
+   */
+  it("sends Yiji's brand id for the brand name, and no CRM-only branch value", () => {
     const p = yijiCouponPayload(ROW) as { couponUser: { coupon: Record<string, unknown> } };
+    expect(p.couponUser.coupon.brandId).toBe(1);
+    expect(p.couponUser.coupon).not.toHaveProperty('restaurantId');
+  });
+
+  it('a phone-only coupon carries both, from the coupon itself', () => {
+    const p = yijiCouponPayload({ ...ROW, brand_id: 'Poshak', restaurant_id: '117' }) as {
+      couponUser: { coupon: Record<string, unknown> };
+    };
+    expect(p.couponUser.coupon).toMatchObject({ brandId: 1004, restaurantId: 117 });
+  });
+
+  it("falls back to the ticket's branch when the coupon has neither", () => {
+    const p = yijiCouponPayload({
+      ...ROW,
+      brand_id: null,
+      restaurant_id: null,
+      ticket: {
+        order_id: null,
+        store: { yiji_restaurant_id: '70', brand: { name: 'Okashi', yiji_brand_name: null } },
+      },
+    }) as { couponUser: { coupon: Record<string, unknown> } };
+    expect(p.couponUser.coupon).toMatchObject({ brandId: 3, restaurantId: 70 });
+  });
+
+  it('never guesses: an unknown brand and a non-number restaurant are left out', () => {
+    const p = yijiCouponPayload({ ...ROW, brand_id: 'Mystery Grill', restaurant_id: 'x-9' }) as {
+      couponUser: { coupon: Record<string, unknown> };
+    };
     expect(p.couponUser.coupon).not.toHaveProperty('brandId');
     expect(p.couponUser.coupon).not.toHaveProperty('restaurantId');
+  });
+
+  it("Yiji's order still wins when it was read", () => {
+    const p = yijiCouponPayload(
+      { ...ROW, brand_id: 'Poshak', restaurant_id: '117' },
+      {
+        restaurantId: 107,
+        brandId: 1,
+      },
+    ) as { couponUser: { coupon: Record<string, unknown> } };
+    expect(p.couponUser.coupon).toMatchObject({ brandId: 1, restaurantId: 107 });
   });
 });
 
@@ -915,12 +954,11 @@ describe("the payload carries YIJI's own values for the order", () => {
     expect(p.couponUser.customerPhone).toBe('+966503813055');
   });
 
-  it('uses THEIR brand and branch ids, and only when the order supplied them', () => {
+  it("uses THEIR brand and branch ids: the order's, else the coupon's own", () => {
     /*
-     * Ours are "Casa Pasta" and "store-4" — meaningless on their side, which is
-     * why they used to be omitted entirely. A wrong number here would scope the
-     * coupon to somebody else's branch, so it is sent only when it came from
-     * the order itself.
+     * The order's ids win when it was read. Without one (every coupon since
+     * 2026-10-11) the coupon's brand NAME maps to their id and a CRM-only
+     * branch value ("store-4") is left out - never a guess (owner, 2026-11-01).
      */
     const withOrder = yijiCouponPayload(ROW, ORDER) as {
       couponUser: { coupon: Record<string, unknown> };
@@ -932,7 +970,7 @@ describe("the payload carries YIJI's own values for the order", () => {
       couponUser: { coupon: Record<string, unknown> };
     };
     expect(without.couponUser.coupon).not.toHaveProperty('restaurantId');
-    expect(without.couponUser.coupon).not.toHaveProperty('brandId');
+    expect(without.couponUser.coupon.brandId).toBe(1);
   });
 
   /* Since 2026-10-11 the job never reads the order at all - the phone decides
