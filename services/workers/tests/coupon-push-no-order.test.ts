@@ -162,6 +162,8 @@ describe('a coupon with no order', () => {
       couponCode: 'OPS-433RHNBB',
     });
     expect(body).not.toHaveProperty('couponUser');
+    // No order on this row: no orderId at all, never a 0 or a guess.
+    expect(body).not.toHaveProperty('orderId');
     // And the CREATE call carried the approved money.
     const created = postCoupon.mock.calls[0]![1] as Record<string, unknown>;
     expect(created.discount).toBe(10);
@@ -259,6 +261,38 @@ describe('a coupon with no order', () => {
   /* No phone anywhere (row, contact, title) is REFUSED with the reason on the
      request, so the approver sees what to add - never guessed from an order
      (owner, 2026-10-11). */
+  /*
+   * THE ORDER IT IS FOR, AS A REFERENCE (owner, 2026-11-01: "to be assigned
+   * based on customer number, but must hold the correct order id"). The
+   * customer is still the phone's; the order number rides along on the attach.
+   */
+  it("attaches with the ticket's order id, still to the phone's customer", async () => {
+    const {
+      deps: d,
+      postCoupon,
+      lookedUp,
+    } = deps({}, {
+      ...NO_ORDER_ROW,
+      ticket: { order_id: '1187929' },
+    } as unknown as CouponApprovalRow);
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
+    expect(lookedUp).toEqual(['0536418952']);
+    const body = postCoupon.mock.calls[1]![1] as Record<string, unknown>;
+    expect(body).toMatchObject({ userId: 'yiji-user-abc', orderId: 1187929 });
+  });
+
+  it('a placeholder order number ("N/A", "0") is not sent', async () => {
+    for (const bad of ['N/A', '0', '0_79']) {
+      const { deps: d, postCoupon } = deps({}, {
+        ...NO_ORDER_ROW,
+        ticket: { order_id: bad },
+      } as unknown as CouponApprovalRow);
+      await processCouponPushJob(job(), d);
+      const body = postCoupon.mock.calls[1]![1] as Record<string, unknown>;
+      expect(body).not.toHaveProperty('orderId');
+    }
+  });
+
   it('refuses a coupon with no phone anywhere, and posts nothing', async () => {
     const {
       deps: d,
