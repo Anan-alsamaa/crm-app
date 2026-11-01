@@ -34,7 +34,9 @@ import {
 import { StartChatDialog } from '../features/inbox/StartChatDialog.js';
 import {
   conversationIdsForOrder,
+  INBOX_PAGE_SIZE,
   useConversations,
+  useConversationsTotal,
   useDeleteConversation,
   useInboxCounts,
   useConversationPreviews,
@@ -278,7 +280,7 @@ export function Inbox() {
     staleTime: 30_000,
     queryFn: () => conversationIdsForOrder(orderTerm),
   });
-  const conversations = useConversations({
+  const listFilters: InboxFilters = {
     ...filters,
     vendor: vendorFilter,
     orderConversationIds: orderMatches.data ?? [],
@@ -286,7 +288,19 @@ export function Inbox() {
     // So a chat handed to this agent's SHIFT shows up in "mine", not only in
     // "all conversations" where nobody working a queue is looking.
     currentTeamId: user?.team ?? null,
-  });
+  };
+  /*
+   * ONE WINDOW AT A TIME (2026-11-01): the newest INBOX_PAGE_SIZE matching
+   * chats, and "Load more" for the next. Any change of filter starts again
+   * from the first window.
+   */
+  const [page, setPage] = useState(INBOX_PAGE_SIZE);
+  const filtersKey = JSON.stringify(listFilters);
+  useEffect(() => setPage(INBOX_PAGE_SIZE), [filtersKey]);
+  const conversations = useConversations(listFilters, { page });
+  const total = useConversationsTotal(listFilters);
+  const loaded = conversations.data?.length ?? 0;
+  const hasMore = loaded >= page && (total.data === undefined || total.data > loaded);
   /**
    * The stat tiles read from the INBOX, not from the filtered list. Counting
    * `conversations.data` meant clicking a tile filtered the list, recounted
@@ -513,7 +527,7 @@ export function Inbox() {
               {t('inbox.title')}
             </h2>
             <span className="rounded-full bg-secondary px-2 py-0.5 text-2xs font-semibold tabular-nums text-muted-foreground ring-1 ring-inset ring-foreground/[0.06]">
-              {conversations.data?.length ?? 0}
+              {total.data ?? loaded}
             </span>
           </div>
 
@@ -998,6 +1012,24 @@ export function Inbox() {
                     );
                   })}
                 </ul>
+                {hasMore && (
+                  <div className="flex justify-center px-2 pb-4">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={conversations.isFetching}
+                      onClick={() => setPage((n) => n + INBOX_PAGE_SIZE)}
+                    >
+                      {conversations.isFetching
+                        ? t('inbox.loadingMore', { defaultValue: 'Loading…' })
+                        : t('inbox.loadMore', {
+                            defaultValue: 'Load more ({{shown}} of {{total}})',
+                            shown: loaded,
+                            total: total.data ?? loaded,
+                          })}
+                    </Button>
+                  </div>
+                )}
               </>
             ) : (
               <div className="flex flex-col items-center gap-4 p-6 pt-12 text-center">

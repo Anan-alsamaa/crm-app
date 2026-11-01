@@ -292,7 +292,9 @@
       "vendor": "Vendor",
       "pickVendor": "Choose a vendor",
       "needVendorPick": "Choose the vendor."
-    }
+    },
+    "loadMore": "Load more ({{shown}} of {{total}})",
+    "loadingMore": "Loading…"
   },
   "conversation": {
     "replyPlaceholder": "Type a reply…",

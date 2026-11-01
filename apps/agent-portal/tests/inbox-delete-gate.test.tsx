@@ -51,6 +51,8 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
 
 vi.mock('../src/features/inbox/api.js', () => ({
   conversationIdsForOrder: async () => [],
+  INBOX_PAGE_SIZE: 100,
+  useConversationsTotal: () => ({ data: h.conversations.length }),
   useConversations: () => ({
     data: h.conversations,
     isLoading: false,

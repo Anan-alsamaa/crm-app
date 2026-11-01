@@ -374,7 +374,9 @@
       "pickVendor": "اختر البائع",
       "needVendorPick": "اختر البائع."
     },
-    "allVendors": "كل البائعين"
+    "allVendors": "كل البائعين",
+    "loadMore": "تحميل المزيد ({{shown}} من {{total}})",
+    "loadingMore": "جارٍ التحميل…"
   },
   "conversation": {
     "askName": "اسأل عن اسمه",
