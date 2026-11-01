@@ -470,18 +470,31 @@ export function useInboxCounts(
   });
 }
 
+/** How many rows the Inbox loads at a time; "Load more" adds as many again. */
+export const INBOX_PAGE_SIZE = 100;
+
 export function useConversations(
   filters: InboxFilters = {},
-  /** For a preview of a few (the command palette): only while shown, capped. */
-  opts: { enabled?: boolean; limit?: number } = {},
+  /**
+   * `limit`: a preview of a few (the command palette) - only while shown,
+   * capped, not refreshed on focus.
+   * `page`: the Inbox's own window (2026-11-01: it read EVERY conversation -
+   * 1,003 on prod and growing - plus a preview each, on every refresh). Capped
+   * like `limit`, but stays live exactly as before.
+   */
+  opts: { enabled?: boolean; limit?: number; page?: number } = {},
 ) {
   const filter = buildFilter(filters);
   const sort = buildSort(filters);
-  const limit = opts.limit ?? -1;
+  const preview = opts.limit !== undefined;
+  const limit = opts.limit ?? opts.page ?? -1;
   return useQuery({
+    /* Still under ['conversations', ...], so every live invalidation reaches it. */
     queryKey: limit === -1 ? ['conversations', filters] : ['conversations', filters, limit],
     enabled: opts.enabled ?? true,
-    ...(limit === -1 ? {} : { staleTime: 60_000, refetchOnWindowFocus: false }),
+    ...(preview ? { staleTime: 60_000, refetchOnWindowFocus: false } : {}),
+    /* Load more keeps the rows on screen while the bigger window arrives. */
+    placeholderData: (prev: InboxConversation[] | undefined) => prev,
     queryFn: () =>
       directus.request(
         readItems('conversations', {
@@ -516,6 +529,28 @@ export function useConversations(
           ...(filter ? { filter } : {}),
         }),
       ) as Promise<InboxConversation[]>,
+  });
+}
+
+/**
+ * How many conversations match the Inbox's filters - the header's number, now
+ * that the list holds one window of them. One aggregate, never the rows.
+ */
+export function useConversationsTotal(filters: InboxFilters = {}) {
+  const filter = buildFilter(filters);
+  return useQuery({
+    queryKey: ['conversations', filters, 'total'],
+    queryFn: async () => {
+      const res = (await directus.request(
+        readItems('conversations', {
+          aggregate: { count: 'id' },
+          ...(filter ? { filter } : {}),
+        } as never),
+      )) as unknown as Array<{ count: { id: number | string } | number | string }>;
+      const raw = res?.[0]?.count;
+      const n = typeof raw === 'object' && raw !== null ? (raw as { id: number | string }).id : raw;
+      return Number(n ?? 0);
+    },
   });
 }
 
