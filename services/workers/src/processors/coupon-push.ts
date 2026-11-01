@@ -1931,6 +1931,13 @@ export async function processCouponPushJob(
           id: 0,
           couponId,
           userId: compensationUserId,
+          /*
+           * THE ORDER IT IS FOR, as a REFERENCE (owner, 2026-11-01: "must hold
+           * the correct order id"). The customer is still the phone's
+           * (`userId`) - this endpoint does not hand the coupon to the order's
+           * owner. Only a real order number is sent: "N/A" or "0_79" is not one.
+           */
+          ...((num(couponOrderId(row)) ?? 0) > 0 ? { orderId: num(couponOrderId(row)) } : {}),
           couponCode: row.coupon_code ?? '',
           couponName: customerFacingCouponName(
             redirectCouponsTo?.trim() ||
