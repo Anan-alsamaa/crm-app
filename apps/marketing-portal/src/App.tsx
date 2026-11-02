@@ -45,11 +45,11 @@ const BulkPage = lazy(() =>
 const CampaignsPage = lazy(() =>
   import('./features/campaigns/CampaignsPage.js').then((m) => ({ default: m.CampaignsPage })),
 );
+const PointsPage = lazy(() =>
+  import('./features/points/PointsPage.js').then((m) => ({ default: m.PointsPage })),
+);
 const CouponsPage = lazy(() =>
   import('./features/coupons/CouponsPage.js').then((m) => ({ default: m.CouponsPage })),
-);
-const ComingNextPage = lazy(() =>
-  import('./features/coming/ComingNextPage.js').then((m) => ({ default: m.ComingNextPage })),
 );
 
 /**
@@ -329,26 +329,6 @@ function Gate({ children, requires }: { children: ReactNode; requires?: Privileg
   );
 }
 
-function Coming({
-  titleKey,
-  title,
-  descKey,
-  desc,
-}: {
-  titleKey: string;
-  title: string;
-  descKey: string;
-  desc: string;
-}) {
-  const { t } = useTranslation();
-  return (
-    <ComingNextPage
-      title={t(titleKey, { defaultValue: title })}
-      description={t(descKey, { defaultValue: desc })}
-    />
-  );
-}
-
 export function App() {
   return (
     <AuthProvider>
@@ -392,12 +372,7 @@ export function App() {
             path="/points"
             element={
               <Gate requires="manage_marketing">
-                <Coming
-                  titleKey="points.title"
-                  title="Points"
-                  descKey="points.desc"
-                  desc="Loyalty points rules and programmes on Yiji. Needs the marketing Yiji account."
-                />
+                <PointsPage />
               </Gate>
             }
           />

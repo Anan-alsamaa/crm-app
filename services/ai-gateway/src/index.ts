@@ -17,6 +17,7 @@ import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.
 import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
+import { registerMarketingPointsRoutes } from './marketing/points.js';
 import { CommerceCache } from './commerce/cache.js';
 import { RedisLateOrdersLiveStore } from './commerce/late-orders-live.js';
 import { Registry } from './metrics.js';
@@ -250,6 +251,19 @@ async function main(): Promise<void> {
   /* `/commerce/customer-exists` uses the connector's phone lookup: null without
      the admin credential, in which case the route reports `configured: false`
      and the coupon card shows no verdict either way. */
+  /* The Marketing portal's points lookups - read-only, behind its own door
+     (owner, 2026-11-02). Same CRM Yiji account; the outbound guard above
+     covers every call. */
+  await registerMarketingPointsRoutes(app, {
+    directusUrl: config.DIRECTUS_INTERNAL_URL,
+    yiji: {
+      adminApiUrl: config.YIJI_ADMIN_API_URL,
+      email: config.YIJI_ADMIN_EMAIL,
+      password: config.YIJI_ADMIN_PASSWORD,
+      tenantId: process.env.YIJI_TENANT_ID,
+    },
+  });
+
   await registerCommerceRoutes(app, {
     directus,
     connectors,

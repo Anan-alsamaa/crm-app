@@ -54,7 +54,7 @@ export function OverviewPage() {
       title: t('overview.points', { defaultValue: 'Points' }),
       body: t('overview.pointsBody', { defaultValue: 'Loyalty points rules and programmes.' }),
       requires: 'manage_marketing',
-      ready: false,
+      ready: true,
     },
     {
       to: '/approvals',
