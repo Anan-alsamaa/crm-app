@@ -43,6 +43,10 @@ import {
   DEFAULT_YIJI_USAGE_RETENTION_MS,
   type ProcessorDeps,
 } from './processors/index.js';
+import {
+  DEFAULT_MARKETING_COUPON_SEND_MS,
+  scheduleMarketingCouponSend,
+} from './processors/marketing-coupon-send.js';
 import { Registry } from './metrics.js';
 
 async function main(): Promise<void> {
@@ -303,6 +307,19 @@ async function main(): Promise<void> {
       { err: (err as Error).message },
       'branch notification sender could not be scheduled',
     );
+  }
+
+  /* Approved marketing coupons -> Yiji, every 2 minutes (owner, 2026-11-02).
+     Does nothing until YIJI_MARKETING_EMAIL/PASSWORD exist.
+     `MARKETING_COUPON_SEND_MS=0` removes it. */
+  const marketingSendMs = Number(
+    process.env.MARKETING_COUPON_SEND_MS ?? DEFAULT_MARKETING_COUPON_SEND_MS,
+  );
+  try {
+    await scheduleMarketingCouponSend(queues[QUEUES.automation], marketingSendMs);
+    logger.info({ everyMs: marketingSendMs }, 'marketing coupon sender scheduled (0 = off)');
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'marketing coupon sender could not be scheduled');
   }
 
   const lateOrdersPollMs = Number(process.env.LATE_ORDERS_POLL_MS ?? DEFAULT_LATE_ORDERS_POLL_MS);

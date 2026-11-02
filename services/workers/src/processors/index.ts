@@ -63,6 +63,11 @@ import {
   runStoreNotifySend,
   saraposConfigFromEnv,
 } from './store-notify-send.js';
+import {
+  MARKETING_COUPON_SEND_JOB,
+  marketingYijiConfigFromEnv,
+  runMarketingCouponSend,
+} from './marketing-coupon-send.js';
 import { processCustomerPushJob } from './customer-push.js';
 import { handleRouting } from '../routing.js';
 import {
@@ -388,6 +393,16 @@ export const processors: Record<QueueName, Processor> = {
     /* "Has this customer a Yiji account?" for pending coupons, checked ONCE
        and stored, so the approval page never asks Yiji (incident 2026-10-26). */
     /* Queued branch notifications, posted to the branch's SaraPOS outlet. */
+    /* Approved marketing coupons, created on Yiji once - off until the
+       marketing Yiji account is configured (owner, 2026-11-02). */
+    if (job.name === MARKETING_COUPON_SEND_JOB) {
+      await runMarketingCouponSend({
+        directus: deps.directus,
+        config: marketingYijiConfigFromEnv(),
+        logger: deps.logger,
+      });
+      return;
+    }
     if (job.name === STORE_NOTIFY_SEND_JOB) {
       await runStoreNotifySend({
         directus: deps.directus,

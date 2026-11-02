@@ -39,6 +39,9 @@ const ApprovalsPage = lazy(() =>
 const ActivityPage = lazy(() =>
   import('./features/activity/ActivityPage.js').then((m) => ({ default: m.ActivityPage })),
 );
+const CouponsPage = lazy(() =>
+  import('./features/coupons/CouponsPage.js').then((m) => ({ default: m.CouponsPage })),
+);
 const ComingNextPage = lazy(() =>
   import('./features/coming/ComingNextPage.js').then((m) => ({ default: m.ComingNextPage })),
 );
@@ -359,12 +362,7 @@ export function App() {
             path="/coupons"
             element={
               <Gate requires="manage_marketing">
-                <Coming
-                  titleKey="coupons.title"
-                  title="Marketing coupons"
-                  descKey="coupons.desc"
-                  desc="Create a marketing coupon once - issuing side, brand, validity and limits - and send it after a manager approves it."
-                />
+                <CouponsPage />
               </Gate>
             }
           />

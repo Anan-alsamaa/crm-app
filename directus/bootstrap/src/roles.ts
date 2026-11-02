@@ -854,6 +854,10 @@ export const roles: RoleSpec[] = [
       { collection: 'store_notifications', action: 'read' },
       { collection: 'store_notifications', action: 'update' },
       ...readOnly('stores'),
+      /* Marketing coupons (owner, 2026-11-02): the sender reads approved ones
+         and records what Yiji said. It never creates or deletes one. */
+      { collection: 'marketing_coupons', action: 'read' },
+      { collection: 'marketing_coupons', action: 'update' },
       { collection: 'reports', action: 'read' },
       { collection: 'reports', action: 'update' },
       ...readOnly('sla_policies'),

@@ -29,7 +29,7 @@ export function OverviewPage() {
         defaultValue: 'One coupon, set up once, sent after approval.',
       }),
       requires: 'manage_marketing',
-      ready: false,
+      ready: true,
     },
     {
       to: '/bulk',

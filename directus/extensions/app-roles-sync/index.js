@@ -146,6 +146,27 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   const CONVERSATION_FIELDS_CLOSE = ['status', 'solved_at'];
   const CONVERSATION_FIELDS_ASSIGN = ['assigned_agent', 'assigned_team'];
   const ORG_NOTIFICATION_DEFAULTS = { key: { _eq: 'notification_defaults' } };
+  /** What the author of a marketing coupon may write (owner, 2026-11-02). */
+  const MARKETING_COUPON_AUTHOR_FIELDS = [
+    'code',
+    'title',
+    'description',
+    'discount_category',
+    'coupon_value',
+    'coupon_percent',
+    'max_discount',
+    'order_minimum',
+    'valid_from',
+    'valid_to',
+    'total_uses',
+    'uses_per_customer',
+    'delivery_type',
+    'yiji_brand_id',
+    'brand_name',
+    'no_other_discounts',
+    'status',
+    'submitted_at',
+  ];
   /** Mirrors RULE_COUPON_LIMIT_SETTING_KEY in packages/shared-types. */
   const RULE_COUPON_LIMIT_SETTING = { key: { _eq: 'compensation_rules_customer_limit' } };
 
@@ -663,9 +684,45 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        The activity log is read by anyone who can open the portal and written
        by those who prepare work. Approving adds nothing here yet: it acts on
        marketing work items, which arrive with the coupons step. */
-    use_marketing_portal: [...readOnly('marketing_activity')],
-    manage_marketing: [g('marketing_activity', 'create')],
-    approve_marketing: [g('marketing_activity', 'create')],
+    use_marketing_portal: [...readOnly('marketing_activity'), ...readOnly('marketing_coupons')],
+    /* The author: creates a draft or submits it, and changes only their OWN
+       coupon while it is a draft or was rejected. Never the decision fields,
+       never what Yiji answered. */
+    manage_marketing: [
+      g('marketing_activity', 'create'),
+      g('marketing_coupons', 'create', {}, MARKETING_COUPON_AUTHOR_FIELDS, {
+        status: { _in: ['draft', 'pending'] },
+      }),
+      g(
+        'marketing_coupons',
+        'update',
+        {
+          _and: [
+            { user_created: { _eq: '$CURRENT_USER' } },
+            { status: { _in: ['draft', 'rejected'] } },
+          ],
+        },
+        MARKETING_COUPON_AUTHOR_FIELDS,
+        { status: { _in: ['draft', 'pending', 'cancelled'] } },
+      ),
+    ],
+    /* The manager: decides a SUBMITTED coupon somebody ELSE wrote. Four eyes
+       by construction - nobody approves their own. */
+    approve_marketing: [
+      g('marketing_activity', 'create'),
+      g(
+        'marketing_coupons',
+        'update',
+        {
+          _and: [
+            { status: { _eq: 'pending' } },
+            { user_created: { _neq: '$CURRENT_USER' } },
+          ],
+        },
+        ['status', 'decision_note', 'decided_at', 'decided_by'],
+        { status: { _in: ['approved', 'rejected'] } },
+      ),
+    ],
   };
 
   const RESERVED = new Set(['administrator', 'admin', 'agent']);

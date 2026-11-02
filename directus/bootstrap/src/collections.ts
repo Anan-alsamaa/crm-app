@@ -1177,6 +1177,52 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'marketing_coupons',
+    note: 'Marketing coupons (owner, 2026-11-02): a General code anyone may enter, prepared in the Marketing portal, approved by a different person, then created on Yiji ONCE by the workers. Never edited on Yiji after that.',
+    fields: [
+      { field: 'code', type: 'string', required: true, unique: true, index: true },
+      { field: 'title', type: 'string', required: true, note: 'The name customers see.' },
+      { field: 'description', type: 'text', note: 'Why it exists. Internal.' },
+      {
+        field: 'discount_category',
+        type: 'string',
+        choices: ['Amount', 'Percentage'],
+        defaultValue: 'Amount',
+        required: true,
+      },
+      { field: 'coupon_value', type: 'decimal', note: 'SAR, for an Amount coupon.' },
+      { field: 'coupon_percent', type: 'decimal', note: 'For a Percentage coupon.' },
+      { field: 'max_discount', type: 'decimal', note: 'SAR cap for a Percentage coupon.' },
+      { field: 'order_minimum', type: 'decimal' },
+      { field: 'valid_from', type: 'date', required: true },
+      { field: 'valid_to', type: 'date', required: true },
+      { field: 'total_uses', type: 'integer', required: true, note: "Yiji's reachLimit." },
+      { field: 'uses_per_customer', type: 'integer', required: true, defaultValue: 1 },
+      {
+        field: 'delivery_type',
+        type: 'string',
+        note: "Channels, stored like a compensation coupon's; empty = all.",
+      },
+      { field: 'yiji_brand_id', type: 'integer', note: "Yiji's brand id; empty = every brand." },
+      { field: 'brand_name', type: 'string', note: 'For display; the id is what Yiji gets.' },
+      { field: 'no_other_discounts', type: 'boolean', defaultValue: false },
+      {
+        field: 'status',
+        type: 'string',
+        choices: ['draft', 'pending', 'approved', 'rejected', 'created', 'failed', 'cancelled'],
+        defaultValue: 'draft',
+        required: true,
+        index: true,
+      },
+      { field: 'submitted_at', type: 'dateTime' },
+      { field: 'decided_at', type: 'dateTime' },
+      { field: 'decision_note', type: 'text' },
+      { field: 'yiji_coupon_id', type: 'string', index: true },
+      { field: 'sent_at', type: 'dateTime' },
+      { field: 'send_error', type: 'text', note: "Yiji's answer when it refused." },
+    ],
+  },
+  {
     collection: 'marketing_activity',
     note: 'APPEND-ONLY log of the Marketing portal (owner, 2026-11-02): who prepared, approved, sent or cancelled which marketing work, and when. No role may update or delete a row.',
     fields: [
@@ -1760,6 +1806,14 @@ export const relations: RelationSpec[] = [
   },
   {
     collection: 'late_order_decisions',
+    field: 'decided_by',
+    related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
+  // Which manager approved or rejected a marketing coupon. SET NULL: a manager
+  // leaving must not erase the coupon that was issued.
+  {
+    collection: 'marketing_coupons',
     field: 'decided_by',
     related: 'directus_users',
     onDelete: 'SET NULL',
