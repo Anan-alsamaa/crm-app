@@ -27,6 +27,8 @@ import {
   COUPON_REPLACE_JOB_NAME,
   type CustomerPushJob,
   errorText,
+  createYijiCouponOrdersReader,
+  createYijiCouponReader,
   fetchWithYijiUsage,
   yijiBackupTokenFromEnv,
   type YijiUsageSink,
@@ -57,6 +59,12 @@ import {
   type VolumeAlertRedis,
 } from './yiji-volume-alert.js';
 export { runCouponDeliverySweep } from './coupon-push.js';
+import {
+  COUPON_MISUSE_CHECK_JOB,
+  alertAdministrators,
+  runCouponMisuseCheck,
+  type MisuseRedis,
+} from './coupon-misuse-check.js';
 import { COUPON_CUSTOMER_CHECK_JOB, runCouponCustomerCheck } from './coupon-customer-check.js';
 import {
   STORE_NOTIFY_SEND_JOB,
@@ -212,6 +220,23 @@ const couponRemover = couponDeliveryEnabled
       onUsage: onYijiUsage,
     })
   : null;
+
+/**
+ * COUPON SAFEGUARDS (owner, 2026-11-02): read a coupon back by id, and list a
+ * day's orders that used a coupon - both READ-ONLY, with the CRM's own Yiji
+ * account (backup token only on a refusal, as everywhere). Built once: each
+ * caches its login. Null without the admin credential.
+ */
+const yijiReadEnv = {
+  adminApiUrl: process.env.YIJI_ADMIN_API_URL ?? '',
+  apiUrl: process.env.YIJI_API_URL ?? '',
+  adminEmail: process.env.YIJI_ADMIN_EMAIL ?? '',
+  adminPassword: process.env.YIJI_ADMIN_PASSWORD ?? '',
+  ...(yijiBackupToken ? { backupToken: yijiBackupToken } : {}),
+  onUsage: onYijiUsage,
+};
+const couponReader = createYijiCouponReader(yijiReadEnv);
+const couponOrdersReader = createYijiCouponOrdersReader(yijiReadEnv);
 
 /**
  * STAGING ONLY: every customer PUSH to one handset.
@@ -382,6 +407,19 @@ export const processors: Record<QueueName, Processor> = {
         ...(deps.redis ? { redis: deps.redis as unknown as VolumeAlertRedis } : {}),
         logger: deps.logger,
         thresholds: yijiVolumeThresholdsFromEnv(process.env),
+      });
+      return;
+    }
+    /* CRM coupons used by the wrong customer, or not Private on Yiji - the
+       Administrator is told in-app (owner, 2026-11-02). Read-only. */
+    if (job.name === COUPON_MISUSE_CHECK_JOB) {
+      await runCouponMisuseCheck({
+        directus: deps.directus,
+        notificationsQueue: deps.queues[QUEUES.notifications],
+        logger: deps.logger,
+        readOrders: couponOrdersReader,
+        readCoupon: couponReader,
+        ...(deps.redis ? { redis: deps.redis as unknown as MisuseRedis } : {}),
       });
       return;
     }
@@ -570,6 +608,23 @@ export const processors: Record<QueueName, Processor> = {
          must not start resolving customers either. */
       findCustomer: (couponDeliveryEnabled ? yiji.findCustomerIdByPhone : null) ?? undefined,
       findUserCoupon: (couponDeliveryEnabled ? yiji.findCustomerCoupon : null) ?? undefined,
+      /* The Private check on every new coupon (owner, 2026-11-02). */
+      readCoupon: (couponDeliveryEnabled ? couponReader : null) ?? undefined,
+      alertNotPrivate: async (code, detail) => {
+        await alertAdministrators(
+          {
+            directus: deps.directus,
+            notificationsQueue: deps.queues[QUEUES.notifications],
+            logger: deps.logger,
+          },
+          {
+            title: 'Coupon blocked: not Private on Yiji',
+            body: `${code}: ${detail}`,
+            codes: [code],
+            stamp: `blocked-${code}`,
+          },
+        );
+      },
       // Yiji's API is multi-tenant and routes on this header. Defaulted to the
       // tenant the captured request used rather than left blank: a missing
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind
@@ -685,6 +740,10 @@ export { scheduleReconcile } from './sla.js';
 export { scheduleLateOrdersPoll, DEFAULT_LATE_ORDERS_POLL_MS } from './late-orders-poll.js';
 export { scheduleInactivitySweep } from './automation.js';
 export { scheduleYijiVolumeAlert, DEFAULT_YIJI_VOLUME_ALERT_MS } from './yiji-volume-alert.js';
+export {
+  scheduleCouponMisuseCheck,
+  DEFAULT_COUPON_MISUSE_CHECK_MS,
+} from './coupon-misuse-check.js';
 export {
   scheduleCouponCustomerCheck,
   DEFAULT_COUPON_CUSTOMER_CHECK_MS,
