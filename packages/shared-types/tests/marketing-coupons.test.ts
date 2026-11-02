@@ -88,3 +88,21 @@ describe('a bulk list', () => {
     expect(marketingCouponPayload(base).type).toBe(0);
   });
 });
+
+describe('what a coupon can cost at most', () => {
+  it('amount x total uses; cap x uses for a percentage; list size for a bulk send', async () => {
+    const { marketingCouponMaxCost } = await import('../src/marketing-coupons.js');
+    expect(marketingCouponMaxCost(base)).toBe(20 * 500);
+    expect(
+      marketingCouponMaxCost({ ...base, discount_category: 'Percentage', max_discount: 30 }),
+    ).toBe(30 * 500);
+    expect(
+      marketingCouponMaxCost({
+        ...base,
+        audience: 'list',
+        recipient_count: 120,
+        uses_per_customer: 2,
+      }),
+    ).toBe(20 * 240);
+  });
+});

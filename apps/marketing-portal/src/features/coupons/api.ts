@@ -17,6 +17,7 @@ export interface MarketingCoupon extends MarketingCouponDraft {
   send_error: string | null;
   user_created: { id: string; first_name: string | null; email: string | null } | null;
   recipient_count: number | null;
+  campaign: string | null;
   sent_count: number | null;
   no_account_count: number | null;
   failed_count: number | null;
@@ -64,7 +65,10 @@ export function useMarketingCoupons(
 }
 
 /** The fields an author sends - never a decision, never what Yiji said. */
-export type CouponForm = MarketingCouponDraft & { brand_name?: string | null };
+export type CouponForm = MarketingCouponDraft & {
+  brand_name?: string | null;
+  campaign?: string | null;
+};
 
 function useInvalidate() {
   const qc = useQueryClient();

@@ -47,7 +47,7 @@ export function OverviewPage() {
         defaultValue: 'Dates, budget and results for a group of coupons and offers.',
       }),
       requires: 'manage_marketing',
-      ready: false,
+      ready: true,
     },
     {
       to: '/points',

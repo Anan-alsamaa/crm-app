@@ -9,6 +9,7 @@ import {
 } from '@yiji/shared-types';
 import { Button, DateField, Drawer, FormField, Input, Select, Textarea, toast } from '@yiji/ui';
 import { useSaveCoupon, type CouponForm, type MarketingCoupon } from './api.js';
+import { useCampaigns } from '../campaigns/api.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
@@ -16,6 +17,7 @@ const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString(
 function blank(audience: 'code' | 'list'): CouponForm {
   return {
     audience,
+    campaign: null,
     code: newMarketingCouponCode(),
     title: '',
     description: '',
@@ -54,6 +56,7 @@ function fromRow(c: MarketingCoupon): CouponForm {
     brand_name: c.brand_name ?? null,
     no_other_discounts: c.no_other_discounts === true,
     audience: c.audience === 'list' ? 'list' : 'code',
+    campaign: c.campaign ?? null,
   };
 }
 
@@ -94,6 +97,7 @@ export function CouponFormDrawer({
 }) {
   const { t } = useTranslation();
   const save = useSaveCoupon();
+  const campaigns = useCampaigns();
   const [form, setForm] = useState<CouponForm>(() => blank(audience));
   const [tried, setTried] = useState(false);
   /* The list as read from the file or the paste box; null = keep the saved list. */
@@ -306,6 +310,19 @@ export function CouponFormDrawer({
             {MARKETING_BRANDS.map((b) => (
               <option key={b.yijiId} value={b.yijiId}>
                 {b.name}
+              </option>
+            ))}
+          </Select>
+        </FormField>
+        <FormField label={t('coupons.campaign', { defaultValue: 'Campaign (optional)' })}>
+          <Select
+            value={form.campaign ?? ''}
+            onChange={(e) => set('campaign', e.target.value || null)}
+          >
+            <option value="">{t('coupons.noCampaign', { defaultValue: 'No campaign' })}</option>
+            {(campaigns.data ?? []).map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
               </option>
             ))}
           </Select>

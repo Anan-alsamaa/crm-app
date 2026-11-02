@@ -1248,6 +1248,28 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'marketing_campaigns',
+    note: 'Marketing campaigns (owner, 2026-11-02): a name, a goal, dates and a budget that marketing coupons and bulk sends belong to. A campaign never reaches a customer itself - every coupon in it is still approved on its own.',
+    fields: [
+      { field: 'name', type: 'string', required: true },
+      { field: 'goal', type: 'text', note: 'What the campaign is meant to achieve.' },
+      { field: 'start_date', type: 'date' },
+      { field: 'end_date', type: 'date' },
+      {
+        field: 'budget',
+        type: 'decimal',
+        note: 'SAR. Checked against the most its coupons can cost.',
+      },
+      {
+        field: 'status',
+        type: 'string',
+        choices: ['active', 'archived'],
+        defaultValue: 'active',
+        index: true,
+      },
+    ],
+  },
+  {
     collection: 'marketing_coupon_recipients',
     note: 'The customers on a bulk (list) marketing coupon, one row each, with what happened when the coupon was given to them.',
     fields: [
@@ -1851,6 +1873,14 @@ export const relations: RelationSpec[] = [
     collection: 'late_order_decisions',
     field: 'decided_by',
     related: 'directus_users',
+    onDelete: 'SET NULL',
+  },
+  // A coupon MAY belong to a campaign. SET NULL: archiving or deleting a
+  // campaign never takes an issued coupon with it.
+  {
+    collection: 'marketing_coupons',
+    field: 'campaign',
+    related: 'marketing_campaigns',
     onDelete: 'SET NULL',
   },
   // A list belongs to its coupon; deleting a draft takes its list with it.

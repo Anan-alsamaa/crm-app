@@ -168,6 +168,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     'submitted_at',
     'audience',
     'recipient_count',
+    'campaign',
   ];
   /** A bulk list may change only while its coupon is still its author's draft. */
   const OWN_DRAFT_LIST = {
@@ -697,6 +698,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       ...readOnly('marketing_activity'),
       ...readOnly('marketing_coupons'),
       ...readOnly('marketing_coupon_recipients'),
+      ...readOnly('marketing_campaigns'),
     ],
     /* The author: creates a draft or submits it, and changes only their OWN
        coupon while it is a draft or was rejected. Never the decision fields,
@@ -724,6 +726,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
         status: { _eq: 'queued' },
       }),
       g('marketing_coupon_recipients', 'delete', OWN_DRAFT_LIST),
+      // Campaigns are the team's: anyone who prepares work may plan and
+      // archive one. No delete - a campaign's history stays.
+      g('marketing_campaigns', 'create'),
+      g('marketing_campaigns', 'update'),
     ],
     /* The manager: decides a SUBMITTED coupon somebody ELSE wrote. Four eyes
        by construction - nobody approves their own. */

@@ -42,6 +42,9 @@ const ActivityPage = lazy(() =>
 const BulkPage = lazy(() =>
   import('./features/bulk/BulkPage.js').then((m) => ({ default: m.BulkPage })),
 );
+const CampaignsPage = lazy(() =>
+  import('./features/campaigns/CampaignsPage.js').then((m) => ({ default: m.CampaignsPage })),
+);
 const CouponsPage = lazy(() =>
   import('./features/coupons/CouponsPage.js').then((m) => ({ default: m.CouponsPage })),
 );
@@ -381,12 +384,7 @@ export function App() {
             path="/campaigns"
             element={
               <Gate requires="manage_marketing">
-                <Coming
-                  titleKey="campaigns.title"
-                  title="Campaigns"
-                  descKey="campaigns.desc"
-                  desc="Group coupons and offers under one campaign with its dates, budget and results."
-                />
+                <CampaignsPage />
               </Gate>
             }
           />

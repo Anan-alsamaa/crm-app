@@ -232,3 +232,27 @@ export function parseRecipientList(text: string): {
   }
   return { phones: [...seen], invalid, duplicates };
 }
+
+/**
+ * The MOST a marketing coupon can cost if every allowed use is redeemed:
+ * amount x uses, or (for a percentage) the cap x uses. A campaign's budget is
+ * checked against the sum of these - the ceiling, never a guess at usage.
+ */
+export function marketingCouponMaxCost(
+  c: Pick<
+    MarketingCouponDraft,
+    | 'discount_category'
+    | 'coupon_value'
+    | 'max_discount'
+    | 'total_uses'
+    | 'uses_per_customer'
+    | 'audience'
+  > & { recipient_count?: number | null },
+): number {
+  const per = isPercentageCategory(c.discount_category) ? n(c.max_discount) : n(c.coupon_value);
+  const uses =
+    c.audience === 'list'
+      ? (Number(c.recipient_count) || 0) * (n(c.uses_per_customer) ?? 1)
+      : (n(c.total_uses) ?? 0);
+  return Math.max(0, (per ?? 0) * uses);
+}
