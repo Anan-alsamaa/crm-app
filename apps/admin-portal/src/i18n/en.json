@@ -1446,7 +1446,10 @@
       "manageTicketCompensation": "Manage a ticket's compensation (assign a coupon; Not Compensated removes it, also from the customer's Yiji app)",
       "deleteCompensation": "Delete a compensation record",
       "editApprovedCoupons": "Edit an approved coupon (applies at once: a new coupon replaces it, also in the customer's Yiji app; a used coupon cannot be edited)",
-      "manageCompensationRules": "Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)"
+      "manageCompensationRules": "Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)",
+      "useMarketingPortal": "Open the Marketing portal",
+      "manageMarketing": "Prepare marketing coupons, bulk sends, campaigns and points",
+      "approveMarketing": "Approve marketing work before it reaches customers"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1469,7 +1472,9 @@
     "groupCoupons": "Coupons & compensation",
     "ownerOnlyHint": "Only the Administrator sees this switch.",
     "portalAgent": "Agent portal",
-    "portalAdmin": "Admin portal"
+    "portalAdmin": "Admin portal",
+    "groupMarketing": "Marketing",
+    "portalMarketing": "Marketing portal"
   },
   "backup": {
     "title": "Backup",

@@ -79,7 +79,7 @@ describe('switches added for the CEO role', () => {
 
   it('every switch is placed in a portal on the Roles page', () => {
     for (const k of [...PRIVILEGES, ...OWNER_PRIVILEGES]) {
-      expect(['agent', 'admin'], k).toContain(PRIVILEGE_PORTAL[k]);
+      expect(['agent', 'admin', 'marketing'], k).toContain(PRIVILEGE_PORTAL[k]);
     }
   });
 });

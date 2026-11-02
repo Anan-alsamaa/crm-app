@@ -1177,6 +1177,28 @@ export const collections: CollectionSpec[] = [
     ],
   },
   {
+    collection: 'marketing_activity',
+    note: 'APPEND-ONLY log of the Marketing portal (owner, 2026-11-02): who prepared, approved, sent or cancelled which marketing work, and when. No role may update or delete a row.',
+    fields: [
+      {
+        field: 'action',
+        type: 'string',
+        required: true,
+        index: true,
+        note: 'What happened, e.g. signed_in, prepared, approved, rejected, sent, cancelled.',
+      },
+      {
+        field: 'subject_type',
+        type: 'string',
+        index: true,
+        note: 'What it happened to: coupon, bulk_send, campaign, points. Empty for portal events.',
+      },
+      { field: 'subject_id', type: 'string', index: true },
+      { field: 'summary', type: 'text', note: 'One readable line for the activity list.' },
+      { field: 'detail', type: 'json' },
+    ],
+  },
+  {
     collection: 'ticket_events',
     note: 'APPEND-ONLY audit history (no update/delete in any role)',
     fields: [

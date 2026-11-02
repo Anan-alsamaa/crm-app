@@ -205,7 +205,7 @@ export function RolesPage() {
    */
   const [creating, setCreating] = useState(false);
   /* Which portal and which area the privilege editor has open. */
-  const [portalPick, setPortalPick] = useState<'agent' | 'admin'>('agent');
+  const [portalPick, setPortalPick] = useState<'agent' | 'admin' | 'marketing'>('agent');
   const [areaPick, setAreaPick] = useState<string>('chat');
   const startNewRole = () => {
     setDraft(EMPTY);
@@ -289,6 +289,7 @@ export function RolesPage() {
     coupons: <TicketIcon size={15} />,
     reporting: <ChartIcon size={15} />,
     admin: <ShieldIcon size={15} />,
+    marketing: <ChartIcon size={15} />,
   };
   const { can, isOwner, user } = useAuth();
   /**
@@ -353,6 +354,7 @@ export function RolesPage() {
     coupons: t('roles.groupCoupons', { defaultValue: 'Coupons & compensation' }),
     reporting: t('roles.groupReporting', { defaultValue: 'Dashboard & reports' }),
     admin: t('roles.groupAdmin', { defaultValue: 'Administration' }),
+    marketing: t('roles.groupMarketing', { defaultValue: 'Marketing' }),
   };
   const PRIV_LABELS: Record<string, string> = {
     use_chat: t('roles.p.useChat', { defaultValue: 'Work the chat inbox' }),
@@ -491,6 +493,15 @@ export function RolesPage() {
     manage_notification_defaults: t('roles.p.manageNotificationDefaults', {
       defaultValue: 'Organisation-wide notification defaults',
     }),
+    use_marketing_portal: t('roles.p.useMarketingPortal', {
+      defaultValue: 'Open the Marketing portal',
+    }),
+    manage_marketing: t('roles.p.manageMarketing', {
+      defaultValue: 'Prepare marketing coupons, bulk sends, campaigns and points',
+    }),
+    approve_marketing: t('roles.p.approveMarketing', {
+      defaultValue: 'Approve marketing work before it reaches customers',
+    }),
   };
 
   /*
@@ -518,7 +529,7 @@ export function RolesPage() {
    * nothing in them for this editor (the Administrator-only ones, for anyone
    * else) are left out, exactly as before.
    */
-  const portals = (['agent', 'admin'] as const)
+  const portals = (['agent', 'admin', 'marketing'] as const)
     .map((portal) => ({
       portal,
       areas: Object.entries(GROUPS)
@@ -859,7 +870,9 @@ export function RolesPage() {
                           label:
                             p.portal === 'agent'
                               ? t('roles.portalAgent', { defaultValue: 'Agent portal' })
-                              : t('roles.portalAdmin', { defaultValue: 'Admin portal' }),
+                              : p.portal === 'marketing'
+                                ? t('roles.portalMarketing', { defaultValue: 'Marketing portal' })
+                                : t('roles.portalAdmin', { defaultValue: 'Admin portal' }),
                         }))}
                       />
                     )}

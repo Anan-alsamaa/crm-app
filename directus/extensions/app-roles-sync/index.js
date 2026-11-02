@@ -219,6 +219,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     edit_yiji_branch_id: never,
     manage_store_notifications: holds('manage_restaurants'),
     manage_notification_defaults: never,
+    use_marketing_portal: never,
+    manage_marketing: never,
+    approve_marketing: never,
   };
   const OWNER_PRIVILEGES = Object.keys(OWNER_PRIVILEGE_DEFAULTS);
   /** Mirrors REPORT_ACCESS_PRIVILEGES in packages/shared-types. */
@@ -656,6 +659,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('app_settings', 'create', {}, null, ORG_NOTIFICATION_DEFAULTS),
       g('app_settings', 'update', ORG_NOTIFICATION_DEFAULTS),
     ],
+    /* ── the Marketing portal (owner, 2026-11-02) ──────────────────────────
+       The activity log is read by anyone who can open the portal and written
+       by those who prepare work. Approving adds nothing here yet: it acts on
+       marketing work items, which arrive with the coupons step. */
+    use_marketing_portal: [...readOnly('marketing_activity')],
+    manage_marketing: [g('marketing_activity', 'create')],
+    approve_marketing: [g('marketing_activity', 'create')],
   };
 
   const RESERVED = new Set(['administrator', 'admin', 'agent']);

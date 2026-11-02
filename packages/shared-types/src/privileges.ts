@@ -177,6 +177,13 @@ export const OWNER_PRIVILEGES = [
   'edit_yiji_branch_id',
   'manage_store_notifications',
   'manage_notification_defaults',
+  // ── marketing (owner, 2026-11-02: the Marketing portal) ───────────────────
+  /** Opens the Marketing portal at all. */
+  'use_marketing_portal',
+  /** Prepare marketing work: coupons, bulk sends, campaigns, points. */
+  'manage_marketing',
+  /** Approve marketing work before it reaches a customer (the marketing manager). */
+  'approve_marketing',
 ] as const;
 
 export type OwnerPrivilege = (typeof OWNER_PRIVILEGES)[number];
@@ -300,6 +307,10 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   edit_yiji_branch_id: never, // was the Administrator only
   manage_store_notifications: holds('manage_restaurants'),
   manage_notification_defaults: never, // was the Administrator only
+  // New (owner, 2026-11-02): nobody until the owner ticks them for a role.
+  use_marketing_portal: never,
+  manage_marketing: never,
+  approve_marketing: never,
 };
 
 /**
@@ -355,7 +366,8 @@ export type PrivilegeGroup =
   | 'lateOrders'
   | 'coupons'
   | 'reporting'
-  | 'admin';
+  | 'admin'
+  | 'marketing';
 
 /** Which capability area each privilege belongs to, for the editor's grouping. */
 export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
@@ -403,6 +415,9 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   edit_yiji_branch_id: 'admin',
   manage_store_notifications: 'admin',
   manage_notification_defaults: 'admin',
+  use_marketing_portal: 'marketing',
+  manage_marketing: 'marketing',
+  approve_marketing: 'marketing',
   use_chat: 'chat',
   view_all_chats: 'chat',
   view_tickets: 'tickets',
@@ -471,6 +486,12 @@ export const AGENT_PORTAL_PRIVILEGES: readonly Privilege[] = [
 ];
 
 /**
+ * Privileges that unlock the MARKETING portal (owner, 2026-11-02). Its own
+ * door: holding a marketing switch does not open the admin or agent portal.
+ */
+export const MARKETING_PORTAL_PRIVILEGES: readonly Privilege[] = ['use_marketing_portal'];
+
+/**
  * The Directus role NAMES whose role holds `key` — for the services that pick
  * people by role (who is routed chats, who is alerted). `roleNames` is every
  * Directus role; a role with no app_roles row is judged on its defaults alone,
@@ -500,9 +521,14 @@ function safeJson(s: string): unknown {
 /** True when `privileges` opens at least one screen in the given portal. */
 export function opensPortal(
   privileges: Record<string, boolean> | null | undefined,
-  portal: 'admin' | 'agent',
+  portal: 'admin' | 'agent' | 'marketing',
 ): boolean {
-  const list = portal === 'admin' ? ADMIN_PORTAL_PRIVILEGES : AGENT_PORTAL_PRIVILEGES;
+  const list =
+    portal === 'admin'
+      ? ADMIN_PORTAL_PRIVILEGES
+      : portal === 'marketing'
+        ? MARKETING_PORTAL_PRIVILEGES
+        : AGENT_PORTAL_PRIVILEGES;
   return list.some((p) => privileges?.[p] === true);
 }
 
@@ -511,7 +537,7 @@ export function opensPortal(
  * parts, "Agent portal" and "Admin portal"). From where each key is actually
  * checked; a key used in both sits where its main screen is.
  */
-export type PrivilegePortal = 'agent' | 'admin';
+export type PrivilegePortal = 'agent' | 'admin' | 'marketing';
 export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   // agent portal
   use_chat: 'agent',
@@ -582,4 +608,8 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   manage_teams: 'admin',
   edit_yiji_branch_id: 'admin',
   manage_store_notifications: 'admin',
+  // marketing portal
+  use_marketing_portal: 'marketing',
+  manage_marketing: 'marketing',
+  approve_marketing: 'marketing',
 };
