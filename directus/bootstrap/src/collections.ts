@@ -29,7 +29,11 @@ export type FieldType =
   | 'float'
   | 'boolean'
   | 'json'
-  | 'dateTime';
+  | 'dateTime'
+  /** Money: exact, not float (marketing coupons, 2026-11-02). Passed to Directus as is. */
+  | 'decimal'
+  /** A calendar day with no time. Passed to Directus as is. */
+  | 'date';
 
 export interface FieldSpec {
   field: string;
