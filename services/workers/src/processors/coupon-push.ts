@@ -149,6 +149,8 @@ export const YIJI_COMPENSATION_COUPON_PATH_FORBIDDEN = '/api/CouponUser/AddCompe
  * `AddCompensationCoupon` is still refused.
  */
 export const YIJI_UNASSIGNED_COUPON_PATH = '/api/Coupon/AddCoupon';
+/** Yiji's coupon type for Private - the only type a CRM coupon may have. */
+export const YIJI_PRIVATE_TYPE = 1;
 
 /**
  * Attach an EXISTING coupon to a customer by its code (verified reachable for
@@ -271,6 +273,15 @@ export interface CouponPushDeps {
    * word, as before.
    */
   findUserCoupon?: YijiUserCouponFinder;
+  /**
+   * Reads a coupon back from Yiji by id - THE PRIVATE CHECK (owner,
+   * 2026-11-02). After `AddCoupon` and BEFORE the coupon is given to the
+   * customer: a coupon Yiji holds as anything but Private is never given (a
+   * General code can be added by anyone - October 2026). Absent = not checked.
+   */
+  readCoupon?: (couponId: number) => Promise<{ type: number | null; code: string | null } | null>;
+  /** Tells the Administrator a coupon was blocked by the Private check. */
+  alertNotPrivate?: (code: string, detail: string) => Promise<void>;
   /**
    * Yiji's `tenantid` header. Their API is multi-tenant and mis-routes a call
    * without it; the captured request sends `1`.
@@ -1794,6 +1805,8 @@ export async function processCouponPushJob(
   }
 
   let body: YijiCouponResponse;
+  /** Yiji's id for the coupon this push created - kept on the row. */
+  let createdCouponId: number | null = null;
 
   /*
    * A REFUSAL IS BELIEVED ONLY AFTER A READ-BACK (owner, 2026-10-07).
@@ -1921,6 +1934,51 @@ export async function processCouponPushJob(
         logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused to create the coupon');
         return 'refused';
       }
+      /*
+       * THE PRIVATE CHECK (owner, 2026-11-02). Coupons created as General
+       * between 29 Sep and 5 Oct were shared and redeemed by hundreds of other
+       * customers. Read back BEFORE attaching: anything but Private is never
+       * given to the customer, the Administrator is told, and the Yiji id is
+       * kept on the row so no retry creates or attaches it again. A read that
+       * FAILS does not block (the misuse check re-reads it within hours).
+       */
+      if (deps.readCoupon) {
+        let saved: { type: number | null } | null | undefined;
+        try {
+          saved = await deps.readCoupon(couponId);
+        } catch (err) {
+          logger.warn(
+            { id, code: row.coupon_code, couponId, err: describeError(err) },
+            'could not read the new coupon back for the Private check — continuing',
+          );
+        }
+        if (saved && saved.type !== YIJI_PRIVATE_TYPE) {
+          const detail =
+            `Yiji saved this coupon as ${saved.type === 0 ? 'General' : `type ${saved.type ?? 'unknown'}`} ` +
+            `(Yiji coupon #${couponId}), not Private - so it was NOT given to the customer. ` +
+            'A General coupon can be added by anyone who knows the code.';
+          await directus.request(
+            updateItem('coupon_approvals' as never, id, {
+              yiji_coupon_id: String(couponId),
+              yiji_push_error: detail,
+            } as never),
+          );
+          logger.warn(
+            { id, code: row.coupon_code, couponId, type: saved.type },
+            'coupon NOT Private on Yiji — blocked',
+          );
+          await deps
+            .alertNotPrivate?.(row.coupon_code ?? id, detail)
+            .catch((err: unknown) =>
+              logger.warn(
+                { id, err: describeError(err) },
+                'could not alert about the blocked coupon',
+              ),
+            );
+          return 'refused';
+        }
+      }
+      createdCouponId = couponId;
       logger.info(
         { id, code: row.coupon_code, couponId },
         'coupon created on yiji — attaching it to the customer',
@@ -2034,6 +2092,8 @@ export async function processCouponPushJob(
       // The receipt, written in the SAME patch as the status: a crash between
       // two writes would otherwise leave "assigned" with nothing to prove it.
       yiji_coupon_user_id: verdict.couponUserId,
+      /* Yiji's coupon id, so the misuse check can re-read its type. */
+      ...(createdCouponId != null ? { yiji_coupon_id: String(createdCouponId) } : {}),
       yiji_pushed_at: new Date().toISOString(),
       // Cleared on success: a stale reason beside a delivered coupon reads as
       // an unresolved problem and sends someone looking for one.

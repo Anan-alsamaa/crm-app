@@ -1105,6 +1105,86 @@ export class HttpYijiClient implements YijiClient {
       : null;
   }
 
+  /**
+   * One coupon as Yiji holds it, by Yiji's coupon id (not the grant id).
+   * Readable by the CRM's own account (2026-11-02; listing coupons is 403).
+   * Null = no such coupon; throws on an outage.
+   */
+  async getCoupon(couponId: number | string): Promise<YijiCouponRecord | null> {
+    const raw = await this.adminFetch<{
+      id?: number | null;
+      code?: string | null;
+      name?: string | null;
+      type?: number | null;
+      status?: number | null;
+      expirationDate?: string | null;
+    } | null>(`/api/Coupon/GetCoupon/id/${encodeURIComponent(String(couponId))}`);
+    if (!raw || raw.id == null) return null;
+    return {
+      id: Number(raw.id),
+      code: raw.code ?? null,
+      name: raw.name ?? null,
+      type: typeof raw.type === 'number' ? raw.type : null,
+      status: typeof raw.status === 'number' ? raw.status : null,
+      expirationDate: raw.expirationDate ?? null,
+    };
+  }
+
+  /**
+   * Every order placed on one day (Yiji's local date, `YYYY-MM-DD`) that used
+   * a coupon. `couponGrantId` is the CUSTOMER'S copy (`coupon_approvals
+   * .yiji_coupon_user_id` for the one we gave); `couponId` is the coupon
+   * itself (Yiji's `couponReferenceId`) - the same for every copy of a shared
+   * code. Measured 2026-11-02: a busy day is ~1,000 orders = 2-3 pages.
+   */
+  async listCouponOrders(day: string, maxPages = 20): Promise<YijiCouponOrder[]> {
+    const next = new Date(`${day}T00:00:00Z`);
+    next.setUTCDate(next.getUTCDate() + 1);
+    const toExclusive = next.toISOString().slice(0, 10);
+    const out: YijiCouponOrder[] = [];
+    const pageSize = 500;
+    for (let page = 1; page <= maxPages; page++) {
+      const params = new URLSearchParams({
+        OrderFromDateFilter: day,
+        OrderToDateFilter: toExclusive,
+        PageSize: String(pageSize),
+        PageNumber: String(page),
+      });
+      const rows = await this.adminFetch<
+        Array<{
+          phoneNumber?: string | null;
+          order?: {
+            id?: number | string | null;
+            userId?: string | null;
+            customerPhoneNumber?: string | null;
+            couponId?: number | null;
+            couponReferenceId?: number | null;
+            totalCoupons?: number | null;
+            orderStatus?: number | string | null;
+            creationTime?: string | null;
+          } | null;
+        }>
+      >(`/api/Order/GetFilteredOrders?${params.toString()}`);
+      if (!Array.isArray(rows) || rows.length === 0) break;
+      for (const r of rows) {
+        const o = r?.order;
+        if (!o?.id || !o.couponId || !o.couponReferenceId) continue;
+        out.push({
+          orderId: String(o.id),
+          couponGrantId: String(o.couponId),
+          couponId: Number(o.couponReferenceId),
+          userId: o.userId ?? null,
+          phone: o.customerPhoneNumber || r.phoneNumber || null,
+          discount: typeof o.totalCoupons === 'number' ? o.totalCoupons : null,
+          orderStatus: o.orderStatus == null ? null : String(o.orderStatus),
+          placedAt: o.creationTime ?? null,
+        });
+      }
+      if (rows.length < pageSize) break;
+    }
+    return out;
+  }
+
   async findCustomerIdByPhone(phone: string): Promise<string | null> {
     /* The national number as Yiji indexes it: digits only, no country code and
        no leading zero. `+966 50 123 4567`, `0501234567` and `501234567` all
@@ -1859,6 +1939,50 @@ export function createYijiUserCouponFinder(env: YijiClientEnv = {}): YijiUserCou
   }
   const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
   return (userId, code) => client.findUserCoupon(userId, code);
+}
+
+/** One coupon as Yiji holds it - see `HttpYijiClient.getCoupon`. */
+export interface YijiCouponRecord {
+  id: number;
+  code: string | null;
+  name: string | null;
+  /** 0 = General (anyone with the code can add it), 1 = Private. */
+  type: number | null;
+  status: number | null;
+  expirationDate: string | null;
+}
+
+/** One order that used a coupon - see `HttpYijiClient.listCouponOrders`. */
+export interface YijiCouponOrder {
+  orderId: string;
+  couponGrantId: string;
+  couponId: number;
+  userId: string | null;
+  phone: string | null;
+  discount: number | null;
+  orderStatus: string | null;
+  placedAt: string | null;
+}
+
+export type YijiCouponReader = (couponId: number | string) => Promise<YijiCouponRecord | null>;
+export type YijiCouponOrdersReader = (day: string) => Promise<YijiCouponOrder[]>;
+
+export function createYijiCouponReader(env: YijiClientEnv = {}): YijiCouponReader | null {
+  if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
+    return null;
+  }
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
+  return (couponId) => client.getCoupon(couponId);
+}
+
+export function createYijiCouponOrdersReader(
+  env: YijiClientEnv = {},
+): YijiCouponOrdersReader | null {
+  if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
+    return null;
+  }
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
+  return (day) => client.listCouponOrders(day);
 }
 
 export function createYijiUserReader(env: YijiClientEnv = {}): YijiUserReader | null {

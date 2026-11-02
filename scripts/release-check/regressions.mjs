@@ -729,7 +729,10 @@ await check(
          ambiguous. 2026-10-13, OPS-MSCGRLEK: +9616556761363 also ends in
          556761363, came back first, and the check reported a correctly
          delivered coupon as missing. */
-      const digits = (v) => String(v ?? '').replace(/D/g, '');
+      /* `\D`, not `D` (fixed 2026-11-02): stripping only the letter D left the
+         "+", so this exact match never matched and the ambiguous last-9 match
+         below always decided. */
+      const digits = (v) => String(v ?? '').replace(/\D/g, '');
       const acct =
         (list ?? []).find((x) => digits(x.phoneNumber) === `966${last9(want)}`) ??
         (list ?? []).find((x) => last9(x.phoneNumber) === last9(want));
@@ -973,9 +976,20 @@ await check(
     const suspects = []; // [userId, code]
     for (const c of crm.data ?? []) {
       if (!c.title || !c.coupon_code) continue;
+      /* THE NATIONAL NUMBER, not the title as typed (2026-11-02): the search
+         is a CONTAINS match, and "0502933330" is not inside the coupon name
+         "+966502933330" - so every +966-named coupon came back with no holders
+         and this check passed while OPS-NRATRG2A, XUTY9GW3 and KKC24JUR had
+         372 extra holders. "502933330" is inside both spellings. */
+      const name = String(c.title)
+        .replace(/\D/g, '')
+        .replace(/^00/, '')
+        .replace(/^966/, '')
+        .replace(/^0+/, '');
+      if (name.length < 8) continue;
       for (let page = 1; page < 50; page++) {
         const rows = await get(
-          `/api/CouponUser/GetFilteredData?CouponName=${encodeURIComponent(c.title)}&PageNumber=${page}&PageSize=100`,
+          `/api/CouponUser/GetFilteredData?CouponName=${encodeURIComponent(name)}&PageNumber=${page}&PageSize=100`,
         );
         if (rows?.denied)
           return { ok: false, detail: `Yiji refused the holder list (${rows.denied})` };
