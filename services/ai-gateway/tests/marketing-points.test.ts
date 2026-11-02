@@ -72,4 +72,25 @@ describe('marketing points lookups', () => {
     );
     expect(ok.statusCode).toBe(200);
   });
+
+  it('an empty period is an empty report, not an error', async () => {
+    const fetchImpl = vi.fn(async (url: string) => {
+      if (url.includes('/items/marketing_activity')) return json(200, { data: [] });
+      if (url.endsWith('/api/Account/login')) return json(200, { token: 't' });
+      return new Response('No report found.', { status: 400 });
+    });
+    const app = Fastify();
+    void registerMarketingPointsRoutes(app, {
+      directusUrl: 'https://d.test',
+      yiji: { adminApiUrl: 'https://y.test', email: 'crm@x', password: 'p' },
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+    });
+    const r = await app.inject({
+      method: 'GET',
+      url: '/commerce/marketing/points/report?type=issued&from=2026-10-01&to=2026-10-31',
+      headers: { authorization: 'Bearer u' },
+    });
+    expect(r.statusCode).toBe(200);
+    expect(r.json().data).toEqual([]);
+  });
 });

@@ -95,6 +95,13 @@ export async function registerMarketingPointsRoutes(
       },
     });
     if (res.status === 401) yijiToken = null;
+    /* Yiji answers an EMPTY report as 400 "No report found" - that is an
+       answer (nothing in the period), not a failure. */
+    if (res.status === 400 && query) {
+      const text = await res.text().catch(() => '');
+      if (/no report found/i.test(text)) return [] as unknown as T;
+      throw Object.assign(new Error(`yiji ${path} 400`), { status: 502 });
+    }
     if (!res.ok)
       throw Object.assign(new Error(`yiji ${path} ${res.status}`), { status: res.status });
     return (await res.json()) as T;
