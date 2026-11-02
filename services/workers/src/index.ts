@@ -34,6 +34,8 @@ import {
   scheduleYijiUsageRetention,
   scheduleYijiVolumeAlert,
   DEFAULT_YIJI_VOLUME_ALERT_MS,
+  scheduleCouponMisuseCheck,
+  DEFAULT_COUPON_MISUSE_CHECK_MS,
   scheduleCouponCustomerCheck,
   DEFAULT_COUPON_CUSTOMER_CHECK_MS,
   scheduleStoreNotifySend,
@@ -278,6 +280,19 @@ async function main(): Promise<void> {
     logger.info({ everyMs: yijiVolumeAlertMs }, 'yiji volume alert scheduled (0 = off)');
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'yiji volume alert could not be scheduled');
+  }
+
+  /* CRM coupons used by the wrong customer / not Private on Yiji, every 3 h;
+     the Administrator is told in-app (owner, 2026-11-02).
+     `COUPON_MISUSE_CHECK_MS=0` turns it off. */
+  const couponMisuseCheckMs = Number(
+    process.env.COUPON_MISUSE_CHECK_MS ?? DEFAULT_COUPON_MISUSE_CHECK_MS,
+  );
+  try {
+    await scheduleCouponMisuseCheck(queues[QUEUES.automation], couponMisuseCheckMs);
+    logger.info({ everyMs: couponMisuseCheckMs }, 'coupon misuse check scheduled (0 = off)');
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'coupon misuse check could not be scheduled');
   }
 
   /* Pending coupons: does the phone have a Yiji account? Looked up ONCE per
