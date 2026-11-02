@@ -30,7 +30,7 @@ function setup(opts: { door: number; yiji?: Record<string, unknown> }) {
 describe('marketing points lookups', () => {
   it('refuses anyone the Marketing portal is not open to, before asking Yiji', async () => {
     const { get, calls } = setup({ door: 403 });
-    const r = await get('/marketing/points/rules');
+    const r = await get('/commerce/marketing/points/rules');
     expect(r.statusCode).toBe(403);
     expect(calls.some((c) => c.includes('y.test'))).toBe(false);
   });
@@ -46,7 +46,7 @@ describe('marketing points lookups', () => {
         'GetUserLoyalityPoints/User/u-1': [{ points: 120 }],
       },
     });
-    const r = await get('/marketing/points/customer?phone=0501234567');
+    const r = await get('/commerce/marketing/points/customer?phone=0501234567');
     expect(r.statusCode).toBe(200);
     expect(r.json().data).toMatchObject({
       found: true,
@@ -57,16 +57,18 @@ describe('marketing points lookups', () => {
 
   it('says so when no single account has the number', async () => {
     const { get } = setup({ door: 200, yiji: { GetfilteredCustomers: [] } });
-    const r = await get('/marketing/points/customer?phone=0501234567');
+    const r = await get('/commerce/marketing/points/customer?phone=0501234567');
     expect(r.json().data).toEqual({ found: false, reason: 'none' });
   });
 
   it('a report may cover at most 31 days', async () => {
     const { get } = setup({ door: 200, yiji: { IssuedPoints: [] } });
-    const long = await get('/marketing/points/report?type=issued&from=2026-09-01&to=2026-11-01');
+    const long = await get(
+      '/commerce/marketing/points/report?type=issued&from=2026-09-01&to=2026-11-01',
+    );
     expect(long.statusCode).toBe(400);
     const ok = await get(
-      '/marketing/points/report?type=issued&from=2026-10-01%2007:00&to=2026-11-01%2007:00',
+      '/commerce/marketing/points/report?type=issued&from=2026-10-01%2007:00&to=2026-11-01%2007:00',
     );
     expect(ok.statusCode).toBe(200);
   });

@@ -56,7 +56,7 @@ export function useCustomerPoints(phone: string | null) {
     staleTime: 60_000,
     refetchInterval: false,
     retry: false,
-    queryFn: () => get<CustomerPoints>('/marketing/points/customer', { phone: phone! }),
+    queryFn: () => get<CustomerPoints>('/commerce/marketing/points/customer', { phone: phone! }),
   });
 }
 
@@ -77,7 +77,7 @@ export function usePointsRules() {
     retry: false,
     queryFn: () =>
       get<{ fixed: PointsRule[] | null; percentage: PointsRule[] | null }>(
-        '/marketing/points/rules',
+        '/commerce/marketing/points/rules',
       ),
   });
 }
@@ -93,7 +93,7 @@ export function usePointsReport(
     refetchInterval: false,
     retry: false,
     queryFn: () =>
-      get<unknown>('/marketing/points/report', {
+      get<unknown>('/commerce/marketing/points/report', {
         type: q!.type,
         from: q!.from,
         to: q!.to,

@@ -134,7 +134,7 @@ export async function registerMarketingPointsRoutes(
   }
 
   /** A customer's points, found by phone (an EXACT +966 match, one account only). */
-  app.get('/marketing/points/customer', (req, reply) =>
+  app.get('/commerce/marketing/points/customer', (req, reply) =>
     handle(req, reply, async () => {
       const phone = String((req.query as { phone?: string }).phone ?? '');
       const national = phone
@@ -175,7 +175,7 @@ export async function registerMarketingPointsRoutes(
   );
 
   /** How customers earn points: the fixed and the percentage rules. */
-  app.get('/marketing/points/rules', (req, reply) =>
+  app.get('/commerce/marketing/points/rules', (req, reply) =>
     handle(req, reply, () =>
       cached('rules', TTL.rules, async () => {
         const [fixed, percentage] = await Promise.all([
@@ -190,7 +190,7 @@ export async function registerMarketingPointsRoutes(
   );
 
   /** Yiji's points reports: issued or used, for at most 31 days. */
-  app.get('/marketing/points/report', (req, reply) =>
+  app.get('/commerce/marketing/points/report', (req, reply) =>
     handle(req, reply, async () => {
       const q = req.query as { type?: string; from?: string; to?: string };
       const kind = q.type === 'consumed' ? 'ConsumedPoints' : 'IssuedPoints';
