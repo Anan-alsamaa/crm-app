@@ -65,8 +65,24 @@ const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 describe('the marketing coupon sender', () => {
-  it('is off without the marketing Yiji account', () => {
-    expect(marketingYijiConfigFromEnv({ YIJI_ADMIN_API_URL: 'https://a' })).toBeNull();
+  it('is off unless MARKETING_COUPON_SEND=on, even with the CRM login present', () => {
+    const crm = {
+      YIJI_ADMIN_API_URL: 'https://a',
+      YIJI_ADMIN_EMAIL: 'crm@x',
+      YIJI_ADMIN_PASSWORD: 'p',
+    };
+    expect(marketingYijiConfigFromEnv(crm)).toBeNull();
+    expect(marketingYijiConfigFromEnv({ ...crm, MARKETING_COUPON_SEND: 'on' })).toMatchObject({
+      email: 'crm@x',
+    });
+    expect(
+      marketingYijiConfigFromEnv({
+        ...crm,
+        MARKETING_COUPON_SEND: 'on',
+        YIJI_MARKETING_EMAIL: 'mkt@x',
+        YIJI_MARKETING_PASSWORD: 'q',
+      }),
+    ).toMatchObject({ email: 'mkt@x' });
   });
 
   it('does nothing at all when off', async () => {

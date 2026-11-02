@@ -17,11 +17,12 @@ import { describeRefusal, readNewCouponId, YIJI_ATTACH_BY_CODE_PATH } from './co
  * Yiji with `POST /api/Coupon/AddCoupon`, one at a time, a pause between - a
  * scheduled trickle, never a burst (incident 2026-10-26).
  *
- * WITH THE MARKETING YIJI ACCOUNT ONLY (owner's decision): until
- * `YIJI_MARKETING_EMAIL` and `YIJI_MARKETING_PASSWORD` are set, this does
- * nothing and approved coupons wait, saying so in the portal. Staging never
- * gets those settings - it shares Yiji's production, so a test there would be
- * a real coupon.
+ * THE CRM'S YIJI ACCOUNT (owner, 2026-11-02: Yiji has no marketing account,
+ * so the same CRM login is used; YIJI_MARKETING_EMAIL/PASSWORD override it if
+ * one ever exists). OFF until `MARKETING_COUPON_SEND=on`: staging's workers
+ * hold the CRM login too and share Yiji's PRODUCTION, so without this switch
+ * approving a test coupon on staging would create a real one. The switch is
+ * set on prod only, at release.
  *
  * ONCE: a coupon is created and then never touched again on Yiji. An edit
  * drops it from Yiji's IssuedCopouns report (2026-11-01).
@@ -40,13 +41,14 @@ export interface MarketingYijiConfig {
   tenantId: string;
 }
 
-/** The marketing Yiji login, or null when it is not configured (= off). */
+/** The Yiji login to send with, or null when sending is off. */
 export function marketingYijiConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): MarketingYijiConfig | null {
+  if (env.MARKETING_COUPON_SEND?.trim().toLowerCase() !== 'on') return null;
   const adminApiUrl = env.YIJI_ADMIN_API_URL?.trim();
-  const email = env.YIJI_MARKETING_EMAIL?.trim();
-  const password = env.YIJI_MARKETING_PASSWORD?.trim();
+  const email = (env.YIJI_MARKETING_EMAIL || env.YIJI_ADMIN_EMAIL)?.trim();
+  const password = (env.YIJI_MARKETING_PASSWORD || env.YIJI_ADMIN_PASSWORD)?.trim();
   if (!adminApiUrl || !email || !password) return null;
   return {
     adminApiUrl: adminApiUrl.replace(/\/+$/, ''),
