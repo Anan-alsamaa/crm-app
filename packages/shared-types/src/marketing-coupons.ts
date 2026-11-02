@@ -20,6 +20,7 @@ import {
   yijiIssuingSideId,
   YIJI_ORDER_MAXIMUM,
 } from './coupon-request.js';
+import { normalizePhone } from './phone.js';
 
 /**
  * Where a marketing coupon is.
@@ -37,6 +38,8 @@ export const MARKETING_COUPON_STATUSES = [
   'pending',
   'approved',
   'rejected',
+  /** A list coupon: on Yiji, still being given to the customers on its list. */
+  'sending',
   'created',
   'failed',
   'cancelled',
@@ -87,6 +90,12 @@ export interface MarketingCouponDraft {
   /** Yiji's brand id, or null for every brand. */
   yiji_brand_id?: number | string | null;
   no_other_discounts?: boolean | null;
+  /**
+   * WHO may use it: `code` = anyone who types the code (General); `list` = only
+   * the customers on its list, each given it in their wallet (Private). A bulk
+   * send is a `list` coupon.
+   */
+  audience?: 'code' | 'list' | null;
 }
 
 const n = (v: unknown): number | null => {
@@ -156,7 +165,8 @@ export function marketingCouponPayload(d: MarketingCouponDraft): Record<string, 
     code: d.code.trim(),
     compensationReason: reason,
     compensation: reason,
-    type: 0, // General: anyone with the code
+    // General for a public code; Private for a list - only those given it.
+    type: d.audience === 'list' ? 1 : 0,
     category: yijiCouponEnum(YIJI_COUPON_CATEGORY, d.discount_category) ?? (pct ? 0 : 1),
     discount: pct ? 0 : (n(d.coupon_value) ?? 0),
     discountPercentage: pct ? (n(d.coupon_percent) ?? 0) : 0,
@@ -185,4 +195,40 @@ export function marketingCouponPayload(d: MarketingCouponDraft): Record<string, 
     expirationDateTime: window.to,
     assignee: [],
   };
+}
+
+/** The most customers one bulk send may carry (owner's paced sender: hours, not days). */
+export const MARKETING_LIST_MAX = 20_000;
+
+/**
+ * Read a pasted or uploaded list of phone numbers - one per line, or CSV with
+ * the number in any column. Every number is put in the CRM's one canonical
+ * form (05XXXXXXXX); anything that is not a Saudi mobile is reported, never
+ * guessed at; repeats are counted and kept once.
+ */
+export function parseRecipientList(text: string): {
+  phones: string[];
+  invalid: string[];
+  duplicates: number;
+} {
+  const seen = new Set<string>();
+  const invalid: string[] = [];
+  let duplicates = 0;
+  for (const line of text.split(/\r?\n/)) {
+    const cells = line.split(/[,;\t]/).map((c) => c.trim().replace(/^"|"$/g, ''));
+    const cell = cells.find((c) => /\d{8,}/.test(c.replace(/\D/g, '')));
+    if (!cell) {
+      // A header row or an empty line is not a mistake worth reporting.
+      if (line.trim() && /\d/.test(line)) invalid.push(line.trim().slice(0, 40));
+      continue;
+    }
+    const phone = normalizePhone(cell);
+    if (!/^05\d{8}$/.test(phone)) {
+      invalid.push(cell.slice(0, 40));
+      continue;
+    }
+    if (seen.has(phone)) duplicates += 1;
+    else seen.add(phone);
+  }
+  return { phones: [...seen], invalid, duplicates };
 }

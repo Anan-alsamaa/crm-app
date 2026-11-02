@@ -3,6 +3,7 @@ import {
   marketingCouponPayload,
   marketingCouponProblems,
   newMarketingCouponCode,
+  parseRecipientList,
   type MarketingCouponDraft,
 } from '../src/marketing-coupons.js';
 
@@ -69,5 +70,21 @@ describe('the Yiji AddCoupon body', () => {
     expect(p.discount).toBe(0);
     expect(p.discountPercentage).toBe(15);
     expect(p.maximumDiscount).toBe(30);
+  });
+});
+
+describe('a bulk list', () => {
+  it('reads one number per line or a CSV column, in every spelling, once each', () => {
+    const r = parseRecipientList(
+      'name,phone\nAli,0501234567\n+966 50 123 4567\n00966551112222\n551112222\nbad,12345\n0561234567',
+    );
+    expect(r.phones).toEqual(['0501234567', '0551112222', '0561234567']);
+    expect(r.duplicates).toBe(2);
+    expect(r.invalid).toEqual(['bad,12345']);
+  });
+
+  it('a list coupon is Private on Yiji', () => {
+    expect(marketingCouponPayload({ ...base, audience: 'list' }).type).toBe(1);
+    expect(marketingCouponPayload(base).type).toBe(0);
   });
 });

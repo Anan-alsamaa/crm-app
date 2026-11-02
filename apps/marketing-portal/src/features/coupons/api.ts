@@ -1,4 +1,4 @@
-import { createItem, readItems, updateItem } from '@directus/sdk';
+import { createItem, createItems, deleteItems, readItems, updateItem } from '@directus/sdk';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { MarketingCouponDraft, MarketingCouponStatus } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
@@ -16,6 +16,10 @@ export interface MarketingCoupon extends MarketingCouponDraft {
   sent_at: string | null;
   send_error: string | null;
   user_created: { id: string; first_name: string | null; email: string | null } | null;
+  recipient_count: number | null;
+  sent_count: number | null;
+  no_account_count: number | null;
+  failed_count: number | null;
   decided_by: { first_name: string | null; email: string | null } | null;
 }
 
@@ -29,9 +33,12 @@ const FIELDS = [
 ];
 
 /** Every marketing coupon, newest first, optionally only some statuses. */
-export function useMarketingCoupons(statuses?: readonly MarketingCouponStatus[]) {
+export function useMarketingCoupons(
+  statuses?: readonly MarketingCouponStatus[],
+  audience?: 'code' | 'list',
+) {
   return useQuery({
-    queryKey: ['marketing-coupons', statuses ?? 'all'],
+    queryKey: ['marketing-coupons', statuses ?? 'all', audience ?? 'any'],
     queryFn: async () =>
       (await directus.request(
         readItems(
@@ -40,7 +47,16 @@ export function useMarketingCoupons(statuses?: readonly MarketingCouponStatus[])
             fields: FIELDS,
             sort: ['-date_created'],
             limit: 200,
-            ...(statuses ? { filter: { status: { _in: statuses } } } : {}),
+            filter: {
+              _and: [
+                ...(statuses ? [{ status: { _in: statuses } }] : []),
+                ...(audience === 'list' ? [{ audience: { _eq: 'list' } }] : []),
+                // Rows from before bulk sends have no audience: they are codes.
+                ...(audience === 'code'
+                  ? [{ _or: [{ audience: { _eq: 'code' } }, { audience: { _null: true } }] }]
+                  : []),
+              ],
+            },
           } as never,
         ),
       )) as unknown as MarketingCoupon[],
@@ -58,26 +74,72 @@ function useInvalidate() {
   };
 }
 
-/** Save a new draft, or save-and-submit (`submit`). */
+/** Rows per request when writing a list: quick, and still one modest request. */
+const LIST_CHUNK = 500;
+
+/**
+ * Save a new draft, or save-and-submit (`submit`).
+ *
+ * A bulk coupon's list (`recipients`) is written while the coupon is still a
+ * draft, and only THEN is the coupon submitted - a manager never sees a
+ * coupon whose list is half written. `recipients` undefined = list unchanged.
+ */
 export function useSaveCoupon() {
   const done = useInvalidate();
   return useMutation({
-    mutationFn: async (v: { id?: string; form: CouponForm; submit: boolean }) => {
-      const body = {
+    mutationFn: async (v: {
+      id?: string;
+      form: CouponForm;
+      submit: boolean;
+      recipients?: string[];
+    }) => {
+      const base = {
         ...v.form,
-        status: v.submit ? 'pending' : 'draft',
-        ...(v.submit ? { submitted_at: new Date().toISOString() } : {}),
+        status: 'draft',
+        ...(v.recipients ? { recipient_count: v.recipients.length } : {}),
       };
       const row = (await directus.request(
         v.id
-          ? updateItem('marketing_coupons' as never, v.id, body as never)
-          : createItem('marketing_coupons' as never, body as never),
+          ? updateItem('marketing_coupons' as never, v.id, base as never)
+          : createItem('marketing_coupons' as never, base as never),
       )) as unknown as { id: string };
+      if (v.recipients) {
+        if (v.id) {
+          await directus.request(
+            deleteItems(
+              'marketing_coupon_recipients' as never,
+              {
+                filter: { coupon: { _eq: row.id } },
+              } as never,
+            ),
+          );
+        }
+        for (let i = 0; i < v.recipients.length; i += LIST_CHUNK) {
+          await directus.request(
+            createItems(
+              'marketing_coupon_recipients' as never,
+              v.recipients
+                .slice(i, i + LIST_CHUNK)
+                .map((phone) => ({ coupon: row.id, phone, status: 'queued' })) as never,
+            ),
+          );
+        }
+      }
+      if (v.submit) {
+        await directus.request(
+          updateItem('marketing_coupons' as never, row.id, {
+            status: 'pending',
+            submitted_at: new Date().toISOString(),
+          } as never),
+        );
+      }
       await logActivity({
         action: v.submit ? 'submitted' : 'saved_draft',
-        subject_type: 'coupon',
+        subject_type: v.form.audience === 'list' ? 'bulk' : 'coupon',
         subject_id: row.id,
-        summary: `${v.submit ? 'Submitted for approval' : 'Saved draft'}: ${v.form.code} - ${v.form.title}`,
+        summary: `${v.submit ? 'Submitted for approval' : 'Saved draft'}: ${v.form.code} - ${v.form.title}${
+          v.recipients ? ` (${v.recipients.length} customers)` : ''
+        }`,
       });
       return row;
     },

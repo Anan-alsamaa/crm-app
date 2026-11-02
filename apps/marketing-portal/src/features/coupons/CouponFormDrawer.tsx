@@ -2,8 +2,10 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   MARKETING_BRANDS,
+  MARKETING_LIST_MAX,
   marketingCouponProblems,
   newMarketingCouponCode,
+  parseRecipientList,
 } from '@yiji/shared-types';
 import { Button, DateField, Drawer, FormField, Input, Select, Textarea, toast } from '@yiji/ui';
 import { useSaveCoupon, type CouponForm, type MarketingCoupon } from './api.js';
@@ -11,8 +13,9 @@ import { useSaveCoupon, type CouponForm, type MarketingCoupon } from './api.js';
 const today = () => new Date().toISOString().slice(0, 10);
 const inDays = (d: number) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10);
 
-function blank(): CouponForm {
+function blank(audience: 'code' | 'list'): CouponForm {
   return {
+    audience,
     code: newMarketingCouponCode(),
     title: '',
     description: '',
@@ -50,6 +53,7 @@ function fromRow(c: MarketingCoupon): CouponForm {
     yiji_brand_id: c.yiji_brand_id ?? null,
     brand_name: c.brand_name ?? null,
     no_other_discounts: c.no_other_discounts === true,
+    audience: c.audience === 'list' ? 'list' : 'code',
   };
 }
 
@@ -79,24 +83,50 @@ export function CouponFormDrawer({
   open,
   coupon,
   onClose,
+  audience = 'code',
 }: {
   open: boolean;
+  /** `list` = a bulk send: one Private coupon given to each customer on a list. */
+  audience?: 'code' | 'list';
   /** The draft or rejected coupon being changed; null for a new one. */
   coupon: MarketingCoupon | null;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
   const save = useSaveCoupon();
-  const [form, setForm] = useState<CouponForm>(blank);
+  const [form, setForm] = useState<CouponForm>(() => blank(audience));
   const [tried, setTried] = useState(false);
+  /* The list as read from the file or the paste box; null = keep the saved list. */
+  const [list, setList] = useState<ReturnType<typeof parseRecipientList> | null>(null);
+  const isList = audience === 'list';
   useEffect(() => {
     if (open) {
-      setForm(coupon ? fromRow(coupon) : blank());
+      setForm(coupon ? fromRow(coupon) : blank(audience));
       setTried(false);
+      setList(null);
     }
-  }, [open, coupon]);
+  }, [open, coupon, audience]);
 
-  const problems = useMemo(() => marketingCouponProblems(clean(form)), [form]);
+  /* A list coupon may be used exactly as often as its list allows. */
+  const listSize = list ? list.phones.length : (coupon?.recipient_count ?? 0);
+  const effective = useMemo(
+    () =>
+      isList
+        ? {
+            ...clean(form),
+            total_uses: Math.max(1, listSize) * (Number(form.uses_per_customer) || 1),
+          }
+        : clean(form),
+    [form, isList, listSize],
+  );
+  const problems = useMemo(() => {
+    const p = marketingCouponProblems(effective);
+    if (isList && listSize === 0) p.push('Add the list of customers (a file or pasted numbers).');
+    if (isList && listSize > MARKETING_LIST_MAX)
+      p.push(`A bulk send can carry at most ${MARKETING_LIST_MAX.toLocaleString()} customers.`);
+    return p;
+  }, [effective, isList, listSize]);
+  const readList = (text: string) => setList(text.trim() ? parseRecipientList(text) : null);
   const set = <K extends keyof CouponForm>(k: K, v: CouponForm[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
   const pct = form.discount_category === 'Percentage';
@@ -106,7 +136,13 @@ export function CouponFormDrawer({
     if (send && problems.length) return;
     if (!form.code.trim() || !form.title.trim()) return;
     try {
-      await save.mutateAsync({ id: coupon?.id, form: clean(form), submit: send });
+      if (isList && listSize > MARKETING_LIST_MAX) return;
+      await save.mutateAsync({
+        id: coupon?.id,
+        form: effective,
+        submit: send,
+        ...(isList && list ? { recipients: list.phones } : {}),
+      });
       toast.success(
         send
           ? t('coupons.submitted', { defaultValue: 'Sent to a manager for approval' })
@@ -129,14 +165,25 @@ export function CouponFormDrawer({
       onClose={onClose}
       width="lg"
       title={
-        coupon
-          ? t('coupons.editTitle', { defaultValue: 'Change marketing coupon' })
-          : t('coupons.newTitle', { defaultValue: 'New marketing coupon' })
+        isList
+          ? coupon
+            ? t('bulk.editTitle', { defaultValue: 'Change bulk send' })
+            : t('bulk.newTitle', { defaultValue: 'New bulk send' })
+          : coupon
+            ? t('coupons.editTitle', { defaultValue: 'Change marketing coupon' })
+            : t('coupons.newTitle', { defaultValue: 'New marketing coupon' })
       }
-      description={t('coupons.formDesc', {
-        defaultValue:
-          'A code anyone can enter in the Yiji app. It reaches Yiji only after a manager approves it, and cannot be changed after that.',
-      })}
+      description={
+        isList
+          ? t('bulk.formDesc', {
+              defaultValue:
+                'One coupon, put in the wallet of every customer on your list. After a manager approves it, it is sent at a steady pace and every customer gets a result.',
+            })
+          : t('coupons.formDesc', {
+              defaultValue:
+                'A code anyone can enter in the Yiji app. It reaches Yiji only after a manager approves it, and cannot be changed after that.',
+            })
+      }
       footer={
         <div className="flex w-full flex-wrap items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
@@ -225,14 +272,16 @@ export function CouponFormDrawer({
         <FormField label={t('coupons.to', { defaultValue: 'Last day' })}>
           <DateField value={form.valid_to} onChange={(v) => set('valid_to', v)} />
         </FormField>
-        <FormField label={t('coupons.total', { defaultValue: 'Total uses (everyone)' })}>
-          <Input
-            type="number"
-            inputMode="numeric"
-            value={String(form.total_uses)}
-            onChange={(e) => set('total_uses', e.target.value)}
-          />
-        </FormField>
+        {!isList && (
+          <FormField label={t('coupons.total', { defaultValue: 'Total uses (everyone)' })}>
+            <Input
+              type="number"
+              inputMode="numeric"
+              value={String(form.total_uses)}
+              onChange={(e) => set('total_uses', e.target.value)}
+            />
+          </FormField>
+        )}
         <FormField label={t('coupons.each', { defaultValue: 'Uses per customer' })}>
           <Input
             type="number"
@@ -270,6 +319,69 @@ export function CouponFormDrawer({
           {t('coupons.noOther', { defaultValue: 'Cannot be used with other discounts' })}
         </label>
       </div>
+      {isList && (
+        <section className="mt-6 space-y-3">
+          <h3 className="text-sm font-semibold">
+            {t('bulk.listTitle', { defaultValue: 'Customers' })}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            {t('bulk.listHint', {
+              defaultValue:
+                'A CSV or text file, or numbers pasted below - one per line, any spelling (05..., +966..., 00966...). Repeats are kept once.',
+            })}
+          </p>
+          <input
+            type="file"
+            accept=".csv,.txt,text/csv,text/plain"
+            className="block text-sm"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (file) readList(await file.text());
+            }}
+          />
+          <Textarea
+            rows={4}
+            placeholder={t('bulk.pastePh', { defaultValue: 'Or paste numbers here' })}
+            onChange={(e) => readList(e.target.value)}
+          />
+          <div className="flex flex-wrap gap-2 text-xs">
+            <span className="rounded-full bg-success-tint px-2.5 py-1 text-success">
+              {t('bulk.ready', {
+                defaultValue: '{{n}} customers',
+                n: listSize.toLocaleString(),
+              })}
+            </span>
+            {list && list.duplicates > 0 && (
+              <span className="rounded-full bg-secondary px-2.5 py-1 text-muted-foreground">
+                {t('bulk.dupes', {
+                  defaultValue: '{{n}} repeats removed',
+                  n: list.duplicates,
+                })}
+              </span>
+            )}
+            {list && list.invalid.length > 0 && (
+              <span className="rounded-full bg-destructive/10 px-2.5 py-1 text-destructive">
+                {t('bulk.invalid', {
+                  defaultValue: '{{n}} not a Saudi mobile - left out',
+                  n: list.invalid.length,
+                })}
+              </span>
+            )}
+            <span className="rounded-full bg-secondary px-2.5 py-1 text-muted-foreground">
+              {t('bulk.uses', {
+                defaultValue: 'Total uses: {{n}}',
+                n: Number(effective.total_uses).toLocaleString(),
+              })}
+            </span>
+          </div>
+          {list && list.invalid.length > 0 && (
+            <p className="text-2xs text-muted-foreground">
+              {list.invalid.slice(0, 8).join(' · ')}
+              {list.invalid.length > 8 ? ' …' : ''}
+            </p>
+          )}
+        </section>
+      )}
       {tried && problems.length > 0 && (
         <ul
           role="alert"

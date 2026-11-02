@@ -39,6 +39,9 @@ const ApprovalsPage = lazy(() =>
 const ActivityPage = lazy(() =>
   import('./features/activity/ActivityPage.js').then((m) => ({ default: m.ActivityPage })),
 );
+const BulkPage = lazy(() =>
+  import('./features/bulk/BulkPage.js').then((m) => ({ default: m.BulkPage })),
+);
 const CouponsPage = lazy(() =>
   import('./features/coupons/CouponsPage.js').then((m) => ({ default: m.CouponsPage })),
 );
@@ -370,12 +373,7 @@ export function App() {
             path="/bulk"
             element={
               <Gate requires="manage_marketing">
-                <Coming
-                  titleKey="bulk.title"
-                  title="Bulk coupons"
-                  descKey="bulk.desc"
-                  desc="Upload a list of phone numbers, check every number first, and send one coupon to all of them at a pace Yiji can take."
-                />
+                <BulkPage />
               </Gate>
             }
           />

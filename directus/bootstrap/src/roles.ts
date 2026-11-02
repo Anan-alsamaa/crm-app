@@ -858,6 +858,8 @@ export const roles: RoleSpec[] = [
          and records what Yiji said. It never creates or deletes one. */
       { collection: 'marketing_coupons', action: 'read' },
       { collection: 'marketing_coupons', action: 'update' },
+      { collection: 'marketing_coupon_recipients', action: 'read' },
+      { collection: 'marketing_coupon_recipients', action: 'update' },
       { collection: 'reports', action: 'read' },
       { collection: 'reports', action: 'update' },
       ...readOnly('sla_policies'),

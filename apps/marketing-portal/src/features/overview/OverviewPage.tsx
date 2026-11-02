@@ -38,7 +38,7 @@ export function OverviewPage() {
         defaultValue: 'A coupon for a whole list of customers, checked and paced.',
       }),
       requires: 'manage_marketing',
-      ready: false,
+      ready: true,
     },
     {
       to: '/campaigns',

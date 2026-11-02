@@ -17,6 +17,7 @@ const TONE: Record<MarketingCouponStatus, string> = {
   pending: 'bg-warning-tint text-foreground',
   approved: 'bg-sky-tint text-sky',
   rejected: 'bg-destructive/10 text-destructive',
+  sending: 'bg-sky-tint text-sky',
   created: 'bg-success-tint text-success',
   failed: 'bg-destructive/10 text-destructive',
   cancelled: 'bg-secondary text-muted-foreground',
@@ -29,6 +30,7 @@ export function StatusBadge({ status }: { status: MarketingCouponStatus }) {
     pending: t('status.pending', { defaultValue: 'Waiting for approval' }),
     approved: t('status.approved', { defaultValue: 'Approved - not on Yiji yet' }),
     rejected: t('status.rejected', { defaultValue: 'Rejected' }),
+    sending: t('status.sending', { defaultValue: 'On Yiji - giving it to the customers' }),
     created: t('status.created', { defaultValue: 'On Yiji' }),
     failed: t('status.failed', { defaultValue: 'Yiji refused it' }),
     cancelled: t('status.cancelled', { defaultValue: 'Cancelled' }),
@@ -55,7 +57,7 @@ export function discountText(c: MarketingCoupon): string {
 export function CouponsPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const q = useMarketingCoupons();
+  const q = useMarketingCoupons(undefined, 'code');
   const cancel = useCancelCoupon();
   const [editing, setEditing] = useState<MarketingCoupon | null>(null);
   const [open, setOpen] = useState(false);

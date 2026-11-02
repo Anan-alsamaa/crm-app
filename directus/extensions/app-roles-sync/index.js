@@ -166,7 +166,16 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     'no_other_discounts',
     'status',
     'submitted_at',
+    'audience',
+    'recipient_count',
   ];
+  /** A bulk list may change only while its coupon is still its author's draft. */
+  const OWN_DRAFT_LIST = {
+    _and: [
+      { coupon: { user_created: { _eq: '$CURRENT_USER' } } },
+      { coupon: { status: { _in: ['draft', 'rejected'] } } },
+    ],
+  };
   /** Mirrors RULE_COUPON_LIMIT_SETTING_KEY in packages/shared-types. */
   const RULE_COUPON_LIMIT_SETTING = { key: { _eq: 'compensation_rules_customer_limit' } };
 
@@ -684,7 +693,11 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        The activity log is read by anyone who can open the portal and written
        by those who prepare work. Approving adds nothing here yet: it acts on
        marketing work items, which arrive with the coupons step. */
-    use_marketing_portal: [...readOnly('marketing_activity'), ...readOnly('marketing_coupons')],
+    use_marketing_portal: [
+      ...readOnly('marketing_activity'),
+      ...readOnly('marketing_coupons'),
+      ...readOnly('marketing_coupon_recipients'),
+    ],
     /* The author: creates a draft or submits it, and changes only their OWN
        coupon while it is a draft or was rejected. Never the decision fields,
        never what Yiji answered. */
@@ -705,6 +718,12 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
         MARKETING_COUPON_AUTHOR_FIELDS,
         { status: { _in: ['draft', 'pending', 'cancelled'] } },
       ),
+      // The list: added and removed only on the author's own draft, and only
+      // ever as `queued` - what happened is the sender's to record.
+      g('marketing_coupon_recipients', 'create', {}, ['coupon', 'phone', 'status'], {
+        status: { _eq: 'queued' },
+      }),
+      g('marketing_coupon_recipients', 'delete', OWN_DRAFT_LIST),
     ],
     /* The manager: decides a SUBMITTED coupon somebody ELSE wrote. Four eyes
        by construction - nobody approves their own. */

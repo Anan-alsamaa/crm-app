@@ -118,6 +118,7 @@ const EXPECTED = [
   { role: 'svc-workers', collection: 'stores', actions: ['read'] },
   /* Marketing coupons: the sender creates each approved coupon on Yiji once. */
   { role: 'svc-workers', collection: 'marketing_coupons', actions: ['read', 'update'] },
+  { role: 'svc-workers', collection: 'marketing_coupon_recipients', actions: ['read', 'update'] },
   /* A late-preparation ticket from Yiji queues its branch notification. */
   { role: 'svc-socket-gateway', collection: 'store_notifications', actions: ['create'] },
   { role: 'Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },

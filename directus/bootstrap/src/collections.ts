@@ -1213,7 +1213,16 @@ export const collections: CollectionSpec[] = [
       {
         field: 'status',
         type: 'string',
-        choices: ['draft', 'pending', 'approved', 'rejected', 'created', 'failed', 'cancelled'],
+        choices: [
+          'draft',
+          'pending',
+          'approved',
+          'rejected',
+          'sending',
+          'created',
+          'failed',
+          'cancelled',
+        ],
         defaultValue: 'draft',
         required: true,
         index: true,
@@ -1224,6 +1233,36 @@ export const collections: CollectionSpec[] = [
       { field: 'yiji_coupon_id', type: 'string', index: true },
       { field: 'sent_at', type: 'dateTime' },
       { field: 'send_error', type: 'text', note: "Yiji's answer when it refused." },
+      {
+        field: 'audience',
+        type: 'string',
+        choices: ['code', 'list'],
+        defaultValue: 'code',
+        index: true,
+        note: 'code = anyone with the code (General); list = only the customers on its list (Private), i.e. a bulk send.',
+      },
+      { field: 'recipient_count', type: 'integer', defaultValue: 0 },
+      { field: 'sent_count', type: 'integer', defaultValue: 0 },
+      { field: 'no_account_count', type: 'integer', defaultValue: 0 },
+      { field: 'failed_count', type: 'integer', defaultValue: 0 },
+    ],
+  },
+  {
+    collection: 'marketing_coupon_recipients',
+    note: 'The customers on a bulk (list) marketing coupon, one row each, with what happened when the coupon was given to them.',
+    fields: [
+      { field: 'phone', type: 'string', required: true, index: true, note: '05XXXXXXXX' },
+      {
+        field: 'status',
+        type: 'string',
+        choices: ['queued', 'sent', 'no_account', 'failed'],
+        defaultValue: 'queued',
+        required: true,
+        index: true,
+      },
+      { field: 'yiji_user_id', type: 'string' },
+      { field: 'error', type: 'text' },
+      { field: 'sent_at', type: 'dateTime' },
     ],
   },
   {
@@ -1813,6 +1852,13 @@ export const relations: RelationSpec[] = [
     field: 'decided_by',
     related: 'directus_users',
     onDelete: 'SET NULL',
+  },
+  // A list belongs to its coupon; deleting a draft takes its list with it.
+  {
+    collection: 'marketing_coupon_recipients',
+    field: 'coupon',
+    related: 'marketing_coupons',
+    onDelete: 'CASCADE',
   },
   // Which manager approved or rejected a marketing coupon. SET NULL: a manager
   // leaving must not erase the coupon that was issued.

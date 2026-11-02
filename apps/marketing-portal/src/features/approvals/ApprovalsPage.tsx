@@ -102,7 +102,15 @@ function PendingCard({ coupon: c }: { coupon: MarketingCoupon }) {
           t('coupons.validCol', { defaultValue: 'Valid' }),
           `${String(c.valid_from).slice(0, 10)} → ${String(c.valid_to).slice(0, 10)}`,
         )}
-        {fact(t('coupons.total', { defaultValue: 'Total uses (everyone)' }), String(c.total_uses))}
+        {c.audience === 'list'
+          ? fact(
+              t('approvals.list', { defaultValue: 'Customers on the list' }),
+              String(c.recipient_count ?? 0),
+            )
+          : fact(
+              t('coupons.total', { defaultValue: 'Total uses (everyone)' }),
+              String(c.total_uses),
+            )}
         {fact(
           t('coupons.each', { defaultValue: 'Uses per customer' }),
           String(c.uses_per_customer),
