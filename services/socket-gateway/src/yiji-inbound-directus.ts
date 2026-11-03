@@ -28,6 +28,17 @@ import {
  * refuses a WHOLE query that names one it cannot (silent-empty-failures).
  */
 
+/**
+ * The Directus token the Yiji inbound API writes with (owner, 2026-11-03): the
+ * "Yiji" user's, so its tickets, coupon requests and history read "Created by
+ * Yiji". ONLY that user - the chat gateway's own account holds no Yiji write
+ * rights. Null = not set up: the API answers 503 "not configured", exactly as
+ * it does without its secret.
+ */
+export function yijiInboundToken(cfg: { SVC_YIJI_TOKEN?: string }): string | null {
+  return cfg.SVC_YIJI_TOKEN?.trim() || null;
+}
+
 /** Sort a Directus SDK rejection into what it means for a retry. */
 export function classifyDirectusError(err: unknown): InboundStoreError {
   if (err instanceof InboundStoreError) return err;

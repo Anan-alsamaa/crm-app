@@ -52,6 +52,9 @@ const schema = z
     YIJI_ADMIN_PASSWORD: z.string().optional(),
     YIJI_API_URL: z.string().url().optional(),
     SVC_GATEWAY_TOKEN: z.string().min(1, 'SVC_GATEWAY_TOKEN is required'),
+    /* The "Yiji" user's token (owner, 2026-11-03): the Yiji inbound API writes
+       ONLY as Yiji. Empty = the API answers 503 "not configured". */
+    SVC_YIJI_TOKEN: z.string().default(''),
     // CORS allow-list for the ADMIN/AI surfaces (the REST app — /jobs/* enqueue,
     // etc.). Comma-separated exact origins; production refuses `*`.
     CORS_ORIGIN: z.string().default('*'),

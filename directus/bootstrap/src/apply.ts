@@ -716,14 +716,20 @@ async function applyServiceUsers(client: AnyClient): Promise<void> {
       // "Ensure" the token/role (same value on re-run). Log as unchanged rather
       // than created so the idempotence check stays honest — an unconditional
       // update is a no-op at the data level here.
-      await client.request(updateUser(existingUser[0].id, { token, role: roleId } as never));
+      await client.request(
+        updateUser(existingUser[0].id, {
+          token,
+          role: roleId,
+          ...(role.displayName ? { first_name: role.displayName } : {}),
+        } as never),
+      );
       console.log(`  = service user ${email} (token ensured)`);
     } else {
       await idempotent(`service user ${email}`, () =>
         client.request(
           createUser({
             email,
-            first_name: role.name,
+            first_name: role.displayName ?? role.name,
             role: roleId,
             token,
             status: 'active',
