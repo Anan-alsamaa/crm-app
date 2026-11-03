@@ -9,8 +9,8 @@ import {
   compensationFlag,
   displayContactName,
   isCouponRequested,
-  isNotifyingType,
   manualStoreMatch,
+  newTicketNotifiesBranch,
   pickCompensationRule,
   splitCouponForApproval,
   toStoreSnapshot,
@@ -22,7 +22,6 @@ import {
 import {
   useConversationAttachmentIds,
   useCreateTicketFromConversation,
-  useStoreNotifyTypes,
   useUpdateTicket,
 } from './api.js';
 import { orderToSnapshot, type TicketOrderSnapshot } from './OrderSnapshotCard.js';
@@ -523,8 +522,9 @@ function CreateTicketForm({
   // Whether this complaint reaches the branch, known BEFORE saving. The agent
   // is writing the description and the resolution notes that get forwarded, so
   // they have to know that is what they are doing while they write them.
-  const notifyTypes = useStoreNotifyTypes();
-  const notifiesStore = isNotifyingType(subject, notifyTypes.data ?? []);
+  // Decided on the TYPE, not the subject: an "Other" ticket's subject is the
+  // name the agent typed, and Other never notifies.
+  const notifiesStore = newTicketNotifiesBranch(complaint.complaint_type);
 
   // A coupon does not go onto the ticket here — it goes to a supervisor. Known
   // while the agent is still typing, so the form can say so before they promise
@@ -750,7 +750,6 @@ function CreateTicketForm({
           compensation: compensationFlag(false),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
-        storeNotifyTypes: notifyTypes.data ?? [],
       });
       // The ticket exists, so the draft has done its job — whatever happens to
       // the coupon below, a reload must not offer to file it a second time.

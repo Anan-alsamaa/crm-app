@@ -21,7 +21,6 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
 const hooks = vi.hoisted(() => ({
   useCreateTicketFromConversation: vi.fn(),
   useConversationAttachmentIds: vi.fn(),
-  useStoreNotifyTypes: vi.fn(),
   useUpdateTicket: vi.fn(() => ({ mutateAsync: vi.fn().mockResolvedValue({}) })),
 }));
 vi.mock('../src/features/tickets/api.js', () => hooks);
@@ -110,8 +109,6 @@ beforeEach(() => {
   });
   hooks.useConversationAttachmentIds.mockReset();
   hooks.useConversationAttachmentIds.mockReturnValue({ data: [] });
-  hooks.useStoreNotifyTypes.mockReset();
-  hooks.useStoreNotifyTypes.mockReturnValue({ data: ['Missing item'] });
   coupons.useRequestCouponApproval.mockReset();
   coupons.useRequestCouponApproval.mockReturnValue({
     mutateAsync: vi.fn().mockResolvedValue({ id: 'ca1' }),
@@ -208,19 +205,10 @@ describe('CreateTicketForm', () => {
     expect(screen.queryByText(/reported to the branch/)).not.toBeInTheDocument();
   });
 
-  it('decides against the rules the form was actually showing', async () => {
-    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1', storeNotify: 'queued' });
-    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+  it('stays silent for Driver attitude', async () => {
     renderDialog();
-
-    await chooseComplaintType('Missing item');
-    await userEvent.click(screen.getByText('tickets.create'));
-
-    await waitFor(() =>
-      expect(mutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ storeNotifyTypes: ['Missing item'] }),
-      ),
-    );
+    await chooseComplaintType('Driver attitude');
+    expect(screen.queryByText(/reported to the branch/)).not.toBeInTheDocument();
   });
 
   it('asks about a coupon in ONE place, not two', () => {
