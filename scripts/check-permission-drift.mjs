@@ -123,6 +123,10 @@ const EXPECTED = [
   { role: 'svc-yiji', collection: 'brands', actions: ['read'] },
   { role: 'svc-yiji', collection: 'store_notifications', actions: ['create'] },
   { role: 'svc-yiji', collection: 'compensation_rules', actions: ['read'] },
+  /* Branch notification rules (owner, 2026-11-03): Yiji reads them; the Admin
+     role only reads them - the Administrator alone changes them. */
+  { role: 'svc-yiji', collection: 'store_notify_rules', actions: ['read'] },
+  { role: 'Admin', collection: 'store_notify_rules', actions: ['read'] },
   { role: 'svc-yiji', collection: 'app_settings', actions: ['read'] },
   { role: 'svc-yiji', collection: 'vendors', actions: ['read'] },
   { role: 'Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },

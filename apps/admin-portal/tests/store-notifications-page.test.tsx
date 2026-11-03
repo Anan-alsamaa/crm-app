@@ -28,6 +28,29 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../src/features/store-notifications/api.js', () => api);
 
+/* The ticket types agents can pick, as production's Dropdown values hold them. */
+const LIVE_TYPES = [
+  'Accuracy',
+  'Cleanness',
+  'Driver attitude',
+  'Foreign object found',
+  'Hospitality',
+  'Instore preparation late order',
+  'Late order',
+  'Missing condiments',
+  'Missing item',
+  'Product',
+  'Roach found',
+  'Technical issue',
+  'Wrong order',
+  'Other',
+];
+const lists = vi.hoisted(() => ({ useOptionLists: vi.fn() }));
+vi.mock('../src/lib/option-lists.js', async (orig) => ({
+  ...(await orig<typeof import('../src/lib/option-lists.js')>()),
+  useOptionLists: lists.useOptionLists,
+}));
+
 import { StoreNotificationsPage } from '../src/features/store-notifications/StoreNotificationsPage.js';
 
 function renderPage() {
@@ -52,24 +75,28 @@ beforeEach(() => {
   });
   api.useSetStoreNotifyRule.mockReturnValue({ mutate, isPending: false });
   api.useStoreNotifications.mockReturnValue({ data: [], isLoading: false });
+  lists.useOptionLists.mockReturnValue({
+    data: { complaint_type: LIVE_TYPES },
+    isLoading: false,
+  });
 });
 
+const pressed = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
+
 describe('StoreNotificationsPage', () => {
-  it('shows every ticket type, with only the chosen ones on', () => {
+  it('shows the live ticket types, each as a new ticket of that type does today', () => {
     renderPage();
-    expect(screen.getByRole('button', { name: 'Missing item' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    expect(screen.getByRole('button', { name: 'Technical issue' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
-    // A type nobody has ruled on is off, not missing.
-    expect(screen.getByRole('button', { name: 'Order cold' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    // Set by the Administrator.
+    expect(pressed('Missing item')).toBe('true');
+    expect(pressed('Technical issue')).toBe('false');
+    // Not set: the default - on, except Driver attitude, Technical issue, Other.
+    expect(pressed('Wrong order')).toBe('true');
+    expect(pressed('Instore preparation late order')).toBe('true');
+    expect(pressed('Driver attitude')).toBe('false');
+    expect(pressed('Other')).toBe('false');
+    // Retired built-in values are not offered.
+    expect(screen.queryByRole('button', { name: 'Order cold' })).not.toBeInTheDocument();
+    expect(screen.getByText('11 of 14 selected')).toBeInTheDocument();
   });
 
   it('reuses a type’s existing row instead of stacking a second one', async () => {
@@ -86,25 +113,36 @@ describe('StoreNotificationsPage', () => {
     );
   });
 
-  it('creates a row the first time a type is chosen', async () => {
+  it('turning off a type that is on by default creates its row, set off', async () => {
     const user = userEvent.setup();
     renderPage();
-    await user.click(screen.getByRole('button', { name: 'Order cold' }));
+    await user.click(screen.getByRole('button', { name: 'Wrong order' }));
     expect(mutate).toHaveBeenCalledWith(
       expect.objectContaining({
-        complaintType: 'Order cold',
-        enabled: true,
+        complaintType: 'Wrong order',
+        enabled: false,
         existingId: undefined,
       }),
       expect.anything(),
     );
   });
 
-  it('says out loud when nothing is configured', () => {
-    api.useStoreNotifyRules.mockReturnValue({ data: [], isLoading: false });
+  it('turning on a type that is off by default creates its row, set on', async () => {
+    const user = userEvent.setup();
     renderPage();
-    // "Nothing selected" is silently identical to "feature broken" unless the
-    // page says which one it is.
+    await user.click(screen.getByRole('button', { name: 'Other' }));
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ complaintType: 'Other', enabled: true, existingId: undefined }),
+      expect.anything(),
+    );
+  });
+
+  it('says out loud when every type is turned off', () => {
+    api.useStoreNotifyRules.mockReturnValue({
+      data: LIVE_TYPES.map((t, i) => ({ id: `r${i}`, complaint_type: t, enabled: false })),
+      isLoading: false,
+    });
+    renderPage();
     expect(screen.getByText(/no branch is told about anything/i)).toBeInTheDocument();
     expect(screen.getByText('0 of 14 selected')).toBeInTheDocument();
   });
@@ -169,7 +207,7 @@ describe('StoreNotificationsPage', () => {
     expect(within(row).getAllByText('not written')).toHaveLength(2);
   });
 
-  it('does not let a queued row read as delivered', async () => {
+  it('says where the notifications go', async () => {
     api.useStoreNotifications.mockReturnValue({
       isLoading: false,
       data: [
@@ -188,7 +226,7 @@ describe('StoreNotificationsPage', () => {
     });
     renderPage();
     await waitFor(() =>
-      expect(screen.getByText(/Delivery to the stores is not connected yet/)).toBeInTheDocument(),
+      expect(screen.getByText(/Sent to each branch's SaraPOS/)).toBeInTheDocument(),
     );
   });
 });

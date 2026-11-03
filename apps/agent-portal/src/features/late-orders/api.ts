@@ -17,6 +17,8 @@ import {
   type LateOrderGroup,
   type LateOrderSnapshot,
   storeNotificationDraft,
+  branchNotifyTypesFor,
+  type BranchNotifyRule,
 } from '@yiji/shared-types';
 import { commerce } from '../../lib/commerce-client.js';
 import { directus } from '../../lib/directus.js';
@@ -687,11 +689,13 @@ export function lateOrderTicket(opts: {
 
 /**
  * Queue the BRANCH NOTIFICATION for a late-preparation ticket (owner,
- * 2026-10-29: on production this is the one reason a branch is notified).
+ * 2026-10-29).
  *
  * A late-order ticket is the branch's fault by definition - only an
- * `operations` cause raises one - so no notification rule is consulted: the
- * ticket's own complaint type is the enabled one. The workers deliver it to
+ * `operations` cause raises one. Whether its type tells the branch is the
+ * Administrator's Branch notifications rule, read at save time (owner,
+ * 2026-11-03); unset, the default notifies. Rules that cannot be read tell
+ * nobody and report 'failed', so the agent is warned. The workers deliver it to
  * the branch's SaraPOS outlet. What the branch gets is the order number and
  * the agent's comment (typed after choosing the cause), verbatim - never the
  * customer.
@@ -705,6 +709,18 @@ export async function queueLateOrderBranchNotification(opts: {
 }): Promise<'queued' | 'skipped' | 'failed'> {
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
   const complaintType = str(opts.ticket.complaint_type);
+  let rules: BranchNotifyRule[] | null;
+  try {
+    rules = (await directus.request(
+      readItems(
+        'store_notify_rules' as never,
+        { fields: ['complaint_type', 'enabled'], limit: -1 } as never,
+      ),
+    )) as unknown as BranchNotifyRule[];
+    if (!Array.isArray(rules)) rules = null;
+  } catch {
+    rules = null;
+  }
   const decision = storeNotificationDraft(
     {
       ticketId: opts.ticketId,
@@ -715,9 +731,10 @@ export async function queueLateOrderBranchNotification(opts: {
       orderId: opts.orderId,
       orderItems: null,
     },
-    complaintType ? [complaintType] : [],
+    branchNotifyTypesFor(complaintType, rules ?? []),
   );
   if (!('draft' in decision)) return 'skipped';
+  if (rules === null) return 'failed';
   try {
     await directus.request(
       createItem(

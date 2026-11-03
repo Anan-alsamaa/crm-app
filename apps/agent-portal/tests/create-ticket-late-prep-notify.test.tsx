@@ -36,7 +36,10 @@ beforeEach(() => {
   );
 });
 
-async function save(complaintType: string) {
+async function save(
+  complaintType: string,
+  branchRules?: Array<{ complaint_type: string; enabled: boolean }> | null,
+) {
   const { result } = renderHook(() => useCreateTicketFromConversation(), { wrapper: wrapper() });
   let out: { storeNotify?: string } | undefined;
   await waitFor(async () => {
@@ -48,6 +51,7 @@ async function save(complaintType: string) {
         store: 'store-1',
         order_id: '1339586',
       } as never,
+      ...(branchRules === undefined ? {} : { branchRules }),
     })) as { storeNotify?: string };
   });
   return out!;
@@ -120,5 +124,29 @@ describe('Add ticket - which types tell the branch', () => {
       }),
     ).rejects.toThrow(/needs a branch/);
     expect(calls().some((c) => c.collection === 'store_notifications')).toBe(false);
+  });
+
+  it("the Administrator's rule wins: a type turned off tells nobody", async () => {
+    const out = await save('Missing item', [{ complaint_type: 'Missing item', enabled: false }]);
+    expect(out.storeNotify).toBe('type-not-notifying');
+    expect(calls().some((c) => c.collection === 'store_notifications')).toBe(false);
+  });
+
+  it("the Administrator's rule wins: a never-notify type turned on tells the branch", async () => {
+    const out = await save('Technical issue', [
+      { complaint_type: 'Technical issue', enabled: true },
+    ]);
+    expect(out.storeNotify).toBe('queued');
+  });
+
+  it('rules that could not be read: nobody is told, and the agent is warned', async () => {
+    const out = await save('Missing item', null);
+    expect(out.storeNotify).toBe('failed');
+    expect(calls().some((c) => c.collection === 'store_notifications')).toBe(false);
+  });
+
+  it('rules that could not be read, for a type that would not notify anyway: no warning', async () => {
+    const out = await save('Technical issue', null);
+    expect(out.storeNotify).toBe('type-not-notifying');
   });
 });

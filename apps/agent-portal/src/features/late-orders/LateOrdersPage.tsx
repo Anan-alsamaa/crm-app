@@ -1216,7 +1216,8 @@ export function LateOrdersPage() {
         )) as { id: string };
         /* LATE PREPARATION TELLS THE BRANCH (owner, 2026-10-29): a ticket from
            this path is the branch's fault by definition (only an `operations`
-           cause raises one), so it is queued for the branch's SaraPOS outlet.
+           cause raises one), so it is queued for the branch's SaraPOS outlet -
+           unless the Administrator turned its type off (2026-11-03).
            Best-effort: the ticket is saved and stays saved; the agent is told
            when the branch could not be queued. */
         if (created?.id) {

@@ -8,6 +8,7 @@ vi.mock('../src/lib/commerce-client.js', () => ({ commerce: {} }));
 vi.mock('@directus/sdk', async (orig) => ({
   ...(await orig<typeof import('@directus/sdk')>()),
   createItem: (collection: string, item: unknown) => ({ collection, item }),
+  readItems: (collection: string) => ({ collection, read: true }),
 }));
 
 import { queueLateOrderBranchNotification } from '../src/features/late-orders/api.js';
@@ -16,7 +17,7 @@ import { queueLateOrderBranchNotification } from '../src/features/late-orders/ap
  * LATE PREPARATION TELLS THE BRANCH (owner, 2026-10-29). On production this is
  * the one reason a branch is notified: a ticket raised from Late orders (only
  * an `operations` cause raises one) is queued for the branch's SaraPOS outlet,
- * with no notification rule needed. The ticket never depends on it.
+ * unless the Administrator turned its type off. The ticket never depends on it.
  */
 
 const ticket = {
@@ -27,22 +28,35 @@ const ticket = {
   customer_phone: '0500000001',
 };
 
+/* The Administrator's Branch notifications rules, as the read returns them. */
+let rules: Array<{ complaint_type: string; enabled: boolean }> | Error = [];
+const writes = () =>
+  request.mock.calls
+    .map((c) => c[0] as { collection: string; read?: boolean; item?: Record<string, unknown> })
+    .filter((c) => !c.read);
+
 beforeEach(() => {
-  request.mockClear();
-  request.mockResolvedValue({});
+  rules = [];
+  request.mockReset();
+  request.mockImplementation(async (arg: { collection: string; read?: boolean }) => {
+    if (arg.read && arg.collection === 'store_notify_rules') {
+      if (rules instanceof Error) throw rules;
+      return rules;
+    }
+    return {};
+  });
 });
 
 describe('queueLateOrderBranchNotification', () => {
   it("queues the branch's notification with the order and the agent's comment", async () => {
-    request.mockResolvedValue({});
     const res = await queueLateOrderBranchNotification({
       ticketId: 't1',
       ticket,
       orderId: '1339586',
     });
     expect(res).toBe('queued');
-    const [arg] = request.mock.calls[0]! as [{ collection: string; item: Record<string, unknown> }];
-    const sent = JSON.stringify(arg);
+    expect(writes()).toHaveLength(1);
+    const sent = JSON.stringify(writes()[0]);
     expect(sent).toContain('store_notifications');
     expect(sent).toContain('"ticket":"t1"');
     expect(sent).toContain('"store":"store-1"');
@@ -63,11 +77,26 @@ describe('queueLateOrderBranchNotification', () => {
       orderId: '1',
     });
     expect(res).toBe('skipped');
-    expect(request).not.toHaveBeenCalled();
+    expect(writes()).toHaveLength(0);
+  });
+
+  it('the Administrator turned the type off: nothing is queued', async () => {
+    rules = [{ complaint_type: 'Instore preparation late order', enabled: false }];
+    const res = await queueLateOrderBranchNotification({ ticketId: 't1', ticket, orderId: '1' });
+    expect(res).toBe('skipped');
+    expect(writes()).toHaveLength(0);
+  });
+
+  it('rules that cannot be read: nothing is queued, and the agent is warned', async () => {
+    rules = new Error('403');
+    const res = await queueLateOrderBranchNotification({ ticketId: 't1', ticket, orderId: '1' });
+    expect(res).toBe('failed');
+    expect(writes()).toHaveLength(0);
   });
 
   it('never throws: a refused write is reported as failed', async () => {
-    request.mockImplementation(async () => {
+    request.mockImplementation(async (arg: { read?: boolean }) => {
+      if (arg.read) return [];
       throw new Error('403');
     });
     const res = await queueLateOrderBranchNotification({

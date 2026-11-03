@@ -119,9 +119,9 @@ const ALL_BUSINESS = [
   'option_lists',
   'app_roles',
   'app_settings',
-  // Which complaint types reach the branch, and the queue of what was decided.
-  // Supervisors own the rules; the queue is theirs to inspect and retry.
-  'store_notify_rules',
+  // The queue of what branches were told. The RULES (store_notify_rules) are
+  // NOT here: only the Administrator changes them (owner, 2026-11-03) - the
+  // Admin role reads them, below.
   'store_notifications',
   // The ready-reply library agents pick from. Operations wording, so operations
   // maintain it.
@@ -327,6 +327,9 @@ export const roles: RoleSpec[] = [
     adminAccess: false,
     permissions: [
       ...ALL_BUSINESS.flatMap(crud),
+      // Branch notification rules: read only - the Administrator's to change
+      // (owner, 2026-11-03).
+      ...readOnly('store_notify_rules'),
       // Read only, display fields only — vendors are the Administrator's (MV-5).
       ...vendorsRead(),
       ...crud('directus_users'),
@@ -815,6 +818,8 @@ export const roles: RoleSpec[] = [
       ...readOnly('stores'),
       ...readOnly('brands'),
       { collection: 'store_notifications', action: 'create' },
+      /* Whether a Yiji ticket tells its branch: the Administrator's rules. */
+      ...readOnly('store_notify_rules'),
       ...readOnly('compensation_rules'),
       /* The rule coupons' per-customer limit lives in app_settings - read only. */
       { collection: 'app_settings', action: 'read' },

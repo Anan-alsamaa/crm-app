@@ -51,6 +51,8 @@ class FakeStore implements YijiInboundStore {
   events: Array<{ ticket: string; actor: string | null; text: string }> = [];
   notifications: Array<Record<string, unknown>> = [];
   notifyFails = false;
+  /* The Administrator's Branch notifications rules; an Error = unreadable. */
+  branchRules: Array<{ complaint_type: string; enabled: boolean }> | Error = [];
   deleted: string[] = [];
   /** Queue of failures for the next createCoupon calls. */
   couponFailures: InboundStoreError[] = [];
@@ -149,6 +151,10 @@ class FakeStore implements YijiInboundStore {
     this.deleted.push(id);
     this.tickets.delete(id);
     for (const [cid, c] of this.coupons) if (c.ticket === id) this.coupons.delete(cid);
+  }
+  async branchNotifyRules() {
+    if (this.branchRules instanceof Error) throw this.branchRules;
+    return this.branchRules;
   }
   async queueStoreNotification(draft: Record<string, unknown>) {
     if (this.notifyFails) throw new InboundStoreError('refused', 'forbidden');
@@ -781,7 +787,7 @@ describe('helpers', () => {
   });
 });
 
-/* Late preparation tells the branch, from Yiji too (owner, 2026-10-29). */
+/* The branch is told from Yiji too (owner, 2026-10-29; rules 2026-11-03). */
 describe('POST /webhooks/yiji/tickets - late preparation notifies the branch', () => {
   const latePrep = () =>
     ticketBody({
@@ -813,8 +819,31 @@ describe('POST /webhooks/yiji/tickets - late preparation notifies the branch', (
     expect(store.notifications).toHaveLength(1);
   });
 
-  it('other types do not notify', async () => {
+  it('every type notifies by default, except the four (owner, 2026-11-03)', async () => {
     await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
+    expect(store.notifications).toHaveLength(1);
+    expect(store.notifications[0]).toMatchObject({ complaint_type: 'Missing item' });
+    for (const [i, t] of ['driver attitude', 'technical issue'].entries())
+      await app.inject(
+        signed(
+          'POST',
+          '/webhooks/yiji/tickets',
+          ticketBody({ externalId: `YT-N-${i}`, complaintType: t }),
+        ),
+      );
+    expect(store.notifications).toHaveLength(1);
+  });
+
+  it("the Administrator's rule decides: a type turned off tells nobody", async () => {
+    store.branchRules = [{ complaint_type: 'Instore preparation late order', enabled: false }];
+    await app.inject(signed('POST', '/webhooks/yiji/tickets', latePrep()));
+    expect(store.notifications).toHaveLength(0);
+  });
+
+  it('rules that cannot be read tell nobody, and the ticket is still created', async () => {
+    store.branchRules = new Error('403');
+    const res = await app.inject(signed('POST', '/webhooks/yiji/tickets', latePrep()));
+    expect(res.statusCode).toBe(201);
     expect(store.notifications).toHaveLength(0);
   });
 

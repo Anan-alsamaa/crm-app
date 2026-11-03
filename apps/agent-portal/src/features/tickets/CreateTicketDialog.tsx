@@ -10,7 +10,7 @@ import {
   displayContactName,
   isCouponRequested,
   manualStoreMatch,
-  newTicketNotifiesBranch,
+  branchNotifies,
   pickCompensationRule,
   splitCouponForApproval,
   toStoreSnapshot,
@@ -21,6 +21,7 @@ import {
 } from '@yiji/shared-types';
 import {
   useConversationAttachmentIds,
+  useBranchNotifyRules,
   useCreateTicketFromConversation,
   useUpdateTicket,
 } from './api.js';
@@ -524,7 +525,8 @@ function CreateTicketForm({
   // they have to know that is what they are doing while they write them.
   // Decided on the TYPE, not the subject: an "Other" ticket's subject is the
   // name the agent typed, and Other never notifies.
-  const notifiesStore = newTicketNotifiesBranch(complaint.complaint_type);
+  const branchRules = useBranchNotifyRules();
+  const notifiesStore = branchNotifies(complaint.complaint_type, branchRules.data ?? []);
 
   // A coupon does not go onto the ticket here — it goes to a supervisor. Known
   // while the agent is still typing, so the form can say so before they promise
@@ -750,6 +752,8 @@ function CreateTicketForm({
           compensation: compensationFlag(false),
         },
         attachmentFileIds: includeFiles ? sessionFileIds : [],
+        // `undefined` while loading counts as unknown, like a failed read.
+        branchRules: branchRules.data ?? null,
       });
       // The ticket exists, so the draft has done its job — whatever happens to
       // the coupon below, a reload must not offer to file it a second time.
