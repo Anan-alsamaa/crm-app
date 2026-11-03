@@ -10,6 +10,7 @@ import {
   type CompensationRule,
   type RuleCouponLimit,
   type StoreNotificationDraft,
+  type BranchNotifyRule,
   type StoreRecord,
 } from '@yiji/shared-types';
 import {
@@ -567,6 +568,18 @@ export class YijiInboundDirectus implements YijiInboundStore {
 
   async createTicket(row: NewTicketRow): Promise<void> {
     await this.req(createItem('tickets' as never, row as never));
+  }
+
+  /** The Administrator's Branch notifications rules - every row, on and off. */
+  async branchNotifyRules(): Promise<BranchNotifyRule[]> {
+    const rows = await this.req<BranchNotifyRule[]>(
+      readItems(
+        'store_notify_rules' as never,
+        { fields: ['complaint_type', 'enabled'], limit: -1 } as never,
+      ),
+    );
+    if (!Array.isArray(rows)) throw new Error('store_notify_rules: unexpected response');
+    return rows;
   }
 
   async queueStoreNotification(draft: StoreNotificationDraft & { vendor: string }): Promise<void> {

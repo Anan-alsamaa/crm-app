@@ -63,6 +63,9 @@ export interface StoreNotificationDraft {
  * orders, the Yiji API - whether or not operations switched the type on under
  * Branch notifications. Never an import, never an edit. The stored spelling is
  * operations' own (shown as "Late preparation in store") - do not "fix" it.
+ *
+ * SUPERSEDED for new tickets by `branchNotifies` (owner, 2026-11-03): the
+ * Administrator's Branch notifications page now decides for every source.
  */
 export const ALWAYS_NOTIFY_BRANCH_TYPES: readonly string[] = ['Instore preparation late order'];
 
@@ -74,14 +77,16 @@ export function branchNotifyTypes(enabled: readonly string[] = []): string[] {
 }
 
 /**
- * A NEW TICKET TELLS ITS BRANCH unless its type is one of these (owner,
- * 2026-11-03). They are not the branch's doing - the driver, the app, or a
- * catch-all - so a branch told about them could do nothing with it. Every other
- * type notifies, including one added to the list later. "Late driver" is not a
- * ticket type today; it is listed so that it never notifies if one is added.
+ * THE ADMINISTRATOR DECIDES, on the admin portal's Branch notifications page
+ * (owner, 2026-11-03), for EVERY ticket however it was raised - Create ticket,
+ * a chat, Late orders, the Yiji API. A `store_notify_rules` row for the type
+ * decides; a type with no row falls back to the default below.
  *
- * Applies to the Create ticket form only. Late orders keeps its own rule (late
- * preparation only) and the Yiji API keeps ALWAYS_NOTIFY_BRANCH_TYPES.
+ * THE DEFAULT: every type tells its branch except these. They are not the
+ * branch's doing - the driver, the app, or a catch-all - so a branch told
+ * about them could do nothing with it. A type added to the list later notifies
+ * until the Administrator turns it off. "Late driver" is not a ticket type
+ * today; it is listed so that it never notifies if one is added.
  */
 export const NEVER_NOTIFY_BRANCH_TYPES: readonly string[] = [
   'Driver attitude',
@@ -90,19 +95,41 @@ export const NEVER_NOTIFY_BRANCH_TYPES: readonly string[] = [
   'Other',
 ];
 
-/** Does a ticket of this type, saved from the Create ticket form, notify its branch? */
-export function newTicketNotifiesBranch(complaintType: string | null | undefined): boolean {
+/** One `store_notify_rules` row: the Administrator's decision for one type. */
+export interface BranchNotifyRule {
+  complaint_type: string | null;
+  enabled: boolean | null;
+}
+
+/** What a type does when the Administrator has not set it. */
+export function defaultBranchNotify(complaintType: string | null | undefined): boolean {
   if (!complaintType?.trim()) return false;
   return !isNotifyingType(complaintType, NEVER_NOTIFY_BRANCH_TYPES);
 }
 
 /**
- * The list to decide a Create-ticket notification against: the ticket's own
- * type when it notifies, otherwise nothing - so a never-notify type stays
- * silent whatever else is configured.
+ * Does a NEW ticket of this type tell its branch? The type's rule row when
+ * there is one (case/space-insensitive), otherwise the default.
  */
-export function newTicketNotifyTypes(complaintType: string | null | undefined): string[] {
-  return newTicketNotifiesBranch(complaintType) ? [complaintType!.trim()] : [];
+export function branchNotifies(
+  complaintType: string | null | undefined,
+  rules: readonly BranchNotifyRule[],
+): boolean {
+  const t = complaintType?.trim().toLowerCase();
+  if (!t) return false;
+  const row = rules.find((r) => r.complaint_type?.trim().toLowerCase() === t);
+  return row ? row.enabled !== false : defaultBranchNotify(complaintType);
+}
+
+/**
+ * The list to hand `storeNotificationDraft` for one new ticket: its own type
+ * when it notifies, otherwise nothing.
+ */
+export function branchNotifyTypesFor(
+  complaintType: string | null | undefined,
+  rules: readonly BranchNotifyRule[],
+): string[] {
+  return branchNotifies(complaintType, rules) ? [complaintType!.trim()] : [];
 }
 
 /** Why a ticket did not produce a notification. Reported, never guessed at. */

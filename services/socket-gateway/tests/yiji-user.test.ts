@@ -54,6 +54,7 @@ describe('the svc-yiji role', () => {
       'brands:read',
       'store_notifications:create',
       'compensation_rules:read',
+      'store_notify_rules:read',
       'app_settings:read',
     ];
     for (const g of need) expect(grants(yiji)).toContain(g);
@@ -76,6 +77,7 @@ describe('the svc-yiji role', () => {
       'brands:read',
       'store_notifications:create',
       'compensation_rules:read',
+      'store_notify_rules:read',
       'app_settings:read',
       'directus_users:read',
     ]);
@@ -112,5 +114,30 @@ describe('the svc-yiji role', () => {
     const u = yiji.permissions!.find((p) => p.collection === 'directus_users')!;
     expect(u.action).toBe('read');
     expect(u.permissions).toEqual({ id: { _eq: '$CURRENT_USER' } });
+  });
+});
+
+/* Branch notification rules: the Administrator's alone (owner, 2026-11-03). */
+describe('who may change the branch notification rules', () => {
+  const grantsOn = (role: string, collection: string) =>
+    (roles.find((r) => r.name === role)?.permissions ?? [])
+      .filter((p) => p.collection === collection)
+      .map((p) => p.action)
+      .sort();
+
+  it('the Admin role reads them and cannot change them', () => {
+    expect(grantsOn('Admin', 'store_notify_rules')).toEqual(['read']);
+  });
+
+  it('no role except the Administrator (admin access) can write them', () => {
+    for (const r of roles) {
+      if (r.adminAccess) continue;
+      const w = grantsOn(r.name, 'store_notify_rules').filter((a) => a !== 'read');
+      expect({ role: r.name, writes: w }).toEqual({ role: r.name, writes: [] });
+    }
+  });
+
+  it('the Yiji user reads them, so Yiji tickets follow the same rules', () => {
+    expect(grantsOn('svc-yiji', 'store_notify_rules')).toEqual(['read']);
   });
 });

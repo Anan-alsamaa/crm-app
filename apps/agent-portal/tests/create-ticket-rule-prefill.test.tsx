@@ -55,7 +55,7 @@ vi.mock('../src/lib/directus.js', () => ({
 const hooks = vi.hoisted(() => ({
   useCreateTicketFromConversation: vi.fn(),
   useConversationAttachmentIds: vi.fn(() => ({ data: [] })),
-  useStoreNotifyTypes: vi.fn(() => ({ data: [] })),
+  useBranchNotifyRules: vi.fn(() => ({ data: [] })),
   useUpdateTicket: vi.fn(),
 }));
 vi.mock('../src/features/tickets/api.js', () => hooks);

@@ -25,8 +25,9 @@ import {
   ruleLimitReached,
   ruleLimitSince,
   toStoreSnapshot,
-  branchNotifyTypes,
+  branchNotifyTypesFor,
   storeNotificationDraft,
+  type BranchNotifyRule,
   type StoreNotificationDraft,
   type CompensationRule,
   type CouponRequestDraft,
@@ -216,6 +217,11 @@ export interface YijiInboundStore {
   ruleCouponsSince?(contactId: string, sinceIso: string, max: number): Promise<number>;
   /** Queue a branch notification (late preparation, owner 2026-10-29). Optional. */
   queueStoreNotification?(draft: StoreNotificationDraft & { vendor: string }): Promise<void>;
+  /**
+   * The Administrator's Branch notifications rules (owner, 2026-11-03). A store
+   * without them, or a read that fails, tells no branch.
+   */
+  branchNotifyRules?(): Promise<BranchNotifyRule[]>;
 }
 
 /* ── The CRM-side compensation policy (OFF by default) ────────────────────── */
@@ -1259,10 +1265,22 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     }
 
     /*
-     * LATE PREPARATION TELLS THE BRANCH (owner, 2026-10-29), from Yiji like
-     * from anywhere else: only for a ticket created HERE (a replay returned
-     * above), best-effort - the ticket never depends on it.
+     * THE BRANCH IS TOLD when the Administrator's Branch notifications rules
+     * say this type does (owner, 2026-11-03), from Yiji like from anywhere
+     * else: only for a ticket created HERE (a replay returned above),
+     * best-effort - the ticket never depends on it. Rules that cannot be read
+     * tell nobody.
      */
+    let branchRules: BranchNotifyRule[] | null = null;
+    if (store.branchNotifyRules) {
+      branchRules = await store.branchNotifyRules().catch((err: unknown) => {
+        logger.warn(
+          { externalId: b.externalId, err: asStoreError(err).message },
+          'yiji inbound: branch notification rules not readable - no branch told',
+        );
+        return null;
+      });
+    }
     const notify = storeNotificationDraft(
       {
         ticketId: row.id,
@@ -1273,9 +1291,9 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         orderId: row.order_id,
         orderItems: null,
       },
-      branchNotifyTypes(),
+      branchNotifyTypesFor(row.complaint_type, branchRules ?? []),
     );
-    if ('draft' in notify && store.queueStoreNotification) {
+    if ('draft' in notify && branchRules && store.queueStoreNotification) {
       await store
         .queueStoreNotification({ ...notify.draft, vendor: vendorId })
         .catch((err: unknown) =>

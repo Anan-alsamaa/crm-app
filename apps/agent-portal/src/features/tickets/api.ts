@@ -3,7 +3,8 @@ import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@dir
 import {
   displayContactName,
   storeNotificationDraft,
-  newTicketNotifyTypes,
+  branchNotifyTypesFor,
+  type BranchNotifyRule,
   type Priority,
   type StoreNotificationSkip,
   type StoreSnapshot,
@@ -427,10 +428,40 @@ export interface CreateTicketFromConversationInput {
   ticket: CreateTicketInput;
   /** File ids from the chat session to copy onto the new ticket (see FR #3). */
   attachmentFileIds?: string[];
+  /**
+   * The Administrator's Branch notifications rules, as the form loaded them
+   * (`useBranchNotifyRules`). `null` means they could not be read: the branch
+   * is then NOT told and the agent is warned, never left assuming it was.
+   */
+  branchRules?: readonly BranchNotifyRule[] | null;
 }
 
 /** What happened to the branch notification for a ticket that was just saved. */
 export type StoreNotifyOutcome = 'queued' | 'failed' | StoreNotificationSkip;
+
+/**
+ * The Administrator's Branch notifications rules - every row, on and off
+ * (owner, 2026-11-03). Read-only for agents. Resolves to `null` when they
+ * cannot be read, so a caller can tell "no rules set" from "rules unknown".
+ */
+export function useBranchNotifyRules() {
+  return useQuery({
+    queryKey: ['branch-notify-rules'],
+    staleTime: 60_000,
+    queryFn: async (): Promise<BranchNotifyRule[] | null> => {
+      try {
+        return (await directus.request(
+          readItems(
+            'store_notify_rules' as never,
+            { fields: ['complaint_type', 'enabled'], limit: -1 } as never,
+          ),
+        )) as unknown as BranchNotifyRule[];
+      } catch {
+        return null;
+      }
+    },
+  });
+}
 
 /**
  * Create a ticket out of a chat and carry the session's context onto it: the
@@ -446,7 +477,11 @@ export type StoreNotifyOutcome = 'queued' | 'failed' | StoreNotificationSkip;
 export function useCreateTicketFromConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ ticket, attachmentFileIds }: CreateTicketFromConversationInput) => {
+    mutationFn: async ({
+      ticket,
+      attachmentFileIds,
+      branchRules,
+    }: CreateTicketFromConversationInput) => {
       assertStore(ticket);
       const created = (await directus.request(
         // `pending`, not the retired `open` — see TicketStatus (owner, 2026-10-07).
@@ -465,7 +500,7 @@ export function useCreateTicketFromConversation() {
         );
       }
 
-      // Tell the branch — every type except the never-notify ones,
+      // Tell the branch — when the Administrator's rules say this type does,
       // and only what they need: the description and the resolution notes.
       const decision = storeNotificationDraft(
         {
@@ -485,12 +520,15 @@ export function useCreateTicketFromConversation() {
               price: i.price,
             })) ?? null,
         },
-        /* Every type except Driver attitude, Late driver, Technical issue and
-           Other (owner, 2026-11-03) - see NEVER_NOTIFY_BRANCH_TYPES. */
-        newTicketNotifyTypes(ticket.complaint_type),
+        /* The Administrator's Branch notifications rules decide (owner,
+           2026-11-03) - see branchNotifies. */
+        branchNotifyTypesFor(ticket.complaint_type, branchRules ?? []),
       );
       let storeNotify: StoreNotifyOutcome = 'skip' in decision ? decision.skip : 'queued';
-      if ('draft' in decision) {
+      /* Rules unknown and the default would tell the branch: tell nobody, and
+         say so - a skipped notification is recoverable, a wrong one is not. */
+      if (branchRules === null && 'draft' in decision) storeNotify = 'failed';
+      if ('draft' in decision && branchRules !== null) {
         try {
           /* The ticket's vendor rides along (MV-1): the branch notified is that
              vendor's branch. Omitted when the ticket has none. */
