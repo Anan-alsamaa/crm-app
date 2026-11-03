@@ -3,8 +3,8 @@ import {
   ALWAYS_NOTIFY_BRANCH_TYPES,
   branchNotifyTypes,
   isNotifyingType,
-  newTicketNotifiesBranch,
-  newTicketNotifyTypes,
+  branchNotifies,
+  branchNotifyTypesFor,
   storeNotificationDraft,
   type StoreNotificationInput,
 } from '../src/store-notifications.js';
@@ -154,9 +154,23 @@ describe('late preparation always tells the branch (owner, 2026-10-29)', () => {
   });
 });
 
-/* Create ticket: every type tells the branch except four (owner, 2026-11-03). */
-describe('newTicketNotifiesBranch', () => {
-  it('the four never-notify types stay silent, however they are spelled', () => {
+/* The Administrator's rules decide for every new ticket; unset types follow
+   the default - all notify except four (owner, 2026-11-03). */
+describe('branchNotifies', () => {
+  const NOTIFY = [
+    'Accuracy',
+    'Cleanness',
+    'Foreign object found',
+    'Hospitality',
+    'Instore preparation late order',
+    'Late order',
+    'Missing condiments',
+    'Missing item',
+    'Product',
+    'Roach found',
+    'Wrong order',
+  ];
+  it('default: the four never-notify types stay silent, however they are spelled', () => {
     for (const t of [
       'Driver attitude',
       'Late driver',
@@ -165,29 +179,39 @@ describe('newTicketNotifiesBranch', () => {
       ' OTHER ',
       'late DRIVER',
     ])
-      expect(newTicketNotifiesBranch(t)).toBe(false);
-    expect(newTicketNotifyTypes('Technical issue')).toEqual([]);
+      expect(branchNotifies(t, [])).toBe(false);
+    expect(branchNotifyTypesFor('Technical issue', [])).toEqual([]);
   });
-  it('every other live type tells the branch', () => {
-    for (const t of [
-      'Accuracy',
-      'Cleanness',
-      'Foreign object found',
-      'Hospitality',
-      'Instore preparation late order',
-      'Late order',
-      'Missing condiments',
-      'Missing item',
-      'Product',
-      'Roach found',
-      'Wrong order',
-    ]) {
-      expect(newTicketNotifiesBranch(t)).toBe(true);
-      expect(newTicketNotifyTypes(t)).toEqual([t]);
+  it('default: every other live type tells the branch', () => {
+    for (const t of NOTIFY) {
+      expect(branchNotifies(t, [])).toBe(true);
+      expect(branchNotifyTypesFor(t, [])).toEqual([t]);
     }
   });
-  it('a type added later tells the branch; no type tells nobody', () => {
-    expect(newTicketNotifiesBranch('Packaging damaged')).toBe(true);
-    for (const t of ['', '   ', null, undefined]) expect(newTicketNotifiesBranch(t)).toBe(false);
+  it('default: a type added later tells the branch; no type tells nobody', () => {
+    expect(branchNotifies('Packaging damaged', [])).toBe(true);
+    for (const t of ['', '   ', null, undefined]) expect(branchNotifies(t, [])).toBe(false);
+  });
+  it("the Administrator's row wins over the default, both ways", () => {
+    const rules = [
+      { complaint_type: 'Missing item', enabled: false },
+      { complaint_type: ' technical ISSUE ', enabled: true },
+      { complaint_type: 'Accuracy', enabled: true },
+    ];
+    expect(branchNotifies('Missing item', rules)).toBe(false);
+    expect(branchNotifies('Technical issue', rules)).toBe(true);
+    expect(branchNotifies('Accuracy', rules)).toBe(true);
+    // Types without a row keep the default.
+    expect(branchNotifies('Cleanness', rules)).toBe(true);
+    expect(branchNotifies('Other', rules)).toBe(false);
+  });
+  it('the live production rows (Accuracy, Cleanness on) change nothing', () => {
+    const prod = [
+      { complaint_type: 'Accuracy', enabled: true },
+      { complaint_type: 'Cleanness', enabled: true },
+    ];
+    for (const t of NOTIFY) expect(branchNotifies(t, prod)).toBe(true);
+    for (const t of ['Driver attitude', 'Technical issue', 'Other'])
+      expect(branchNotifies(t, prod)).toBe(false);
   });
 });

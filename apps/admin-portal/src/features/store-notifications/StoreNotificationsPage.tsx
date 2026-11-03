@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Pill, Skeleton, cn, toast } from '@yiji/ui';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
-import { ComplaintType, normalizeOrderId } from '@yiji/shared-types';
+import { branchNotifies, normalizeOrderId } from '@yiji/shared-types';
+import { optionsWith, useOptionLists } from '../../lib/option-lists.js';
 import {
   useSetStoreNotifyRule,
   useStoreNotifications,
@@ -18,9 +19,12 @@ import {
  * issue with the app or a driver's attitude is nothing a branch manager can act
  * on, and a queue that forwards everything is a queue nobody reads.
  *
- * Nothing is enabled by default. An empty configuration means "not set up yet",
- * and the safe reading of that is to tell nobody: a missing notification is
- * recoverable, one that has already gone out to 132 branches is not.
+ * THE ADMINISTRATOR'S PAGE (owner, 2026-11-03): only the Administrator sees
+ * it, and what it says decides for every ticket however it was raised -
+ * Create ticket, a chat, Late orders, the Yiji API. A type the Administrator
+ * has not set follows the default: every type notifies except Driver attitude,
+ * Late driver, Technical issue and Other (see `branchNotifies`). Each button
+ * shows what a new ticket of that type does TODAY, default or not.
  */
 const STATUS_TONE = {
   queued: 'neutral',
@@ -104,6 +108,9 @@ export function StoreNotificationsPage() {
   const rules = useStoreNotifyRules();
   const setRule = useSetStoreNotifyRule();
   const queue = useStoreNotifications();
+  const lists = useOptionLists();
+  /* The ticket types agents can actually pick, live from Dropdown values. */
+  const types = useMemo(() => optionsWith(lists.data, 'complaint_type'), [lists.data]);
 
   const byType = useMemo(() => {
     const m = new Map<string, { id: string; enabled: boolean }>();
@@ -111,15 +118,13 @@ export function StoreNotificationsPage() {
     return m;
   }, [rules.data]);
 
-  const enabledCount = useMemo(
-    () => ComplaintType.options.filter((o) => byType.get(o)?.enabled).length,
-    [byType],
-  );
+  const notifies = (type: string) => branchNotifies(type, rules.data ?? []);
+  const enabledCount = types.filter(notifies).length;
 
   const toggle = (type: string) => {
     const current = byType.get(type);
     setRule.mutate(
-      { complaintType: type, enabled: !current?.enabled, existingId: current?.id },
+      { complaintType: type, enabled: !notifies(type), existingId: current?.id },
       {
         onError: () =>
           toast.error(t('storeNotify.saveError', { defaultValue: 'Could not save that change' })),
@@ -145,7 +150,7 @@ export function StoreNotificationsPage() {
               <p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">
                 {t('storeNotify.rulesHelp', {
                   defaultValue:
-                    'A ticket is reported to its branch only when its ticket type is selected here. The branch receives the order number and its items, the description and the resolution notes — nothing else about the customer.',
+                    'A new ticket is reported to its branch when its ticket type is selected here - from Create ticket, a chat, Late orders or the Yiji API. The branch receives the order number, the description and the resolution notes - nothing else about the customer.',
                 })}
               </p>
             </div>
@@ -153,12 +158,12 @@ export function StoreNotificationsPage() {
               {t('storeNotify.enabledCount', {
                 defaultValue: '{{n}} of {{total}} selected',
                 n: enabledCount,
-                total: ComplaintType.options.length,
+                total: types.length,
               })}
             </span>
           </header>
           <div className="mt-4">
-            {rules.isLoading ? (
+            {rules.isLoading || lists.isLoading ? (
               <div className="flex flex-wrap gap-2">
                 {Array.from({ length: 8 }).map((_, i) => (
                   <Skeleton key={i} className="h-8 w-32 rounded-full" />
@@ -166,18 +171,18 @@ export function StoreNotificationsPage() {
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">
-                {ComplaintType.options.map((type) => (
+                {types.map((type) => (
                   <TypeToggle
                     key={type}
                     type={type}
-                    enabled={!!byType.get(type)?.enabled}
+                    enabled={notifies(type)}
                     busy={setRule.isPending}
                     onToggle={() => toggle(type)}
                   />
                 ))}
               </div>
             )}
-            {enabledCount === 0 && !rules.isLoading && (
+            {enabledCount === 0 && !rules.isLoading && !lists.isLoading && (
               // A proper notice card, not a bare paragraph — warning-foreground ink
               // because the raw warning hue is a light token that fails on light.
               <p className="mt-4 flex items-start gap-2 rounded-xl bg-warning-tint px-3.5 py-2.5 text-xs leading-relaxed text-warning ring-1 ring-warning/25">
@@ -202,7 +207,7 @@ export function StoreNotificationsPage() {
               {/* Said plainly rather than implied by a row of "queued" pills that
                 an admin could read as "delivered". */}
               {t('storeNotify.pendingTransport', {
-                defaultValue: 'Delivery to the stores is not connected yet',
+                defaultValue: "Sent to each branch's SaraPOS",
               })}
             </span>
           </header>

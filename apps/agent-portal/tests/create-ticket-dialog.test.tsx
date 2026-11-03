@@ -20,6 +20,7 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
 
 const hooks = vi.hoisted(() => ({
   useCreateTicketFromConversation: vi.fn(),
+  useBranchNotifyRules: vi.fn(() => ({ data: [] })),
   useConversationAttachmentIds: vi.fn(),
   useUpdateTicket: vi.fn(() => ({ mutateAsync: vi.fn().mockResolvedValue({}) })),
 }));

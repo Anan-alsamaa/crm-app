@@ -444,7 +444,8 @@ function Shell({ children }: { children: React.ReactNode }) {
         },
         {
           to: '/store-notifications',
-          requires: 'manage_store_notifications' as const,
+          /* The Administrator only (owner, 2026-11-03). */
+          ownerOnly: true,
           label: t('nav.storeNotifications', { defaultValue: 'Branch notifications' }),
           icon: StoreIcon,
         },
@@ -952,7 +953,7 @@ export function App() {
           <Route
             path="/store-notifications"
             element={
-              <ProtectedRoute requires="manage_store_notifications">
+              <ProtectedRoute ownerOnly>
                 <Shell>
                   <StoreNotificationsPage />
                 </Shell>
