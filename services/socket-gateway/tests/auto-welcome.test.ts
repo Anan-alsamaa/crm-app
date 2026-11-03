@@ -206,6 +206,33 @@ describe('the automatic welcome', () => {
     expect(messages).toHaveLength(1);
   });
 
+  /* 2026-11-03: one failed read was cached as "no welcome" for 5 minutes, so
+     the NEXT chats were silently skipped too. A failure is never remembered. */
+  it.each([
+    [
+      'the read threw',
+      () => {
+        throw new Error('An unexpected error occurred.');
+      },
+    ],
+    ['the read reported a failure', () => ({ ar: null, en: null, failed: true as const })],
+  ])('a failed read does not silence the next chat (%s)', async (_label, fail) => {
+    let calls = 0;
+    const directus = makeDirectus({
+      welcomeTemplates: vi.fn(async () => (calls++ === 0 ? fail() : { ar: TEMPLATE, en: null })),
+    });
+    const server = await start(directus);
+    const first = await customer(server);
+    first.client.emit('message:send', { content: 'hello', clientMsgId: 'a' });
+    await until(() => first.messages.length >= 1);
+    await settle();
+    expect(first.messages).toHaveLength(1); // this one could not be greeted
+    const second = await customer(server);
+    second.client.emit('message:send', { content: 'hello', clientMsgId: 'b' });
+    await until(() => second.messages.length >= 2);
+    expect(directus.welcomeTemplates).toHaveBeenCalledTimes(2); // asked again
+  });
+
   it('substitutes the customer name, and removes {name} cleanly without one', async () => {
     const named = makeDirectus({
       upsertContact: vi.fn(async () => ({ id: 'c', isNew: false, name: 'Ayman', phone: null })),
