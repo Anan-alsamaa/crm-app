@@ -89,7 +89,11 @@ jobs:
             # A TAG IS A PROMOTION, NOT A BUILD. The images already exist from
             # the merge to main; production re-tags those exact digests, so what
             # was tested on staging is byte-for-byte what ships.
-            ENVIRONMENT=prod; TAG="${GITHUB_REF#refs/tags/}"; BUILD=false
+            # SERVICES-ONLY RELEASE BRANCH (owner, 2026-11-03): this branch is
+            # production's exact service code (main@7de8eadf) + the coupon
+            # safeguards, nothing else. Its tag BUILDS those images (tags vX +
+            # sha-<commit>; `:main` untouched) and ships NO portals.
+            ENVIRONMENT=prod; TAG="${GITHUB_REF#refs/tags/}"; BUILD=true
           else
             ENVIRONMENT=staging; TAG=main; BUILD=true
           fi
@@ -169,6 +173,8 @@ jobs:
   portals:
     name: Build & upload portals
     needs: plan
+    # Services-only branch: production portals stay exactly as they are.
+    if: needs.plan.outputs.environment != 'prod'
     runs-on: ubuntu-24.04
     steps:
       # TAGS, because the Update now summary is read from the TAG ANNOTATION.
@@ -561,7 +567,7 @@ jobs:
   approve:
     name: Approve ${{ needs.plan.outputs.environment }} release
     needs: [plan, build, portals]
-    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success'
+    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && (needs.portals.result == 'success' || needs.portals.result == 'skipped')
     runs-on: ubuntu-24.04
     environment: ${{ needs.plan.outputs.environment }}
     steps:
@@ -580,7 +586,7 @@ jobs:
     # `approve` must genuinely have SUCCEEDED — `always()` would otherwise let a
     # rejected or cancelled approval through, which is the one thing the gate
     # exists to prevent.
-    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success' && needs.approve.result == 'success'
+    if: always() && needs.plan.result == 'success' && needs.build.result == 'success' && (needs.portals.result == 'success' || needs.portals.result == 'skipped') && needs.approve.result == 'success'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -758,7 +764,7 @@ jobs:
       # stop, because that means someone moved a release tag and the operator
       # needs to decide, not us.
       - name: Promote — tag the tested digest with the release version
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && needs.plan.outputs.build != 'true'
         env:
           IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
         run: |
