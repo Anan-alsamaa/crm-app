@@ -51,7 +51,7 @@ import { GatewayDirectus } from './directus.js';
 import { createVendorVerifier, DEFAULT_VENDOR_ID } from './auth/customer-jwt.js';
 import { createVendorJwtSecrets, registerVendorWebhooks } from './vendor-auth.js';
 import { createYijiInboundService, registerYijiInboundApi } from './yiji-inbound.js';
-import { YijiInboundDirectus } from './yiji-inbound-directus.js';
+import { YijiInboundDirectus, yijiInboundToken } from './yiji-inbound-directus.js';
 import { createServiceClient } from '@yiji/shared-config';
 import jwt from 'jsonwebtoken';
 import { randomBytes } from 'node:crypto';
@@ -711,14 +711,25 @@ async function main(): Promise<void> {
    * Under `/webhooks/yiji/…` so the ALB's existing `/webhooks/*` rule routes
    * it here. Its own secret; 503 until YIJI_INBOUND_API_SECRET is set.
    */
+  /* Written as the "Yiji" user only (owner, 2026-11-03): without its token the
+     API answers 503 "not configured", like a missing secret. */
+  const yijiToken = yijiInboundToken(config);
+  if (config.YIJI_INBOUND_API_SECRET && !yijiToken) {
+    logger.warn({}, 'Yiji inbound API: SVC_YIJI_TOKEN is not set - the API answers 503');
+  }
   registerYijiInboundApi(app, {
-    secret: config.YIJI_INBOUND_API_SECRET,
+    secret: yijiToken ? config.YIJI_INBOUND_API_SECRET : '',
     toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
     rate: { capacity: config.YIJI_INBOUND_RATE_CAPACITY, perSec: config.YIJI_INBOUND_RATE_PER_SEC },
     logger,
     service: createYijiInboundService({
       store: new YijiInboundDirectus(
-        createServiceClient({ url: config.DIRECTUS_INTERNAL_URL, token: config.SVC_GATEWAY_TOKEN }),
+        /* As the "Yiji" user (owner, 2026-11-03). Without its token the
+           routes answer 503 before this client is ever used. */
+        createServiceClient({
+          url: config.DIRECTUS_INTERNAL_URL,
+          token: yijiToken ?? config.SVC_GATEWAY_TOKEN,
+        }),
         {
           yijiVendorExternalId: DEFAULT_VENDOR_ID,
           actorUserId: config.YIJI_INBOUND_ACTOR_USER_ID || null,

@@ -37,6 +37,8 @@ export interface RoleSpec {
   permissions: PermissionSpec[] | null;
   /** If true, this role's static token is seeded from an env var. */
   serviceTokenEnv?: string;
+  /** The service user's name as people see it ("Created by Yiji"); defaults to `name`. */
+  displayName?: string;
 }
 
 const CRUD: Action[] = ['create', 'read', 'update', 'delete'];
@@ -754,8 +756,8 @@ export const roles: RoleSpec[] = [
       // READ-ONLY on tickets: POST /jobs/notify-assignment re-reads the assigned
       // entity server-side to derive the notification recipient (the caller's own
       // token can't — an agent loses ticket read access the moment they hand it
-      // to a colleague). Its only ticket WRITES are the Yiji inbound API's,
-      // granted (and fenced to Yiji's own rows) at the end of this list.
+      // to a colleague). No ticket WRITES: the Yiji inbound API writes as the
+      // "Yiji" user (svc-yiji, owner 2026-11-03), never as the gateway.
       { collection: 'tickets', action: 'read' },
       /* The agent-performance report (POST /jobs/performance, owner
          2026-10-11) reads the routing ladder's outcomes and coupon requests
@@ -775,22 +777,28 @@ export const roles: RoleSpec[] = [
          (vendorKeyById, vendorByWebhookKey). */
       ...vendorsRead(['webhook_path_key']),
       ...readOnly('teams'),
-      /*
-       * THE YIJI INBOUND API (owner, 2026-10-27): Yiji raises tickets and
-       * coupon REQUESTS in the CRM (`/webhooks/yiji/tickets`, yiji-inbound.ts).
-       *
-       *  - tickets: CREATE, plus two narrow rights fenced to Yiji's own rows
-       *    (`external_id` set): UPDATE of `compensation` only (marked
-       *    Compensated once its coupon row exists), and DELETE - the rollback
-       *    when the coupon of a ticket+coupon call could not be stored, so a
-       *    ticket is never left behind half-made. Read is granted above.
-       *  - coupon_approvals: CREATE only (read above). The row arrives
-       *    `pending`; DECIDING stays a WeCare supervisor's act - the gateway
-       *    can never approve, exactly like an agent.
-       *  - ticket_events: append-only, for the "Created by Yiji" history line.
-       *  - stores / brands: read, to resolve Yiji's restaurant id to the
-       *    branch every ticket must carry (ticket-branch-mandatory).
-       */
+      /* THE YIJI INBOUND API's rights moved to the "Yiji" user (svc-yiji,
+         owner 2026-11-03): tickets, coupon requests, history, branches, rules. */
+    ],
+  },
+  /*
+   * THE "YIJI" USER (owner, 2026-11-03): everything Yiji does through the
+   * inbound API (`/webhooks/yiji/...`) is recorded under this user - tickets,
+   * coupon requests and history read "Created by Yiji", not by the gateway.
+   * Exactly the inbound API's rights, nothing else: no chats, no messages, no
+   * settings writes. The gateway uses this token for the inbound API only
+   * (SVC_YIJI_TOKEN); without it the API falls back to the gateway account.
+   */
+  {
+    name: 'svc-yiji',
+    displayName: 'Yiji',
+    description: 'Service account: the Yiji inbound API (tickets and coupon requests from Yiji).',
+    appAccess: false,
+    adminAccess: false,
+    serviceTokenEnv: 'SVC_YIJI_TOKEN',
+    permissions: [
+      ...vendorsRead(),
+      { collection: 'tickets', action: 'read' },
       { collection: 'tickets', action: 'create' },
       {
         collection: 'tickets',
@@ -798,21 +806,25 @@ export const roles: RoleSpec[] = [
         fields: ['compensation'],
         permissions: { external_id: { _nnull: true } },
       },
+      { collection: 'coupon_approvals', action: 'read' },
       { collection: 'coupon_approvals', action: 'create' },
       ...appendOnly('ticket_events'),
+      { collection: 'contacts', action: 'create' },
+      { collection: 'contacts', action: 'read' },
+      { collection: 'contacts', action: 'update' },
       ...readOnly('stores'),
       ...readOnly('brands'),
-      /* A late-preparation ticket from Yiji tells the branch (owner,
-         2026-10-29): queue only - the workers send it. */
       { collection: 'store_notifications', action: 'create' },
-      /*
-       * THE COMPENSATION RULES (owner, 2026-10-27): a Yiji ticket sent WITHOUT
-       * a coupon gets the matching rule's coupon REQUEST (pending, like every
-       * other). Read the rules and the optional per-customer limit
-       * (`app_settings`, read above); the rule coupons already given are
-       * counted through the coupon_approvals read above.
-       */
       ...readOnly('compensation_rules'),
+      /* The rule coupons' per-customer limit lives in app_settings - read only. */
+      { collection: 'app_settings', action: 'read' },
+      /* Its own record only: the history line names who acted (readMe). */
+      {
+        collection: 'directus_users',
+        action: 'read',
+        fields: ['id', 'first_name', 'last_name'],
+        permissions: { id: { _eq: '$CURRENT_USER' } },
+      },
     ],
   },
   {

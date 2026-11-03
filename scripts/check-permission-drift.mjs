@@ -102,15 +102,6 @@ const UNSCOPED_TICKET_ROLES = [
 const EXPECTED = [
   { role: 'svc-socket-gateway', collection: 'app_settings', actions: ['read', 'create', 'update'] },
   { role: 'svc-socket-gateway', collection: 'contacts', actions: ['create', 'read', 'update'] },
-  /* The Yiji inbound API (2026-10-27, yiji-inbound.ts). Without these the
-     endpoints answer 503 to every call - nothing is written, nothing breaks
-     elsewhere, but Yiji's tickets never arrive. */
-  /* No delete: a ticket from Yiji is never undone when its coupon fails (owner, 2026-10-27). */
-  { role: 'svc-socket-gateway', collection: 'tickets', actions: ['read', 'create', 'update'] },
-  { role: 'svc-socket-gateway', collection: 'coupon_approvals', actions: ['read', 'create'] },
-  { role: 'svc-socket-gateway', collection: 'ticket_events', actions: ['create', 'read'] },
-  { role: 'svc-socket-gateway', collection: 'stores', actions: ['read'] },
-  { role: 'svc-socket-gateway', collection: 'brands', actions: ['read'] },
   /* Branch notifications to SaraPOS (2026-10-29, store-notify-send.ts). Without
      these the sender cannot read the outbox: every row stays `queued` and the
      branches are never told, with only a worker warning to show for it. */
@@ -119,8 +110,21 @@ const EXPECTED = [
   /* Marketing coupons: the sender creates each approved coupon on Yiji once. */
   { role: 'svc-workers', collection: 'marketing_coupons', actions: ['read', 'update'] },
   { role: 'svc-workers', collection: 'marketing_coupon_recipients', actions: ['read', 'update'] },
-  /* A late-preparation ticket from Yiji queues its branch notification. */
-  { role: 'svc-socket-gateway', collection: 'store_notifications', actions: ['create'] },
+  /* The Yiji inbound API (2026-10-27) writes ONLY as the "Yiji" user
+     (2026-11-03). Without these its endpoints fail and Yiji's tickets never
+     arrive; the gateway itself only reads tickets and coupon requests. */
+  { role: 'svc-socket-gateway', collection: 'tickets', actions: ['read'] },
+  { role: 'svc-socket-gateway', collection: 'coupon_approvals', actions: ['read'] },
+  { role: 'svc-yiji', collection: 'tickets', actions: ['read', 'create', 'update'] },
+  { role: 'svc-yiji', collection: 'coupon_approvals', actions: ['read', 'create'] },
+  { role: 'svc-yiji', collection: 'ticket_events', actions: ['create', 'read'] },
+  { role: 'svc-yiji', collection: 'contacts', actions: ['create', 'read', 'update'] },
+  { role: 'svc-yiji', collection: 'stores', actions: ['read'] },
+  { role: 'svc-yiji', collection: 'brands', actions: ['read'] },
+  { role: 'svc-yiji', collection: 'store_notifications', actions: ['create'] },
+  { role: 'svc-yiji', collection: 'compensation_rules', actions: ['read'] },
+  { role: 'svc-yiji', collection: 'app_settings', actions: ['read'] },
+  { role: 'svc-yiji', collection: 'vendors', actions: ['read'] },
   { role: 'Agent', collection: 'contacts', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'tickets', actions: ['create', 'read', 'update'] },
   { role: 'Agent', collection: 'app_settings', actions: ['read'] },
