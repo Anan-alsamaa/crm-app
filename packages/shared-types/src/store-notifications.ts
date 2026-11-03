@@ -73,6 +73,38 @@ export function branchNotifyTypes(enabled: readonly string[] = []): string[] {
   return out;
 }
 
+/**
+ * A NEW TICKET TELLS ITS BRANCH unless its type is one of these (owner,
+ * 2026-11-03). They are not the branch's doing - the driver, the app, or a
+ * catch-all - so a branch told about them could do nothing with it. Every other
+ * type notifies, including one added to the list later. "Late driver" is not a
+ * ticket type today; it is listed so that it never notifies if one is added.
+ *
+ * Applies to the Create ticket form only. Late orders keeps its own rule (late
+ * preparation only) and the Yiji API keeps ALWAYS_NOTIFY_BRANCH_TYPES.
+ */
+export const NEVER_NOTIFY_BRANCH_TYPES: readonly string[] = [
+  'Driver attitude',
+  'Late driver',
+  'Technical issue',
+  'Other',
+];
+
+/** Does a ticket of this type, saved from the Create ticket form, notify its branch? */
+export function newTicketNotifiesBranch(complaintType: string | null | undefined): boolean {
+  if (!complaintType?.trim()) return false;
+  return !isNotifyingType(complaintType, NEVER_NOTIFY_BRANCH_TYPES);
+}
+
+/**
+ * The list to decide a Create-ticket notification against: the ticket's own
+ * type when it notifies, otherwise nothing - so a never-notify type stays
+ * silent whatever else is configured.
+ */
+export function newTicketNotifyTypes(complaintType: string | null | undefined): string[] {
+  return newTicketNotifiesBranch(complaintType) ? [complaintType!.trim()] : [];
+}
+
 /** Why a ticket did not produce a notification. Reported, never guessed at. */
 export type StoreNotificationSkip = 'no-store' | 'no-complaint-type' | 'type-not-notifying';
 
