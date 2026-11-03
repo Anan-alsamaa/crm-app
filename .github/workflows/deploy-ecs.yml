@@ -86,13 +86,10 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             ENVIRONMENT="${{ inputs.environment }}"; TAG="main"; BUILD=false
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            # A RELEASE TAG BUILDS ITS OWN SERVICE IMAGES (owner, 2026-11-03).
-            # Releases are cut from release/1.2, and main carries unreleased
-            # work (the Marketing portal), so promoting `:main` would ship it.
-            # The tag's commit is built and tagged `vX` + `sha-<commit>` only -
-            # `:main` (staging) is never touched. The code itself was tested on
-            # staging from main; the gate below re-runs pnpm verify on the tag.
-            ENVIRONMENT=prod; TAG="${GITHUB_REF#refs/tags/}"; BUILD=true
+            # A TAG IS A PROMOTION, NOT A BUILD. The images already exist from
+            # the merge to main; production re-tags those exact digests, so what
+            # was tested on staging is byte-for-byte what ships.
+            ENVIRONMENT=prod; TAG="${GITHUB_REF#refs/tags/}"; BUILD=false
           else
             ENVIRONMENT=staging; TAG=main; BUILD=true
           fi
@@ -761,9 +758,7 @@ jobs:
       # stop, because that means someone moved a release tag and the operator
       # needs to decide, not us.
       - name: Promote — tag the tested digest with the release version
-        # Only when nothing was built: a release tag now builds its own images
-        # (see plan), and promoting `:main` over them would ship main.
-        if: startsWith(github.ref, 'refs/tags/v') && needs.plan.outputs.build != 'true'
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
         run: |
