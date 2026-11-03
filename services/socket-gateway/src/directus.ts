@@ -164,7 +164,7 @@ export class GatewayDirectus {
    * not worth failing a handshake over, and a chat that will not open because a
    * template is missing is far worse than a generic hello.
    */
-  async welcomeTemplates(): Promise<{ ar: string | null; en: string | null }> {
+  async welcomeTemplates(): Promise<{ ar: string | null; en: string | null; failed?: true }> {
     const empty = { ar: null, en: null };
     try {
       const rows = (await this.client.request(
@@ -196,9 +196,10 @@ export class GatewayDirectus {
       const any = rows.find((r) => !!r.text?.trim())?.text?.trim() || null;
       return { ar: pick('ar') ?? any, en: pick('en') ?? any };
     } catch {
-      /* No collection, no permission, no row — all the same answer: use the
-         built-in wording. Never block the handshake. */
-      return empty;
+      /* The READ failed (database error, permission): still never block the
+         handshake, but say so - a failure must not be remembered as "there is
+         no welcome" (2026-11-03: one blip silenced welcomes for 5 minutes). */
+      return { ...empty, failed: true };
     }
   }
 

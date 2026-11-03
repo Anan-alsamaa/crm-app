@@ -857,10 +857,28 @@ async function cachedWelcome(
    * wrong resolves to "no template" and the widget uses its built-in wording.
    */
   let value: { ar: string | null; en: string | null } = { ar: null, en: null };
+  let failed = false;
   try {
-    value = (await deps.directus.welcomeTemplates?.()) ?? value;
+    const got = await deps.directus.welcomeTemplates?.();
+    if (got) {
+      failed = got.failed === true;
+      value = { ar: got.ar, en: got.en };
+    }
   } catch {
-    /* Already the fallback. */
+    failed = true;
+  }
+  /*
+   * ONLY A SUCCESSFUL READ IS REMEMBERED (2026-11-03). A failed read used to be
+   * cached as "no welcome" for the whole TTL, so one database blip silently
+   * skipped the welcome on every new chat for 5 minutes. Now the next chat
+   * simply asks again, and the miss is logged.
+   */
+  if (failed) {
+    deps.logger.warn(
+      {},
+      'welcome template could not be read - this chat gets no welcome; retrying on the next',
+    );
+    return value;
   }
   welcomeCache = { at: now, value };
   return value;
