@@ -580,7 +580,12 @@ jobs:
     # `approve` must genuinely have SUCCEEDED — `always()` would otherwise let a
     # rejected or cancelled approval through, which is the one thing the gate
     # exists to prevent.
-    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success' && needs.approve.result == 'success'
+    #
+    # PORTALS-ONLY RELEASE BRANCH (owner, 2026-11-04): production SERVICES ship
+    # from release/svc-* (their own built images). A tag on THIS branch would
+    # otherwise promote `:main`'s services - unreleased work - so on prod it
+    # ships the portals (parked for Update now) and deploys NO service.
+    if: always() && needs.plan.outputs.environment != 'prod' && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success' && needs.approve.result == 'success'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
