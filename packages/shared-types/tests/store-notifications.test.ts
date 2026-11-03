@@ -3,6 +3,8 @@ import {
   ALWAYS_NOTIFY_BRANCH_TYPES,
   branchNotifyTypes,
   isNotifyingType,
+  newTicketNotifiesBranch,
+  newTicketNotifyTypes,
   storeNotificationDraft,
   type StoreNotificationInput,
 } from '../src/store-notifications.js';
@@ -149,5 +151,43 @@ describe('late preparation always tells the branch (owner, 2026-10-29)', () => {
   it('other types still need their rule', () => {
     const d = storeNotificationDraft(input({ complaintType: 'Order cold' }), branchNotifyTypes([]));
     expect(d).toEqual({ skip: 'type-not-notifying' });
+  });
+});
+
+/* Create ticket: every type tells the branch except four (owner, 2026-11-03). */
+describe('newTicketNotifiesBranch', () => {
+  it('the four never-notify types stay silent, however they are spelled', () => {
+    for (const t of [
+      'Driver attitude',
+      'Late driver',
+      'Technical issue',
+      'Other',
+      ' OTHER ',
+      'late DRIVER',
+    ])
+      expect(newTicketNotifiesBranch(t)).toBe(false);
+    expect(newTicketNotifyTypes('Technical issue')).toEqual([]);
+  });
+  it('every other live type tells the branch', () => {
+    for (const t of [
+      'Accuracy',
+      'Cleanness',
+      'Foreign object found',
+      'Hospitality',
+      'Instore preparation late order',
+      'Late order',
+      'Missing condiments',
+      'Missing item',
+      'Product',
+      'Roach found',
+      'Wrong order',
+    ]) {
+      expect(newTicketNotifiesBranch(t)).toBe(true);
+      expect(newTicketNotifyTypes(t)).toEqual([t]);
+    }
+  });
+  it('a type added later tells the branch; no type tells nobody', () => {
+    expect(newTicketNotifiesBranch('Packaging damaged')).toBe(true);
+    for (const t of ['', '   ', null, undefined]) expect(newTicketNotifiesBranch(t)).toBe(false);
   });
 });

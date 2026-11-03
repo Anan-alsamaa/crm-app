@@ -3,7 +3,7 @@ import { readItems, createItem, updateItem, deleteItem, uploadFiles } from '@dir
 import {
   displayContactName,
   storeNotificationDraft,
-  branchNotifyTypes,
+  newTicketNotifyTypes,
   type Priority,
   type StoreNotificationSkip,
   type StoreSnapshot,
@@ -427,48 +427,10 @@ export interface CreateTicketFromConversationInput {
   ticket: CreateTicketInput;
   /** File ids from the chat session to copy onto the new ticket (see FR #3). */
   attachmentFileIds?: string[];
-  /**
-   * The complaint types operations has decided the BRANCH should hear about.
-   * Passed in rather than read here so the decision is taken against the rules
-   * the agent's form was actually showing.
-   */
-  storeNotifyTypes?: readonly string[];
 }
 
 /** What happened to the branch notification for a ticket that was just saved. */
 export type StoreNotifyOutcome = 'queued' | 'failed' | StoreNotificationSkip;
-
-/**
- * The complaint types that notify the branch, as a plain list.
- *
- * Read-only for agents: which types are the branch's business is an operations
- * decision made in the admin console. Fail-soft — if the rules cannot be read,
- * the list is empty and nothing is queued, which is the safe direction: a
- * missing notification is recoverable, a wrong one has already been sent.
- */
-export function useStoreNotifyTypes() {
-  return useQuery({
-    queryKey: ['store-notify-types'],
-    staleTime: 60_000,
-    queryFn: async () => {
-      try {
-        const rows = (await directus.request(
-          readItems(
-            'store_notify_rules' as never,
-            {
-              filter: { enabled: { _eq: true } },
-              fields: ['complaint_type'],
-              limit: -1,
-            } as never,
-          ),
-        )) as unknown as Array<{ complaint_type: string | null }>;
-        return rows.map((r) => r.complaint_type).filter((v): v is string => !!v);
-      } catch {
-        return [] as string[];
-      }
-    },
-  });
-}
 
 /**
  * Create a ticket out of a chat and carry the session's context onto it: the
@@ -484,11 +446,7 @@ export function useStoreNotifyTypes() {
 export function useCreateTicketFromConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({
-      ticket,
-      attachmentFileIds,
-      storeNotifyTypes,
-    }: CreateTicketFromConversationInput) => {
+    mutationFn: async ({ ticket, attachmentFileIds }: CreateTicketFromConversationInput) => {
       assertStore(ticket);
       const created = (await directus.request(
         // `pending`, not the retired `open` — see TicketStatus (owner, 2026-10-07).
@@ -507,7 +465,7 @@ export function useCreateTicketFromConversation() {
         );
       }
 
-      // Tell the branch — but only for the complaint types operations chose,
+      // Tell the branch — every type except the never-notify ones,
       // and only what they need: the description and the resolution notes.
       const decision = storeNotificationDraft(
         {
@@ -527,8 +485,9 @@ export function useCreateTicketFromConversation() {
               price: i.price,
             })) ?? null,
         },
-        /* Late preparation always tells the branch (owner, 2026-10-29). */
-        branchNotifyTypes(storeNotifyTypes ?? []),
+        /* Every type except Driver attitude, Late driver, Technical issue and
+           Other (owner, 2026-11-03) - see NEVER_NOTIFY_BRANCH_TYPES. */
+        newTicketNotifyTypes(ticket.complaint_type),
       );
       let storeNotify: StoreNotifyOutcome = 'skip' in decision ? decision.skip : 'queued';
       if ('draft' in decision) {
