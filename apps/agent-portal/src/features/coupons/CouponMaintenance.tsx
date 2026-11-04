@@ -36,7 +36,7 @@ function MaintenanceMark({ size = 'md' }: { size?: 'sm' | 'md' }) {
   return (
     <span aria-hidden className={cn('relative inline-flex shrink-0', box)}>
       <span className="absolute inset-0 rounded-full bg-warning/25 motion-safe:animate-soft-pulse" />
-      <span className="relative inline-flex h-full w-full items-center justify-center rounded-full bg-warning-tint text-warning-foreground ring-1 ring-inset ring-warning/30">
+      <span className="relative inline-flex h-full w-full items-center justify-center rounded-full bg-warning-tint text-warning ring-1 ring-inset ring-warning/30">
         <WrenchGlyph
           size={size === 'sm' ? 13 : 18}
           className="origin-center motion-safe:animate-tool-nudge"
@@ -86,7 +86,7 @@ export function CouponMaintenancePill({ className }: { className?: string }): JS
           'We are improving how coupons are issued, so new coupons cannot be created for now. Everything else works as usual, and coupons customers already have are not affected.',
       })}
       className={cn(
-        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warning-tint py-0.5 pe-2.5 ps-0.5 text-2xs font-semibold text-warning-foreground ring-1 ring-inset ring-warning/25',
+        'inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-warning-tint py-0.5 pe-2.5 ps-0.5 text-2xs font-semibold text-warning ring-1 ring-inset ring-warning/25',
         className,
       )}
     >

@@ -32,6 +32,7 @@ import {
   type CouponRequestRow,
 } from '../src/features/coupons/api.js';
 import { CouponRequestDialog } from '../src/features/coupons/CouponRequestDialog.js';
+import { CouponMaintenancePill } from '../src/features/coupons/CouponMaintenance.js';
 import { EditApprovedCouponButton } from '../src/features/tickets/EditApprovedCoupon.js';
 
 const wrap = ({ children }: { children: ReactNode }) => (
@@ -76,6 +77,16 @@ describe('coupons under maintenance', () => {
     const closes = screen.getAllByRole('button', { name: 'Close' });
     await userEvent.click(closes[closes.length - 1]!);
     expect(onClose).toHaveBeenCalled();
+  });
+
+  /* White warning ink on the pale wash measured ~1.3:1 - unreadable (seen on
+     staging 2026-11-04). The chip uses the warning hue itself. */
+  it('the chip is readable: never the white warning ink on the pale wash', () => {
+    render(<CouponMaintenancePill />);
+    const chip = screen.getByTestId('coupon-maintenance');
+    expect(chip.className).not.toMatch(/text-warning-foreground/);
+    expect(chip.className.split(' ')).toContain('text-warning');
+    expect(chip).toHaveTextContent('Coupons under maintenance');
   });
 
   it('a request that still gets through is refused before anything is written', async () => {
