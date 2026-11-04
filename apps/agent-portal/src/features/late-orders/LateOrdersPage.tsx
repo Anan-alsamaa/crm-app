@@ -61,6 +61,8 @@ import { orderToSnapshot } from '../tickets/OrderSnapshotCard.js';
 import { useVendors } from '../tickets/api.js';
 import { useVendorDirectory } from '../../lib/vendors.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import { CouponMaintenanceIcon, CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
+import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
 import { LateOrderDetail } from './OrderDetail.js';
 import { QuickReplies } from '../conversation/QuickReplies.js';
 import { LateOrderColumnsPicker } from './LateOrderColumnsPicker.js';
@@ -1801,7 +1803,10 @@ export function LateOrdersPage() {
               <Pill tone="success" size="sm">
                 {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
               </Pill>
-            ) : !canRequestCoupon ? null : (
+            ) : !canRequestCoupon ? null : COUPONS_UNDER_MAINTENANCE ? (
+              /* Coupons under maintenance (owner, 2026-11-04). */
+              <CouponMaintenancePill />
+            ) : (
               /*
                   ONE DECISION, AND ONLY ONE (owner spec, 2026-09-29):
                   assign a coupon. Ignore is gone — it was a second
@@ -2062,6 +2067,9 @@ export function LateOrdersPage() {
           {state === 'handled' || !canRequestCoupon ? (
             /* Holds the slot, so the buttons line up down the board. */
             <span aria-hidden className="h-8 w-8" />
+          ) : COUPONS_UNDER_MAINTENANCE ? (
+            /* Coupons under maintenance (owner, 2026-11-04). */
+            <CouponMaintenanceIcon />
           ) : (
             /* The one decision, so the one solid brand fill on the row. */
             <button

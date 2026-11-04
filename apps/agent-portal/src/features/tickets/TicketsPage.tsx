@@ -108,6 +108,8 @@ import {
   wantsCouponRemoval,
 } from './TicketCompensation.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
+import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
 import { useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
 import { formatBytes, isImage, isUnknownType } from '../../lib/files.js';
 import { FileGlyph } from '../../components/FileGlyph.js';
@@ -2220,7 +2222,7 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
             values={draft}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
             // Editing the coupon here RAISES a request (owner, 2026-10-06).
-            hideCoupon={!can('request_coupons')}
+            hideCoupon={!can('request_coupons') || COUPONS_UNDER_MAINTENANCE}
             compensationSlot={
               manage ? (
                 <TicketCompensationField
@@ -2321,9 +2323,14 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
       )}
       {manage && !editing && (
         <div className="mt-3 flex justify-end">
-          <Button type="button" size="sm" variant="ghost" onClick={() => setAssignOpen(true)}>
-            {t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })}
-          </Button>
+          {COUPONS_UNDER_MAINTENANCE ? (
+            /* Coupons under maintenance (owner, 2026-11-04). */
+            <CouponMaintenancePill />
+          ) : (
+            <Button type="button" size="sm" variant="ghost" onClick={() => setAssignOpen(true)}>
+              {t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })}
+            </Button>
+          )}
         </div>
       )}
       {manage && (

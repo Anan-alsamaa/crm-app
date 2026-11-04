@@ -46,6 +46,8 @@ import { newCouponRequestId, type CouponRequestError } from '../coupons/coupon-r
 import { raiseTicketCoupon } from '../coupons/ticket-coupon.js';
 import { couponTermsFromDraft } from '../coupons/coupon-request-fields.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import { CouponMaintenancePanel } from '../coupons/CouponMaintenance.js';
+import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
 import { useContact } from '../contacts/api.js';
 import { commerce } from '../../lib/commerce-client.js';
 import { clearPinnedOrder, getPinnedOrder } from '../commerce/pinned-order.js';
@@ -241,7 +243,10 @@ function CreateTicketForm({
   const createFromChat = useCreateTicketFromConversation();
   const updateTicket = useUpdateTicket();
   const { user, can } = useAuth();
-  const canRequestCoupon = can('request_coupons');
+  /* Coupons under maintenance (owner, 2026-11-04): the box, the rule pre-fill
+     and a restored draft's coupon are all off; the notice takes the box's place. */
+  const mayRequestCoupon = can('request_coupons');
+  const canRequestCoupon = mayRequestCoupon && !COUPONS_UNDER_MAINTENANCE;
   /* Read ONCE, on mount: the draft seeds the form, and from then on the form
      is the truth and the draft its copy. */
   const [initialDraft] = useState(() => readTicketDraft(draftKey));
@@ -339,10 +344,12 @@ function CreateTicketForm({
      until it is made. There is no ticket yet, so the coupon is COLLECTED here
      and raised once the ticket exists — a failed coupon can then never leave a
      half-created ticket behind. */
-  const [assignCoupon, setAssignCoupon] = useState(restored?.assignCoupon ?? false);
+  const [assignCoupon, setAssignCoupon] = useState(
+    COUPONS_UNDER_MAINTENANCE ? false : (restored?.assignCoupon ?? false),
+  );
   const [couponOpen, setCouponOpen] = useState(false);
   const [collectedCoupon, setCollectedCoupon] = useState<CouponRequestDraft | null>(
-    restored?.collectedCoupon ?? null,
+    COUPONS_UNDER_MAINTENANCE ? null : (restored?.collectedCoupon ?? null),
   );
   const [includeOrder, setIncludeOrder] = useState(restored?.includeOrder ?? true);
   const [includeFiles, setIncludeFiles] = useState(restored?.includeFiles ?? true);
@@ -1117,6 +1124,7 @@ function CreateTicketForm({
                   </div>
                 </div>
               )}
+              {mayRequestCoupon && COUPONS_UNDER_MAINTENANCE && <CouponMaintenancePanel />}
               <CouponRequestDialog
                 open={couponOpen}
                 onClose={() => setCouponOpen(false)}

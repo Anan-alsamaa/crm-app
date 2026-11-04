@@ -952,6 +952,13 @@
     "allVendors": "All vendors"
   },
   "coupons": {
+    "maintenance": {
+      "title": "Coupons are under maintenance",
+      "short": "Coupons under maintenance",
+      "body": "We are improving how coupons are issued, so new coupons cannot be created for now. Everything else works as usual, and coupons customers already have are not affected.",
+      "blocked": "Coupons are under maintenance, so this coupon was not sent.",
+      "close": "Close"
+    },
     "title": "My coupons",
     "waiting": "{{n}} waiting on a supervisor",
     "noneWaiting": "Nothing waiting on a supervisor.",

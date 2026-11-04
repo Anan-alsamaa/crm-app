@@ -254,6 +254,13 @@ module.exports = {
           '0%, 100%': { backgroundPosition: '0% 0%, 100% 100%' },
           '50%': { backgroundPosition: '30% 20%, 70% 80%' },
         },
+        // A wrench giving a small turn, then resting (coupons under maintenance).
+        'tool-nudge': {
+          '0%, 70%, 100%': { transform: 'rotate(0deg)' },
+          '78%': { transform: 'rotate(-16deg)' },
+          '86%': { transform: 'rotate(10deg)' },
+          '93%': { transform: 'rotate(-4deg)' },
+        },
         // Subtle scale pulse for brand marks.
         'soft-pulse': {
           '0%, 100%': { transform: 'scale(1)', opacity: '1' },
@@ -333,6 +340,7 @@ module.exports = {
         shimmer: 'shimmer 1.4s linear infinite',
         'mesh-drift': 'mesh-drift 24s ease-in-out infinite',
         'soft-pulse': 'soft-pulse 3.2s ease-in-out infinite',
+        'tool-nudge': 'tool-nudge 4s cubic-bezier(0.77, 0, 0.175, 1) infinite',
         'slide-in-drawer': 'slide-in-drawer 240ms cubic-bezier(0.32, 0.72, 0, 1) both',
         'message-in': 'message-in 260ms cubic-bezier(0.23, 1, 0.32, 1) both',
         'rise-in': 'rise-in 320ms cubic-bezier(0.23, 1, 0.32, 1) both',
