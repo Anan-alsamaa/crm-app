@@ -1,4 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+/* These tests guard the coupon flow itself, which returns once the total-limit
+   fix ships: run them with coupons OUT of maintenance. Maintenance has its own
+   tests (coupon-maintenance.test.tsx). */
+vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
+  ...(await orig<typeof import('../src/features/coupons/maintenance.js')>()),
+  COUPONS_UNDER_MAINTENANCE: false,
+}));
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';

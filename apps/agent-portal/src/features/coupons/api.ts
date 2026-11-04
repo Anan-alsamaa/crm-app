@@ -13,6 +13,7 @@ import {
 import { directus } from '../../lib/directus.js';
 import { vendorField } from '../../lib/record-vendor.js';
 import { jobProducer } from '../../lib/job-producer.js';
+import { COUPONS_UNDER_MAINTENANCE, CouponsUnderMaintenanceError } from './maintenance.js';
 import {
   COUPON_LOG_TAG,
   CouponRequestError,
@@ -251,7 +252,11 @@ export interface CreateCouponRequestInput extends CouponFields {
 export function useRequestCouponApproval(opts: Pick<SendOptions, 'delays' | 'sleep'> = {}) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateCouponRequestInput) => sendCouponRequest(input, opts),
+    mutationFn: (input: CreateCouponRequestInput) => {
+      /* Coupons under maintenance (owner, 2026-11-04): the backstop behind every door. */
+      if (COUPONS_UNDER_MAINTENANCE) return Promise.reject(new CouponsUnderMaintenanceError());
+      return sendCouponRequest(input, opts);
+    },
     onSuccess: (_d, vars) => {
       void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
       if (vars.ticket) void qc.invalidateQueries({ queryKey: ['ticket-events', vars.ticket] });
@@ -537,6 +542,7 @@ export function useReplaceTicketCoupon() {
       reason: string;
       editorId: string | null;
     }): Promise<{ code: string; state: CouponReplaceState; note: string | null }> => {
+      if (COUPONS_UNDER_MAINTENANCE) throw new CouponsUnderMaintenanceError();
       const { replacementId, code } = await startCouponReplacement(
         {
           /* Both homes of a code, like the request form's duplicate check. */

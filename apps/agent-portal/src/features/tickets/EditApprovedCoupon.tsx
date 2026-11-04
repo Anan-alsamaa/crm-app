@@ -13,6 +13,8 @@ import {
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useReplaceTicketCoupon, type CouponRequestRow } from '../coupons/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
+import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
 
 /**
  * EDIT AN APPROVED COUPON FROM ITS TICKET (owner, 2026-10-27).
@@ -102,6 +104,8 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
     ? defaultCouponDates(new Date())
     : { valid_from: coupon.valid_from ?? '', valid_to: coupon.valid_to ?? '' };
 
+  /* Coupons under maintenance (owner, 2026-11-04): an edit sends a new coupon. */
+  if (COUPONS_UNDER_MAINTENANCE) return <CouponMaintenancePill />;
   return (
     <>
       <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)}>

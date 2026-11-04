@@ -1,4 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+/* These tests guard the coupon flow itself, which returns once the total-limit
+   fix ships: run them with coupons OUT of maintenance. Maintenance has its own
+   tests (coupon-maintenance.test.tsx). */
+const maintenance = vi.hoisted(() => ({ on: false }));
+vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
+  ...(await orig<typeof import('../src/features/coupons/maintenance.js')>()),
+  get COUPONS_UNDER_MAINTENANCE() {
+    return maintenance.on;
+  },
+}));
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -102,6 +112,7 @@ async function chooseComplaintType(label: string) {
 }
 
 beforeEach(() => {
+  maintenance.on = false;
   // The form keeps a per-tab draft; one test's typing must not seed the next.
   sessionStorage.clear();
   hooks.useCreateTicketFromConversation.mockReset();
@@ -223,6 +234,23 @@ describe('CreateTicketForm', () => {
     expect(screen.queryByText('Coupon %')).not.toBeInTheDocument();
     expect(screen.getByText(/assign a coupon/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /create coupon/i })).toBeDisabled();
+  });
+
+  it('coupons under maintenance: the notice replaces the coupon box, and the ticket still saves', async () => {
+    maintenance.on = true;
+    const mutateAsync = vi.fn().mockResolvedValue({ id: 'tk1' });
+    hooks.useCreateTicketFromConversation.mockReturnValue({ mutateAsync });
+    const requestCoupon = vi.fn();
+    coupons.useRequestCouponApproval.mockReturnValue({ mutateAsync: requestCoupon });
+    renderDialog();
+    expect(screen.getByTestId('coupon-maintenance')).toBeInTheDocument();
+    expect(screen.getByText('Coupons are under maintenance')).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /assign a coupon/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /create coupon/i })).not.toBeInTheDocument();
+    await chooseComplaintType('Missing item');
+    await userEvent.click(screen.getByText('tickets.create'));
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(requestCoupon).not.toHaveBeenCalled();
   });
 
   it('does not queue an approval when no coupon was given', async () => {

@@ -4,6 +4,8 @@ import { Button, cn, FormField, Textarea } from '@yiji/ui';
 import { couponCountsAsCompensation } from '@yiji/shared-types';
 import type { CouponRequestRow } from '../coupons/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
+import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
 import type { TicketRow } from './api.js';
 import { customerPhone } from './api.js';
 import type { StoreRow } from './useStoreMatch.js';
@@ -152,9 +154,14 @@ export function TicketCompensationField({
               );
             })}
           </div>
-          <Button type="button" size="sm" variant="ghost" onClick={onAssign}>
-            {t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })}
-          </Button>
+          {COUPONS_UNDER_MAINTENANCE ? (
+            /* Coupons under maintenance (owner, 2026-11-04). */
+            <CouponMaintenancePill />
+          ) : (
+            <Button type="button" size="sm" variant="ghost" onClick={onAssign}>
+              {t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })}
+            </Button>
+          )}
         </div>
       </FormField>
 
