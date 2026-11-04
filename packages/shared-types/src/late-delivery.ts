@@ -439,8 +439,10 @@ export interface OrderEventTimes {
   serviceMinutes: number | null;
   /** Driver accepted → arrived (in-delivery when there is no arrival). */
   driverArrivalMinutes: number | null;
-  /** In-delivery → closed. */
+  /** In-delivery → closed; to NOW while still out for delivery (`liveDelivery`). */
   deliveryMinutes: number | null;
+  /** True while the order is out for delivery and not closed: the figure is still counting. */
+  deliveryLive: boolean;
   /** POS accepted → ready-to-pickup (in-delivery when there is no ready). */
   preparationMinutes: number | null;
 }
@@ -458,7 +460,19 @@ function minutesBetween(from: string | null | undefined, to: string | null | und
   return Math.max(0, Math.floor((b - a) / 60_000));
 }
 
-export function orderEventTimes(at: OrderEventAt, now?: number): OrderEventTimes {
+export function orderEventTimes(
+  at: OrderEventAt,
+  now?: number,
+  /*
+   * DELIVERY TIME WHILE ON THE ROAD (owner, 2026-11-04: "Delivery time not
+   * showing values in late orders"). An order out for delivery has no close
+   * yet, so in-delivery -> closed was always blank on the live queue. With
+   * `liveDelivery` it runs to NOW, like service time. Opt-in, and only for an
+   * order the caller knows is still open - a closed order whose history lacks
+   * the close must not start counting.
+   */
+  opts: { liveDelivery?: boolean } = {},
+): OrderEventTimes {
   /* CLOSED FIRST. `force_closed` is the fallback, never the preference. */
   const finished = at.closed ?? at.force_closed ?? null;
 
@@ -475,11 +489,22 @@ export function orderEventTimes(at: OrderEventAt, now?: number): OrderEventTimes
       ? Math.max(0, Math.floor((serviceEnd - accepted) / 60_000))
       : null;
 
+  const outAt = parseYijiTimestamp(at.in_delivery);
+  const deliveryLive =
+    !finished &&
+    opts.liveDelivery === true &&
+    typeof now === 'number' &&
+    Number.isFinite(now) &&
+    Number.isFinite(outAt);
+
   return {
     serviceMinutes,
     // Arrived when there is one; otherwise the moment it went out for delivery.
     driverArrivalMinutes: minutesBetween(at.driver_accepted, at.arrived ?? at.in_delivery),
-    deliveryMinutes: minutesBetween(at.in_delivery, finished),
+    deliveryMinutes: deliveryLive
+      ? Math.max(0, Math.floor(((now as number) - outAt) / 60_000))
+      : minutesBetween(at.in_delivery, finished),
+    deliveryLive,
     // Ready-to-pickup when there is one; otherwise it left the kitchen when it
     // went out for delivery.
     preparationMinutes: minutesBetween(at.pos_accepted, at.ready_to_pickup ?? at.in_delivery),

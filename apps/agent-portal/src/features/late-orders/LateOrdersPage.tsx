@@ -137,12 +137,34 @@ const LATE_ORDER_PAGE_SIZES = [10, 25, 50] as const;
  * that never went out for delivery has no delivery time, and that is a fact, not
  * a gap. A zero would read as "instant" and is never shown.
  */
-function LegTime({ loading, minutes }: { loading: boolean; minutes: number | null }) {
+function LegTime({
+  loading,
+  minutes,
+  live = false,
+  liveLabel = 'still counting',
+}: {
+  loading: boolean;
+  minutes: number | null;
+  /** Still counting (delivery time while out for delivery): Service time's amber + pulse. */
+  live?: boolean;
+  liveLabel?: string;
+}) {
   if (loading)
     return (
       <span className="inline-block h-4 w-12 animate-pulse rounded bg-muted/60 align-middle" />
     );
   if (minutes === null) return <span className="text-muted-foreground/60">&mdash;</span>;
+  if (live)
+    return (
+      <span className="inline-flex items-center gap-1.5 text-sm font-semibold tabular-nums text-[oklch(0.5_0.13_75)]">
+        <span
+          className="inline-block h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-warning"
+          aria-hidden="true"
+        />
+        {elapsed(minutes)}
+        <span className="sr-only">{liveLabel}</span>
+      </span>
+    );
   return <span className="text-sm text-muted-foreground">{elapsed(minutes)}</span>;
 }
 
@@ -990,7 +1012,9 @@ export function LateOrdersPage() {
    * time ticks with the queue's own refresh.
    */
   const timesOf = useCallback(
-    (orderId: string) => orderEventTimes(eventTimes.data?.[orderId] ?? {}, nowMs),
+    /* `open`: the order has not closed, so its delivery time may run to now. */
+    (orderId: string, open = false) =>
+      orderEventTimes(eventTimes.data?.[orderId] ?? {}, nowMs, { liveDelivery: open }),
     [eventTimes.data, nowMs],
   );
 
@@ -1574,7 +1598,17 @@ export function LateOrdersPage() {
       ),
       td: (row) => (
         <Td className="whitespace-nowrap tabular-nums">
-          <LegTime loading={eventTimes.isLoading} minutes={timesOf(row.orderId).deliveryMinutes} />
+          {(() => {
+            const d = timesOf(row.orderId, !row.closedAt);
+            return (
+              <LegTime
+                loading={eventTimes.isLoading}
+                minutes={d.deliveryMinutes}
+                live={d.deliveryLive}
+                liveLabel={t('lateOrders.serviceLive', { defaultValue: 'still counting' })}
+              />
+            );
+          })()}
         </Td>
       ),
     },
@@ -1934,7 +1968,7 @@ export function LateOrdersPage() {
           live ? 'text-[oklch(0.5_0.13_75)]' : 'text-foreground/80',
         )}
       >
-        {/* Service time only: still counting (pulsing amber) vs settled. */}
+        {/* Service time, and delivery time while out for delivery: still counting (pulsing amber) vs settled. */}
         {live && (
           <span
             aria-hidden="true"
@@ -1957,7 +1991,7 @@ export function LateOrdersPage() {
   const boardRow = (row: (typeof paged)[number]) => {
     const state = stateOf(row.orderId);
     const agentName = decisionMap.get(row.orderId)?.decided_by?.first_name;
-    const times = timesOf(row.orderId);
+    const times = timesOf(row.orderId, !row.closedAt);
     const customer =
       displayContactName(row.customerName, row.customerPhone) ||
       normalizePhone(row.customerPhone) ||
@@ -1997,7 +2031,7 @@ export function LateOrdersPage() {
         </div>
         <div role="cell">{boardLeg(times.serviceMinutes, !row.closedAt)}</div>
         <div role="cell">{boardLeg(times.driverArrivalMinutes)}</div>
-        <div role="cell">{boardLeg(times.deliveryMinutes)}</div>
+        <div role="cell">{boardLeg(times.deliveryMinutes, times.deliveryLive)}</div>
         <div role="cell">{boardLeg(times.preparationMinutes)}</div>
         <div role="cell" className="min-w-0">
           <span className={cn(boardName, 'font-semibold')}>{row.brandName || '-'}</span>

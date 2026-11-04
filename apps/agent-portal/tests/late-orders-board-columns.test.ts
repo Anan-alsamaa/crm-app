@@ -47,7 +47,7 @@ describe('the late-orders board', () => {
       'tabular-nums text-foreground 2xl:text-lg"',
       'boardLeg(times.serviceMinutes',
       'boardLeg(times.driverArrivalMinutes)',
-      'boardLeg(times.deliveryMinutes)',
+      'boardLeg(times.deliveryMinutes, times.deliveryLive)',
       'boardLeg(times.preparationMinutes)',
       '{row.brandName ||',
       '{row.restaurantName ||',

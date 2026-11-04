@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { orderEventTimes } from '../src/late-delivery.js';
+import { orderEventTimes, parseYijiTimestamp } from '../src/late-delivery.js';
 
 /**
  * THE FOUR ORDER TIMES, from the real status history.
@@ -88,5 +88,38 @@ describe('orderEventTimes — the rules', () => {
       closed: '2026-09-28T17:00:00',
     });
     expect(t.serviceMinutes).toBe(0);
+  });
+});
+
+/* Owner, 2026-11-04: "Delivery time not showing values in late orders" - an
+   order still out for delivery had no close, so the cell was always blank. */
+describe('orderEventTimes — delivery time while out for delivery', () => {
+  const { closed: _c, force_closed: _f, delivered: _d, ...onTheRoad } = ORDER_1323407;
+  const out = parseYijiTimestamp(ORDER_1323407.in_delivery);
+  const now = out + 50 * 60_000; // 50 minutes after it went out
+
+  it('runs to NOW, flagged live, when the caller says the order is open', () => {
+    const t = orderEventTimes(onTheRoad, now, { liveDelivery: true });
+    expect(t.deliveryMinutes).toBe(50);
+    expect(t.deliveryLive).toBe(true);
+  });
+
+  it('stays blank without the opt-in (the admin report is unchanged)', () => {
+    const t = orderEventTimes(onTheRoad, now);
+    expect(t.deliveryMinutes).toBeNull();
+    expect(t.deliveryLive).toBe(false);
+  });
+
+  it('stays blank when the order has not gone out for delivery yet', () => {
+    const { in_delivery: _i, ...inKitchen } = onTheRoad;
+    const t = orderEventTimes(inKitchen, now, { liveDelivery: true });
+    expect(t.deliveryMinutes).toBeNull();
+    expect(t.deliveryLive).toBe(false);
+  });
+
+  it('a closed order keeps its settled figure, never counting', () => {
+    const t = orderEventTimes(ORDER_1323407, now + 9e6, { liveDelivery: true });
+    expect(t.deliveryMinutes).toBe(21);
+    expect(t.deliveryLive).toBe(false);
   });
 });
