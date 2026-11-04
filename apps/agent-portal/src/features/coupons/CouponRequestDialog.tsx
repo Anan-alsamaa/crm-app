@@ -30,6 +30,8 @@ import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useCouponCodeTaken, useRequestCouponApproval } from './api.js';
 import { couponTermsFromDraft } from './coupon-request-fields.js';
 import { newCouponRequestId } from './coupon-request-send.js';
+import { COUPONS_UNDER_MAINTENANCE } from './maintenance.js';
+import { CouponMaintenancePanel } from './CouponMaintenance.js';
 
 /**
  * The coupon an agent asks a supervisor to approve.
@@ -329,7 +331,38 @@ function ItemPicker({
   );
 }
 
-export function CouponRequestDialog({
+/**
+ * COUPONS UNDER MAINTENANCE (owner, 2026-11-04): every door that opens this
+ * form gets the notice instead, so no coupon can be raised from any of them.
+ */
+export function CouponRequestDialog(props: CouponRequestDialogProps) {
+  if (COUPONS_UNDER_MAINTENANCE)
+    return <CouponMaintenanceDrawer open={props.open} onClose={props.onClose} />;
+  return <CouponRequestForm {...props} />;
+}
+
+function CouponMaintenanceDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      width="md"
+      title={t('coupons.maintenance.title', { defaultValue: 'Coupons are under maintenance' })}
+      footer={
+        <div className="flex justify-end">
+          <Button type="button" variant="secondary" onClick={onClose}>
+            {t('coupons.maintenance.close', { defaultValue: 'Close' })}
+          </Button>
+        </div>
+      }
+    >
+      <CouponMaintenancePanel />
+    </Drawer>
+  );
+}
+
+function CouponRequestForm({
   open,
   onClose,
   ticketId,

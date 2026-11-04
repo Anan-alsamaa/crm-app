@@ -1,4 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+/* These tests guard the coupon flow itself, which returns once the total-limit
+   fix ships: run them with coupons OUT of maintenance. Maintenance has its own
+   tests (coupon-maintenance.test.tsx). */
+const maintenance = vi.hoisted(() => ({ on: false }));
+vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
+  ...(await orig<typeof import('../src/features/coupons/maintenance.js')>()),
+  get COUPONS_UNDER_MAINTENANCE() {
+    return maintenance.on;
+  },
+}));
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -221,6 +231,7 @@ beforeEach(() => {
   coupons.remove.mockReset().mockResolvedValue(undefined);
   coupons.request.mockReset().mockResolvedValue({});
   dialog.props = null;
+  maintenance.on = false;
   complaints.useMyComplaints.mockReturnValue({ data: [row], isLoading: false });
   hooks.useTicket.mockReturnValue({ data: ticket, isLoading: false });
   hooks.useTicketEvents.mockReturnValue({ data: [], isLoading: false });
@@ -407,6 +418,37 @@ describe('ticket details → Edit, for a WeCare Admin / Supervisor', () => {
     await waitFor(() =>
       expect(update).toHaveBeenCalledWith({ id: 't1', patch: { compensation: 'Compensated' } }),
     );
+  });
+});
+
+describe('coupons under maintenance (owner, 2026-11-04)', () => {
+  it('the Edit form shows the notice where Assign a coupon was', async () => {
+    maintenance.on = true;
+    coupons.rows = [];
+    hooks.useTicket.mockReturnValue({
+      data: { ...ticket, compensation: 'Not Compensated' },
+      isLoading: false,
+    });
+    await openEdit();
+    expect(screen.queryByRole('button', { name: 'Assign a coupon' })).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('coupon-maintenance').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Coupons under maintenance').length).toBeGreaterThan(0);
+  });
+
+  it('the ticket card offers no Assign a coupon, only the notice', async () => {
+    maintenance.on = true;
+    coupons.rows = [];
+    renderPage();
+    await waitFor(() => expect(screen.getByText('Ticket details')).toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Assign a coupon' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('coupon-maintenance')).toBeInTheDocument();
+  });
+
+  it('the field alone: no Assign button, the notice instead', () => {
+    maintenance.on = true;
+    render(<Field initial="Not Compensated" rows={[]} />);
+    expect(screen.queryByRole('button', { name: 'Assign a coupon' })).not.toBeInTheDocument();
+    expect(screen.getByTestId('coupon-maintenance')).toBeInTheDocument();
   });
 });
 
