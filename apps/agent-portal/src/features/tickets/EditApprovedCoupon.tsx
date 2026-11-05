@@ -14,7 +14,7 @@ import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useReplaceTicketCoupon, type CouponRequestRow } from '../coupons/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
-import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
+import { useCouponsUnderMaintenance } from '../coupons/maintenance.js';
 
 /**
  * EDIT AN APPROVED COUPON FROM ITS TICKET (owner, 2026-10-27).
@@ -53,6 +53,7 @@ export function draftToTerms(d: CouponRequestDraft): CouponReplacementTerms {
     coupon_percent: pct ? (d.coupon_percent ?? null) : null,
     max_discount: pct ? d.max_discount : (d.coupon_value ?? null),
     usage_limit: d.usage_limit,
+    total_discount_limit: d.total_discount_limit ?? null,
     item_name: d.item_name ?? null,
     item_sku: d.item_sku ?? null,
     no_other_discounts: d.no_other_discounts,
@@ -97,6 +98,7 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
   const { t } = useTranslation();
   const { user } = useAuth();
   const replace = useReplaceTicketCoupon();
+  const couponsPaused = useCouponsUnderMaintenance();
   const [open, setOpen] = useState(false);
   const expired = couponIsExpired(coupon.valid_to, new Date());
   /* An expired coupon is replaced by a VALID one: fresh dates to start from. */
@@ -105,7 +107,7 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
     : { valid_from: coupon.valid_from ?? '', valid_to: coupon.valid_to ?? '' };
 
   /* Coupons under maintenance (owner, 2026-11-04): an edit sends a new coupon. */
-  if (COUPONS_UNDER_MAINTENANCE) return <CouponMaintenancePill />;
+  if (couponsPaused) return <CouponMaintenancePill />;
   return (
     <>
       <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(true)}>
@@ -141,6 +143,10 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
             coupon_percent: coupon.coupon_percent,
             max_discount: coupon.max_discount ?? 0,
             usage_limit: coupon.usage_limit ?? 1,
+            total_discount_limit:
+              coupon.total_discount_limit != null && coupon.total_discount_limit !== ''
+                ? Number(coupon.total_discount_limit)
+                : null,
             compensation_reason: coupon.reason ?? '',
             item_name: coupon.item_name,
             item_sku: coupon.item_sku,

@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
    tests (coupon-maintenance.test.tsx). */
 vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
   ...(await orig<typeof import('../src/features/coupons/maintenance.js')>()),
-  COUPONS_UNDER_MAINTENANCE: false,
+  useCouponsUnderMaintenance: () => false,
+  useCouponsMaintenanceState: () => ({ paused: false, known: true }),
+  assertCouponsOpen: async () => {},
 }));
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -82,6 +84,7 @@ async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
   const val = screen.getByLabelText(/coupon value/i);
   await user.clear(val);
   await user.type(val, '25');
+  await user.type(screen.getByTestId('coupon-total-limit'), '25');
   await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
 }
 

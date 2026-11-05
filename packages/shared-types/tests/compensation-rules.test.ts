@@ -152,7 +152,15 @@ describe('the coupon a rule suggests', () => {
       reason: 'Late',
       restaurantId: '501',
     });
-    expect(CouponRequestDraftChecked.safeParse(d).success).toBe(true);
+    /* A rule never sets the total discount limit: a person types it (owner,
+       2026-11-04). That is the ONLY thing missing from a rule's draft. */
+    expect(d.total_discount_limit ?? null).toBeNull();
+    const bare = CouponRequestDraftChecked.safeParse(d);
+    expect(bare.success).toBe(false);
+    expect(bare.error?.issues.map((i) => i.path[0])).toEqual(['total_discount_limit']);
+    expect(CouponRequestDraftChecked.safeParse({ ...d, total_discount_limit: 1000 }).success).toBe(
+      true,
+    );
     expect(d.delivery_excluded).toBe(false);
   });
 });

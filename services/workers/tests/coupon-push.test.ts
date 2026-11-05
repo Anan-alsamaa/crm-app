@@ -56,6 +56,7 @@ const ROW: CouponApprovalRow = {
   coupon_percent: null,
   max_discount: '50.00000',
   usage_limit: '1',
+  total_discount_limit: '10000.00000',
   valid_from: '2026-08-18',
   valid_to: '2026-09-18',
   title: 'Sorry about your order',
@@ -1034,5 +1035,44 @@ describe('yijiCouponPayload — the STAGING coupon redirect', () => {
     ).couponUser;
     expect(u.customerPhone).toBe('+966537301009');
     expect(u.userId).toBeUndefined();
+  });
+});
+
+/*
+ * THE TOTAL DISCOUNT LIMIT (owner, 2026-11-04). Yiji's `reachLimit` is the
+ * "Total given discount limit" in SAR. It was a fixed 10000, so a coupon still
+ * valid on the 1st could be spent again after Yiji's monthly reset. It is now
+ * the number the agent typed, and a coupon without a valid one never leaves.
+ */
+describe('total discount limit', () => {
+  it('sends the agent-typed limit as reachLimit', () => {
+    const body = yijiCouponPayload({ ...ROW, total_discount_limit: '25.00000' }, null, {
+      compensationUserId: 'yiji-77',
+    });
+    expect((body.coupon as Record<string, unknown>).reachLimit).toBe(25);
+  });
+
+  it('refuses a coupon with no limit - nothing is sent to Yiji', async () => {
+    const { deps: d, patches, postCoupon } = deps({}, { ...ROW, total_discount_limit: null });
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(postCoupon).not.toHaveBeenCalled();
+    expect(patches).toContainEqual(
+      expect.objectContaining({ yiji_push_error: expect.stringMatching(/total discount limit/) }),
+    );
+  });
+
+  it('refuses a Private Amount coupon whose limit is below its value', async () => {
+    const { deps: d, postCoupon } = deps(
+      {},
+      {
+        ...ROW,
+        coupon_type: 'Private',
+        discount_category: 'Amount',
+        coupon_value: '50',
+        total_discount_limit: '20',
+      },
+    );
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+    expect(postCoupon).not.toHaveBeenCalled();
   });
 });

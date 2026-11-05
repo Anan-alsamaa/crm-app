@@ -6,6 +6,7 @@ import {
   couponDecision,
   couponEditBlock,
   couponIsRemoved,
+  couponLimitProblem,
   couponReplacedHistoryText,
   couponTermsProblems,
   refId,
@@ -94,6 +95,8 @@ interface NewRow {
   coupon_percent: number | string | null;
   max_discount: number | string | null;
   discount_category: string | null;
+  coupon_type?: string | null;
+  total_discount_limit?: number | string | null;
   compensation: string | null;
   replaces: RelationRef;
   decided_by: RelationRef;
@@ -122,6 +125,8 @@ const NEW_FIELDS = [
   'coupon_percent',
   'max_discount',
   'discount_category',
+  'coupon_type',
+  'total_discount_limit',
   'compensation',
   'replaces',
   'decided_by',
@@ -228,6 +233,10 @@ export async function processCouponReplaceJob(
     max_discount: num(fresh.max_discount),
   })[0];
   if (termsWrong) return rollback(`Refused: ${termsWrong.message}`, 'refused');
+  /* The total discount limit (owner, 2026-11-04): checked BEFORE the old coupon
+     is taken back, so a bad limit never leaves the customer with neither. */
+  const limitWrong = couponLimitProblem(fresh);
+  if (limitWrong) return rollback(`Refused: ${limitWrong}`, 'refused');
 
   const resumed = claim === newId;
   /* A previous run finished everything but the follow-ups. */

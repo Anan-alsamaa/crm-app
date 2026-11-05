@@ -79,6 +79,7 @@ const pending = {
   id: 'ca1',
   coupon_code: 'SORRY10',
   coupon_value: 25,
+  total_discount_limit: '100.00000',
   coupon_percent: null,
   compensation: 'Compensated',
   reason: 'Two items missing from a 4-item order.',
@@ -391,6 +392,40 @@ describe('CouponApprovalsPage', () => {
       await expandFirst(user);
       expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
       expect(screen.getByRole('alert')).toHaveTextContent(/maximum discount is below/i);
+    });
+
+    /* The total discount limit (owner, 2026-11-04): a waiting coupon with no
+       limit, or one below its value, cannot be approved until it is typed. */
+    it('will not approve a coupon without a total discount limit', async () => {
+      api.useCouponApprovals.mockReturnValue({
+        data: [{ ...pending, total_discount_limit: null }],
+        isLoading: false,
+      });
+      const user = userEvent.setup();
+      renderPage();
+      await expandFirst(user);
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+      expect(screen.getByRole('alert')).toHaveTextContent(/total discount limit/i);
+    });
+
+    it('will not approve a Private Amount coupon whose limit is below its value', async () => {
+      api.useCouponApprovals.mockReturnValue({
+        data: [
+          {
+            ...pending,
+            coupon_type: 'Private',
+            discount_category: 'Amount',
+            max_discount: 25,
+            total_discount_limit: '10.00000',
+          },
+        ],
+        isLoading: false,
+      });
+      const user = userEvent.setup();
+      renderPage();
+      await expandFirst(user);
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+      expect(screen.getByRole('alert')).toHaveTextContent(/cannot be less than the coupon value/i);
     });
 
     it('offers no separate ceiling to type for an amount', async () => {

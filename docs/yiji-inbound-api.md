@@ -129,21 +129,22 @@ Send the same string you signed (`body`), not a re-serialised object.
 
 **Coupon object** (same body for `POST /tickets/{externalId}/coupons`):
 
-| Field                  | Req.       | Notes                                                                       |
-| ---------------------- | ---------- | --------------------------------------------------------------------------- |
-| `externalId`           | yes        | Your coupon id. Unique across all your coupons. The idempotency key.        |
-| `type`                 | yes        | `amount` or `percentage`.                                                   |
-| `value`                | amount     | SAR off, > 0. (`maxDiscount` defaults to it.)                               |
-| `percent`              | percentage | 0 < percent ≤ 100.                                                          |
-| `maxDiscount`          | percentage | Ceiling in SAR, > 0. For an amount it may not be below `value`.             |
-| `validFrom`, `validTo` | no         | `YYYY-MM-DD`, whole days inclusive. Default: today → same day next month.   |
-| `reason`               | no         | Why. Defaults to the ticket description. Shown to the approving supervisor. |
-| `deliveryTypes`        | no         | Any of `All, Delivery, Pickup, Carhop, Takeout, Dine-in`. Default `All`.    |
-| `item`                 | no         | `{ "name": "Fries", "sku": "123" }` — the order line it compensates.        |
-| `issuingSide`          | no         | Default `Customer Care`.                                                    |
-| `audience`             | no         | `private` (default) or `general`.                                           |
-| `usageLimit`           | no         | Times it can be used, default 1.                                            |
-| `noOtherDiscounts`     | no         | `true` = cannot be combined with other offers. Default `false`.             |
+| Field                  | Req.       | Notes                                                                                                                                     |
+| ---------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `externalId`           | yes        | Your coupon id. Unique across all your coupons. The idempotency key.                                                                      |
+| `type`                 | yes        | `amount` or `percentage`.                                                                                                                 |
+| `value`                | amount     | SAR off, > 0. (`maxDiscount` defaults to it.)                                                                                             |
+| `percent`              | percentage | 0 < percent ≤ 100.                                                                                                                        |
+| `maxDiscount`          | percentage | Ceiling in SAR, > 0. For an amount it may not be below `value`.                                                                           |
+| `validFrom`, `validTo` | no         | `YYYY-MM-DD`, whole days inclusive. Default: today → same day next month.                                                                 |
+| `reason`               | no         | Why. Defaults to the ticket description. Shown to the approving supervisor.                                                               |
+| `deliveryTypes`        | no         | Any of `All, Delivery, Pickup, Carhop, Takeout, Dine-in`. Default `All`.                                                                  |
+| `item`                 | no         | `{ "name": "Fries", "sku": "123" }` — the order line it compensates.                                                                      |
+| `issuingSide`          | no         | Default `Customer Care`.                                                                                                                  |
+| `audience`             | no         | `private` (default) or `general`.                                                                                                         |
+| `usageLimit`           | no         | Times it can be used, default 1.                                                                                                          |
+| `totalDiscountLimit`   | yes        | Total given discount limit, SAR, > 0: the most the coupon gives across all uses. For a private amount coupon it may not be below `value`. |
+| `noOtherDiscounts`     | no         | `true` = cannot be combined with other offers. Default `false`.                                                                           |
 
 **The ticket never depends on its coupon.** A ticket is always created when its own fields are
 valid; tickets without a coupon are normal. If a `coupon` is sent but cannot be created (invalid

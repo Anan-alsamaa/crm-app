@@ -818,6 +818,11 @@ export const collections: CollectionSpec[] = [
       { field: 'coupon_value', type: 'float', note: 'Face value in SAR.' },
       { field: 'coupon_percent', type: 'float', note: 'Discount as a percentage (0–100).' },
       {
+        field: 'total_discount_limit',
+        type: 'decimal',
+        note: 'Yiji\'s "Total given discount limit" (reachLimit), SAR, typed by the agent on every coupon (owner, 2026-11-04). For a Private Amount coupon it may not be below coupon_value. Empty = not sent to Yiji.',
+      },
+      {
         field: 'compensation',
         type: 'string',
         choices: [...Compensation.options],

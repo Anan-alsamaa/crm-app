@@ -67,6 +67,8 @@ const NEW = {
   coupon_percent: null,
   max_discount: '40',
   discount_category: 'Amount',
+  coupon_type: 'Private',
+  total_discount_limit: '40.00000',
   compensation: 'Compensated',
   replaces: 'old-1',
   decided_by: 'sup-1',

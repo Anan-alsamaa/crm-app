@@ -15,6 +15,7 @@ import {
 import {
   couponPrefix,
   CouponRequestDraftChecked,
+  couponLimitProblem,
   defaultCouponDates,
   generateCouponCode,
   isPercentageCategory,
@@ -30,7 +31,7 @@ import { optionsFor, useOptionLists } from '../tickets/option-lists.js';
 import { useCouponCodeTaken, useRequestCouponApproval } from './api.js';
 import { couponTermsFromDraft } from './coupon-request-fields.js';
 import { newCouponRequestId } from './coupon-request-send.js';
-import { COUPONS_UNDER_MAINTENANCE } from './maintenance.js';
+import { useCouponsUnderMaintenance } from './maintenance.js';
 import { CouponMaintenancePanel } from './CouponMaintenance.js';
 
 /**
@@ -336,8 +337,8 @@ function ItemPicker({
  * form gets the notice instead, so no coupon can be raised from any of them.
  */
 export function CouponRequestDialog(props: CouponRequestDialogProps) {
-  if (COUPONS_UNDER_MAINTENANCE)
-    return <CouponMaintenanceDrawer open={props.open} onClose={props.onClose} />;
+  const paused = useCouponsUnderMaintenance();
+  if (paused) return <CouponMaintenanceDrawer open={props.open} onClose={props.onClose} />;
   return <CouponRequestForm {...props} />;
 }
 
@@ -416,6 +417,8 @@ function CouponRequestForm({
     coupon_percent: null,
     max_discount: 0,
     usage_limit: 1,
+    /* Typed by the agent on EVERY coupon (owner, 2026-11-04) - never pre-set. */
+    total_discount_limit: null,
     compensation_reason: description ?? '',
     /* Deliver, unless the agent says otherwise — the ordinary case, and the safe
        default for anyone who does not touch the field. */
@@ -531,6 +534,29 @@ function CouponRequestForm({
   }, [open, reasonTouched, description]);
 
   const parsed = CouponRequestDraftChecked.safeParse(draft);
+  /* The total-limit warning, in the agent's language. Shown once they have
+     typed in the box (an empty box on a fresh form is not yet a mistake) or
+     whenever the number is below the coupon value. */
+  const [limitTouched, setLimitTouched] = useState(false);
+  const limitProblem = couponLimitProblem(draft);
+  const limitTyped =
+    draft.total_discount_limit !== null &&
+    draft.total_discount_limit !== undefined &&
+    Number(draft.total_discount_limit) > 0;
+  const limitError = !limitProblem
+    ? null
+    : limitTyped
+      ? t('coupons.totalLimit.belowValue', {
+          limit: draft.total_discount_limit,
+          value: draft.coupon_value,
+          defaultValue:
+            'The total discount limit ({{limit}} SAR) cannot be less than the coupon value ({{value}} SAR). Fix it to send this coupon.',
+        })
+      : limitTouched
+        ? t('coupons.totalLimit.required', {
+            defaultValue: 'Enter the total discount limit (SAR) to send this coupon.',
+          })
+        : null;
   /** The first thing wrong, named — not "check the highlighted fields". */
   const blockedReason = parsed.success ? '' : (parsed.error.issues[0]?.message ?? '');
 
@@ -1052,6 +1078,39 @@ function CouponRequestForm({
               step="1"
               value={String(draft.usage_limit)}
               onChange={(e) => set('usage_limit', Number(e.target.value))}
+            />
+          </FormField>
+          {/* THE TOTAL DISCOUNT LIMIT (owner, 2026-11-04): Yiji's "Total given
+              discount limit", the most this coupon can give in total across
+              every use and every month. Typed on every coupon; a Private
+              Amount coupon's limit cannot be below its value. Send stays
+              disabled until it is right - see couponLimitProblem. */}
+          <FormField
+            className="sm:col-span-2"
+            label={t('coupons.totalLimit.label', {
+              defaultValue: 'Total discount limit (SAR)',
+            })}
+            hint={
+              limitError
+                ? undefined
+                : t('coupons.totalLimit.hint', {
+                    defaultValue:
+                      'The most this coupon can give in total, across every use. Required.',
+                  })
+            }
+            error={limitError ?? undefined}
+          >
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              data-testid="coupon-total-limit"
+              aria-invalid={limitError ? true : undefined}
+              value={String(draft.total_discount_limit ?? '')}
+              onChange={(e) => {
+                setLimitTouched(true);
+                set('total_discount_limit', e.target.value === '' ? null : Number(e.target.value));
+              }}
             />
           </FormField>
         </div>

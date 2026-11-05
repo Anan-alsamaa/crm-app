@@ -1033,7 +1033,13 @@
     "differsFromPolicy": "Differs from policy - the supervisor will see that.",
     "prefilledFrom": "Pre-filled from the rule \"{{name}}\". Accept it, adjust it with Create coupon, or untick to send none.",
     "ruleLimitReached": "This customer already had {{max}} rule coupon(s) in the last {{days}} days, so nothing was pre-filled. You can still create one by hand.",
-    "noRule": "No rule"
+    "noRule": "No rule",
+    "totalLimit": {
+      "label": "Total discount limit (SAR)",
+      "hint": "The most this coupon can give in total, across every use. Required.",
+      "required": "Enter the total discount limit (SAR) to send this coupon.",
+      "belowValue": "The total discount limit ({{limit}} SAR) cannot be less than the coupon value ({{value}} SAR). Fix it to send this coupon."
+    }
   },
   "busy": {
     "on": "Busy",

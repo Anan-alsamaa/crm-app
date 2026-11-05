@@ -47,6 +47,7 @@ const BASE: CouponApprovalRow = {
   coupon_percent: null,
   max_discount: '30.00000',
   usage_limit: '1',
+  total_discount_limit: '10000.00000',
   valid_from: '2026-10-07',
   valid_to: '2026-11-07',
   title: '0502933330',

@@ -267,6 +267,7 @@ Add-ons come from Yiji's `orderItems[].extraModifiers[].elements[]`. Unknown ven
 
 Form `CouponRequestDialog` (from a ticket, chat or late order) creates a `coupon_approvals` row (status `pending`). Defaults: title = customer phone, code = `<SIDE>-XXXXXXXX` (CC, OPS, MKT…), type **Private**, category **Amount**, validity one month, 1 use, **Assign the coupon on Yiji: Yes / No, don't assign to customer** (`delivery_excluded`).
 Rules (`couponTermsProblems`): Amount → value > 0 and **cap = value**; Percentage → percent > 0 and a cap > 0; end date ≥ start date.
+Total discount limit (`couponLimitProblem`, owner 2026-11-04): required on every coupon, > 0; a **Private Amount** coupon's limit ≥ its value; Percentage taken as typed. Coupons can be paused for everyone from admin → Roles & privileges → **Global settings → Coupons under maintenance** (`app_settings` key `coupons_under_maintenance`; no row / unreadable = paused).
 
 ### E2. Admin approves (`/coupon-approvals`, needs `approve_coupons`)
 
@@ -283,7 +284,7 @@ Rules (`couponTermsProblems`): Amount → value > 0 and **cap = value**; Percent
 | **2**  | "No, don't assign" (`delivery_excluded`) | **`AddCoupon`** only (`assignee: []`)                                                                                                                | stays `approved`, `yiji_coupon_id` saved                                                                  |
 | **3**  | phone has no Yiji account yet            | none — held                                                                                                                                          | `awaiting_signup_at`; re-checked every 10 min (day 1), hourly (to day 7), daily; expires after `valid_to` |
 
-**Request body (route 1a)** — fixed values: `orderMaximum 1000000`, `reachLimit 10000`; name = `+966` phone; description prefixed **`CRM - `**.
+**Request body (route 1a)** — fixed `orderMaximum 1000000`; `reachLimit` = the agent's **Total discount limit** (`total_discount_limit`, SAR; was a fixed 10000 until 2026-11-04 — a row without one is refused, never sent); name = `+966` phone; description prefixed **`CRM - `**.
 
 ```json
 {

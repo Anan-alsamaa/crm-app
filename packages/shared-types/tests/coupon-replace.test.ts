@@ -39,6 +39,7 @@ const TERMS: CouponReplacementTerms = {
   coupon_percent: null,
   max_discount: 40,
   usage_limit: 1,
+  total_discount_limit: 1000,
   item_name: 'Burger',
   reason: 'Cold food',
 };
