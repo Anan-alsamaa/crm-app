@@ -41,10 +41,19 @@ describe('every admin surface resolves the name through the shared helper', () =
     expect(read(file)).toContain('displayContactName(');
   });
 
+  /*
+   * Reads the actual import STATEMENTS rather than a fixed character window.
+   * The old check (`displayContactName` within 200 characters of `import` and
+   * of `@yiji/shared-types`) broke whenever an unrelated name was added to the
+   * same import list (2026-11-05) - brittle to the list's length, not to the
+   * behaviour it guards.
+   */
   it.each(SURFACES)('$what imports it from shared-types', ({ file }) => {
-    expect(read(file)).toMatch(
-      /import[\s\S]{0,200}displayContactName[\s\S]{0,200}@yiji\/shared-types/,
-    );
+    const statements = read(file).match(/import\s[^;]*?from\s*['"][^'"]+['"]/g) ?? [];
+    const source = statements
+      .filter((st) => /\bdisplayContactName\b/.test(st))
+      .map((st) => st.match(/from\s*['"]([^'"]+)['"]/)?.[1]);
+    expect(source).toEqual(['@yiji/shared-types']);
   });
 });
 

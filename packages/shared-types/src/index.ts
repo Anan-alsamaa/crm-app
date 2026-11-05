@@ -4,6 +4,7 @@
 
 export * from './enums.js';
 export * from './coupon-request.js';
+export * from './coupons-maintenance.js';
 export * from './staff-identity.js';
 export * from './phone.js';
 export * from './entities/common.js';

@@ -5,8 +5,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const maintenance = vi.hoisted(() => ({ on: false }));
 vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
   ...(await orig<typeof import('../src/features/coupons/maintenance.js')>()),
-  get COUPONS_UNDER_MAINTENANCE() {
-    return maintenance.on;
+  useCouponsUnderMaintenance: () => maintenance.on,
+  useCouponsMaintenanceState: () => ({ paused: maintenance.on, known: true }),
+  assertCouponsOpen: async () => {
+    if (maintenance.on)
+      throw new Error('Coupons are under maintenance, so this coupon was not sent.');
   },
 }));
 import { render, screen, waitFor } from '@testing-library/react';

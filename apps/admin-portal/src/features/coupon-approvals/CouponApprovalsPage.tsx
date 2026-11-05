@@ -24,6 +24,8 @@ import {
   type CouponApprovalStatus,
   couponDecision,
   displayContactName,
+  couponLimitProblem,
+  type CouponTermsProblem,
   normalizePhone,
   type StoreIndex,
   normalizeOrderId,
@@ -218,6 +220,8 @@ export interface TermEdits {
   amount: string;
   max_discount: string;
   usage_limit: string;
+  /** Yiji's total given discount limit, SAR (owner, 2026-11-04). */
+  total_discount_limit: string;
   item_name: string;
   reason: string;
 }
@@ -237,6 +241,8 @@ function seedEdits(row: CouponApprovalRow): TermEdits {
     amount: String((pct ? row.coupon_percent : row.coupon_value) ?? ''),
     max_discount: String(row.max_discount ?? ''),
     usage_limit: String(row.usage_limit ?? ''),
+    total_discount_limit:
+      row.total_discount_limit == null ? '' : String(Number(row.total_discount_limit)),
     item_name: row.item_name ?? '',
     reason: row.reason ?? '',
   };
@@ -317,6 +323,17 @@ function diffEdits(row: CouponApprovalRow, e: TermEdits): Record<string, unknown
     u !== (row.usage_limit ?? null)
   ) {
     out.usage_limit = u;
+  }
+  /* The total discount limit - decimal STRING in storage, so compare numbers. */
+  const lim = Number(e.total_discount_limit);
+  const storedLim = row.total_discount_limit == null ? null : Number(row.total_discount_limit);
+  if (
+    e.total_discount_limit.trim() !== '' &&
+    Number.isFinite(lim) &&
+    lim > 0 &&
+    lim !== storedLim
+  ) {
+    out.total_discount_limit = lim;
   }
   return out;
 }
@@ -481,25 +498,44 @@ function Row({
    * enforced on one side only is not a rule.
    */
   const termsProblems = useMemo(() => {
+    /* The total discount limit rule rides along (owner, 2026-11-04). */
+    const withLimit = (
+      list: CouponTermsProblem[],
+      terms: Parameters<typeof couponLimitProblem>[0],
+    ): CouponTermsProblem[] => {
+      const limit = couponLimitProblem(terms);
+      return limit ? [...list, { field: 'total_discount_limit', message: limit }] : list;
+    };
     if (!editing) {
-      return couponTermsProblems({
-        discount_category: row.discount_category,
-        coupon_value: row.coupon_value,
-        coupon_percent: row.coupon_percent,
-        max_discount: row.max_discount,
-      });
+      return withLimit(
+        couponTermsProblems({
+          discount_category: row.discount_category,
+          coupon_value: row.coupon_value,
+          coupon_percent: row.coupon_percent,
+          max_discount: row.max_discount,
+        }),
+        row,
+      );
     }
     const pctNow = isPercentageCategory(edits.discount_category);
     const amount = edits.amount.trim() === '' ? null : Number(edits.amount);
     const cap = edits.max_discount.trim() === '' ? null : Number(edits.max_discount);
-    return couponTermsProblems({
-      discount_category: edits.discount_category,
-      coupon_value: pctNow ? null : amount,
-      coupon_percent: pctNow ? amount : null,
-      // An amount's ceiling is derived on save, so judge it the same way here
-      // rather than warning about a cap the supervisor is not being asked for.
-      max_discount: pctNow ? cap : amount,
-    });
+    return withLimit(
+      couponTermsProblems({
+        discount_category: edits.discount_category,
+        coupon_value: pctNow ? null : amount,
+        coupon_percent: pctNow ? amount : null,
+        // An amount's ceiling is derived on save, so judge it the same way here
+        // rather than warning about a cap the supervisor is not being asked for.
+        max_discount: pctNow ? cap : amount,
+      }),
+      {
+        coupon_type: edits.coupon_type,
+        discount_category: edits.discount_category,
+        coupon_value: pctNow ? null : amount,
+        total_discount_limit: edits.total_discount_limit,
+      },
+    );
   }, [editing, edits, row]);
 
   const worth = [
@@ -803,6 +839,14 @@ function Row({
               <Term
                 label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
                 value={row.usage_limit}
+              />
+              <Term
+                label={t('coupons.totalLimit.label', {
+                  defaultValue: 'Total discount limit (SAR)',
+                })}
+                value={
+                  row.total_discount_limit == null ? null : money(Number(row.total_discount_limit))
+                }
               />
               {/* ALWAYS rendered, never hidden when empty: "no item" says so
                   out loud rather than reading as a missing field. */}
@@ -1279,6 +1323,14 @@ function Row({
                         onChange={(v) => setEdit('usage_limit', v)}
                       />
                       <EditField
+                        label={t('coupons.totalLimit.label', {
+                          defaultValue: 'Total discount limit (SAR)',
+                        })}
+                        type="number"
+                        value={edits.total_discount_limit}
+                        onChange={(v) => setEdit('total_discount_limit', v)}
+                      />
+                      <EditField
                         label={t('coupons.itemShort', { defaultValue: 'Item' })}
                         value={edits.item_name}
                         onChange={(v) => setEdit('item_name', v)}
@@ -1632,7 +1684,8 @@ export function CouponApprovalsPage() {
             coupon_value: r.coupon_value,
             coupon_percent: r.coupon_percent,
             max_discount: r.max_discount,
-          }).length === 0,
+          }).length === 0 &&
+          couponLimitProblem(r) === null,
       ),
     [rows],
   );

@@ -1755,5 +1755,20 @@
     "done": "Let’s go",
     "close": "Close",
     "goTo": "Go to slide {{n}}"
+  },
+  "coupons": {
+    "totalLimit": {
+      "label": "Total discount limit (SAR)"
+    }
+  },
+  "globalSettings": {
+    "title": "Global settings",
+    "subtitle": "These apply to every user at once, whatever their role.",
+    "couponsMaintenance": "Coupons under maintenance",
+    "couponsMaintenanceHint": "On: no coupon can be raised from the agent portal by anyone, and agents see the maintenance notice. Off: coupons work as normal.",
+    "ownerOnly": "Only the Administrator can change this.",
+    "couponsPaused": "Coupons are now under maintenance for every user.",
+    "couponsResumed": "Coupons are back on for every user.",
+    "saveError": "Could not save that setting"
   }
 }

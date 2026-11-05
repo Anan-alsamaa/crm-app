@@ -5,11 +5,12 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 /**
- * COUPONS UNDER MAINTENANCE (owner, 2026-11-04).
+ * COUPONS UNDER MAINTENANCE (owner, 2026-11-04; a live switch 2026-11-05).
  *
- * Until the total limit is fixed, no coupon may be raised from this portal.
- * The flag is the REAL one here - this file fails the moment someone turns
- * coupons back on without the fix, which is the point.
+ * The Administrator's switch (Roles & privileges -> Global settings) is one
+ * `app_settings` row. The REAL module is used here: the setting read goes
+ * through the mocked Directus client, and anything but an explicit "false"
+ * keeps coupons paused.
  */
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -25,7 +26,7 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'agent-1' } }),
 }));
 
-import { COUPONS_UNDER_MAINTENANCE } from '../src/features/coupons/maintenance.js';
+import { parseCouponsMaintenance } from '@yiji/shared-types';
 import { useRequestCouponApproval } from '../src/features/coupons/api.js';
 import { CouponRequestDialog } from '../src/features/coupons/CouponRequestDialog.js';
 import { CouponMaintenancePill } from '../src/features/coupons/CouponMaintenance.js';
@@ -38,16 +39,54 @@ const wrap = ({ children }: { children: ReactNode }) => (
   </QueryClientProvider>
 );
 
+/* The switch row as Directus returns it; ON unless a test says otherwise. */
+const setting = { value: 'true' as unknown };
 beforeEach(() => {
+  setting.value = 'true';
   sdk.request.mockReset();
+  sdk.request.mockImplementation(async () => [{ value: setting.value }]);
   producer.replaceCoupon.mockReset();
 });
 
-describe('coupons under maintenance', () => {
-  it('is ON until the total-limit fix ships', () => {
-    expect(COUPONS_UNDER_MAINTENANCE).toBe(true);
+describe('the switch is fail-safe', () => {
+  it('only an explicit off resumes coupons', () => {
+    expect(parseCouponsMaintenance('false')).toBe(false);
+    expect(parseCouponsMaintenance(false)).toBe(false);
+    expect(parseCouponsMaintenance('off')).toBe(false);
+    for (const v of ['true', true, undefined, null, '', 'yes', 'garbage']) {
+      expect(parseCouponsMaintenance(v)).toBe(true);
+    }
   });
 
+  it('a failed read keeps coupons paused', async () => {
+    sdk.request.mockRejectedValue(new Error('network'));
+    const { result } = renderHook(() => useRequestCouponApproval(), { wrapper: wrap });
+    await expect(
+      result.current.mutateAsync({ id: 'r1', title: '0501234567' } as never),
+    ).rejects.toThrow(/under maintenance/);
+  });
+
+  it('switched OFF, the coupon form opens with the total discount limit box', async () => {
+    setting.value = 'false';
+    render(
+      <CouponRequestDialog
+        open
+        onClose={vi.fn()}
+        contactId="k1"
+        customerPhone="0501234567"
+        description={null}
+        brandId={null}
+        restaurantId={null}
+        requestedBy="agent-1"
+      />,
+      { wrapper: wrap },
+    );
+    expect(await screen.findByTestId('coupon-total-limit')).toBeInTheDocument();
+    expect(screen.queryByTestId('coupon-maintenance')).not.toBeInTheDocument();
+  });
+});
+
+describe('coupons under maintenance', () => {
   it('the coupon form shows the notice, with nothing to send', async () => {
     const onClose = vi.fn();
     render(
@@ -89,6 +128,7 @@ describe('coupons under maintenance', () => {
     await expect(
       result.current.mutateAsync({ id: 'r1', title: '0501234567' } as never),
     ).rejects.toThrow(/under maintenance/);
-    expect(sdk.request).not.toHaveBeenCalled();
+    /* Only the switch was read - nothing was written. */
+    expect(sdk.request).toHaveBeenCalledTimes(1);
   });
 });

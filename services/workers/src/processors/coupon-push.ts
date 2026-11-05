@@ -21,6 +21,7 @@ import {
   yijiIssuingSideId,
   YIJI_ORDER_MAXIMUM,
   YIJI_REACH_LIMIT,
+  couponLimitProblem,
   YIJI_COUPON_CATEGORY,
   YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
@@ -306,6 +307,12 @@ export interface CouponApprovalRow {
   coupon_percent: number | string | null;
   max_discount: number | string | null;
   usage_limit: number | string | null;
+  /**
+   * Yiji's "Total given discount limit" (`reachLimit`), in SAR, typed by the
+   * agent on every coupon (owner, 2026-11-04). Null on rows written before the
+   * field existed - such a row is refused, never sent with a made-up limit.
+   */
+  total_discount_limit?: number | string | null;
   valid_from: string | null;
   valid_to: string | null;
   title: string | null;
@@ -744,12 +751,16 @@ export function yijiCouponPayload(
        * The pool is the ONLY bound there, so it is exactly the allowance.
        */
       /*
-       * FIXED, ON EVERY COUPON (owner, 2026-10-06): "orderMaximum and
-       * reachLimit are fixed and never change until I ask" — no exception for
-       * unassigned coupons, no deriving from the uses. A derived reachLimit is
-       * exactly what left 88 coupons unredeemable.
+       * THE AGENT'S TOTAL DISCOUNT LIMIT (owner, 2026-11-04) - replaces the
+       * fixed 10000 of 2026-10-06. Yiji's console labels `reachLimit` "Total
+       * given discount limit": SAR given across every use, and the only bound
+       * that survives Yiji's 1st-of-the-month reset of the monthly uses (8
+       * coupons were spent a second time after the 1 Nov reset with 10000).
+       * `processCouponPushJob` refuses a row without a valid one, so this is
+       * never the fallback in practice; the fallback only keeps the builder
+       * total for direct callers (tests, scripts).
        */
-      reachLimit: YIJI_REACH_LIMIT,
+      reachLimit: num(row.total_discount_limit) ?? YIJI_REACH_LIMIT,
       limitForUser: limit,
       monthlyReachLimit: limit,
       /*
@@ -1519,6 +1530,7 @@ export async function processCouponPushJob(
         'coupon_percent',
         'max_discount',
         'usage_limit',
+        'total_discount_limit',
         'valid_from',
         'valid_to',
         'title',
@@ -1605,6 +1617,20 @@ export async function processCouponPushJob(
   if (row.status !== 'approved' && row.status !== 'edited') {
     logger.warn({ id, status: row.status }, 'coupon is not approved — refusing to push');
     return 'not-approved';
+  }
+  /*
+   * NO VALID TOTAL DISCOUNT LIMIT, NO COUPON (owner, 2026-11-04).
+   *
+   * Before every Yiji call - assigned, order-less and withheld alike - so a row
+   * from before the field existed, or one whose limit is below its value,
+   * never reaches Yiji with a limit nobody typed. Recorded on the row, so the
+   * supervisor sees why; `refused` so BullMQ does not retry a settled answer.
+   */
+  const limitWrong = couponLimitProblem(row);
+  if (limitWrong) {
+    logger.warn({ id, code: row.coupon_code }, `coupon not sent: ${limitWrong}`);
+    await recordFailure(directus, id, `not sent: ${limitWrong}`);
+    return 'refused';
   }
   /*
    * WITHHELD: CREATED ON YIJI, ASSIGNED TO NOBODY (owner, 2026-10-06).

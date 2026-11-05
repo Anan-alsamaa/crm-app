@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
    tests (coupon-maintenance.test.tsx). */
 vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
   ...(await orig<typeof import('../src/features/coupons/maintenance.js')>()),
-  COUPONS_UNDER_MAINTENANCE: false,
+  useCouponsUnderMaintenance: () => false,
+  useCouponsMaintenanceState: () => ({ paused: false, known: true }),
+  assertCouponsOpen: async () => {},
 }));
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -118,6 +120,7 @@ describe('CouponRequestDialog', () => {
     const val = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(val);
     await userEvent.type(val, '25');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
 
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
@@ -154,6 +157,7 @@ describe('CouponRequestDialog', () => {
     const val = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(val);
     await userEvent.type(val, '25');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
     const send = screen.getByRole('button', { name: /send for approval/i });
     await userEvent.click(send);
@@ -176,6 +180,7 @@ describe('CouponRequestDialog', () => {
     const pct = screen.getByLabelText(/coupon percentage/i);
     await userEvent.clear(pct);
     await userEvent.type(pct, '10');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '50');
     await waitFor(() => expect((pct as HTMLInputElement).value).toBe('10'));
 
     // A percentage needs a ceiling: 10% of an unbounded order is an unbounded
@@ -202,6 +207,7 @@ describe('CouponRequestDialog', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     // Sendable at this point — so what follows tests the dates and nothing else.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeEnabled(),
@@ -379,6 +385,7 @@ describe('CouponRequestDialog', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeEnabled(),
     );
@@ -482,6 +489,7 @@ describe('the items a coupon compensates', () => {
     // A starting point, not the answer — the agent can still change it.
     await userEvent.clear(amount);
     await userEvent.type(amount, '15');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '15');
     await waitFor(() => expect(amount.value).toBe('15'));
   });
 
@@ -528,6 +536,7 @@ describe('the items a coupon compensates', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '100');
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
@@ -553,6 +562,7 @@ describe('the items a coupon compensates', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
@@ -607,6 +617,7 @@ describe('the items a coupon compensates', () => {
     await userEvent.click(box(/Vegetable Pasta/));
     await userEvent.click(box(/Garlic Bread/));
 
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '100');
     await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
     await waitFor(() => expect(onCollect).toHaveBeenCalled());
     // The value came from the two prices without anyone typing it.
@@ -628,10 +639,44 @@ describe('the items a coupon compensates', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
+    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
 
     await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
     await waitFor(() => expect(onCollect).toHaveBeenCalled());
     // Not the empty string: "no item" is an absence, and the column is nullable.
     expect(onCollect.mock.calls[0]![0]!.item_name ?? null).toBeNull();
+  });
+});
+
+/* THE TOTAL DISCOUNT LIMIT (owner, 2026-11-04): typed on every coupon, and a
+   Private Amount coupon's cannot be below its value. Send waits until it is. */
+describe('the total discount limit', () => {
+  beforeEach(() => {
+    mutateAsync.mockReset();
+    mutateAsync.mockResolvedValue({});
+  });
+  it('blocks Send until a valid limit is typed, and sends it', async () => {
+    renderDialog();
+    await userEvent.click(screen.getByLabelText(/issuing side/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    const amount = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(amount);
+    await userEvent.type(amount, '25');
+    const send = screen.getByRole('button', { name: /send for approval/i });
+    expect(send).toBeDisabled();
+
+    const limit = screen.getByTestId('coupon-total-limit');
+    await userEvent.type(limit, '10');
+    expect(
+      (await screen.findAllByText(/cannot be less than the coupon value/i)).length,
+    ).toBeGreaterThan(0);
+    expect(send).toBeDisabled();
+
+    await userEvent.clear(limit);
+    await userEvent.type(limit, '25');
+    await waitFor(() => expect(send).toBeEnabled());
+    await userEvent.click(send);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0]![0]).toMatchObject({ total_discount_limit: 25 });
   });
 });

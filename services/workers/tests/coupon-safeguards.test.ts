@@ -57,6 +57,7 @@ const ROW = {
   coupon_percent: null,
   max_discount: '20.00000',
   usage_limit: '1',
+  total_discount_limit: '10000.00000',
   valid_from: '2026-11-02',
   valid_to: '2026-12-02',
   title: '0536418952',

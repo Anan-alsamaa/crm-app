@@ -199,8 +199,57 @@ export const CouponRequestDraft = z.object({
    * "marked never-send" when this is blank.
    */
   delivery_excluded_reason: z.string().max(500).nullish(),
+  /**
+   * Yiji's "Total given discount limit" (`reachLimit`), in SAR — the most this
+   * coupon can EVER give away, across every use and every month.
+   *
+   * TYPED BY THE AGENT ON EVERY COUPON (owner, 2026-11-04), never derived.
+   * Yiji resets "uses per month" on the 1st, so the old fixed 10000 let a
+   * coupon still valid on the 1st be spent again (8 second uses after the
+   * 1 Nov reset). This total is the only bound that survives the reset.
+   *
+   * Nullish in the SHAPE so a half-filled draft and the rows written before
+   * the field existed still parse; `couponLimitProblem` is what makes it
+   * required, and nothing is sent to Yiji without it.
+   */
+  total_discount_limit: z.number().nullish(),
 });
 export type CouponRequestDraft = z.infer<typeof CouponRequestDraft>;
+
+/** The fields the total-limit rule reads. */
+export interface CouponLimitTerms {
+  coupon_type?: string | null;
+  discount_category?: string | null;
+  coupon_value?: number | string | null;
+  total_discount_limit?: number | string | null;
+}
+
+/**
+ * THE TOTAL DISCOUNT LIMIT RULE (owner, 2026-11-04) — one place, read by the
+ * agent's form, the supervisor's approval card, the Yiji API intake, the
+ * coupon edit and the push to Yiji, so no path can disagree.
+ *
+ *  - Every coupon needs it, typed by a person, above 0.
+ *  - A Private AMOUNT coupon's limit can never be below the coupon value:
+ *    a limit under the value makes the coupon unusable on its first order.
+ *  - Anything else (Percentage) is taken exactly as typed.
+ *
+ * Returns the message to show, or null when the limit is fine.
+ */
+export function couponLimitProblem(terms: CouponLimitTerms): string | null {
+  const raw = terms.total_discount_limit;
+  const limit = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
+  if (!Number.isFinite(limit) || !(limit > 0)) {
+    return 'Enter the total discount limit (SAR) — the most this coupon can give in total.';
+  }
+  const privateType = (terms.coupon_type ?? '').trim().toLowerCase() === 'private';
+  const amount = !isPercentageCategory(terms.discount_category);
+  const value = Number(terms.coupon_value ?? NaN);
+  if (privateType && amount && Number.isFinite(value) && limit < value) {
+    return `The total discount limit (${limit} SAR) cannot be less than the coupon value (${value} SAR).`;
+  }
+  return null;
+}
 
 /** Is this category a percentage discount? The list is editable, the shape is not. */
 export function isPercentageCategory(category: string | null | undefined): boolean {
@@ -218,7 +267,7 @@ export interface CouponTerms {
 
 /** One problem with a coupon's numbers: what is wrong, and which field owns it. */
 export interface CouponTermsProblem {
-  field: 'coupon_value' | 'coupon_percent' | 'max_discount';
+  field: 'coupon_value' | 'coupon_percent' | 'max_discount' | 'total_discount_limit';
   message: string;
 }
 
@@ -325,6 +374,10 @@ export const CouponRequestDraftChecked = CouponRequestDraft.superRefine((v, ctx)
   }
   for (const p of couponTermsProblems(v)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: [p.field], message: p.message });
+  }
+  const limit = couponLimitProblem(v);
+  if (limit) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['total_discount_limit'], message: limit });
   }
 });
 
