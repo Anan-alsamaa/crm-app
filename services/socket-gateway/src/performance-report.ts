@@ -46,6 +46,15 @@ export const PerformanceQuery = z.object({
     .default({}),
   ids: z.array(idSchema).max(5000).optional(),
   field: z.enum(['delivery_excluded', 'yiji_coupon_id', 'awaiting_signup_at', 'ticket']).optional(),
+  /**
+   * PER-SESSION READING (owner, 2026-11-05). Sent by portals that measure first
+   * response per SESSION: chats ACTIVE in the dates (a returning customer's
+   * thread may be weeks old), no agent filter here (a session belongs to whoever
+   * answered it - the client filters the session rows), and the message fields
+   * that mark where a session starts. Absent = exactly the old reading, for a
+   * portal still waiting for Update now.
+   */
+  sessions: z.boolean().optional(),
 });
 export type PerformanceQuery = z.infer<typeof PerformanceQuery>;
 
@@ -76,6 +85,22 @@ function dateWindow(f: PerformanceQuery['filters'], field = 'date_created') {
   const and: Array<Record<string, unknown>> = [];
   if (f.from) and.push({ [field]: { _gte: f.from } });
   if (f.to) and.push({ [field]: { _lte: endOfDay(f.to) } });
+  return and;
+}
+
+/**
+ * Chats with ANY activity in the dates: created by the end of the range and
+ * either created or last written to within it. A thread reopened today but
+ * created last month is in; the session rows are then cut to the dates.
+ */
+function activeWindow(f: PerformanceQuery['filters']) {
+  const and: Array<Record<string, unknown>> = [];
+  if (f.to) and.push({ date_created: { _lte: endOfDay(f.to) } });
+  if (f.from) {
+    and.push({
+      _or: [{ date_created: { _gte: f.from } }, { last_message_at: { _gte: f.from } }],
+    });
+  }
   return and;
 }
 
@@ -122,8 +147,8 @@ export async function readPerformanceDataset(
   const ids = [...new Set(q.ids ?? [])];
   switch (q.dataset) {
     case 'conversations': {
-      const and = dateWindow(f);
-      if (f.agentId) and.push({ assigned_agent: { _eq: f.agentId } });
+      const and = q.sessions ? activeWindow(f) : dateWindow(f);
+      if (f.agentId && !q.sessions) and.push({ assigned_agent: { _eq: f.agentId } });
       if (f.vendor) and.push({ vendor: { _eq: f.vendor } });
       return read('conversations', {
         limit: -1,
@@ -159,7 +184,13 @@ export async function readPerformanceDataset(
         {
           limit: -1,
           filter: { conversation: { _in: c }, is_internal_note: { _eq: false } },
-          fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
+          fields: [
+            'conversation',
+            'sender_type',
+            'date_created',
+            'sender_user',
+            ...(q.sessions ? ['source', 'starts_session'] : []),
+          ],
           sort: ['date_created'],
         },
       ]);
@@ -178,12 +209,16 @@ export async function readPerformanceDataset(
       if (ids.length)
         return chunked(read, ids, (c) => [
           'csat_responses',
-          { limit: -1, filter: { conversation: { _in: c } }, fields: ['conversation', 'score'] },
+          {
+            limit: -1,
+            filter: { conversation: { _in: c } },
+            fields: ['conversation', 'score', ...(q.sessions ? ['submitted_at'] : [])],
+          },
         ]);
       const and = dateWindow(f, 'submitted_at');
       return read('csat_responses', {
         limit: -1,
-        fields: ['conversation', 'score'],
+        fields: ['conversation', 'score', ...(q.sessions ? ['submitted_at'] : [])],
         ...(and.length ? { filter: { _and: and } } : {}),
       });
     }

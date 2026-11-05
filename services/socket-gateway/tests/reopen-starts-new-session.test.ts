@@ -160,3 +160,54 @@ describe('the first-response sweep', () => {
     expect(SLA).toMatch(/predatesPolicy\(c\.session_started_at \?\? c\.date_created/);
   });
 });
+
+/*
+ * THE SESSION MARKER (owner, 2026-11-05): the message that reopened the chat
+ * is stamped `starts_session`, so the reports measure first response per
+ * SESSION - not from the thread's first-ever message (b08c00f5: a 34-minute
+ * reply to the night session was reported for the morning visit).
+ */
+describe('the session marker', () => {
+  it('stamps the reopening message', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-9', date_created: '2026-11-05T04:00:35.000Z' })
+      .mockResolvedValueOnce([{ unread_count_agent: 0, status: 'solved' }])
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+    await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'back again',
+    } as never);
+    expect(request).toHaveBeenCalledTimes(4);
+    expect(await bodyOf(3)).toEqual({ starts_session: true });
+  });
+
+  it('does not stamp a message in a chat that is still open', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-10', date_created: '2026-11-05T04:01:00.000Z' })
+      .mockResolvedValueOnce([{ unread_count_agent: 1, status: 'open' }])
+      .mockResolvedValueOnce(undefined);
+    await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'still waiting',
+    } as never);
+    expect(request).toHaveBeenCalledTimes(3);
+  });
+
+  it('a failed stamp never fails the customer message', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-11', date_created: '2026-11-05T04:00:35.000Z' })
+      .mockResolvedValueOnce([{ unread_count_agent: 0, status: 'solved' }])
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('403'));
+    await expect(
+      gateway().persistMessage({
+        conversationId: 'convo-1',
+        senderType: 'customer',
+        content: 'back again',
+      } as never),
+    ).resolves.toMatchObject({ id: 'msg-11' });
+  });
+});

@@ -76,3 +76,49 @@ describe('performance report datasets', () => {
     ).toBe(false);
   });
 });
+
+/* PER-SESSION READING (owner, 2026-11-05) - only when the portal asks for it,
+   so a portal still waiting for Update now reads exactly what it did. */
+describe('per-session reading', () => {
+  it('chats ACTIVE in the dates, and no agent clause (the client filters sessions)', async () => {
+    const r = recorder();
+    await readPerformanceDataset(
+      r.read,
+      q({
+        dataset: 'conversations',
+        filters: { from: '2026-11-05', to: '2026-11-05', agentId: 'shatha' },
+        sessions: true,
+      }),
+    );
+    expect(r.calls[0]!.query['filter']).toEqual({
+      _and: [
+        { date_created: { _lte: '2026-11-05T23:59:59.999Z' } },
+        {
+          _or: [
+            { date_created: { _gte: '2026-11-05' } },
+            { last_message_at: { _gte: '2026-11-05' } },
+          ],
+        },
+      ],
+    });
+  });
+
+  it('messages carry the session markers - still never the text', async () => {
+    const r = recorder();
+    await readPerformanceDataset(r.read, q({ dataset: 'messages', ids: ['c1'], sessions: true }));
+    expect(r.calls[0]!.query['fields']).toEqual([
+      'conversation',
+      'sender_type',
+      'date_created',
+      'sender_user',
+      'source',
+      'starts_session',
+    ]);
+  });
+
+  it('ratings carry their time, so each session gets only its own', async () => {
+    const r = recorder();
+    await readPerformanceDataset(r.read, q({ dataset: 'csat', ids: ['c1'], sessions: true }));
+    expect(r.calls[0]!.query['fields']).toEqual(['conversation', 'score', 'submitted_at']);
+  });
+});
