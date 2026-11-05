@@ -87,6 +87,7 @@ const approved = {
   valid_to: future,
   max_discount: 25,
   usage_limit: 1,
+  total_discount_limit: '25.00000',
   item_name: null,
   item_sku: null,
   no_other_discounts: false,
@@ -178,6 +179,11 @@ describe('Edit coupon on an approved card', () => {
       screen.getByPlaceholderText('Why is this approved coupon being changed?'),
       'Wrong amount',
     );
+    /* The limit (25) is now below the value (40): Save waits until it is fixed. */
+    expect(save).toBeDisabled();
+    const limit = screen.getByLabelText('Total discount limit (SAR)');
+    await user.clear(limit);
+    await user.type(limit, '40');
     expect(save).toBeEnabled();
     await user.click(save);
 
@@ -191,6 +197,7 @@ describe('Edit coupon on an approved card', () => {
         coupon_value: 40,
         max_discount: 40,
         coupon_percent: null,
+        total_discount_limit: 40,
         issuing_side: 'Operations',
       },
     });

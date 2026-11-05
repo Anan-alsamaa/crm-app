@@ -37,6 +37,8 @@ export interface CouponApprovalRow {
   valid_to: string | null;
   max_discount: number | null;
   usage_limit: number | null;
+  /** Yiji's total given discount limit, SAR. Decimal string from Postgres. */
+  total_discount_limit?: number | string | null;
   /** The specific order item the coupon compensates, when it is about one. */
   item_name: string | null;
   /** Yiji's item id for that line — groupable where the name is not. */
@@ -223,6 +225,7 @@ const COUPON_APPROVAL_FIELDS = [
   'valid_to',
   'max_discount',
   'usage_limit',
+  'total_discount_limit',
   'item_name',
   'item_sku',
   'no_other_discounts',
@@ -291,6 +294,7 @@ export interface DecideInput {
         | 'valid_to'
         | 'max_discount'
         | 'usage_limit'
+        | 'total_discount_limit'
         | 'coupon_value'
         | 'coupon_percent'
         | 'item_name'

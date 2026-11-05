@@ -5,6 +5,7 @@ import {
   couponWindow,
   defaultCouponDates,
   couponTermsProblems,
+  couponLimitProblem,
   couponExposure,
   couponPrefix,
   yijiIssuingSideId,
@@ -31,6 +32,7 @@ const draft = {
   coupon_value: 50,
   max_discount: 50,
   usage_limit: 1,
+  total_discount_limit: 1000,
   compensation_reason: 'Order arrived cold.',
   brand_id: 'b1',
   restaurant_id: 'r1',
@@ -486,5 +488,41 @@ describe('yijiIssuingSideId', () => {
     expect(findIssuingSide('customer care')?.prefix).toBe('CC');
     expect(findIssuingSide('Call Centre')?.value).toBe('Customer Care');
     expect(findIssuingSide('Shurouq')?.prefix).toBe('SHUROUQ');
+  });
+});
+
+/* THE TOTAL DISCOUNT LIMIT RULE (owner, 2026-11-04). */
+describe('couponLimitProblem', () => {
+  const base = { coupon_type: 'Private', discount_category: 'Amount', coupon_value: 25 };
+  it('is required on every coupon', () => {
+    expect(couponLimitProblem({ ...base, total_discount_limit: null })).toMatch(
+      /total discount limit/,
+    );
+    expect(couponLimitProblem({ ...base, total_discount_limit: 0 })).toMatch(
+      /total discount limit/,
+    );
+    expect(
+      couponLimitProblem({ discount_category: 'Percentage', total_discount_limit: '' }),
+    ).toMatch(/total discount limit/);
+  });
+  it('a Private Amount coupon cannot have a limit below its value', () => {
+    expect(couponLimitProblem({ ...base, total_discount_limit: 24.99 })).toMatch(/cannot be less/);
+    expect(couponLimitProblem({ ...base, total_discount_limit: 25 })).toBeNull();
+    expect(couponLimitProblem({ ...base, total_discount_limit: '50.00000' })).toBeNull();
+  });
+  it('a Percentage coupon is taken as typed', () => {
+    expect(
+      couponLimitProblem({
+        coupon_type: 'Private',
+        discount_category: 'Percentage',
+        coupon_value: null,
+        total_discount_limit: 1,
+      }),
+    ).toBeNull();
+  });
+  it('the request schema enforces it', () => {
+    const r = CouponRequestDraftChecked.safeParse({ ...draft, total_discount_limit: null });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some((i) => i.path[0] === 'total_discount_limit')).toBe(true);
   });
 });

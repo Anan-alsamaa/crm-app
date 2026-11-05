@@ -17,6 +17,7 @@ import {
   toast,
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
+import { GlobalSettingsCard } from './GlobalSettings.js';
 import { BranchPicker } from './BranchPicker.js';
 import {
   PRIVILEGE_PORTAL,
@@ -693,6 +694,8 @@ export function RolesPage() {
                 </ul>
               </div>
             )}
+            {/* Switches for EVERY user at once (owner, 2026-11-05). */}
+            <GlobalSettingsCard />
           </div>
 
           {/* ── the open role ── */}

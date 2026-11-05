@@ -13,7 +13,7 @@ import {
 import { directus } from '../../lib/directus.js';
 import { vendorField } from '../../lib/record-vendor.js';
 import { jobProducer } from '../../lib/job-producer.js';
-import { COUPONS_UNDER_MAINTENANCE, CouponsUnderMaintenanceError } from './maintenance.js';
+import { assertCouponsOpen } from './maintenance.js';
 import {
   COUPON_LOG_TAG,
   CouponRequestError,
@@ -49,6 +49,8 @@ export interface CouponRequestRow {
   valid_to: string | null;
   max_discount: number | null;
   usage_limit: number | null;
+  /** Yiji's total given discount limit (SAR). Null on rows from before 2026-11. */
+  total_discount_limit?: number | string | null;
   /** The specific order item the coupon compensates, when it is about one. */
   item_name: string | null;
   /** Yiji's item id for that line — the key, where the name is the label. */
@@ -118,6 +120,7 @@ export const COUPON_REQUEST_FIELDS = [
   'valid_to',
   'max_discount',
   'usage_limit',
+  'total_discount_limit',
   'item_name',
   'item_sku',
   'no_other_discounts',
@@ -200,6 +203,8 @@ export interface CreateCouponRequestInput extends CouponFields {
   valid_to?: string;
   max_discount?: number;
   usage_limit?: number;
+  /** Yiji's "Total given discount limit" in SAR, typed by the agent (2026-11-04). */
+  total_discount_limit?: number | null;
   /** The specific order item the coupon compensates, when it is about one. */
   item_name?: string | null;
   item_sku?: string | null;
@@ -252,9 +257,10 @@ export interface CreateCouponRequestInput extends CouponFields {
 export function useRequestCouponApproval(opts: Pick<SendOptions, 'delays' | 'sleep'> = {}) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: CreateCouponRequestInput) => {
-      /* Coupons under maintenance (owner, 2026-11-04): the backstop behind every door. */
-      if (COUPONS_UNDER_MAINTENANCE) return Promise.reject(new CouponsUnderMaintenanceError());
+    mutationFn: async (input: CreateCouponRequestInput) => {
+      /* Coupons under maintenance (owner, 2026-11-04): the backstop behind every
+         door, read fresh from the Administrator's switch at send time. */
+      await assertCouponsOpen();
       return sendCouponRequest(input, opts);
     },
     onSuccess: (_d, vars) => {
@@ -404,6 +410,7 @@ export interface PendingCouponPatch {
   coupon_percent?: number | null;
   max_discount?: number | null;
   usage_limit?: number | null;
+  total_discount_limit?: number | null;
   reason?: string | null;
   item_name?: string | null;
   item_sku?: string | null;
@@ -542,7 +549,7 @@ export function useReplaceTicketCoupon() {
       reason: string;
       editorId: string | null;
     }): Promise<{ code: string; state: CouponReplaceState; note: string | null }> => {
-      if (COUPONS_UNDER_MAINTENANCE) throw new CouponsUnderMaintenanceError();
+      await assertCouponsOpen();
       const { replacementId, code } = await startCouponReplacement(
         {
           /* Both homes of a code, like the request form's duplicate check. */

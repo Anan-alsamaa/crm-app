@@ -415,7 +415,7 @@ await check('EMA-23', 'Yiji accepts our coupon endpoint (probe that creates noth
  */
 const PIPE_SINCE = '2026-10-06T10:00:00Z';
 const PIPE_FIELDS =
-  'yiji_coupon_user_id,valid_to,coupon_code,coupon_type,discount_category,coupon_value,coupon_percent,max_discount,usage_limit,reason,customer_phone,contact.phone,order_id,ticket.order_id,yiji_coupon_id,yiji_pushed_at';
+  'yiji_coupon_user_id,valid_to,coupon_code,coupon_type,discount_category,coupon_value,coupon_percent,max_discount,usage_limit,total_discount_limit,reason,customer_phone,contact.phone,order_id,ticket.order_id,yiji_coupon_id,yiji_pushed_at';
 const plusPhone = (row) => {
   const d = String(row.customer_phone || row.contact?.phone || '').replace(/\D/g, '');
   return d ? `+966${d.replace(/^(966|0)/, '')}` : null;
@@ -429,7 +429,12 @@ function compareCoupon(row, c) {
     discount: pct ? 0 : Number(row.coupon_value),
     discountPercentage: pct ? Number(row.coupon_percent) : 0,
     maximumDiscount: Number(row.max_discount),
-    reachLimit: 10000,
+    /* The agent's total discount limit (owner, 2026-11-04); a coupon from
+       before the field existed went out with the fixed 10000. */
+    reachLimit:
+      row.total_discount_limit == null || row.total_discount_limit === ''
+        ? 10000
+        : Number(row.total_discount_limit),
     orderMaximum: 1000000,
     limitForUser: Number(row.usage_limit),
     monthlyReachLimit: Number(row.usage_limit),
@@ -638,14 +643,15 @@ await check(
 
 await check(
   'EMA-23',
-  'recently delivered coupons are redeemable on Yiji (reachLimit >= 1000)',
+  'recently delivered coupons are redeemable on Yiji (reachLimit covers the coupon)',
   async () => {
     if (!yijiToken) return 'skip';
     /* 88 coupons sat at reachLimit 1 — customers were refused "Coupon exceeds
      usage limit" — until the 2026-10-06 repair. Sample the newest 15. */
     const r = await items('coupon_approvals', {
       filter: JSON.stringify({ yiji_coupon_user_id: { _nnull: true } }),
-      fields: 'coupon_code,order_id,ticket.order_id',
+      fields:
+        'coupon_code,order_id,ticket.order_id,coupon_type,discount_category,coupon_value,total_discount_limit',
       sort: '-yiji_pushed_at',
       limit: '15',
     });
@@ -676,7 +682,21 @@ await check(
       // Made by hand on Yiji, not by the CRM: not ours to check (see COUPON-1a).
       if (!/^CRM - /.test(String(c.compensationReason ?? ''))) continue;
       seen += 1;
-      if (!(c.reachLimit >= 1000)) low.push(`${row.coupon_code}=${c.reachLimit}`);
+      /* Since 2026-11-04 the limit is the agent's number: it must be exactly
+         what was typed, and a Private Amount coupon's never below its value
+         (a limit under the value is the "exceeds usage limit" refusal). Older
+         coupons carry the fixed 10000. */
+      const typed =
+        row.total_discount_limit == null || row.total_discount_limit === ''
+          ? null
+          : Number(row.total_discount_limit);
+      const privAmount =
+        /^private$/i.test(String(row.coupon_type ?? '')) &&
+        !/^percent/i.test(String(row.discount_category ?? ''));
+      const floor = privAmount ? Number(row.coupon_value ?? 0) : 0.01;
+      const ok =
+        typed === null ? c.reachLimit >= 1000 : c.reachLimit === typed && c.reachLimit >= floor;
+      if (!ok) low.push(`${row.coupon_code}=${c.reachLimit}`);
     }
     return { ok: low.length === 0, detail: low.length ? low.join(', ') : `${seen} checked` };
   },

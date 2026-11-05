@@ -4,7 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
    tests (coupon-maintenance.test.tsx). */
 vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
   ...(await orig<typeof import('../src/features/coupons/maintenance.js')>()),
-  COUPONS_UNDER_MAINTENANCE: false,
+  useCouponsUnderMaintenance: () => false,
+  useCouponsMaintenanceState: () => ({ paused: false, known: true }),
+  assertCouponsOpen: async () => {},
 }));
 import { renderHook, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -216,6 +218,7 @@ const TERMS = {
   coupon_percent: null,
   max_discount: 40,
   usage_limit: 1,
+  total_discount_limit: 40,
   reason: 'Missing items',
 };
 

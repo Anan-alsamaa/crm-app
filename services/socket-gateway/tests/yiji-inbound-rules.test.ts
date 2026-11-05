@@ -250,7 +250,7 @@ describe('Yiji ticket WITH a coupon: Yiji decides, never a second (rule) coupon'
   it('keeps Yiji’s coupon and adds no rule coupon', async () => {
     store.rules = [rule()];
     const res = await svc.createTicket(
-      body({ coupon: { externalId: 'YC-1', type: 'amount', value: 15 } }),
+      body({ coupon: { externalId: 'YC-1', type: 'amount', value: 15, totalDiscountLimit: 15 } }),
     );
     expect(res.status).toBe(201);
     const coupons = [...store.coupons.values()];
@@ -325,7 +325,12 @@ describe('one rule coupon per ticket', () => {
 
   it('a ticket that already has a coupon (Yiji added one later) gets no rule coupon on replay', async () => {
     await svc.createTicket(body());
-    await svc.addCoupon('YT-1', { externalId: 'YC-7', type: 'amount', value: 20 });
+    await svc.addCoupon('YT-1', {
+      externalId: 'YC-7',
+      type: 'amount',
+      value: 20,
+      totalDiscountLimit: 20,
+    });
     store.rules = [rule()];
     await svc.createTicket(body());
     expect([...store.coupons.values()].map((c) => c.external_id)).toEqual(['YC-7']);
@@ -337,7 +342,12 @@ describe('Yiji adds a coupon to a ticket that already has its rule coupon', () =
   it('is not created; the reply warns and names the existing coupon', async () => {
     store.rules = [rule()];
     await svc.createTicket(body());
-    const res = await svc.addCoupon('YT-1', { externalId: 'YC-8', type: 'amount', value: 20 });
+    const res = await svc.addCoupon('YT-1', {
+      externalId: 'YC-8',
+      type: 'amount',
+      value: 20,
+      totalDiscountLimit: 20,
+    });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       warning: 'rule_coupon_exists',

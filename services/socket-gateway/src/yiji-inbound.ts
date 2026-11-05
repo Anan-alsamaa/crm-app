@@ -170,6 +170,7 @@ export interface NewCouponRow {
   valid_to: string;
   max_discount: number;
   usage_limit: number;
+  total_discount_limit: number | null;
   brand_id: string | null;
   restaurant_id: string | null;
   item_name: string | null;
@@ -373,6 +374,12 @@ export const CouponBody = z.object({
     .enum(['private', 'general'], { errorMap: () => ({ message: 'Use "private" or "general".' }) })
     .nullish(),
   usageLimit: z.number().int('Must be a whole number.').min(1).max(100).nullish(),
+  /**
+   * Yiji's "Total given discount limit", in SAR (owner, 2026-11-04): the most
+   * this coupon may give in total, across every use. Required on every coupon;
+   * for a private amount coupon it cannot be below `value`.
+   */
+  totalDiscountLimit: z.number().nullish(),
   /** True = cannot be combined with other discounts (default false). */
   noOtherDiscounts: z.boolean().nullish(),
 });
@@ -487,6 +494,7 @@ const DRAFT_TO_API: Record<string, string> = {
   coupon_percent: 'coupon.percent',
   max_discount: 'coupon.maxDiscount',
   usage_limit: 'coupon.usageLimit',
+  total_discount_limit: 'coupon.totalDiscountLimit',
   compensation_reason: 'coupon.reason',
   item_name: 'coupon.item.name',
   item_sku: 'coupon.item.sku',
@@ -571,6 +579,7 @@ export function planCoupon(
     coupon_percent: percent,
     max_discount: cap,
     usage_limit: c.usageLimit ?? 1,
+    total_discount_limit: c.totalDiscountLimit ?? null,
     compensation_reason: (c.reason ?? ctx.description ?? '').slice(0, 2000),
     brand_id: ctx.brandId,
     restaurant_id: ctx.restaurantId,
@@ -856,6 +865,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       valid_to: d.valid_to,
       max_discount: d.max_discount,
       usage_limit: d.usage_limit,
+      total_discount_limit: d.total_discount_limit ?? null,
       brand_id: d.brand_id ?? null,
       restaurant_id: d.restaurant_id ?? null,
       item_name: d.item_name ?? null,
@@ -1001,8 +1011,15 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         restaurantId: inputs.restaurantId,
       });
       const checked = CouponRequestDraftChecked.safeParse(draft);
-      if (!checked.success) {
-        const why = checked.error.issues[0]?.message ?? 'invalid terms';
+      /* A RULE coupon has nobody to type the total discount limit, so it is
+         stored WITHOUT one and the supervisor types it on the approval card
+         (owner, 2026-11-04); nothing is sent to Yiji until they do. Every other
+         rule still applies. */
+      const ruleIssues = checked.success
+        ? []
+        : checked.error.issues.filter((i) => i.path[0] !== 'total_discount_limit');
+      if (ruleIssues.length > 0) {
+        const why = ruleIssues[0]?.message ?? 'invalid terms';
         logger.warn(
           { ticketId: ticket.id, rule: rule.id, why },
           'yiji inbound: compensation rule is not a valid coupon - no rule coupon',
@@ -1016,7 +1033,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       }
       const out = await storeCoupon(vendorId, ticket, {
         externalId: null,
-        draft: checked.data,
+        draft: checked.success ? checked.data : draft,
         rule: { id: rule.id, name: rule.name },
       });
       if (out.created) {

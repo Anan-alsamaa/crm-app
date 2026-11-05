@@ -33,6 +33,8 @@ export function couponTermsFromDraft(d: CouponRequestDraft) {
     valid_to: d.valid_to,
     max_discount: d.max_discount,
     usage_limit: d.usage_limit,
+    /* Yiji's total given discount limit, typed by the agent (owner, 2026-11-04). */
+    total_discount_limit: d.total_discount_limit ?? null,
     brand_id: d.brand_id ?? null,
     restaurant_id: d.restaurant_id ?? null,
     item_name: d.item_name ?? null,

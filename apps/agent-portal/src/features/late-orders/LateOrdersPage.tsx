@@ -62,7 +62,7 @@ import { useVendors } from '../tickets/api.js';
 import { useVendorDirectory } from '../../lib/vendors.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { CouponMaintenanceIcon, CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
-import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
+import { useCouponsUnderMaintenance } from '../coupons/maintenance.js';
 import { LateOrderDetail } from './OrderDetail.js';
 import { QuickReplies } from '../conversation/QuickReplies.js';
 import { LateOrderColumnsPicker } from './LateOrderColumnsPicker.js';
@@ -370,6 +370,8 @@ export function LateOrdersPage() {
   // Assigning a coupon is `request_coupons` (owner, 2026-10-06); the page itself
   // is `work_late_orders`, so commenting needs nothing more.
   const canRequestCoupon = can('request_coupons');
+  /* The Administrator's coupons-under-maintenance switch. */
+  const couponsPaused = useCouponsUnderMaintenance();
   /*
    * THE FILTERS (owner, 2026-09-21): order id, then a date range, then brand
    * or branch.
@@ -1803,7 +1805,7 @@ export function LateOrdersPage() {
               <Pill tone="success" size="sm">
                 {t('lateOrders.alreadyHandled', { defaultValue: 'Handled' })}
               </Pill>
-            ) : !canRequestCoupon ? null : COUPONS_UNDER_MAINTENANCE ? (
+            ) : !canRequestCoupon ? null : couponsPaused ? (
               /* Coupons under maintenance (owner, 2026-11-04). */
               <CouponMaintenancePill />
             ) : (
@@ -2067,7 +2069,7 @@ export function LateOrdersPage() {
           {state === 'handled' || !canRequestCoupon ? (
             /* Holds the slot, so the buttons line up down the board. */
             <span aria-hidden className="h-8 w-8" />
-          ) : COUPONS_UNDER_MAINTENANCE ? (
+          ) : couponsPaused ? (
             /* Coupons under maintenance (owner, 2026-11-04). */
             <CouponMaintenanceIcon />
           ) : (

@@ -268,6 +268,7 @@ const amountCoupon = (over: Record<string, unknown> = {}) => ({
   externalId: 'YC-9001',
   type: 'amount',
   value: 25,
+  totalDiscountLimit: 25,
   validFrom: '2026-10-27',
   validTo: '2026-11-27',
   reason: 'Missing item',
@@ -403,6 +404,7 @@ describe('POST /webhooks/yiji/tickets - the ticket never depends on its coupon',
       order_id: '1280043',
       restaurant_id: '501',
       usage_limit: 1,
+      total_discount_limit: 25,
       delivery_excluded: false,
     });
     expect(store.tickets.get(body.ticketId)!.compensation).toBe('Compensated');
@@ -533,6 +535,7 @@ describe('POST /webhooks/yiji/tickets/:externalId/coupons', () => {
         type: 'percentage',
         percent: 20,
         maxDiscount: 40,
+        totalDiscountLimit: 40,
         deliveryTypes: ['delivery', 'Pickup'],
         audience: 'general',
       }),
@@ -612,6 +615,36 @@ describe('validation: 400 with field messages, never 500', () => {
     );
     expect(noCap.statusCode).toBe(201);
     expect(noCap.json().coupon.error.fields['coupon.maxDiscount']).toContain('maximum discount');
+
+    /* The total discount limit is required, and a private amount coupon's
+       cannot be below its value (owner, 2026-11-04). */
+    const noLimit = await app.inject(
+      signed(
+        'POST',
+        '/webhooks/yiji/tickets',
+        ticketBody({
+          externalId: 'YT-NOLIMIT',
+          coupon: amountCoupon({ externalId: 'C2', totalDiscountLimit: undefined }),
+        }),
+      ),
+    );
+    expect(noLimit.statusCode).toBe(201);
+    expect(noLimit.json().coupon.error.fields['coupon.totalDiscountLimit']).toMatch(
+      /total discount limit/,
+    );
+    const lowLimit = await app.inject(
+      signed(
+        'POST',
+        '/webhooks/yiji/tickets',
+        ticketBody({
+          externalId: 'YT-LOWLIMIT',
+          coupon: amountCoupon({ externalId: 'C3', totalDiscountLimit: 10 }),
+        }),
+      ),
+    );
+    expect(lowLimit.json().coupon.error.fields['coupon.totalDiscountLimit']).toMatch(
+      /cannot be less than the coupon value/,
+    );
 
     const backwards = await app.inject(
       signed(
@@ -709,7 +742,7 @@ describe('GET /webhooks/yiji/tickets/:externalId', () => {
 });
 
 describe('CRM-side compensation policy hook', () => {
-  const big = () => ticketBody({ coupon: amountCoupon({ value: 500 }) });
+  const big = () => ticketBody({ coupon: amountCoupon({ value: 500, totalDiscountLimit: 500 }) });
 
   it('OFF by default: a coupon over the limits is still accepted (pending a supervisor)', async () => {
     const res = await app.inject(signed('POST', '/webhooks/yiji/tickets', big()));

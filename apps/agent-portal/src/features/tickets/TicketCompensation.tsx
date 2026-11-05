@@ -5,7 +5,7 @@ import { couponCountsAsCompensation } from '@yiji/shared-types';
 import type { CouponRequestRow } from '../coupons/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
-import { COUPONS_UNDER_MAINTENANCE } from '../coupons/maintenance.js';
+import { useCouponsUnderMaintenance } from '../coupons/maintenance.js';
 import type { TicketRow } from './api.js';
 import { customerPhone } from './api.js';
 import type { StoreRow } from './useStoreMatch.js';
@@ -104,6 +104,7 @@ export function TicketCompensationField({
   onBlocked: (blocked: boolean) => void;
 }): JSX.Element {
   const { t } = useTranslation();
+  const couponsPaused = useCouponsUnderMaintenance();
   const removing = wantsCouponRemoval(state, value);
   const allUsed = state.active.length > 0 && state.removable.length === 0 && state.used.length > 0;
   const pick = (next: string) => {
@@ -154,7 +155,7 @@ export function TicketCompensationField({
               );
             })}
           </div>
-          {COUPONS_UNDER_MAINTENANCE ? (
+          {couponsPaused ? (
             /* Coupons under maintenance (owner, 2026-11-04). */
             <CouponMaintenancePill />
           ) : (

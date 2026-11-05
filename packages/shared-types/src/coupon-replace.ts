@@ -28,7 +28,12 @@
  *
  * Pure functions only: they never talk to Directus or Yiji.
  */
-import { couponDecision, couponTermsProblems, type CouponTerms } from './coupon-request.js';
+import {
+  couponDecision,
+  couponLimitProblem,
+  couponTermsProblems,
+  type CouponTerms,
+} from './coupon-request.js';
 
 /**
  * The new columns on `coupon_approvals`. They need a manual `apply:fields`
@@ -123,6 +128,8 @@ export interface CouponReplacementTerms extends CouponTerms {
   valid_from: string;
   valid_to: string;
   usage_limit: number;
+  /** Yiji's total given discount limit (SAR) - required, see couponLimitProblem. */
+  total_discount_limit?: number | null;
   item_name?: string | null;
   item_sku?: string | null;
   no_other_discounts?: boolean | null;
@@ -159,7 +166,7 @@ export function replacementTermsProblem(
   if (!Number.isInteger(terms.usage_limit) || terms.usage_limit < 1) {
     return 'It has to be usable at least once.';
   }
-  return couponTermsProblems(terms)[0]?.message ?? null;
+  return couponTermsProblems(terms)[0]?.message ?? couponLimitProblem(terms);
 }
 
 /** The old row, as much of it as the replacement copies. */
@@ -233,6 +240,7 @@ export function buildReplacementCoupon(
     // For an amount the ceiling IS the amount (OPS-SGVAVXW6).
     max_discount: pct ? (terms.max_discount ?? null) : (terms.coupon_value ?? null),
     usage_limit: terms.usage_limit,
+    total_discount_limit: terms.total_discount_limit ?? null,
     item_name: terms.item_name?.trim() || null,
     item_sku: terms.item_sku?.trim() || null,
     no_other_discounts: terms.no_other_discounts === true,
