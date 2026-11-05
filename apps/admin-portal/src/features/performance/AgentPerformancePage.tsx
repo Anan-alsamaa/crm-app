@@ -36,6 +36,7 @@ import {
   timeToSolveSec,
   agentInitiatedSummary,
   awaitingCustomer,
+  sessionRating,
 } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { useSlaHours } from '../../lib/sla-hours.js';
@@ -335,7 +336,7 @@ export function AgentPerformancePage() {
   const csatByAgent = useMemo(() => {
     const acc = new Map<string, { sum: number; n: number }>();
     for (const c of chats) {
-      const score = csat.data?.get(c.conversationId);
+      const score = sessionRating(c, csat.data?.get(c.conversationId));
       if (typeof score !== 'number') continue;
       const key = c.agentId ?? '';
       const cur = acc.get(key) ?? { sum: 0, n: 0 };
@@ -970,7 +971,7 @@ export function AgentPerformancePage() {
                               {breakdown.length === 0 && <NoMatchRow colSpan={8} search={search} />}
                               {breakdown.map(({ chat, first, solve }) => (
                                 <tr
-                                  key={chat.conversationId}
+                                  key={chat.sessionKey}
                                   className="transition-colors duration-fast hover:bg-primary/[0.06]"
                                 >
                                   <td className="max-w-[20rem] px-5 py-3">
@@ -1068,7 +1069,10 @@ export function AgentPerformancePage() {
                                   2026-10-13). */}
                                   <td className="px-5 py-3 text-end tabular-nums text-foreground">
                                     {(() => {
-                                      const score = csat.data?.get(chat.conversationId);
+                                      const score = sessionRating(
+                                        chat,
+                                        csat.data?.get(chat.conversationId),
+                                      );
                                       return typeof score === 'number' ? `${score}/5` : '';
                                     })()}
                                   </td>

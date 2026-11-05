@@ -1063,6 +1063,22 @@ export class GatewayDirectus {
       }
     }
     await this.client.request(updateItem('conversations', input.conversationId, patch as never));
+    /*
+     * THE SESSION MARKER (owner, 2026-11-05): the message that reopened a
+     * finished chat is stamped, so the reports can split the thread into its
+     * sessions without inferring it from the automatic welcome (which is
+     * skipped when no template is set or the send fails). Best-effort: a
+     * failed stamp must never fail the customer's message.
+     */
+    if (patch.status === 'open') {
+      try {
+        await this.client.request(
+          updateItem('messages', created.id, { starts_session: true } as never),
+        );
+      } catch {
+        /* the welcome still marks the session for the reports */
+      }
+    }
     return { id: created.id, createdAt: now, ...(sessionStarted ? { sessionStarted: true } : {}) };
   }
 

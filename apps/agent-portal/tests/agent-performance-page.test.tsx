@@ -39,7 +39,9 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
 
 const perf = vi.hoisted(() => ({
   useChatTimings: vi.fn(),
-  useCsatByConversation: vi.fn(() => ({ data: new Map<string, number>() })),
+  useCsatByConversation: vi.fn(() => ({
+    data: new Map<string, Array<{ score: number; at: string | null }>>(),
+  })),
   // The Tickets and Coupons tabs (owner, 2026-10-07) — not opened here.
   useTicketPerformance: vi.fn(() => ({ data: [], isLoading: false })),
   useCouponPerformance: vi.fn(() => ({ data: [], isLoading: false })),
@@ -225,7 +227,7 @@ describe('AgentPerformancePage', () => {
   /* Owner, 2026-10-11: a rating column, empty when the customer did not rate. */
   it('shows each chat’s own customer rating, and nothing when unrated', () => {
     vi.mocked(perf.useCsatByConversation).mockReturnValue({
-      data: new Map([['slow', 4]]),
+      data: new Map([['slow', [{ score: 4, at: null }]]]),
     } as never);
     renderPage();
     const breakdown = screen.getByRole('table', { name: 'Chat by chat' });

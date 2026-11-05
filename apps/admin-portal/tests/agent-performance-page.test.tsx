@@ -34,14 +34,20 @@ vi.mock('@directus/sdk', () => ({
 
 import { AgentPerformancePage } from '../src/features/performance/AgentPerformancePage.js';
 
-const day = { date_created: '2026-08-13T09:59:00.000Z' };
+/* Dated a few hours ago (2026-11-05): the page cuts chat sessions to its
+   dates on the client, and it opens on yesterday's business day through today,
+   so sample chats must fall inside that range as real ones would. The minute
+   offsets are the old fixture's (10:00 = t(0)), so every duration is the same. */
+const T0 = Date.now() - 3 * 3_600_000;
+const t = (min: number) => new Date(T0 + min * 60_000).toISOString();
+const day = { date_created: t(-1) };
 const conversations = [
   // Answered in 1 minute.
   {
     id: 'fast',
     status: 'solved',
     assigned_agent: 'a1',
-    solved_at: '2026-08-13T10:30:00.000Z',
+    solved_at: t(30),
     ...day,
   },
   // Answered in 20 minutes.
@@ -49,7 +55,7 @@ const conversations = [
     id: 'slow',
     status: 'solved',
     assigned_agent: 'a1',
-    solved_at: '2026-08-13T10:40:00.000Z',
+    solved_at: t(40),
     ...day,
   },
   // Nobody answered, and nobody picked it up either.
@@ -57,11 +63,11 @@ const conversations = [
 ];
 
 const messages = [
-  { conversation: 'fast', sender_type: 'customer', date_created: '2026-08-13T10:00:00.000Z' },
-  { conversation: 'fast', sender_type: 'agent', date_created: '2026-08-13T10:01:00.000Z' },
-  { conversation: 'slow', sender_type: 'customer', date_created: '2026-08-13T10:00:00.000Z' },
-  { conversation: 'slow', sender_type: 'agent', date_created: '2026-08-13T10:20:00.000Z' },
-  { conversation: 'never', sender_type: 'customer', date_created: '2026-08-13T10:00:00.000Z' },
+  { conversation: 'fast', sender_type: 'customer', date_created: t(0) },
+  { conversation: 'fast', sender_type: 'agent', date_created: t(1) },
+  { conversation: 'slow', sender_type: 'customer', date_created: t(0) },
+  { conversation: 'slow', sender_type: 'agent', date_created: t(20) },
+  { conversation: 'never', sender_type: 'customer', date_created: t(0) },
 ];
 
 /* Under a router since the tab lives in the URL (`?tab=tickets`, owner,

@@ -156,13 +156,15 @@ export type PerformanceDataset =
 export async function performanceRead<T>(
   dataset: PerformanceDataset,
   filters: { from?: string; to?: string; agentId?: string; vendor?: string } = {},
-  opts: { ids?: string[]; field?: string } = {},
+  opts: { ids?: string[]; field?: string; sessions?: boolean } = {},
 ): Promise<T[]> {
   const res = await post<EnqueueResult & { data?: T[] }>('/jobs/performance', {
     dataset,
     filters,
     ...(opts.ids ? { ids: opts.ids } : {}),
     ...(opts.field ? { field: opts.field } : {}),
+    /* Per-session reading (2026-11-05); an older gateway ignores it. */
+    ...(opts.sessions ? { sessions: true } : {}),
   });
   return res.data ?? [];
 }

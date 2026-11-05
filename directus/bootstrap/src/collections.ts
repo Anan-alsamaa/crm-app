@@ -516,6 +516,11 @@ export const collections: CollectionSpec[] = [
        * gateway decides.
        */
       {
+        field: 'starts_session',
+        type: 'boolean',
+        note: 'True on the customer message that reopened a finished chat - the start of a new session. Set by the socket gateway (2026-11-05) so reports measure first response per session. Null on older messages (the automatic welcome marks those).',
+      },
+      {
         field: 'source',
         type: 'string',
         index: true,

@@ -101,6 +101,16 @@ export {
   type ConversationTimestamps,
   type TimingMessage,
 } from './chat-timings.js';
+export {
+  chatSessions,
+  sessionInRange,
+  sessionTimingRows,
+  sessionRating,
+  type ChatSession,
+  type SessionMessage,
+  type SessionConversation,
+  type SessionTimingRow,
+} from './chat-sessions.js';
 
 export { chatHandoffs, missedOffers, type ChatHandoff, type RoutingEvent } from './handoffs.js';
 
