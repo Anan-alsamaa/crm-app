@@ -1865,6 +1865,9 @@
     }
   },
   "globalSettings": {
+    "eyebrow": "Global setting · every user",
+    "on": "On",
+    "off": "Off",
     "title": "Global settings",
     "subtitle": "These apply to every user at once, whatever their role.",
     "couponsMaintenance": "Coupons under maintenance",

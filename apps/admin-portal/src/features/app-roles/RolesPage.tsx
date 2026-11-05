@@ -598,6 +598,9 @@ export function RolesPage() {
           defaultValue:
             'Named sets of ticked privileges, optionally fenced to specific brands. Pick a role to see or change what it can do.',
         })}
+        /* Switches for EVERY user at once sit in the top corner, above the
+           roles they override (owner, 2026-11-05). */
+        actions={<GlobalSettingsCard />}
       />
 
       {/* A SETTINGS PAGE (owner, 2026-10-25): the roles on the start side, the
@@ -705,8 +708,6 @@ export function RolesPage() {
                 </ul>
               </div>
             )}
-            {/* Switches for EVERY user at once (owner, 2026-11-05). */}
-            <GlobalSettingsCard />
           </div>
 
           {/* ── the open role ── */}
