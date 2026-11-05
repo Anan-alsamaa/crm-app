@@ -44,6 +44,7 @@ import {
   awaitingCustomer,
   defaultPerformanceRange,
   matchesSearch,
+  sessionRating,
 } from '@yiji/reports';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useSlaHours } from '../../lib/sla-hours.js';
@@ -383,7 +384,8 @@ export function AgentPerformancePage() {
   );
 
   /** Per-agent totals — the same shared rollup the admin console reports. */
-  const chatIds = useMemo(() => chats.map((c) => c.conversationId), [chats]);
+  /* Unique: a returning customer's thread is several session rows. */
+  const chatIds = useMemo(() => [...new Set(chats.map((c) => c.conversationId))], [chats]);
   const csat = useCsatByConversation(scoped, chatIds);
   const totals = useMemo(() => agentPerformance(chats, undefined, agentNames), [chats, agentNames]);
   /* CSAT joined onto the same chats the rest of the page measures, so the
@@ -392,7 +394,10 @@ export function AgentPerformancePage() {
   const csatByAgent = useMemo(() => {
     const acc = new Map<string, { sum: number; n: number }>();
     for (const c of chats) {
-      const score = csat.data?.get(c.conversationId);
+      const score = sessionRating(
+        { startedAt: c.startedAt, nextSessionAt: c.nextSessionAt ?? null },
+        csat.data?.get(c.conversationId),
+      );
       if (typeof score !== 'number') continue;
       const key = c.agentId ?? '';
       const cur = acc.get(key) ?? { sum: 0, n: 0 };
@@ -1027,7 +1032,7 @@ export function AgentPerformancePage() {
                           )}
                           {breakdownPage.map(({ chat, first, solve }) => (
                             <tr
-                              key={chat.conversationId}
+                              key={chat.sessionKey ?? chat.conversationId}
                               onClick={() => void openChat(chat.conversationId)}
                               className={PERF_BODY_ROW}
                             >
@@ -1132,7 +1137,13 @@ export function AgentPerformancePage() {
                                   did not rate (owner, 2026-10-11). */}
                               <td className={cn(PERF_TD, 'text-end tabular-nums text-foreground')}>
                                 {(() => {
-                                  const score = csat.data?.get(chat.conversationId);
+                                  const score = sessionRating(
+                                    {
+                                      startedAt: chat.startedAt,
+                                      nextSessionAt: chat.nextSessionAt ?? null,
+                                    },
+                                    csat.data?.get(chat.conversationId),
+                                  );
                                   return typeof score === 'number' ? `${score}/5` : '';
                                 })()}
                               </td>

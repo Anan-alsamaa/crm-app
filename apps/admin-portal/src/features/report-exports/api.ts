@@ -20,7 +20,8 @@ import {
   agentPerformance,
   chatHandoffs,
   agentInitiatedSummary,
-  conversationTimestamps,
+  chatSessions,
+  sessionTimingRows,
   firstResponseSec,
   median,
   readChunked,
@@ -979,6 +980,39 @@ async function loadAgentReport(
        * chunks four at a time. A month of chats is a handful of chunks; in
        * series each one was a full round trip of waiting (2026-10-05).
        */
+      /*
+       * THREADS CREATED BEFORE THE RANGE BUT ACTIVE IN IT (owner, 2026-11-05):
+       * a returning customer writes into their old thread, so today's session
+       * can live in a conversation created weeks ago. Read only for the agent
+       * timings - the conversation status report still counts chats by the
+       * day they were created.
+       */
+      const sinceZ = /[zZ]|[+-]\d\d:\d\d$/.test(since) ? since : `${since}Z`;
+      const untilZ = until ? (/[zZ]$/.test(until) ? until : `${until}Z`) : null;
+      const reopened: RawConversation[] =
+        needs.chats && needs.agentKpi
+          ? ((await directus.request(
+              readItems('conversations', {
+                filter: byVendor({
+                  _and: [{ date_created: { _lt: since } }, { last_message_at: { _gte: since } }],
+                }) as never,
+                fields: [
+                  'id',
+                  'status',
+                  'priority',
+                  'assigned_agent',
+                  'date_created',
+                  'solved_at',
+                  'last_message_at',
+                  { contact: ['id', 'name', 'phone', 'email'] },
+                  'last_order_id',
+                  'initiated_by',
+                ],
+                limit: -1,
+              }),
+            )) as RawConversation[])
+          : [];
+      const timedConvs = [...conversations, ...reopened];
       const [extraConvs, chatMsgs] = await Promise.all([
         missingConvIds.length > 0
           ? readByIdsChunked<{ id: string; assigned_agent: string | null }>(
@@ -1001,9 +1035,11 @@ async function loadAgentReport(
           sender_type: string;
           date_created: string | null;
           sender_user: string | null;
+          source: string | null;
+          starts_session: boolean | null;
         }>(
           'messages',
-          conversations.map((c) => c.id),
+          timedConvs.map((c) => c.id),
           (ids) => ({
             limit: -1,
             filter: {
@@ -1013,7 +1049,16 @@ async function loadAgentReport(
             /* `sender_user` so a reply is credited to the agent who SENT it. The
                ladder moves chats, so `assigned_agent` is who holds it now, which is
                frequently not who answered. */
-            fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
+            /* `source` + `starts_session`: where each SESSION of a returning
+               customer's thread starts (2026-11-05). */
+            fields: [
+              'conversation',
+              'sender_type',
+              'date_created',
+              'sender_user',
+              'source',
+              'starts_session',
+            ],
             sort: ['date_created'],
           }),
           4,
@@ -1257,23 +1302,31 @@ async function loadAgentReport(
       }
       const handoffs = chatHandoffs(routingEvents);
 
-      const chatTimes = conversationTimestamps(chatMsgs);
-      const timings = conversations.map((c) => {
-        const agentId = realAgentId(c.assigned_agent);
+      /* ONE ROW PER SESSION (owner, 2026-11-05) - the same shared rows as the
+         performance pages, so the export and the screen agree. */
+      const chatSessionMap = chatSessions(chatMsgs);
+      const timings = sessionTimingRows(
+        timedConvs,
+        chatMsgs,
+        { from: sinceZ, to: untilZ },
+        (st) => normaliseConversationStatus(st) === 'solved',
+      ).map((r) => {
+        const agentId = realAgentId(r.agentId);
+        const handoff = r.isLatestSession ? handoffs.get(r.conversationId) : undefined;
         return {
-          conversationId: c.id,
+          conversationId: r.conversationId,
           agentId,
           agentName: agentOf(agentId),
-          firstCustomerAt: chatTimes.get(c.id)?.firstCustomerAt ?? null,
-          firstAgentAt: chatTimes.get(c.id)?.firstAgentAt ?? null,
-          firstAgentBy: realAgentId(chatTimes.get(c.id)?.firstAgentBy ?? null),
-          solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
-          passedOn: handoffs.get(c.id)?.passedOn ?? false,
-          takenBy: handoffs.get(c.id)?.takenBy ?? null,
+          firstCustomerAt: r.firstCustomerAt,
+          firstAgentAt: r.firstAgentAt,
+          firstAgentBy: realAgentId(r.firstAgentBy),
+          solvedAt: r.solvedAt,
+          passedOn: handoff?.passedOn ?? false,
+          takenBy: handoff?.takenBy ?? null,
           // Agent-started chats: measured from the customer's reply, and one
           // never answered is not "not replied" (owner, 2026-10-07).
-          initiatedBy: c.initiated_by === 'agent' ? ('agent' as const) : ('customer' as const),
-          firstOutreachAt: chatTimes.get(c.id)?.firstAgentAnyAt ?? null,
+          initiatedBy: r.initiatedBy,
+          firstOutreachAt: r.firstOutreachAt,
           // Every chat duration below counts the chat policy's working hours.
           businessHours: slaHours.chat,
         };
@@ -1418,7 +1471,9 @@ async function loadAgentReport(
           d.total += 1;
           d.byStatus[c.status] = (d.byStatus[c.status] ?? 0) + 1;
         }
-        const times = chatTimes.get(c.id);
+        /* The NEWEST session decides (2026-11-05): a returning customer's
+           unanswered message is waiting even when an old session was answered. */
+        const times = chatSessionMap.get(c.id)?.at(-1);
         // Solved chats are not waiting on anybody, however the messages fell.
         const awaitingReply =
           c.status !== 'solved' && !!times?.firstCustomerAt && !times?.firstAgentAt;

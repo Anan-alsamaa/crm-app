@@ -40,13 +40,19 @@ import { AgentPerformancePage } from '../src/features/performance/AgentPerforman
 
 type Req = { kind: string; collection?: string; query?: Record<string, unknown> };
 
-const day = { date_created: '2026-08-13T09:59:00.000Z' };
+/* Dated a few hours ago (2026-11-05): the page cuts chat sessions to its
+   dates on the client, and it opens on yesterday's business day through today,
+   so sample chats must fall inside that range as real ones would. The minute
+   offsets are the old fixture's (10:00 = t(0)), so every duration is the same. */
+const T0 = Date.now() - 3 * 3_600_000;
+const t = (min: number) => new Date(T0 + min * 60_000).toISOString();
+const day = { date_created: t(-1) };
 const conversations = [
   {
     id: 'fast',
     status: 'solved',
     assigned_agent: 'a1',
-    solved_at: '2026-08-13T10:30:00.000Z',
+    solved_at: t(30),
     last_order_id: 'ORD-777',
     contact: { id: 'c1', name: null, phone: '0501234567' },
     ...day,
@@ -55,7 +61,7 @@ const conversations = [
     id: 'slow',
     status: 'solved',
     assigned_agent: 'a1',
-    solved_at: '2026-08-13T10:40:00.000Z',
+    solved_at: t(40),
     last_order_id: 'ORD-888',
     contact: null,
     ...day,
@@ -63,10 +69,10 @@ const conversations = [
   { id: 'never', status: 'open', assigned_agent: null, solved_at: null, ...day },
 ];
 const messages = [
-  { conversation: 'fast', sender_type: 'customer', date_created: '2026-08-13T10:00:00.000Z' },
-  { conversation: 'fast', sender_type: 'agent', date_created: '2026-08-13T10:01:00.000Z' },
-  { conversation: 'slow', sender_type: 'customer', date_created: '2026-08-13T10:00:00.000Z' },
-  { conversation: 'slow', sender_type: 'agent', date_created: '2026-08-13T10:20:00.000Z' },
+  { conversation: 'fast', sender_type: 'customer', date_created: t(0) },
+  { conversation: 'fast', sender_type: 'agent', date_created: t(1) },
+  { conversation: 'slow', sender_type: 'customer', date_created: t(0) },
+  { conversation: 'slow', sender_type: 'agent', date_created: t(20) },
 ];
 
 const tickets = [
@@ -78,8 +84,8 @@ const tickets = [
     status: 'solved',
     assigned_agent: 'a1',
     user_created: 'a1',
-    date_created: '2026-08-13T10:00:00.000Z',
-    resolved_at: '2026-08-13T11:00:00.000Z',
+    date_created: t(0),
+    resolved_at: t(60),
     closed_at: null,
     customer_phone: null,
     contact: { id: 'c1', name: 'Huda', phone: '0501234567' },
@@ -92,7 +98,7 @@ const tickets = [
     status: 'open',
     assigned_agent: 'a1',
     user_created: 'a1',
-    date_created: '2026-08-13T12:00:00.000Z',
+    date_created: t(120),
     resolved_at: null,
     closed_at: null,
     customer_phone: '+966559876543',
@@ -108,7 +114,7 @@ const coupons = [
     coupon_percent: null,
     discount_category: 'Amount',
     status: 'approved',
-    date_created: '2026-08-13T10:30:00.000Z',
+    date_created: t(30),
     order_id: 'ORD-1001',
     customer_phone: '0501234567',
     ticket: { id: 4417, subject: 'Late delivery', order_id: 'ORD-1001', complaint_type: null },
@@ -122,7 +128,7 @@ const coupons = [
     coupon_percent: null,
     discount_category: 'Amount',
     status: 'pending',
-    date_created: '2026-08-13T12:30:00.000Z',
+    date_created: t(150),
     order_id: null,
     customer_phone: '0559876543',
     ticket: null,

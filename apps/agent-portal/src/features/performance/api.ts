@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { normaliseConversationStatus } from '@yiji/shared-types';
-import { chatHandoffs, conversationTimestamps, type ChatTiming } from '@yiji/reports';
+import { chatHandoffs, sessionTimingRows, type ChatTiming } from '@yiji/reports';
 import { performanceRead } from '../../lib/job-producer.js';
 
 /**
@@ -38,6 +38,13 @@ export interface ChatTimingRow extends ChatTiming {
   customerPhone?: string | null;
   /** The newest ticket raised from this chat, searchable by id (owner, 2026-10-07). */
   ticketId?: string | null;
+  /**
+   * ONE ROW PER SESSION (owner, 2026-11-05): a returning customer's thread is
+   * several rows, one per visit. `sessionKey` is unique per row; the rating of
+   * a session is the one given before `nextSessionAt`.
+   */
+  sessionKey?: string;
+  nextSessionAt?: string | null;
 }
 
 export interface PerformanceFilters {
@@ -53,6 +60,18 @@ export interface PerformanceFilters {
    * own `vendor` column.
    */
   vendor?: string;
+}
+
+/**
+ * The report's dates as the gateway reads them (performance-report.ts): from
+ * the start of `from`, to the last millisecond of `to`. Session rows are cut
+ * to the same instants, so a session is in range exactly when a chat was.
+ */
+function rangeOf(f: PerformanceFilters): { from: string | null; to: string | null } {
+  return {
+    from: f.from ? f.from.slice(0, 10) : null,
+    to: f.to ? `${f.to.slice(0, 10)}T23:59:59.999Z` : null,
+  };
 }
 
 interface ConversationRow {
@@ -74,6 +93,10 @@ interface MessageRow {
   /* Who sent it, so a reply is credited to the agent who made it rather than to
      whoever holds the chat now — the ladder moves chats. */
   sender_user: string | null;
+  /* Where a SESSION starts (2026-11-05): the automatic welcome, and the
+     gateway's marker on the message that reopened the chat. */
+  source?: string | null;
+  starts_session?: boolean | null;
 }
 
 /**
@@ -93,7 +116,13 @@ export function useChatTimings(filters: PerformanceFilters) {
   return useQuery({
     queryKey: ['chat-timings', filters],
     queryFn: async (): Promise<ChatTimingRow[]> => {
-      const conversations = await performanceRead<ConversationRow>('conversations', filters);
+      /* PER SESSION (owner, 2026-11-05): chats ACTIVE in the dates, every
+         agent's - a session belongs to whoever answered it, so the agent
+         filter is applied to the session rows below, not to the chats. */
+      const { agentId: agentFilter, ...readFilters } = filters;
+      const conversations = await performanceRead<ConversationRow>('conversations', readFilters, {
+        sessions: true,
+      });
 
       if (conversations.length === 0) return [];
 
@@ -125,17 +154,23 @@ export function useChatTimings(filters: PerformanceFilters) {
         {},
         {
           ids: conversations.map((c) => c.id),
+          sessions: true,
         },
       );
 
       /**
-       * Shared with the admin console — see conversationTimestamps in
-       * @yiji/reports. It also enforces the rule this code used to miss: the
-       * first response is the first agent message AT OR AFTER the customer's,
-       * so an agent who greeted before the customer wrote is not reported as
-       * having never replied.
+       * EACH SESSION ITS OWN ROW (owner, 2026-11-05) - see sessionTimingRows in
+       * @yiji/reports, shared with the admin console. A returning customer's
+       * thread is split where each visit started, and each visit's first
+       * response is measured on its own and credited to whoever answered it.
        */
-      const times = conversationTimestamps(messages);
+      const range = rangeOf(filters);
+      const sessions = sessionTimingRows(
+        conversations,
+        messages,
+        range,
+        (st) => normaliseConversationStatus(st) === 'solved',
+      ).filter((r) => !agentFilter || r.agentId === agentFilter || r.firstAgentBy === agentFilter);
 
       /**
        * Which of these chats the auto-assignment ladder had to pass on.
@@ -161,34 +196,38 @@ export function useChatTimings(filters: PerformanceFilters) {
         /* no routing history readable — every chat counts as cleanly assigned */
       }
 
-      return conversations.map((c) => ({
-        conversationId: c.id,
-        /* NO OWNER = THE AGENT WHO ANSWERED (owner, 2026-10-11). A chat taken
-           back by routing (its agent went offline) and closed from the pool
-           kept no owner, so the work showed as "Unassigned". Credit the first
-           person who replied; only a chat nobody has answered stays General. */
-        agentId: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? null,
-        // Placeholder; the page replaces it with the resolved name. See above.
-        agentName: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? 'General',
-        firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
-        firstAgentBy: times.get(c.id)?.firstAgentBy ?? null,
-        firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,
-        // A chat can hold a solve time from before it was reopened only if
-        // something failed to clear it; trust the status over the stamp.
-        solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
-        startedAt: c.date_created,
-        customer: c.contact?.name ?? c.contact?.phone ?? null,
-        orderId: c.last_order_id,
-        subject: subjectOf.get(c.id) ?? null,
-        customerPhone: c.contact?.phone ?? null,
-        ticketId: ticketOf.get(c.id) ?? null,
-        passedOn: handoffs.get(c.id)?.passedOn ?? false,
-        takenBy: handoffs.get(c.id)?.takenBy ?? null,
-        // Agent-started chats are measured from the customer's reply, and one
-        // the customer never answered is not "unanswered" (owner, 2026-10-07).
-        initiatedBy: c.initiated_by === 'agent' ? ('agent' as const) : ('customer' as const),
-        firstOutreachAt: times.get(c.id)?.firstAgentAnyAt ?? null,
-      }));
+      return sessions.map((r) => {
+        const c = r.conversation;
+        /* Routing history is per thread, without times: it describes the
+           session being worked on now, so only the newest session carries it. */
+        const handoff = r.isLatestSession ? handoffs.get(c.id) : undefined;
+        return {
+          conversationId: c.id,
+          sessionKey: r.sessionKey,
+          nextSessionAt: r.nextSessionAt,
+          /* NO OWNER = THE AGENT WHO ANSWERED (owner, 2026-10-11); an earlier
+             session belongs to whoever answered it (2026-11-05). */
+          agentId: r.agentId,
+          // Placeholder; the page replaces it with the resolved name. See above.
+          agentName: r.agentId ?? 'General',
+          firstCustomerAt: r.firstCustomerAt,
+          firstAgentBy: r.firstAgentBy,
+          firstAgentAt: r.firstAgentAt,
+          solvedAt: r.solvedAt,
+          startedAt: r.startedAt,
+          customer: c.contact?.name ?? c.contact?.phone ?? null,
+          orderId: c.last_order_id,
+          subject: subjectOf.get(c.id) ?? null,
+          customerPhone: c.contact?.phone ?? null,
+          ticketId: ticketOf.get(c.id) ?? null,
+          passedOn: handoff?.passedOn ?? false,
+          takenBy: handoff?.takenBy ?? null,
+          // Agent-started chats are measured from the customer's reply, and one
+          // the customer never answered is not "unanswered" (owner, 2026-10-07).
+          initiatedBy: r.initiatedBy,
+          firstOutreachAt: r.firstOutreachAt,
+        };
+      });
     },
   });
 }
@@ -197,6 +236,8 @@ export function useChatTimings(filters: PerformanceFilters) {
 export interface CsatRow {
   conversation: string | null;
   score: number | null;
+  /** When it was given; present on the per-session read (2026-11-05). */
+  submitted_at?: string | null;
 }
 
 /**
@@ -214,12 +255,20 @@ export function useCsatByConversation(filters: PerformanceFilters, conversationI
        own timestamp dropped late ratings of chats that ARE in range. */
     queryKey: ['csat-by-conversation', filters, conversationIds],
     enabled: conversationIds.length > 0,
-    queryFn: async (): Promise<Map<string, number>> => {
-      const rows = await performanceRead<CsatRow>('csat', {}, { ids: conversationIds });
-      const out = new Map<string, number>();
+    /* Every rating of each chat WITH its time (2026-11-05): a thread can hold
+       several sessions, and `sessionRating` gives each session only its own. */
+    queryFn: async (): Promise<Map<string, Array<{ score: number; at: string | null }>>> => {
+      const rows = await performanceRead<CsatRow>(
+        'csat',
+        {},
+        { ids: conversationIds, sessions: true },
+      );
+      const out = new Map<string, Array<{ score: number; at: string | null }>>();
       for (const r of rows) {
         if (!r.conversation || typeof r.score !== 'number') continue;
-        out.set(r.conversation, r.score);
+        const list = out.get(r.conversation) ?? [];
+        list.push({ score: r.score, at: r.submitted_at ?? null });
+        out.set(r.conversation, list);
       }
       return out;
     },

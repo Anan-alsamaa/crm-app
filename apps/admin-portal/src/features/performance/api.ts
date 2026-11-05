@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { readItems } from '@directus/sdk';
 import { normaliseConversationStatus, displayContactName } from '@yiji/shared-types';
-import { chatHandoffs, conversationTimestamps, readChunked, type ChatTiming } from '@yiji/reports';
+import { chatHandoffs, readChunked, sessionTimingRows, type ChatTiming } from '@yiji/reports';
 import { directus } from '../../lib/directus.js';
 import { businessDayWindow } from '../../lib/date-range.js';
 import { loadTicketSolveContext } from '../../lib/ticket-solve.js';
@@ -44,6 +44,22 @@ export interface PerformanceFilters {
 const endOfDay = (isoDate: string) => businessDayWindow(isoDate, isoDate).toIso;
 
 /** Date window on `field`, as Directus `_and` clauses. */
+/**
+ * Chats with ANY activity in the dates (2026-11-05): created by the end of the
+ * range, and created or last written to within it. The session rows are then
+ * cut to the dates - see sessionTimingRows.
+ */
+function activeWindow(filters: PerformanceFilters) {
+  const and: Array<Record<string, unknown>> = [];
+  if (filters.to) and.push({ date_created: { _lte: endOfDay(filters.to) } });
+  if (filters.from) {
+    and.push({
+      _or: [{ date_created: { _gte: filters.from } }, { last_message_at: { _gte: filters.from } }],
+    });
+  }
+  return and;
+}
+
 function dateWindow(filters: PerformanceFilters, field = 'date_created') {
   const and: Array<Record<string, unknown>> = [];
   if (filters.from) and.push({ [field]: { _gte: filters.from } });
@@ -75,6 +91,10 @@ export type AdminChatTiming = ChatTiming & {
   orderId: string | null;
   /** The newest ticket raised from this chat, searchable by id. */
   ticketId: string | null;
+  /** One row per SESSION (owner, 2026-11-05) - unique per row. */
+  sessionKey: string;
+  /** When this thread's next session started; null for the newest. */
+  nextSessionAt: string | null;
 };
 
 type Rows<T> = Promise<T[]>;
@@ -93,8 +113,11 @@ export function useChatTimings(filters: PerformanceFilters, enabled = true) {
     enabled,
     ...REPORT_FRESHNESS,
     queryFn: async (): Promise<AdminChatTiming[]> => {
-      const and = dateWindow(filters);
-      if (filters.agentId) and.push({ assigned_agent: { _eq: filters.agentId } });
+      /* PER SESSION (owner, 2026-11-05): every chat ACTIVE in the dates - a
+         returning customer's thread may be weeks old - and every agent's: a
+         session belongs to whoever answered it, so the agent filter is
+         applied to the session rows below. */
+      const and = activeWindow(filters);
 
       const conversations = await read<{
         id: string;
@@ -159,13 +182,23 @@ export function useChatTimings(filters: PerformanceFilters, enabled = true) {
               sender_type: string;
               date_created: string | null;
               sender_user: string | null;
+              source: string | null;
+              starts_session: boolean | null;
             }>('messages', {
               limit: -1,
               filter: { conversation: { _in: chunk }, is_internal_note: { _eq: false } },
               /* `sender_user` so a reply is credited to the agent who SENT
                  it — the ladder moves chats, so the assignee is often not the
-                 replier. */
-              fields: ['conversation', 'sender_type', 'date_created', 'sender_user'],
+                 replier. `source` + `starts_session` mark where each session
+                 of a returning customer's thread starts (2026-11-05). */
+              fields: [
+                'conversation',
+                'sender_type',
+                'date_created',
+                'sender_user',
+                'source',
+                'starts_session',
+              ],
               sort: ['date_created'],
             }),
           undefined,
@@ -199,10 +232,20 @@ export function useChatTimings(filters: PerformanceFilters, enabled = true) {
         if (label && !subjectOf.has(tk.conversation)) subjectOf.set(tk.conversation, label);
       }
 
-      // Shared with the agent portal — see conversationTimestamps in
-      // @yiji/reports. Two portals reducing the same messages by hand is how
-      // they came to agree on a wrong "No reply".
-      const times = conversationTimestamps(messages);
+      /* EACH SESSION ITS OWN ROW (owner, 2026-11-05) - see sessionTimingRows
+         in @yiji/reports, shared with the agent portal. */
+      const sessions = sessionTimingRows(
+        conversations,
+        messages,
+        {
+          from: filters.from ?? null,
+          to: filters.to ? endOfDay(filters.to) : null,
+        },
+        (st) => normaliseConversationStatus(st) === 'solved',
+      ).filter(
+        (r) =>
+          !filters.agentId || r.agentId === filters.agentId || r.firstAgentBy === filters.agentId,
+      );
       /**
        * Chats the ladder passed on leave the personal first-response population
        * and become COMMON chats for whoever picked them up, because the wait
@@ -212,34 +255,42 @@ export function useChatTimings(filters: PerformanceFilters, enabled = true) {
         ? chatHandoffs(events)
         : new Map<string, { passedOn: boolean; takenBy: string | null }>();
 
-      return conversations.map((c) => ({
-        conversationId: c.id,
-        // No owner = the agent who answered; see the agent portal (2026-10-11).
-        agentId: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? null,
-        // Placeholder; the page replaces it with the resolved name.
-        agentName: c.assigned_agent ?? times.get(c.id)?.firstAgentBy ?? 'General',
-        firstCustomerAt: times.get(c.id)?.firstCustomerAt ?? null,
-        firstAgentAt: times.get(c.id)?.firstAgentAt ?? null,
-        firstAgentBy: times.get(c.id)?.firstAgentBy ?? null,
-        solvedAt: normaliseConversationStatus(c.status) === 'solved' ? c.solved_at : null,
-        // Carried so a chat nobody ever wrote in still lands on a day in the
-        // trend instead of vanishing from it.
-        startedAt: c.date_created,
-        /* THROUGH `displayContactName` (owner, 2026-10-05): a `+966…` name
-           renders as `05…`. It already falls back to the phone, so the old
-           `?? phone` chain folds into it — null only when nothing is known. */
-        customer: displayContactName(c.contact?.name, c.contact?.phone) || null,
-        customerPhone: c.contact?.phone ?? null,
-        orderId: c.last_order_id ?? null,
-        subject: subjectOf.get(c.id) ?? null,
-        ticketId: ticketOf.get(c.id) ?? null,
-        passedOn: handoffs.get(c.id)?.passedOn ?? false,
-        takenBy: handoffs.get(c.id)?.takenBy ?? null,
-        // Agent-started chats are measured from the customer's reply; one the
-        // customer never answered is not "unanswered" (owner, 2026-10-07).
-        initiatedBy: c.initiated_by === 'agent' ? ('agent' as const) : ('customer' as const),
-        firstOutreachAt: times.get(c.id)?.firstAgentAnyAt ?? null,
-      }));
+      return sessions.map((r) => {
+        const c = r.conversation;
+        /* Routing history is per thread, without times: it describes the
+           session being worked on now, so only the newest session carries it. */
+        const handoff = r.isLatestSession ? handoffs.get(c.id) : undefined;
+        return {
+          conversationId: c.id,
+          sessionKey: r.sessionKey,
+          nextSessionAt: r.nextSessionAt,
+          // No owner = the agent who answered; an earlier session belongs to
+          // whoever answered it (2026-11-05).
+          agentId: r.agentId,
+          // Placeholder; the page replaces it with the resolved name.
+          agentName: r.agentId ?? 'General',
+          firstCustomerAt: r.firstCustomerAt,
+          firstAgentAt: r.firstAgentAt,
+          firstAgentBy: r.firstAgentBy,
+          solvedAt: r.solvedAt,
+          // Carried so a chat nobody ever wrote in still lands on a day in the
+          // trend instead of vanishing from it.
+          startedAt: r.startedAt,
+          /* THROUGH `displayContactName` (owner, 2026-10-05): a `+966…` name
+             renders as `05…`. */
+          customer: displayContactName(c.contact?.name, c.contact?.phone) || null,
+          customerPhone: c.contact?.phone ?? null,
+          orderId: c.last_order_id ?? null,
+          subject: subjectOf.get(c.id) ?? null,
+          ticketId: ticketOf.get(c.id) ?? null,
+          passedOn: handoff?.passedOn ?? false,
+          takenBy: handoff?.takenBy ?? null,
+          // Agent-started chats are measured from the customer's reply; one the
+          // customer never answered is not "unanswered" (owner, 2026-10-07).
+          initiatedBy: r.initiatedBy,
+          firstOutreachAt: r.firstOutreachAt,
+        };
+      });
     },
   });
 }
@@ -253,20 +304,25 @@ export function useCsatByConversation(filters: PerformanceFilters, enabled = tru
     queryKey: ['admin-csat-by-conversation', filters.from, filters.to],
     enabled,
     ...REPORT_FRESHNESS,
-    queryFn: async (): Promise<Map<string, number>> => {
+    /* Every rating of each chat WITH its time (2026-11-05): a thread holds
+       sessions, and `sessionRating` gives each session row only its own. */
+    queryFn: async (): Promise<Map<string, Array<{ score: number; at: string | null }>>> => {
       const and = dateWindow(filters, 'submitted_at');
-      const rows = await read<{ conversation: string | null; score: number | null }>(
-        'csat_responses',
-        {
-          limit: -1,
-          fields: ['conversation', 'score'],
-          ...(and.length ? { filter: { _and: and } } : {}),
-        },
-      );
-      const out = new Map<string, number>();
+      const rows = await read<{
+        conversation: string | null;
+        score: number | null;
+        submitted_at: string | null;
+      }>('csat_responses', {
+        limit: -1,
+        fields: ['conversation', 'score', 'submitted_at'],
+        ...(and.length ? { filter: { _and: and } } : {}),
+      });
+      const out = new Map<string, Array<{ score: number; at: string | null }>>();
       for (const r of rows) {
         if (!r.conversation || typeof r.score !== 'number') continue;
-        out.set(r.conversation, r.score);
+        const list = out.get(r.conversation) ?? [];
+        list.push({ score: r.score, at: r.submitted_at ?? null });
+        out.set(r.conversation, list);
       }
       return out;
     },

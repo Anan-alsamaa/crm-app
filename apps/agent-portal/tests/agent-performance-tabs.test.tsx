@@ -48,7 +48,9 @@ vi.mock('../src/lib/auth/AuthContext.js', () => ({
 
 const perf = vi.hoisted(() => ({
   useChatTimings: vi.fn(),
-  useCsatByConversation: vi.fn(() => ({ data: new Map<string, number>() })),
+  useCsatByConversation: vi.fn(() => ({
+    data: new Map<string, Array<{ score: number; at: string | null }>>(),
+  })),
   useTicketPerformance: vi.fn(),
   useCouponPerformance: vi.fn(),
 }));
