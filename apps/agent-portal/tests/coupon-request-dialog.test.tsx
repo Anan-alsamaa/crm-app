@@ -120,7 +120,6 @@ describe('CouponRequestDialog', () => {
     const val = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(val);
     await userEvent.type(val, '25');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
 
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
@@ -157,7 +156,6 @@ describe('CouponRequestDialog', () => {
     const val = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(val);
     await userEvent.type(val, '25');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
     const send = screen.getByRole('button', { name: /send for approval/i });
     await userEvent.click(send);
@@ -180,7 +178,6 @@ describe('CouponRequestDialog', () => {
     const pct = screen.getByLabelText(/coupon percentage/i);
     await userEvent.clear(pct);
     await userEvent.type(pct, '10');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '50');
     await waitFor(() => expect((pct as HTMLInputElement).value).toBe('10'));
 
     // A percentage needs a ceiling: 10% of an unbounded order is an unbounded
@@ -207,7 +204,6 @@ describe('CouponRequestDialog', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     // Sendable at this point — so what follows tests the dates and nothing else.
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeEnabled(),
@@ -385,7 +381,6 @@ describe('CouponRequestDialog', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await waitFor(() =>
       expect(screen.getByRole('button', { name: /send for approval/i })).toBeEnabled(),
     );
@@ -489,7 +484,6 @@ describe('the items a coupon compensates', () => {
     // A starting point, not the answer — the agent can still change it.
     await userEvent.clear(amount);
     await userEvent.type(amount, '15');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '15');
     await waitFor(() => expect(amount.value).toBe('15'));
   });
 
@@ -536,7 +530,6 @@ describe('the items a coupon compensates', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
     await userEvent.click(screen.getByLabelText(/delivery type/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '100');
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
@@ -562,7 +555,6 @@ describe('the items a coupon compensates', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
     await userEvent.click(screen.getByRole('button', { name: /send for approval/i }));
 
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
@@ -617,7 +609,6 @@ describe('the items a coupon compensates', () => {
     await userEvent.click(box(/Vegetable Pasta/));
     await userEvent.click(box(/Garlic Bread/));
 
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '100');
     await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
     await waitFor(() => expect(onCollect).toHaveBeenCalled());
     // The value came from the two prices without anyone typing it.
@@ -639,7 +630,6 @@ describe('the items a coupon compensates', () => {
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
     await userEvent.type(amount, '25');
-    await userEvent.type(screen.getByTestId('coupon-total-limit'), '25');
 
     await userEvent.click(screen.getByRole('button', { name: /attach to this ticket/i }));
     await waitFor(() => expect(onCollect).toHaveBeenCalled());
@@ -707,35 +697,65 @@ describe('CouponRequestDialog - editing an approved coupon', () => {
   });
 });
 
-/* THE TOTAL DISCOUNT LIMIT (owner, 2026-11-04): typed on every coupon, and a
-   Private Amount coupon's cannot be below its value. Send waits until it is. */
+/* THE TOTAL DISCOUNT LIMIT (owner, 2026-11-08). Private (the default): not
+   shown, calculated as Number of uses x maximum discount. General: shown,
+   typed, required - and only after the agent confirms the General warning. */
 describe('the total discount limit', () => {
   beforeEach(() => {
     mutateAsync.mockReset();
     mutateAsync.mockResolvedValue({});
   });
-  it('blocks Send until a valid limit is typed, and sends it', async () => {
-    renderDialog();
+  async function fill(value: string) {
     await userEvent.click(screen.getByLabelText(/issuing side/i));
     await userEvent.click(await screen.findByRole('button', { name: 'Operations' }));
+    await userEvent.click(screen.getByLabelText(/delivery type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Van' }));
     const amount = screen.getByLabelText(/coupon value/i);
     await userEvent.clear(amount);
-    await userEvent.type(amount, '25');
+    await userEvent.type(amount, value);
+  }
+
+  it('PRIVATE: no limit box; the request carries uses x maximum discount', async () => {
+    renderDialog();
+    await fill('50');
+    expect(screen.queryByTestId('coupon-total-limit')).not.toBeInTheDocument();
+    const uses = screen.getByLabelText(/number of uses/i);
+    await userEvent.clear(uses);
+    await userEvent.type(uses, '2');
     const send = screen.getByRole('button', { name: /send for approval/i });
-    expect(send).toBeDisabled();
-
-    const limit = screen.getByTestId('coupon-total-limit');
-    await userEvent.type(limit, '10');
-    expect(
-      (await screen.findAllByText(/cannot be less than the coupon value/i)).length,
-    ).toBeGreaterThan(0);
-    expect(send).toBeDisabled();
-
-    await userEvent.clear(limit);
-    await userEvent.type(limit, '25');
     await waitFor(() => expect(send).toBeEnabled());
     await userEvent.click(send);
     await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
-    expect(mutateAsync.mock.calls[0]![0]).toMatchObject({ total_discount_limit: 25 });
+    // The owner's example: 50 SAR, 2 uses -> 100.
+    expect(mutateAsync.mock.calls[0]![0]).toMatchObject({
+      coupon_type: 'Private',
+      usage_limit: 2,
+      total_discount_limit: 100,
+    });
+  });
+
+  it('GENERAL: the warning must be confirmed and the limit typed before Send', async () => {
+    renderDialog();
+    await fill('25');
+    await userEvent.click(screen.getByLabelText(/coupon type/i));
+    await userEvent.click(await screen.findByRole('button', { name: 'Public' }));
+    const send = screen.getByRole('button', { name: /send for approval/i });
+    const limit = await screen.findByTestId('coupon-total-limit');
+    expect(send).toBeDisabled();
+
+    await userEvent.type(limit, '10');
+    expect((await screen.findAllByText(/cannot be less than one use/i)).length).toBeGreaterThan(0);
+    await userEvent.clear(limit);
+    await userEvent.type(limit, '5000');
+    // Still blocked: the General warning is not confirmed yet.
+    expect(send).toBeDisabled();
+    await userEvent.click(within(screen.getByTestId('coupon-general-ack')).getByRole('checkbox'));
+    await waitFor(() => expect(send).toBeEnabled());
+    await userEvent.click(send);
+    await waitFor(() => expect(mutateAsync).toHaveBeenCalled());
+    expect(mutateAsync.mock.calls[0]![0]).toMatchObject({
+      coupon_type: 'Public',
+      total_discount_limit: 5000,
+    });
   });
 });

@@ -94,6 +94,7 @@ interface NewRow {
   coupon_value: number | string | null;
   coupon_percent: number | string | null;
   max_discount: number | string | null;
+  usage_limit?: number | string | null;
   discount_category: string | null;
   coupon_type?: string | null;
   total_discount_limit?: number | string | null;
@@ -124,6 +125,7 @@ const NEW_FIELDS = [
   'coupon_value',
   'coupon_percent',
   'max_discount',
+  'usage_limit',
   'discount_category',
   'coupon_type',
   'total_discount_limit',

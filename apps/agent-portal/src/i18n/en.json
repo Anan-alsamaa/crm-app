@@ -1038,7 +1038,14 @@
       "label": "Total discount limit (SAR)",
       "hint": "The most this coupon can give in total, across every use. Required.",
       "required": "Enter the total discount limit (SAR) to send this coupon.",
-      "belowValue": "The total discount limit ({{limit}} SAR) cannot be less than the coupon value ({{value}} SAR). Fix it to send this coupon."
+      "belowValue": "The total discount limit ({{limit}} SAR) cannot be less than the coupon value ({{value}} SAR). Fix it to send this coupon.",
+      "hintGeneral": "The most this General coupon can give in total, across everyone who uses the code. Required.",
+      "belowOneUse": "The total discount limit ({{limit}} SAR) cannot be less than one use of the coupon. Fix it to send this coupon.",
+      "requiredGeneral": "Enter the total discount limit (SAR) to send this General coupon."
+    },
+    "general": {
+      "ack": "General coupon: anyone who has the code can add it to their own Yiji account. The total discount limit below is the most it can give in total, across everyone. I understand.",
+      "ackNeeded": "Confirm the General coupon warning to send it."
     }
   },
   "busy": {

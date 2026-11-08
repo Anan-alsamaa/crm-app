@@ -425,7 +425,9 @@ describe('CouponApprovalsPage', () => {
       renderPage();
       await expandFirst(user);
       expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
-      expect(screen.getByRole('alert')).toHaveTextContent(/cannot be less than the coupon value/i);
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        /cannot be less than one use of the coupon/i,
+      );
     });
 
     it('offers no separate ceiling to type for an amount', async () => {

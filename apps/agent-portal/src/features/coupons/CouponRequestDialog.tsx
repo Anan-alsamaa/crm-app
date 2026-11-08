@@ -16,6 +16,7 @@ import {
   couponPrefix,
   CouponRequestDraftChecked,
   couponLimitProblem,
+  isGeneralCouponType,
   defaultCouponDates,
   generateCouponCode,
   isPercentageCategory,
@@ -538,7 +539,16 @@ function CouponRequestForm({
      typed in the box (an empty box on a fresh form is not yet a mistake) or
      whenever the number is below the coupon value. */
   const [limitTouched, setLimitTouched] = useState(false);
-  const limitProblem = couponLimitProblem(draft);
+  /* GENERAL vs PRIVATE (owner, 2026-11-08). Private: the limit is calculated
+     (Number of uses x maximum discount) and the field is not shown. General:
+     the agent types it, and must first confirm they understand a General
+     coupon can be added to ANY account by its code (the October leak). */
+  const general = isGeneralCouponType(draft.coupon_type);
+  const [generalAck, setGeneralAck] = useState(false);
+  useEffect(() => {
+    if (!general) setGeneralAck(false);
+  }, [general]);
+  const limitProblem = general ? couponLimitProblem(draft) : null;
   const limitTyped =
     draft.total_discount_limit !== null &&
     draft.total_discount_limit !== undefined &&
@@ -546,19 +556,24 @@ function CouponRequestForm({
   const limitError = !limitProblem
     ? null
     : limitTyped
-      ? t('coupons.totalLimit.belowValue', {
+      ? t('coupons.totalLimit.belowOneUse', {
           limit: draft.total_discount_limit,
-          value: draft.coupon_value,
           defaultValue:
-            'The total discount limit ({{limit}} SAR) cannot be less than the coupon value ({{value}} SAR). Fix it to send this coupon.',
+            'The total discount limit ({{limit}} SAR) cannot be less than one use of the coupon. Fix it to send this coupon.',
         })
       : limitTouched
-        ? t('coupons.totalLimit.required', {
-            defaultValue: 'Enter the total discount limit (SAR) to send this coupon.',
+        ? t('coupons.totalLimit.requiredGeneral', {
+            defaultValue: 'Enter the total discount limit (SAR) to send this General coupon.',
           })
         : null;
   /** The first thing wrong, named — not "check the highlighted fields". */
-  const blockedReason = parsed.success ? '' : (parsed.error.issues[0]?.message ?? '');
+  const blockedReason = !parsed.success
+    ? (parsed.error.issues[0]?.message ?? '')
+    : general && !generalAck
+      ? t('coupons.general.ackNeeded', {
+          defaultValue: 'Confirm the General coupon warning to send it.',
+        })
+      : '';
 
   const submit = () => {
     if (!parsed.success) return;
@@ -708,6 +723,7 @@ function CouponRequestForm({
                hand Yiji a duplicate idempotency-key and deliver nothing. */
             disabled={
               !parsed.success ||
+              (general && !generalAck) ||
               (codeTaken && !replaceMode) ||
               (replaceMode && !changeReason.trim()) ||
               !!saving
@@ -889,6 +905,25 @@ function CouponRequestForm({
               'coupon_type',
               'coupon_type',
               t('lists.couponType', { defaultValue: 'Coupon type' }),
+            )}
+            {general && (
+              <label
+                data-testid="coupon-general-ack"
+                className="mt-2 flex cursor-pointer items-start gap-2.5 rounded-xl bg-warning/10 px-3 py-2.5 ring-1 ring-inset ring-warning/40"
+              >
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 shrink-0 accent-primary"
+                  checked={generalAck}
+                  onChange={(e) => setGeneralAck(e.target.checked)}
+                />
+                <span className="text-xs leading-relaxed text-foreground">
+                  {t('coupons.general.ack', {
+                    defaultValue:
+                      'General coupon: anyone who has the code can add it to their own Yiji account. The total discount limit below is the most it can give in total, across everyone. I understand.',
+                  })}
+                </span>
+              </label>
             )}
           </FormField>
           <FormField label={t('lists.discountCategory', { defaultValue: 'Discount category' })}>
@@ -1085,34 +1120,39 @@ function CouponRequestForm({
               every use and every month. Typed on every coupon; a Private
               Amount coupon's limit cannot be below its value. Send stays
               disabled until it is right - see couponLimitProblem. */}
-          <FormField
-            className="sm:col-span-2"
-            label={t('coupons.totalLimit.label', {
-              defaultValue: 'Total discount limit (SAR)',
-            })}
-            hint={
-              limitError
-                ? undefined
-                : t('coupons.totalLimit.hint', {
-                    defaultValue:
-                      'The most this coupon can give in total, across every use. Required.',
-                  })
-            }
-            error={limitError ?? undefined}
-          >
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              data-testid="coupon-total-limit"
-              aria-invalid={limitError ? true : undefined}
-              value={String(draft.total_discount_limit ?? '')}
-              onChange={(e) => {
-                setLimitTouched(true);
-                set('total_discount_limit', e.target.value === '' ? null : Number(e.target.value));
-              }}
-            />
-          </FormField>
+          {general && (
+            <FormField
+              className="sm:col-span-2"
+              label={t('coupons.totalLimit.label', {
+                defaultValue: 'Total discount limit (SAR)',
+              })}
+              hint={
+                limitError
+                  ? undefined
+                  : t('coupons.totalLimit.hintGeneral', {
+                      defaultValue:
+                        'The most this General coupon can give in total, across everyone who uses the code. Required.',
+                    })
+              }
+              error={limitError ?? undefined}
+            >
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                data-testid="coupon-total-limit"
+                aria-invalid={limitError ? true : undefined}
+                value={String(draft.total_discount_limit ?? '')}
+                onChange={(e) => {
+                  setLimitTouched(true);
+                  set(
+                    'total_discount_limit',
+                    e.target.value === '' ? null : Number(e.target.value),
+                  );
+                }}
+              />
+            </FormField>
+          )}
         </div>
         {/* Whether the coupon stacks on an already-discounted item.
             Phrased as a NEGATIVE to match Yiji's own two flags — theirs are

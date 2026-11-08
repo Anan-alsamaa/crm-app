@@ -168,16 +168,22 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
     expect(c.category).toBe(0);
   });
 
-  it('OMITS an unmapped word rather than defaulting it to 0', () => {
+  it('an unknown or MISSING type is sent as PRIVATE - never left for Yiji to default to General', () => {
     /*
-     * The critical case. 0 means General and Percentage — both real values — so
-     * falling back to it would assert the OPPOSITE of a coupon somebody
-     * approved as Private/Amount. Better to let Yiji default than to state
-     * something false with confidence.
+     * Owner, 2026-11-08. Omitting the type let Yiji default it to 0 = GENERAL,
+     * a coupon any account can add by its code (the October leak) - and five
+     * stored rows have no type. Only an explicit General/Public is General.
+     * An unknown category is still omitted (it decides money, not exposure).
      */
-    const c = coupon({ ...ROW, coupon_type: 'Bundle', discount_category: 'Tiered' });
-    expect(c).not.toHaveProperty('type');
-    expect(c).not.toHaveProperty('category');
+    expect(coupon({ ...ROW, coupon_type: 'Bundle', discount_category: 'Tiered' }).type).toBe(1);
+    expect(coupon({ ...ROW, coupon_type: null }).type).toBe(1);
+    expect(coupon({ ...ROW, coupon_type: '' }).type).toBe(1);
+    expect(coupon({ ...ROW, coupon_type: 'Private' }).type).toBe(1);
+    expect(coupon({ ...ROW, coupon_type: 'Public' }).type).toBe(0);
+    expect(coupon({ ...ROW, coupon_type: 'General' }).type).toBe(0);
+    expect(
+      coupon({ ...ROW, coupon_type: 'Bundle', discount_category: 'Tiered' }),
+    ).not.toHaveProperty('category');
   });
 
   it('is valid on every day of the week', () => {
@@ -1052,8 +1058,32 @@ describe('total discount limit', () => {
     expect((body.coupon as Record<string, unknown>).reachLimit).toBe(25);
   });
 
-  it('refuses a coupon with no limit - nothing is sent to Yiji', async () => {
-    const { deps: d, patches, postCoupon } = deps({}, { ...ROW, total_discount_limit: null });
+  it('a PRIVATE coupon with no stored limit is sent with uses x maximum discount', async () => {
+    const { deps: d, postCoupon } = deps(
+      {},
+      {
+        ...ROW,
+        coupon_type: 'Private',
+        discount_category: 'Amount',
+        coupon_value: '30',
+        usage_limit: 2,
+        total_discount_limit: null,
+      },
+    );
+    await processCouponPushJob(job(), d);
+    expect(postCoupon).toHaveBeenCalled();
+    const sent = postCoupon.mock.calls
+      .map((c) => c[1] as Record<string, unknown> | undefined)
+      .find((b) => b && 'reachLimit' in b);
+    expect(sent).toMatchObject({ type: 1, reachLimit: 60 });
+  });
+
+  it('refuses a GENERAL coupon with no typed limit - nothing is sent to Yiji', async () => {
+    const {
+      deps: d,
+      patches,
+      postCoupon,
+    } = deps({}, { ...ROW, coupon_type: 'Public', total_discount_limit: null });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
     expect(postCoupon).not.toHaveBeenCalled();
     expect(patches).toContainEqual(

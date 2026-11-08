@@ -13,6 +13,7 @@ import {
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useReplaceTicketCoupon, type CouponRequestRow } from '../coupons/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
+import { storedCouponType, storedTotalLimit } from '../coupons/coupon-request-fields.js';
 import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
 import { useCouponsUnderMaintenance } from '../coupons/maintenance.js';
 
@@ -45,7 +46,7 @@ export function draftToTerms(d: CouponRequestDraft): CouponReplacementTerms {
     title: d.title,
     issuing_side: d.issuing_side,
     delivery_type: d.delivery_type,
-    coupon_type: d.coupon_type,
+    coupon_type: storedCouponType(d),
     discount_category: d.discount_category,
     valid_from: d.valid_from,
     valid_to: d.valid_to,
@@ -53,7 +54,7 @@ export function draftToTerms(d: CouponRequestDraft): CouponReplacementTerms {
     coupon_percent: pct ? (d.coupon_percent ?? null) : null,
     max_discount: pct ? d.max_discount : (d.coupon_value ?? null),
     usage_limit: d.usage_limit,
-    total_discount_limit: d.total_discount_limit ?? null,
+    total_discount_limit: storedTotalLimit(d),
     item_name: d.item_name ?? null,
     item_sku: d.item_sku ?? null,
     no_other_discounts: d.no_other_discounts,

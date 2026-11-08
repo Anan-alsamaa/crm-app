@@ -54,10 +54,17 @@ describe('how many times a coupon may be used', () => {
    * pool was exhausted by the first grant and the customer was refused with
    * "Coupon exceeds usage limit". All 102 coupons on production carried it.
    */
-  it('never caps the pool at the per-customer figure', () => {
-    const c = coupon({ usage_limit: 1 });
-    expect(c.reachLimit).not.toBe(1);
-    expect(Number(c.reachLimit)).toBeGreaterThanOrEqual(1000);
+  /* THE POOL IS THE TOTAL DISCOUNT LIMIT (owner, 2026-11-08): for a Private
+     coupon with none stored, Number of uses x maximum discount - 25 SAR once is
+     25, never the per-customer figure and never the old fixed 10000. */
+  it('a Private coupon without a stored limit gets uses x maximum discount', () => {
+    expect(coupon({ usage_limit: 1, total_discount_limit: null }).reachLimit).toBe(25);
+    expect(
+      coupon({ usage_limit: 2, coupon_value: 50, total_discount_limit: null }).reachLimit,
+    ).toBe(100);
+  });
+  it('a stored limit (the admin edit) is what Yiji gets', () => {
+    expect(coupon({ usage_limit: 2, total_discount_limit: 70 }).reachLimit).toBe(70);
   });
 
   /* The CRM's "Number of uses" box is what ONE customer may redeem — its own
@@ -66,13 +73,6 @@ describe('how many times a coupon may be used', () => {
   it('carries the Number of uses as the per-customer allowance', () => {
     expect(coupon({ usage_limit: 1 })).toMatchObject({ monthlyReachLimit: 1, limitForUser: 1 });
     expect(coupon({ usage_limit: 3 })).toMatchObject({ monthlyReachLimit: 3, limitForUser: 3 });
-  });
-
-  /* The pool scales with the allowance, so it can never bind first — a pool
-     that runs out before the allowance is a bug, never a policy. */
-  it('keeps the pool far above the allowance', () => {
-    const c = coupon({ usage_limit: 3 });
-    expect(Number(c.reachLimit)).toBeGreaterThan(Number(c.monthlyReachLimit) * 10);
   });
 
   /* One grant is the default a compensation implies when nobody said otherwise. */

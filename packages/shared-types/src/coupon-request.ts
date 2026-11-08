@@ -221,32 +221,86 @@ export interface CouponLimitTerms {
   coupon_type?: string | null;
   discount_category?: string | null;
   coupon_value?: number | string | null;
+  max_discount?: number | string | null;
+  usage_limit?: number | string | null;
   total_discount_limit?: number | string | null;
 }
 
+const numOrNaN = (v: unknown): number =>
+  v === null || v === undefined || v === '' ? NaN : Number(v);
+
 /**
- * THE TOTAL DISCOUNT LIMIT RULE (owner, 2026-11-04) — one place, read by the
- * agent's form, the supervisor's approval card, the Yiji API intake, the
- * coupon edit and the push to Yiji, so no path can disagree.
+ * GENERAL vs PRIVATE (owner, 2026-11-08). A coupon is General ONLY when its
+ * type says so in words - "General" or the option list's "Public". Anything
+ * else, a missing or unknown type included, is Private: a General coupon can
+ * be added to ANY account by its code (the October leak, 1,848 copies), so the
+ * safe reading of "unclear" is always Private.
+ */
+export function isGeneralCouponType(type: string | null | undefined): boolean {
+  const t = (type ?? '').trim().toLowerCase();
+  return t === 'general' || t === 'public';
+}
+
+/** The `type` sent to Yiji: 0 = General ONLY for an explicit General/Public, else 1 = Private. */
+export function yijiCouponTypeCode(type: string | null | undefined): 0 | 1 {
+  return isGeneralCouponType(type) ? 0 : 1;
+}
+
+/** The most one use can give: the amount itself, or a percentage coupon's cap. */
+export function perUseMaxDiscount(terms: CouponLimitTerms): number {
+  return isPercentageCategory(terms.discount_category)
+    ? numOrNaN(terms.max_discount)
+    : numOrNaN(terms.coupon_value);
+}
+
+/**
+ * A PRIVATE coupon's total discount limit (owner, 2026-11-08):
+ * Number of uses x maximum discount. 50 SAR, 2 uses -> 100. Null when the
+ * inputs are not usable yet.
+ */
+export function privateTotalLimit(terms: CouponLimitTerms): number | null {
+  const uses = numOrNaN(terms.usage_limit);
+  const max = perUseMaxDiscount(terms);
+  if (!(uses > 0) || !(max > 0)) return null;
+  return Math.round(uses * max * 100) / 100;
+}
+
+/**
+ * The limit that goes to Yiji: the STORED number when there is one (the
+ * agent's for a General coupon, the calculation or the approving admin's edit
+ * for a Private one); a Private coupon without one gets the calculation; a
+ * General coupon without one has none - it must be typed.
+ */
+export function effectiveTotalLimit(terms: CouponLimitTerms): number | null {
+  const stored = numOrNaN(terms.total_discount_limit);
+  if (stored > 0) return stored;
+  return isGeneralCouponType(terms.coupon_type) ? null : privateTotalLimit(terms);
+}
+
+/**
+ * THE TOTAL DISCOUNT LIMIT RULE (owner, 2026-11-04, logic 2026-11-08) - one
+ * place, read by the agent's form, the approval card, the coupon edit and the
+ * push to Yiji, so no path can disagree.
  *
- *  - Every coupon needs it, typed by a person, above 0.
- *  - A Private AMOUNT coupon's limit can never be below the coupon value:
- *    a limit under the value makes the coupon unusable on its first order.
- *  - Anything else (Percentage) is taken exactly as typed.
+ *  - PRIVATE: calculated, Number of uses x maximum discount (the field is not
+ *    shown to the agent); the approving admin may change it.
+ *  - GENERAL: typed by the agent, required - the total across EVERY account
+ *    that uses the code.
+ *  - Either way it is above 0 and covers at least one use, or the coupon
+ *    could not be used even once.
  *
  * Returns the message to show, or null when the limit is fine.
  */
 export function couponLimitProblem(terms: CouponLimitTerms): string | null {
-  const raw = terms.total_discount_limit;
-  const limit = raw === null || raw === undefined || raw === '' ? NaN : Number(raw);
-  if (!Number.isFinite(limit) || !(limit > 0)) {
-    return 'Enter the total discount limit (SAR) — the most this coupon can give in total.';
+  const limit = effectiveTotalLimit(terms);
+  if (limit === null || !(limit > 0)) {
+    return isGeneralCouponType(terms.coupon_type)
+      ? 'Enter the total discount limit (SAR) for this General coupon — the most it can give in total, across everyone who uses the code.'
+      : 'Enter the coupon value (or maximum discount) and the number of uses — the total discount limit is calculated from them.';
   }
-  const privateType = (terms.coupon_type ?? '').trim().toLowerCase() === 'private';
-  const amount = !isPercentageCategory(terms.discount_category);
-  const value = Number(terms.coupon_value ?? NaN);
-  if (privateType && amount && Number.isFinite(value) && limit < value) {
-    return `The total discount limit (${limit} SAR) cannot be less than the coupon value (${value} SAR).`;
+  const perUse = perUseMaxDiscount(terms);
+  if (Number.isFinite(perUse) && perUse > 0 && limit < perUse) {
+    return `The total discount limit (${limit} SAR) cannot be less than one use of the coupon (${perUse} SAR).`;
   }
   return null;
 }
