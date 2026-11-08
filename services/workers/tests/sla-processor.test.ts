@@ -93,6 +93,61 @@ const baseTicket: TicketRow = {
 };
 
 describe('runReconcile (T067)', () => {
+  /*
+   * ONE JOB PER DEADLINE (2026-11-08): the finished job is kept under an id
+   * that names its deadline, so the sweep's re-add every minute is a no-op -
+   * no re-run, no Directus reads - while a moved deadline still gets new jobs.
+   */
+  it('schedules under a deadline-stamped id and KEEPS finished jobs, so a re-sweep never re-runs them', async () => {
+    const due = '2026-06-01T14:00:00.000Z';
+    const { repo } = makeRepo(
+      [{ ...baseTicket, sla_policy: 'p1', resolution_due_at: due }],
+      [POLICY],
+    );
+    const q = makeQueues();
+    const deps: SlaDeps = {
+      tickets: repo,
+      teams: makeTeams(),
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    };
+    await runReconcile(deps);
+    await runReconcile(deps);
+    const ms = Date.parse(due);
+    const ids = q.sla.map((j) => (j.opts as { jobId: string }).jobId);
+    // The same two ids both times: BullMQ ignores an add whose id still exists.
+    expect(new Set(ids)).toEqual(
+      new Set([`t1-resolution-warning-${ms}`, `t1-resolution-breach-${ms}`]),
+    );
+    for (const j of q.sla) {
+      const o = j.opts as { removeOnComplete: unknown; removeOnFail: unknown };
+      expect(o.removeOnComplete).toEqual({ age: 7 * 24 * 3600 });
+      expect(o.removeOnFail).toEqual({ age: 3600 });
+    }
+  });
+
+  it('a moved deadline gets NEW job ids, so it is still scheduled', async () => {
+    const first = '2026-06-01T14:00:00.000Z';
+    const moved = '2026-06-02T09:30:00.000Z';
+    const t = { ...baseTicket, sla_policy: 'p1', resolution_due_at: first };
+    const { repo } = makeRepo([t], [POLICY]);
+    const q = makeQueues();
+    const deps: SlaDeps = {
+      tickets: repo,
+      teams: makeTeams(),
+      slaQueue: q.slaQueue,
+      notificationsQueue: q.notificationsQueue,
+      logger,
+    };
+    await runReconcile(deps);
+    t.resolution_due_at = moved;
+    await runReconcile(deps);
+    const ids = q.sla.map((j) => (j.opts as { jobId: string }).jobId);
+    expect(ids).toContain(`t1-resolution-breach-${Date.parse(first)}`);
+    expect(ids).toContain(`t1-resolution-breach-${Date.parse(moved)}`);
+  });
+
   it('survives an active policy that names no priorities', async () => {
     /*
      * The compensation clone ships active policies with a NULL
@@ -301,7 +356,10 @@ describe('runReconcile (T067)', () => {
 
     // Two jobs, not four: a warning and a breach, for resolution alone.
     const ids = q.sla.map((j) => (j.opts as { jobId: string }).jobId).sort();
-    expect(ids).toEqual(['t1-resolution-breach', 't1-resolution-warning']);
+    expect(ids).toEqual([
+      expect.stringMatching(/^t1-resolution-breach-\d+$/),
+      expect.stringMatching(/^t1-resolution-warning-\d+$/),
+    ]);
   });
 
   it('skips first-response warning when ticket has already been responded to', async () => {
@@ -317,7 +375,10 @@ describe('runReconcile (T067)', () => {
     };
     await runReconcile(deps);
     const ids = q.sla.map((j) => (j.opts as { jobId: string }).jobId).sort();
-    expect(ids).toEqual(['t1-resolution-breach', 't1-resolution-warning']);
+    expect(ids).toEqual([
+      expect.stringMatching(/^t1-resolution-breach-\d+$/),
+      expect.stringMatching(/^t1-resolution-warning-\d+$/),
+    ]);
   });
 
   it('skips resolved or closed tickets entirely', async () => {
