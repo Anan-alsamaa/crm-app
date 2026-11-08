@@ -208,6 +208,8 @@ describe('a Yiji ticket: the rule decides', () => {
     expect(c.external_id).toBeNull();
     expect(c.coupon_value).toBe(30);
     expect(c.max_discount).toBe(30);
+    // Private: the limit is calculated and STORED - 1 use x 30 SAR (owner, 2026-11-08).
+    expect(c.total_discount_limit).toBe(30);
     expect(c.coupon_type).toBe('Private');
     expect(c.issuing_side).toBe('Customer Care');
     expect(c.coupon_code).toMatch(/^CC-/);

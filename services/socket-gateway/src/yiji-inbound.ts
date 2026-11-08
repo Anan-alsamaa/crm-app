@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   ComplaintType,
   CouponRequestDraftChecked,
+  effectiveTotalLimit,
   ServiceType,
   YIJI_COMPLAINT_SOURCE,
   buildStoreIndex,
@@ -837,7 +838,10 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       valid_to: d.valid_to,
       max_discount: d.max_discount,
       usage_limit: d.usage_limit,
-      total_discount_limit: d.total_discount_limit ?? null,
+      /* Stored as a number on every coupon (owner, 2026-11-08): a Private one
+         without a typed limit carries its calculation, uses x maximum
+         discount; a General one keeps what was typed (or nothing). */
+      total_discount_limit: d.total_discount_limit ?? effectiveTotalLimit(d) ?? null,
       brand_id: d.brand_id ?? null,
       restaurant_id: d.restaurant_id ?? null,
       item_name: d.item_name ?? null,
@@ -1001,10 +1005,10 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         restaurantId: inputs.restaurantId,
       });
       const checked = CouponRequestDraftChecked.safeParse(draft);
-      /* A RULE coupon has nobody to type the total discount limit, so it is
-         stored WITHOUT one and the supervisor types it on the approval card
-         (owner, 2026-11-04); nothing is sent to Yiji until they do. Every other
-         rule still applies. */
+      /* A Private rule coupon's limit is CALCULATED (owner, 2026-11-08: uses x
+         maximum discount) and stored. Only a General rule has nobody to type
+         its limit: it is stored without one and the supervisor types it on the
+         approval card - Approve is blocked, nothing is sent until they do. */
       const ruleIssues = checked.success
         ? []
         : checked.error.issues.filter((i) => i.path[0] !== 'total_discount_limit');
