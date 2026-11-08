@@ -20,9 +20,11 @@ import {
  * Both callers now spread THIS, so a field added to the form reaches every
  * path or none — `coupon-request-fields.test.ts` enforces it.
  */
-/** Private unless the form chose General on purpose - never stored blank. */
+/** The type as chosen (the form starts on Private). A blank or unknown type
+ *  is never turned into something else: the form will not send it, and the
+ *  worker refuses it (owner, 2026-11-08). */
 export function storedCouponType(d: Pick<CouponRequestDraft, 'coupon_type'>): string {
-  return isGeneralCouponType(d.coupon_type) ? d.coupon_type : 'Private';
+  return (d.coupon_type ?? '').trim();
 }
 
 /**

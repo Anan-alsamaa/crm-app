@@ -241,7 +241,21 @@ export function isGeneralCouponType(type: string | null | undefined): boolean {
   return t === 'general' || t === 'public';
 }
 
-/** The `type` sent to Yiji: 0 = General ONLY for an explicit General/Public, else 1 = Private. */
+/**
+ * A MISSING OR UNKNOWN TYPE IS NEVER SENT (owner, 2026-11-08). Yiji reads a
+ * missing type as General, so a coupon whose type is not exactly Private or
+ * General/Public is stopped with this message - on the form, on the approval
+ * card and, last, in the worker that sends it - never guessed.
+ */
+export function couponTypeProblem(type: string | null | undefined): string | null {
+  const t = (type ?? '').trim().toLowerCase();
+  if (t === 'private' || t === 'general' || t === 'public') return null;
+  return t
+    ? `Unknown coupon type "${String(type).trim()}" — choose Private or General. The coupon was not sent.`
+    : 'The coupon type is missing — choose Private or General. The coupon was not sent.';
+}
+
+/** The `type` sent to Yiji, for a type couponTypeProblem accepts: 0 = General/Public, 1 = Private. */
 export function yijiCouponTypeCode(type: string | null | undefined): 0 | 1 {
   return isGeneralCouponType(type) ? 0 : 1;
 }
@@ -321,7 +335,12 @@ export interface CouponTerms {
 
 /** One problem with a coupon's numbers: what is wrong, and which field owns it. */
 export interface CouponTermsProblem {
-  field: 'coupon_value' | 'coupon_percent' | 'max_discount' | 'total_discount_limit';
+  field:
+    | 'coupon_value'
+    | 'coupon_percent'
+    | 'max_discount'
+    | 'total_discount_limit'
+    | 'coupon_type';
   message: string;
 }
 
@@ -428,6 +447,10 @@ export const CouponRequestDraftChecked = CouponRequestDraft.superRefine((v, ctx)
   }
   for (const p of couponTermsProblems(v)) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: [p.field], message: p.message });
+  }
+  const type = couponTypeProblem(v.coupon_type);
+  if (type) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['coupon_type'], message: type });
   }
   const limit = couponLimitProblem(v);
   if (limit) {

@@ -78,6 +78,7 @@ function renderPage() {
 const pending = {
   id: 'ca1',
   coupon_code: 'SORRY10',
+  coupon_type: 'Private',
   coupon_value: 25,
   total_discount_limit: '100.00000',
   coupon_percent: null,
@@ -406,6 +407,19 @@ describe('CouponApprovalsPage', () => {
       await expandFirst(user);
       expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
       expect(screen.getByRole('alert')).toHaveTextContent(/total discount limit/i);
+    });
+
+    /* Owner, 2026-11-08: Yiji reads a missing type as General - never sent. */
+    it('will not approve a coupon whose type is missing, and says why', async () => {
+      api.useCouponApprovals.mockReturnValue({
+        data: [{ ...pending, coupon_type: null }],
+        isLoading: false,
+      });
+      const user = userEvent.setup();
+      renderPage();
+      await expandFirst(user);
+      expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled();
+      expect(screen.getByRole('alert')).toHaveTextContent(/coupon type is missing/i);
     });
 
     it('will not approve a Private Amount coupon whose limit is below its value', async () => {

@@ -22,6 +22,7 @@ import {
   YIJI_ORDER_MAXIMUM,
   YIJI_REACH_LIMIT,
   couponLimitProblem,
+  couponTypeProblem,
   effectiveTotalLimit,
   yijiCouponTypeCode,
   YIJI_COUPON_CATEGORY,
@@ -1692,6 +1693,19 @@ export async function processCouponPushJob(
    * never reaches Yiji with a limit nobody typed. Recorded on the row, so the
    * supervisor sees why; `refused` so BullMQ does not retry a settled answer.
    */
+  /* NO TYPE, NO COUPON (owner, 2026-11-08): Yiji reads a missing type as
+     General - a coupon any account can add by its code. A row whose type is
+     not exactly Private or General/Public is stopped here and the reason is
+     shown on the approval card; nothing is guessed. */
+  const typeWrong = couponTypeProblem(row.coupon_type);
+  if (typeWrong) {
+    logger.warn(
+      { id, code: row.coupon_code, type: row.coupon_type },
+      `coupon not sent: ${typeWrong}`,
+    );
+    await recordFailure(directus, id, `not sent: ${typeWrong}`);
+    return 'refused';
+  }
   const limitWrong = couponLimitProblem(row);
   if (limitWrong) {
     logger.warn({ id, code: row.coupon_code }, `coupon not sent: ${limitWrong}`);

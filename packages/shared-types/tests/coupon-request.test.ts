@@ -6,6 +6,7 @@ import {
   defaultCouponDates,
   couponTermsProblems,
   couponLimitProblem,
+  couponTypeProblem,
   effectiveTotalLimit,
   privateTotalLimit,
   yijiCouponTypeCode,
@@ -525,8 +526,7 @@ describe('couponLimitProblem', () => {
     expect(couponLimitProblem({ ...base, coupon_value: null })).toMatch(/calculated/);
     expect(couponLimitProblem({ ...base, usage_limit: 0 })).toMatch(/calculated/);
   });
-  it('a missing or unknown type is PRIVATE (never General)', () => {
-    expect(effectiveTotalLimit({ ...base, coupon_type: null })).toBe(25);
+  it('the Yiji type code: only General/Public is 0 (a bad type never gets this far)', () => {
     expect(yijiCouponTypeCode(null)).toBe(1);
     expect(yijiCouponTypeCode('')).toBe(1);
     expect(yijiCouponTypeCode('weird')).toBe(1);
@@ -546,6 +546,17 @@ describe('couponLimitProblem', () => {
     expect(
       couponLimitProblem({ ...base, coupon_type: 'Public', total_discount_limit: 10 }),
     ).toMatch(/cannot be less/);
+  });
+  it('a missing or unknown TYPE is a problem - never sent, never guessed', () => {
+    expect(couponTypeProblem(null)).toMatch(/missing/);
+    expect(couponTypeProblem('')).toMatch(/missing/);
+    expect(couponTypeProblem('Bundle')).toMatch(/Unknown coupon type/);
+    expect(couponTypeProblem('Private')).toBeNull();
+    expect(couponTypeProblem('Public')).toBeNull();
+    expect(couponTypeProblem('general')).toBeNull();
+    const r = CouponRequestDraftChecked.safeParse({ ...draft, coupon_type: '' });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some((i) => i.path[0] === 'coupon_type')).toBe(true);
   });
   it('the request schema enforces it', () => {
     const general = CouponRequestDraftChecked.safeParse({

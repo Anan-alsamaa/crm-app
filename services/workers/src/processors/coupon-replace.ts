@@ -7,6 +7,7 @@ import {
   couponEditBlock,
   couponIsRemoved,
   couponLimitProblem,
+  couponTypeProblem,
   couponReplacedHistoryText,
   couponTermsProblems,
   refId,
@@ -237,6 +238,8 @@ export async function processCouponReplaceJob(
   if (termsWrong) return rollback(`Refused: ${termsWrong.message}`, 'refused');
   /* The total discount limit (owner, 2026-11-04): checked BEFORE the old coupon
      is taken back, so a bad limit never leaves the customer with neither. */
+  const typeWrong = couponTypeProblem(fresh.coupon_type);
+  if (typeWrong) return rollback(`Refused: ${typeWrong}`, 'refused');
   const limitWrong = couponLimitProblem(fresh);
   if (limitWrong) return rollback(`Refused: ${limitWrong}`, 'refused');
 

@@ -168,7 +168,7 @@ describe('yijiCouponPayload — what KIND of coupon this is', () => {
     expect(c.category).toBe(0);
   });
 
-  it('an unknown or MISSING type is sent as PRIVATE - never left for Yiji to default to General', () => {
+  it('the payload never omits the type (only General/Public is 0)', () => {
     /*
      * Owner, 2026-11-08. Omitting the type let Yiji default it to 0 = GENERAL,
      * a coupon any account can add by its code (the October leak) - and five
@@ -1076,6 +1076,17 @@ describe('total discount limit', () => {
       .map((c) => c[1] as Record<string, unknown> | undefined)
       .find((b) => b && 'reachLimit' in b);
     expect(sent).toMatchObject({ type: 1, reachLimit: 60 });
+  });
+
+  it('REFUSES a coupon whose type is missing or unknown - nothing sent, reason on the row', async () => {
+    for (const coupon_type of [null, '', 'Bundle']) {
+      const { deps: d, patches, postCoupon } = deps({}, { ...ROW, coupon_type });
+      await expect(processCouponPushJob(job(), d)).resolves.toBe('refused');
+      expect(postCoupon).not.toHaveBeenCalled();
+      expect(patches).toContainEqual(
+        expect.objectContaining({ yiji_push_error: expect.stringMatching(/coupon type/i) }),
+      );
+    }
   });
 
   it('refuses a GENERAL coupon with no typed limit - nothing is sent to Yiji', async () => {

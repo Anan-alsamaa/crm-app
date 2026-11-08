@@ -25,6 +25,7 @@ import {
   couponDecision,
   displayContactName,
   couponLimitProblem,
+  couponTypeProblem,
   isGeneralCouponType,
   privateTotalLimit,
   type CouponTermsProblem,
@@ -839,8 +840,12 @@ function Row({
       list: CouponTermsProblem[],
       terms: Parameters<typeof couponLimitProblem>[0],
     ): CouponTermsProblem[] => {
+      const type = couponTypeProblem(terms.coupon_type);
+      const withType: CouponTermsProblem[] = type
+        ? [...list, { field: 'coupon_type', message: type }]
+        : list;
       const limit = couponLimitProblem(terms);
-      return limit ? [...list, { field: 'total_discount_limit', message: limit }] : list;
+      return limit ? [...withType, { field: 'total_discount_limit', message: limit }] : withType;
     };
     if (!editing) {
       return withLimit(
@@ -2109,7 +2114,8 @@ export function CouponApprovalsPage() {
             coupon_percent: r.coupon_percent,
             max_discount: r.max_discount,
           }).length === 0 &&
-          couponLimitProblem(r) === null,
+          couponLimitProblem(r) === null &&
+          couponTypeProblem(r.coupon_type) === null,
       ),
     [rows],
   );
