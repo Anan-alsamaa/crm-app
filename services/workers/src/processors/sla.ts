@@ -170,11 +170,40 @@ function predatesPolicy(startedAt: string | null, policy: SlaPolicyRow): boolean
   return new Date(startedAt).getTime() < new Date(policy.date_created).getTime();
 }
 
-function jobId(ticketId: string, deadline: Deadline, kind: 'warning' | 'breach'): string {
-  // BullMQ (v5.50+) rejects custom job ids containing ':' (its redis key
-  // delimiter), so use '-' separators.
-  return `${ticketId}-${deadline}-${kind}`;
+/**
+ * ONE JOB PER DEADLINE, NOT ONE PER MINUTE (2026-11-08).
+ *
+ * The id carries the deadline itself, and a finished job is KEPT (see
+ * `schedule`), so the sweep's re-add every 60 seconds is a no-op once the job
+ * ran. Before, the job deleted itself on completion and the next sweep re-added
+ * it with zero delay for every overdue ticket - each one re-reading the ticket
+ * and its events every minute, forever, alongside the sweep's own reads. That
+ * steady stream tripped Directus's rate limiter ("Too many requests", 4,147
+ * failed SLA jobs on prod in three days) and took notification and automation
+ * jobs down with it. A MOVED deadline is a new id, so it is still scheduled.
+ *
+ * BullMQ (v5.50+) rejects custom job ids containing ':' (its redis key
+ * delimiter), so use '-' separators and the epoch milliseconds.
+ */
+function jobId(
+  ticketId: string,
+  deadline: Deadline,
+  kind: 'warning' | 'breach',
+  dueAt: Date,
+): string {
+  return `${ticketId}-${deadline}-${kind}-${dueAt.getTime()}`;
 }
+
+/**
+ * How long a finished warning/breach job is kept: while it exists, the sweep
+ * cannot re-run it. After a week one re-run reads the ledger and no-ops.
+ */
+const KEEP_COMPLETED = { age: 7 * 24 * 3600 };
+/**
+ * A job that failed all its attempts is kept an hour, then dropped so the
+ * sweep re-adds it - never blocked for good (bullmq-jobid-blocks-retry).
+ */
+const KEEP_FAILED = { age: 3600 };
 
 /**
  * When to warn, measured the same way the deadline was.
@@ -215,22 +244,22 @@ async function schedule(
   const warnDelay = Math.max(0, warningTs.getTime() - now);
   const breachDelay = Math.max(0, dueAt.getTime() - now);
 
-  const wId = jobId(ticketId, deadline, 'warning');
-  const bId = jobId(ticketId, deadline, 'breach');
+  const wId = jobId(ticketId, deadline, 'warning', dueAt);
+  const bId = jobId(ticketId, deadline, 'breach', dueAt);
 
   await deps.slaQueue.add(
     'warning',
     { ticketId, kind: 'warning', deadline, dueAt: dueAt.toISOString() } as SlaJob & {
       deadline: Deadline;
     },
-    { delay: warnDelay, jobId: wId, removeOnComplete: true, removeOnFail: false },
+    { delay: warnDelay, jobId: wId, removeOnComplete: KEEP_COMPLETED, removeOnFail: KEEP_FAILED },
   );
   await deps.slaQueue.add(
     'breach',
     { ticketId, kind: 'breach', deadline, dueAt: dueAt.toISOString() } as SlaJob & {
       deadline: Deadline;
     },
-    { delay: breachDelay, jobId: bId, removeOnComplete: true, removeOnFail: false },
+    { delay: breachDelay, jobId: bId, removeOnComplete: KEEP_COMPLETED, removeOnFail: KEEP_FAILED },
   );
 }
 
