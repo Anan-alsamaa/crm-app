@@ -22,8 +22,10 @@ import {
   YIJI_ORDER_MAXIMUM,
   YIJI_REACH_LIMIT,
   couponLimitProblem,
+  couponTypeProblem,
+  effectiveTotalLimit,
+  yijiCouponTypeCode,
   YIJI_COUPON_CATEGORY,
-  YIJI_COUPON_TYPE,
 } from '@yiji/shared-types';
 import {
   couponOrderId,
@@ -676,13 +678,14 @@ export function yijiCouponPayload(
        * went unnoticed: the customer got the correct amount off a coupon
        * described as something else entirely.
        *
-       * Omitted rather than defaulted when the CRM word is not in the map:
-       * 0 means something in both vocabularies, so sending it as a fallback
-       * would assert the opposite of what was approved.
+       * ALWAYS SENT, AND PRIVATE UNLESS THE ROW SAYS GENERAL (owner,
+       * 2026-11-08). It used to be omitted when the CRM word was missing or
+       * unknown - and Yiji's default for a missing type is 0 = GENERAL, a
+       * coupon any account can add by its code (the October leak). Five stored
+       * rows have no type at all. Now only an explicit "General"/"Public" is
+       * sent as General; everything else is Private.
        */
-      ...(yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) != null
-        ? { type: yijiCouponEnum(YIJI_COUPON_TYPE, row.coupon_type) }
-        : {}),
+      type: yijiCouponTypeCode(row.coupon_type),
       ...(yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) != null
         ? { category: yijiCouponEnum(YIJI_COUPON_CATEGORY, row.discount_category) }
         : {}),
@@ -766,7 +769,10 @@ export function yijiCouponPayload(
        * never the fallback in practice; the fallback only keeps the builder
        * total for direct callers (tests, scripts).
        */
-      reachLimit: num(row.total_discount_limit) ?? YIJI_REACH_LIMIT,
+      /* The stored limit (General: typed by the agent; Private: calculated as
+         uses x maximum discount, or the approving admin's edit); a Private
+         row without one gets the calculation (owner, 2026-11-08). */
+      reachLimit: effectiveTotalLimit(row) ?? YIJI_REACH_LIMIT,
       limitForUser: limit,
       monthlyReachLimit: limit,
       /*
@@ -1687,6 +1693,19 @@ export async function processCouponPushJob(
    * never reaches Yiji with a limit nobody typed. Recorded on the row, so the
    * supervisor sees why; `refused` so BullMQ does not retry a settled answer.
    */
+  /* NO TYPE, NO COUPON (owner, 2026-11-08): Yiji reads a missing type as
+     General - a coupon any account can add by its code. A row whose type is
+     not exactly Private or General/Public is stopped here and the reason is
+     shown on the approval card; nothing is guessed. */
+  const typeWrong = couponTypeProblem(row.coupon_type);
+  if (typeWrong) {
+    logger.warn(
+      { id, code: row.coupon_code, type: row.coupon_type },
+      `coupon not sent: ${typeWrong}`,
+    );
+    await recordFailure(directus, id, `not sent: ${typeWrong}`);
+    return 'refused';
+  }
   const limitWrong = couponLimitProblem(row);
   if (limitWrong) {
     logger.warn({ id, code: row.coupon_code }, `coupon not sent: ${limitWrong}`);

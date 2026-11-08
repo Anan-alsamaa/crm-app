@@ -6,6 +6,10 @@ import {
   defaultCouponDates,
   couponTermsProblems,
   couponLimitProblem,
+  couponTypeProblem,
+  effectiveTotalLimit,
+  privateTotalLimit,
+  yijiCouponTypeCode,
   couponExposure,
   couponPrefix,
   yijiIssuingSideId,
@@ -493,36 +497,80 @@ describe('yijiIssuingSideId', () => {
 
 /* THE TOTAL DISCOUNT LIMIT RULE (owner, 2026-11-04). */
 describe('couponLimitProblem', () => {
-  const base = { coupon_type: 'Private', discount_category: 'Amount', coupon_value: 25 };
-  it('is required on every coupon', () => {
-    expect(couponLimitProblem({ ...base, total_discount_limit: null })).toMatch(
-      /total discount limit/,
-    );
-    expect(couponLimitProblem({ ...base, total_discount_limit: 0 })).toMatch(
-      /total discount limit/,
-    );
+  const base = {
+    coupon_type: 'Private',
+    discount_category: 'Amount',
+    coupon_value: 25,
+    usage_limit: 1,
+  };
+  it('PRIVATE: calculated as Number of uses x maximum discount - nothing to type', () => {
+    expect(couponLimitProblem({ ...base, total_discount_limit: null })).toBeNull();
+    expect(effectiveTotalLimit({ ...base, total_discount_limit: null })).toBe(25);
+    // The owner's example (2026-11-08): 50 SAR, 2 uses -> 100.
+    expect(privateTotalLimit({ ...base, coupon_value: 50, usage_limit: 2 })).toBe(100);
+    // Percentage: the cap is the maximum discount.
     expect(
-      couponLimitProblem({ discount_category: 'Percentage', total_discount_limit: '' }),
-    ).toMatch(/total discount limit/);
-  });
-  it('a Private Amount coupon cannot have a limit below its value', () => {
-    expect(couponLimitProblem({ ...base, total_discount_limit: 24.99 })).toMatch(/cannot be less/);
-    expect(couponLimitProblem({ ...base, total_discount_limit: 25 })).toBeNull();
-    expect(couponLimitProblem({ ...base, total_discount_limit: '50.00000' })).toBeNull();
-  });
-  it('a Percentage coupon is taken as typed', () => {
-    expect(
-      couponLimitProblem({
+      privateTotalLimit({
         coupon_type: 'Private',
         discount_category: 'Percentage',
-        coupon_value: null,
-        total_discount_limit: 1,
-      }),
-    ).toBeNull();
+        coupon_percent: 20,
+        max_discount: 40,
+        usage_limit: 3,
+      } as never),
+    ).toBe(120);
+  });
+  it('PRIVATE: a stored number (the admin edit) wins over the calculation', () => {
+    expect(effectiveTotalLimit({ ...base, total_discount_limit: 60 })).toBe(60);
+  });
+  it('PRIVATE: no value or no uses -> nothing to calculate from', () => {
+    expect(couponLimitProblem({ ...base, coupon_value: null })).toMatch(/calculated/);
+    expect(couponLimitProblem({ ...base, usage_limit: 0 })).toMatch(/calculated/);
+  });
+  it('the Yiji type code: only General/Public is 0 (a bad type never gets this far)', () => {
+    expect(yijiCouponTypeCode(null)).toBe(1);
+    expect(yijiCouponTypeCode('')).toBe(1);
+    expect(yijiCouponTypeCode('weird')).toBe(1);
+    expect(yijiCouponTypeCode('Private')).toBe(1);
+    expect(yijiCouponTypeCode('Public')).toBe(0);
+    expect(yijiCouponTypeCode(' general ')).toBe(0);
+  });
+  it('GENERAL: the limit must be typed - never calculated', () => {
+    const g = { ...base, coupon_type: 'Public' };
+    expect(couponLimitProblem({ ...g, total_discount_limit: null })).toMatch(/General/);
+    expect(couponLimitProblem({ ...g, total_discount_limit: 0 })).toMatch(/General/);
+    expect(couponLimitProblem({ ...g, total_discount_limit: 5000 })).toBeNull();
+  });
+  it('never below one use of the coupon', () => {
+    expect(couponLimitProblem({ ...base, total_discount_limit: 24.99 })).toMatch(/cannot be less/);
+    expect(couponLimitProblem({ ...base, total_discount_limit: '50.00000' })).toBeNull();
+    expect(
+      couponLimitProblem({ ...base, coupon_type: 'Public', total_discount_limit: 10 }),
+    ).toMatch(/cannot be less/);
+  });
+  it('a missing or unknown TYPE is a problem - never sent, never guessed', () => {
+    expect(couponTypeProblem(null)).toMatch(/missing/);
+    expect(couponTypeProblem('')).toMatch(/missing/);
+    expect(couponTypeProblem('Bundle')).toMatch(/Unknown coupon type/);
+    expect(couponTypeProblem('Private')).toBeNull();
+    expect(couponTypeProblem('Public')).toBeNull();
+    expect(couponTypeProblem('general')).toBeNull();
+    const r = CouponRequestDraftChecked.safeParse({ ...draft, coupon_type: '' });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some((i) => i.path[0] === 'coupon_type')).toBe(true);
   });
   it('the request schema enforces it', () => {
-    const r = CouponRequestDraftChecked.safeParse({ ...draft, total_discount_limit: null });
-    expect(r.success).toBe(false);
-    expect(r.error?.issues.some((i) => i.path[0] === 'total_discount_limit')).toBe(true);
+    const general = CouponRequestDraftChecked.safeParse({
+      ...draft,
+      coupon_type: 'Public',
+      total_discount_limit: null,
+    });
+    expect(general.success).toBe(false);
+    expect(general.error?.issues.some((i) => i.path[0] === 'total_discount_limit')).toBe(true);
+    const priv = CouponRequestDraftChecked.safeParse({
+      ...draft,
+      coupon_type: 'Private',
+      total_discount_limit: null,
+    });
+    expect(priv.success).toBe(true);
   });
 });

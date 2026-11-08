@@ -420,21 +420,34 @@ const plusPhone = (row) => {
   const d = String(row.customer_phone || row.contact?.phone || '').replace(/\D/g, '');
   return d ? `+966${d.replace(/^(966|0)/, '')}` : null;
 };
+/*
+ * THE TOTAL DISCOUNT LIMIT YIJI SHOULD HOLD (owner, 2026-11-04 / 11-08): the
+ * stored number; a Private coupon without one - Number of uses x maximum
+ * discount; a coupon sent before the field existed (pushed before 5 Nov) went
+ * out with the fixed 10000.
+ */
+function expectedReachLimit(row) {
+  const stored = row.total_discount_limit;
+  if (stored != null && stored !== '' && Number(stored) > 0) return Number(stored);
+  if (row.yiji_pushed_at && Date.parse(row.yiji_pushed_at) < Date.parse('2026-11-05T00:00:00Z'))
+    return 10000;
+  const pct = /^percent/i.test(row.discount_category ?? '');
+  return Number(row.usage_limit) * Number(pct ? row.max_discount : row.coupon_value);
+}
 function compareCoupon(row, c) {
   const pct = /^percent/i.test(row.discount_category ?? '');
   const want = {
     name: plusPhone(row),
-    type: { private: 1, general: 0, public: 0 }[String(row.coupon_type ?? '').toLowerCase()],
+    /* Only an explicit General/Public is General; anything else is Private
+       (owner, 2026-11-08 - a missing type used to be left to Yiji's General). */
+    type: ['general', 'public'].includes(String(row.coupon_type ?? '').trim().toLowerCase()) ? 0 : 1,
     category: pct ? 0 : 1,
     discount: pct ? 0 : Number(row.coupon_value),
     discountPercentage: pct ? Number(row.coupon_percent) : 0,
     maximumDiscount: Number(row.max_discount),
     /* The agent's total discount limit (owner, 2026-11-04); a coupon from
        before the field existed went out with the fixed 10000. */
-    reachLimit:
-      row.total_discount_limit == null || row.total_discount_limit === ''
-        ? 10000
-        : Number(row.total_discount_limit),
+    reachLimit: expectedReachLimit(row),
     orderMaximum: 1000000,
     limitForUser: Number(row.usage_limit),
     monthlyReachLimit: Number(row.usage_limit),
@@ -992,7 +1005,19 @@ await check(
       return null;
     };
     const crm = await items('coupon_approvals', {
-      filter: JSON.stringify({ yiji_coupon_user_id: { _nnull: true } }),
+      /* Private coupons only: a General one (on purpose, 2026-11-08) is MEANT
+         to be added by anyone with the code - the leak check covers General. */
+      filter: JSON.stringify({
+        _and: [
+          { yiji_coupon_user_id: { _nnull: true } },
+          {
+            _or: [
+              { coupon_type: { _null: true } },
+              { coupon_type: { _nin: ['General', 'Public', 'general', 'public'] } },
+            ],
+          },
+        ],
+      }),
       fields: 'coupon_code,title,yiji_coupon_user_id',
       limit: '-1',
     });
@@ -1468,6 +1493,17 @@ await check(
     if (!token) return 'skip';
     const yh = { authorization: `Bearer ${token}`, tenantid: '1', accept: 'application/json' };
     const bad = [];
+    /* GENERAL ON PURPOSE (owner, 2026-11-08): an agent may now choose General,
+       with a warning and a typed total limit. Those codes are listed, not
+       failed; any OTHER active General coupon with our codes is still a leak. */
+    const intended = await items('coupon_approvals', {
+      filter: JSON.stringify({ coupon_type: { _in: ['General', 'Public', 'general', 'public'] } }),
+      fields: 'coupon_code',
+      limit: '-1',
+    });
+    if (intended.status !== 200) return { status: 'FAIL', detail: `CRM HTTP ${intended.status}` };
+    const meant = new Set((intended.data ?? []).map((c) => String(c.coupon_code ?? '').toUpperCase()));
+    const listed = [];
     // Our code prefixes, plus anything that reads like a test coupon.
     for (const code of ['OPS-', 'CC-', 'ZZ-', 'PROBE', 'TEST']) {
       for (let page = 1; page <= 50; page++) {
@@ -1480,14 +1516,18 @@ await check(
         const rows = await r.json();
         if (!Array.isArray(rows) || rows.length === 0) break;
         // Type 0 = General, status 0 = active (status 1 = removed).
-        for (const c of rows) if (c.type === 0 && c.status === 0) bad.push(`${c.code} #${c.id}`);
+        for (const c of rows)
+          if (c.type === 0 && c.status === 0)
+            (meant.has(String(c.code ?? '').toUpperCase()) ? listed : bad).push(`${c.code} #${c.id}`);
         if (rows.length < 100) break;
       }
     }
     const unique = [...new Set(bad)];
+    const ok = [...new Set(listed)];
+    const note = ok.length ? ` (${ok.length} General on purpose: ${ok.slice(0, 10).join(', ')})` : '';
     return unique.length === 0
-      ? { status: 'PASS', detail: 'no active General coupon with our codes or a test name' }
-      : { status: 'FAIL', detail: `active General: ${unique.slice(0, 10).join(', ')}` };
+      ? { status: 'PASS', detail: `no unintended active General coupon with our codes or a test name${note}` }
+      : { status: 'FAIL', detail: `active General NOT issued as General: ${unique.slice(0, 10).join(', ')}${note}` };
   },
 );
 

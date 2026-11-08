@@ -616,8 +616,9 @@ describe('validation: 400 with field messages, never 500', () => {
     expect(noCap.statusCode).toBe(201);
     expect(noCap.json().coupon.error.fields['coupon.maxDiscount']).toContain('maximum discount');
 
-    /* The total discount limit is required, and a private amount coupon's
-       cannot be below its value (owner, 2026-11-04). */
+    /* The total discount limit (owner, 2026-11-08): a PRIVATE coupon sent
+       without one gets the calculation (uses x maximum discount) - accepted,
+       pending; one below a single use of the coupon is refused. */
     const noLimit = await app.inject(
       signed(
         'POST',
@@ -629,9 +630,7 @@ describe('validation: 400 with field messages, never 500', () => {
       ),
     );
     expect(noLimit.statusCode).toBe(201);
-    expect(noLimit.json().coupon.error.fields['coupon.totalDiscountLimit']).toMatch(
-      /total discount limit/,
-    );
+    expect(noLimit.json().coupon.status).toBe('pending');
     const lowLimit = await app.inject(
       signed(
         'POST',
@@ -643,7 +642,7 @@ describe('validation: 400 with field messages, never 500', () => {
       ),
     );
     expect(lowLimit.json().coupon.error.fields['coupon.totalDiscountLimit']).toMatch(
-      /cannot be less than the coupon value/,
+      /cannot be less than one use of the coupon/,
     );
 
     const backwards = await app.inject(
@@ -658,7 +657,8 @@ describe('validation: 400 with field messages, never 500', () => {
     );
     expect(backwards.statusCode).toBe(201);
     expect(backwards.json().coupon.error.fields['coupon.validTo']).toBeDefined();
-    expect(store.coupons.size).toBe(0);
+    // Only the Private coupon sent without a limit was stored (calculated).
+    expect(store.coupons.size).toBe(1);
   });
 
   it('refuses a mismatched money field and an unknown delivery type', async () => {
