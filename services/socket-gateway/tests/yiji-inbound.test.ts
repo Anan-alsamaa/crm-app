@@ -377,111 +377,53 @@ describe('POST /webhooks/yiji/tickets - ticket only', () => {
   });
 });
 
-describe('POST /webhooks/yiji/tickets - the ticket never depends on its coupon', () => {
-  it('creates both: the coupon pending for a supervisor, the ticket then Compensated', async () => {
+describe('Yiji only creates tickets (owner, 2026-11-05)', () => {
+  it('a coupon in the body is ignored: the ticket is created, no coupon stored, no coupon in the reply', async () => {
     const res = await app.inject(
       signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
     );
     expect(res.statusCode).toBe(201);
     const body = res.json();
-    expect(body.coupon).toMatchObject({ externalId: 'YC-9001', status: 'pending' });
-    expect(body.coupon.code).toMatch(/^CC-[A-Z2-9]{8}$/);
-
-    const c = store.coupons.get(body.coupon.id)!;
-    expect(c).toMatchObject({
-      vendor: VENDOR,
-      ticket: body.ticketId,
-      status: 'pending',
-      requested_by: ACTOR,
-      coupon_value: 25,
-      coupon_percent: null,
-      max_discount: 25, // an amount's ceiling IS the amount
-      discount_category: 'Amount',
-      coupon_type: 'Private',
-      delivery_type: 'All',
-      issuing_side: 'Customer Care',
-      customer_phone: '0501234567',
-      order_id: '1280043',
-      restaurant_id: '501',
-      usage_limit: 1,
-      total_discount_limit: 25,
-      delivery_excluded: false,
-    });
-    expect(store.tickets.get(body.ticketId)!.compensation).toBe('Compensated');
+    expect(Object.keys(body).sort()).toEqual(['externalId', 'ticketId', 'ticketNumber']);
+    expect(store.coupons.size).toBe(0);
+    expect(store.tickets.get(body.ticketId)!.compensation).toBe('Not Compensated');
     expect(store.events.map((e) => e.text)).toEqual([
       'Created by Yiji (externalId YT-1001).',
-      expect.stringContaining('Coupon requested by Yiji (externalId YC-9001'),
+      expect.stringContaining('it was ignored'),
     ]);
   });
 
-  // Owner, 2026-10-27: a coupon problem never blocks or removes the complaint.
-  it('keeps the ticket when the coupon cannot be stored, and says so', async () => {
-    store.couponFailures = [new InboundStoreError('refused', 'FORBIDDEN')];
+  it('a malformed coupon in the body never blocks the ticket', async () => {
     const res = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
+      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: { type: 'cash', value: -1 } })),
     );
     expect(res.statusCode).toBe(201);
-    expect(res.json().coupon.status).toBe('not_created');
     expect(store.tickets.size).toBe(1);
-    expect([...store.tickets.values()][0]!.compensation).toBe('Not Compensated');
     expect(store.coupons.size).toBe(0);
   });
 
-  it('retries a transient coupon failure and succeeds', async () => {
-    store.couponFailures = [new InboundStoreError('transient', 'ECONNRESET')];
-    const res = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
-    );
-    expect(res.statusCode).toBe(201);
-    expect(store.coupons.size).toBe(1);
+  it('the add-coupon call answers 410 coupons_not_accepted and writes nothing', async () => {
+    await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
+    for (const url of [
+      '/webhooks/yiji/tickets/YT-1001/coupons',
+      '/webhooks/yiji/tickets/NOPE/coupons',
+    ]) {
+      const res = await app.inject(signed('POST', url, amountCoupon()));
+      expect(res.statusCode).toBe(410);
+      expect(res.json().error).toBe('coupons_not_accepted');
+    }
+    expect(store.coupons.size).toBe(0);
   });
 
-  it('a write that landed but lost its answer is not written twice', async () => {
-    store.couponLandsThenFails = true;
-    const res = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
+  it('the add-coupon call still needs a valid signature', async () => {
+    const req = signed(
+      'POST',
+      '/webhooks/yiji/tickets/YT-1001/coupons',
+      amountCoupon(),
+      nowTs(),
+      'not-the-secret',
     );
-    expect(res.statusCode).toBe(201);
-    expect(store.coupons.size).toBe(1);
-  });
-
-  it('a coupon that failed is completed later with the add-coupon call', async () => {
-    store.couponFailures = [new InboundStoreError('refused', 'FORBIDDEN')];
-    const first = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
-    );
-    expect(first.statusCode).toBe(201);
-    const [left] = [...store.tickets.values()];
-    expect(left!.compensation).toBe('Not Compensated');
-
-    const retry = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
-    );
-    expect(retry.statusCode).toBe(200);
-    expect(retry.json().ticketId).toBe(left!.id);
-    expect(retry.json().coupon.status).toBe('pending');
-    expect(store.coupons.size).toBe(1);
-    expect(store.tickets.get(left!.id)!.compensation).toBe('Compensated');
-  });
-
-  it('a coupon externalId already used on another ticket: the new ticket is created, its coupon is not', async () => {
-    await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
-    );
-    const res = await app.inject(
-      signed(
-        'POST',
-        '/webhooks/yiji/tickets',
-        ticketBody({ externalId: 'YT-2002', coupon: amountCoupon() }),
-      ),
-    );
-    expect(res.statusCode).toBe(201);
-    expect(res.json().coupon).toMatchObject({
-      status: 'not_created',
-      error: { code: 'coupon_external_id_conflict' },
-    });
-    expect(store.tickets.size).toBe(2);
-    expect(store.coupons.size).toBe(1);
+    expect((await app.inject(req)).statusCode).toBe(401);
   });
 });
 
@@ -491,70 +433,22 @@ describe('idempotency', () => {
     const b = await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
     expect(a.statusCode).toBe(201);
     expect(b.statusCode).toBe(200);
-    expect(b.json().ticketId).toBe(a.json().ticketId);
+    expect(b.json()).toEqual(a.json());
     expect(store.tickets.size).toBe(1);
   });
 
-  it('the same ticket + coupon replayed returns both, writes nothing new', async () => {
-    const body = ticketBody({ coupon: amountCoupon() });
-    const a = await app.inject(signed('POST', '/webhooks/yiji/tickets', body));
-    const b = await app.inject(signed('POST', '/webhooks/yiji/tickets', body));
-    expect(b.statusCode).toBe(200);
-    expect(b.json().coupon).toEqual(a.json().coupon);
-    expect(store.coupons.size).toBe(1);
-    expect(store.tickets.size).toBe(1);
-  });
-
-  it('the same coupon externalId added twice returns the existing coupon (200)', async () => {
+  it('a replay with a different body changes nothing', async () => {
     await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
-    const url = '/webhooks/yiji/tickets/YT-1001/coupons';
-    const a = await app.inject(signed('POST', url, amountCoupon()));
-    const b = await app.inject(signed('POST', url, amountCoupon()));
-    expect(a.statusCode).toBe(201);
+    const b = await app.inject(
+      signed(
+        'POST',
+        '/webhooks/yiji/tickets',
+        ticketBody({ subject: 'Changed', coupon: amountCoupon() }),
+      ),
+    );
     expect(b.statusCode).toBe(200);
-    expect(b.json().coupon.id).toBe(a.json().coupon.id);
-    expect(store.coupons.size).toBe(1);
-  });
-});
-
-describe('POST /webhooks/yiji/tickets/:externalId/coupons', () => {
-  it('404 for an unknown ticket - never a loose coupon', async () => {
-    const res = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets/NOPE/coupons', amountCoupon()),
-    );
-    expect(res.statusCode).toBe(404);
-    expect(res.json().error).toBe('ticket_not_found');
+    expect([...store.tickets.values()][0]!.subject).toBe('Missing fries');
     expect(store.coupons.size).toBe(0);
-  });
-
-  it('adds a coupon to an existing Yiji ticket and marks it Compensated', async () => {
-    const t = await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
-    const res = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets/YT-1001/coupons', {
-        externalId: 'YC-7',
-        type: 'percentage',
-        percent: 20,
-        maxDiscount: 40,
-        totalDiscountLimit: 40,
-        deliveryTypes: ['delivery', 'Pickup'],
-        audience: 'general',
-      }),
-    );
-    expect(res.statusCode).toBe(201);
-    const c = store.coupons.get(res.json().coupon.id)!;
-    expect(c).toMatchObject({
-      ticket: t.json().ticketId,
-      discount_category: 'Percentage',
-      coupon_percent: 20,
-      coupon_value: null,
-      max_discount: 40,
-      delivery_type: 'Delivery, Pickup',
-      coupon_type: 'Public',
-      restaurant_id: '501',
-      status: 'pending',
-      reason: 'The fries were missing from the order.',
-    });
-    expect(store.tickets.get(t.json().ticketId)!.compensation).toBe('Compensated');
   });
 });
 
@@ -595,86 +489,6 @@ describe('validation: 400 with field messages, never 500', () => {
     expect(res.json().fields.complaintType).toContain('Unknown complaint type');
   });
 
-  it('applies the agent form coupon rules (zero value, percentage without a cap, dates)', async () => {
-    const zero = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon({ value: 0 }) })),
-    );
-    // The ticket is created; the coupon is reported with its field errors.
-    expect(zero.statusCode).toBe(201);
-    expect(zero.json().coupon.error.fields['coupon.value']).toBeDefined();
-
-    const noCap = await app.inject(
-      signed(
-        'POST',
-        '/webhooks/yiji/tickets',
-        ticketBody({
-          externalId: 'YT-NOCAP',
-          coupon: { externalId: 'C1', type: 'percentage', percent: 20 },
-        }),
-      ),
-    );
-    expect(noCap.statusCode).toBe(201);
-    expect(noCap.json().coupon.error.fields['coupon.maxDiscount']).toContain('maximum discount');
-
-    /* The total discount limit is required, and a private amount coupon's
-       cannot be below its value (owner, 2026-11-04). */
-    const noLimit = await app.inject(
-      signed(
-        'POST',
-        '/webhooks/yiji/tickets',
-        ticketBody({
-          externalId: 'YT-NOLIMIT',
-          coupon: amountCoupon({ externalId: 'C2', totalDiscountLimit: undefined }),
-        }),
-      ),
-    );
-    expect(noLimit.statusCode).toBe(201);
-    expect(noLimit.json().coupon.error.fields['coupon.totalDiscountLimit']).toMatch(
-      /total discount limit/,
-    );
-    const lowLimit = await app.inject(
-      signed(
-        'POST',
-        '/webhooks/yiji/tickets',
-        ticketBody({
-          externalId: 'YT-LOWLIMIT',
-          coupon: amountCoupon({ externalId: 'C3', totalDiscountLimit: 10 }),
-        }),
-      ),
-    );
-    expect(lowLimit.json().coupon.error.fields['coupon.totalDiscountLimit']).toMatch(
-      /cannot be less than the coupon value/,
-    );
-
-    const backwards = await app.inject(
-      signed(
-        'POST',
-        '/webhooks/yiji/tickets',
-        ticketBody({
-          externalId: 'YT-BACKWARDS',
-          coupon: amountCoupon({ validFrom: '2026-11-10', validTo: '2026-11-01' }),
-        }),
-      ),
-    );
-    expect(backwards.statusCode).toBe(201);
-    expect(backwards.json().coupon.error.fields['coupon.validTo']).toBeDefined();
-    expect(store.coupons.size).toBe(0);
-  });
-
-  it('refuses a mismatched money field and an unknown delivery type', async () => {
-    const res = await app.inject(
-      signed(
-        'POST',
-        '/webhooks/yiji/tickets',
-        ticketBody({ coupon: amountCoupon({ percent: 10, deliveryTypes: ['teleport'] }) }),
-      ),
-    );
-    expect(res.statusCode).toBe(201);
-    expect(Object.keys(res.json().coupon.error.fields)).toEqual(
-      expect.arrayContaining(['coupon.percent', 'coupon.deliveryTypes']),
-    );
-  });
-
   it('a body that is not JSON is a 400', async () => {
     const res = await app.inject({
       method: 'POST',
@@ -685,51 +499,46 @@ describe('validation: 400 with field messages, never 500', () => {
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toBe('invalid_request');
   });
-
-  it('an add-coupon body is validated with coupon.* field names', async () => {
-    await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
-    const res = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets/YT-1001/coupons', { type: 'cash' }),
-    );
-    expect(res.statusCode).toBe(400);
-    expect(Object.keys(res.json().fields)).toEqual(
-      expect.arrayContaining(['coupon.externalId', 'coupon.type']),
-    );
-  });
 });
 
 describe('GET /webhooks/yiji/tickets/:externalId', () => {
   it('reads back the ticket status and every coupon with its decision', async () => {
-    const created = await app.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
-    );
-    await app.inject(
-      signed(
-        'POST',
-        '/webhooks/yiji/tickets/YT-1001/coupons',
-        amountCoupon({ externalId: 'YC-2' }),
-      ),
-    );
-    const [first, second] = [...store.coupons.values()];
-    first!.status = 'assigned' as never;
-    second!.status = 'rejected' as never;
-    second!.decision_note = 'Already compensated by phone.';
-    store.tickets.get(created.json().ticketId)!.status = 'solved' as never;
+    const created = await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
+    const ticketId = created.json().ticketId as string;
+    const seed = (id: string, status: string, over: Record<string, unknown> = {}) =>
+      store.coupons.set(id, {
+        id,
+        vendor: VENDOR,
+        external_id: null,
+        ticket: ticketId,
+        status,
+        coupon_code: `CC-${id.toUpperCase()}`,
+        coupon_value: 25,
+        coupon_percent: null,
+        max_discount: 25,
+        valid_from: '2026-10-27',
+        valid_to: '2026-11-27',
+        ...over,
+      } as never);
+    seed('c1', 'assigned');
+    seed('c2', 'rejected', { decision_note: 'Already compensated by phone.' });
+    store.tickets.get(ticketId)!.status = 'solved' as never;
+    store.tickets.get(ticketId)!.compensation = 'Compensated' as never;
 
     const res = await app.inject(signed('GET', '/webhooks/yiji/tickets/YT-1001'));
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     const body = res.json();
     expect(body).toMatchObject({
-      ticketId: created.json().ticketId,
+      ticketId,
       externalId: 'YT-1001',
       status: 'solved',
       compensation: 'Compensated',
     });
     expect(body.coupons).toHaveLength(2);
-    expect(body.coupons[0]).toMatchObject({ externalId: 'YC-9001', status: 'assigned', value: 25 });
+    expect(body.coupons[0]).toMatchObject({ id: 'c1', status: 'assigned', value: 25 });
     expect(body.coupons[1]).toMatchObject({
-      externalId: 'YC-2',
+      id: 'c2',
       status: 'rejected',
       decisionNote: 'Already compensated by phone.',
     });
@@ -741,36 +550,7 @@ describe('GET /webhooks/yiji/tickets/:externalId', () => {
   });
 });
 
-describe('CRM-side compensation policy hook', () => {
-  const big = () => ticketBody({ coupon: amountCoupon({ value: 500, totalDiscountLimit: 500 }) });
-
-  it('OFF by default: a coupon over the limits is still accepted (pending a supervisor)', async () => {
-    const res = await app.inject(signed('POST', '/webhooks/yiji/tickets', big()));
-    expect(res.statusCode).toBe(201);
-  });
-
-  it('ON: the coupon is refused as policy_violation; the ticket is still created', async () => {
-    const strict = build(store, {
-      policy: { enforce: true, maxExposureSar: 200, maxPercent: 50, maxValidityDays: 90 },
-    });
-    const res = await strict.inject(signed('POST', '/webhooks/yiji/tickets', big()));
-    expect(res.statusCode).toBe(201);
-    expect(res.json().coupon).toMatchObject({
-      status: 'not_created',
-      error: { code: 'policy_violation', fields: { 'coupon.value': expect.any(String) } },
-    });
-    expect(store.tickets.size).toBe(1);
-    expect(store.coupons.size).toBe(0);
-
-    // Yiji fixes the coupon and resends: same ticket, the coupon is added.
-    const ok = await strict.inject(
-      signed('POST', '/webhooks/yiji/tickets', ticketBody({ coupon: amountCoupon() })),
-    );
-    expect(ok.statusCode).toBe(200);
-    expect(ok.json().coupon.status).toBe('pending');
-    expect(store.tickets.size).toBe(1);
-  });
-
+describe('CRM-side compensation policy helper', () => {
   it('checks percent and validity length too', () => {
     const p = { enforce: true, maxExposureSar: 200, maxPercent: 30, maxValidityDays: 30 };
     expect(

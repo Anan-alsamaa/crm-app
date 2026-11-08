@@ -1,24 +1,25 @@
 # Sara CRM — Yiji inbound API (tickets + coupon requests)
 
-For Yiji's engineering team. Lets Yiji raise a complaint ticket in the CRM, optionally with a
-compensation coupon **request**, and read back what became of it.
+INTERNAL reference (the partner-facing spec is the short ticket-only text sent on 2026-11-05).
+
+**Since 2026-11-05 (owner): Yiji only creates tickets.**
+
+- `POST /tickets` creates a ticket. A `coupon` in the body is **ignored** (never validated or
+  stored); the ticket is still created and its history notes it. The reply is the ticket only:
+  `{ ticketId, ticketNumber, externalId }`.
+- The CRM's **compensation rules** decide for every API ticket. A match raises a coupon request
+  **pending** WeCare approval (the supervisor types the total discount limit on the approval card).
+  While Global "Coupons under maintenance" is ON (or unreadable), no rule coupon is raised and the
+  ticket says why.
+- `POST /tickets/{externalId}/coupons` is **closed**: `410 coupons_not_accepted`.
+- `GET /tickets/{externalId}` still returns the ticket and its coupons.
+
+The sections below about Yiji-sent coupons describe the API before 2026-11-05 and no longer apply.
 
 | Environment | Base URL                                        |
 | ----------- | ----------------------------------------------- |
 | Staging     | `https://crm-api-staging.anan.sa/webhooks/yiji` |
 | Production  | `https://crm-api.anan.sa/webhooks/yiji`         |
-
-| Method | Path                            | What it does                                  |
-| ------ | ------------------------------- | --------------------------------------------- |
-| POST   | `/tickets`                      | Create a ticket, optionally with one coupon   |
-| POST   | `/tickets/{externalId}/coupons` | Add a coupon to a ticket you created earlier  |
-| GET    | `/tickets/{externalId}`         | Ticket status + every coupon and its decision |
-
-`{externalId}` is **your** ticket id (URL-encode it).
-
-**Coupons are requests.** A coupon arrives `pending` and is delivered to the customer's Yiji
-wallet by the CRM only after a WeCare supervisor approves it. Poll `GET /tickets/{externalId}` for
-the decision. The CRM never calls Yiji from these endpoints.
 
 ## Authentication — HMAC-SHA256
 

@@ -13,9 +13,10 @@ import {
 /**
  * THE COMPENSATION RULES on the Yiji inbound API (owner, 2026-10-27).
  *
- * A Yiji ticket sent WITHOUT a coupon gets the matching rule's coupon as a
- * PENDING request; one sent WITH a coupon keeps Yiji's and never gets a second;
- * a rule problem of any kind never blocks or undoes the ticket.
+ * Yiji ONLY creates tickets (owner, 2026-11-05): every ticket gets the matching
+ * rule's coupon as a PENDING request, a coupon Yiji sends is ignored, no rule
+ * coupon is raised while "Coupons under maintenance" is on, and a rule problem
+ * of any kind never blocks or undoes the ticket.
  */
 
 const VENDOR = 'vendor-yiji';
@@ -54,6 +55,8 @@ class FakeStore implements YijiInboundStore {
   couponFailures: InboundStoreError[] = [];
   /** Rule coupons the customer already had (counted by ruleCouponsSince). */
   priorRuleCoupons = 0;
+  /** The Global "Coupons under maintenance" switch. */
+  maintenance = false;
   private seq = 0;
 
   async yijiVendorId() {
@@ -159,6 +162,9 @@ class FakeStore implements YijiInboundStore {
   async ruleCouponsSince(_contact: string, _since: string, max: number) {
     return Math.min(this.priorRuleCoupons, max);
   }
+  async couponsUnderMaintenance() {
+    return this.maintenance;
+  }
 }
 
 const silent = { info: () => {}, warn: () => {}, error: () => {} };
@@ -189,7 +195,7 @@ const body = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-describe('Yiji ticket WITHOUT a coupon: the rule decides', () => {
+describe('a Yiji ticket: the rule decides', () => {
   it('creates the matching rule coupon, pending, linked to the ticket', async () => {
     store.rules = [rule()];
     const res = await svc.createTicket(body());
@@ -207,7 +213,12 @@ describe('Yiji ticket WITHOUT a coupon: the rule decides', () => {
     expect(c.coupon_code).toMatch(/^CC-/);
     expect(c.reason).toBe('Arrived an hour late.');
     expect(c.ticket).toBe(res.body.ticketId);
-    expect(res.body.coupon).toMatchObject({ status: 'pending', source: 'rule' });
+    // The reply is the ticket only - the coupon is the CRM's business.
+    expect(res.body).toEqual({
+      ticketId: c.ticket,
+      ticketNumber: expect.any(String),
+      externalId: 'YT-1',
+    });
     // The history line names the rule.
     expect(store.events.map((e) => e.text)).toContain(
       `Coupon from rule "Late order 30" (code ${c.coupon_code}) - waiting for a WeCare supervisor.`,
@@ -246,8 +257,8 @@ describe('Yiji ticket WITHOUT a coupon: the rule decides', () => {
   });
 });
 
-describe('Yiji ticket WITH a coupon: Yiji decides, never a second (rule) coupon', () => {
-  it('keeps Yiji’s coupon and adds no rule coupon', async () => {
+describe('a coupon Yiji sends is ignored - the rules still decide', () => {
+  it('a valid Yiji coupon is not stored; the rule coupon is', async () => {
     store.rules = [rule()];
     const res = await svc.createTicket(
       body({ coupon: { externalId: 'YC-1', type: 'amount', value: 15, totalDiscountLimit: 15 } }),
@@ -255,17 +266,65 @@ describe('Yiji ticket WITH a coupon: Yiji decides, never a second (rule) coupon'
     expect(res.status).toBe(201);
     const coupons = [...store.coupons.values()];
     expect(coupons).toHaveLength(1);
-    expect(coupons[0]!.external_id).toBe('YC-1');
-    expect(coupons[0]!.policy_rule).toBeUndefined();
-    expect(res.body.coupon).not.toHaveProperty('source');
+    expect(coupons[0]!.external_id).toBeNull();
+    expect(coupons[0]!.policy_rule).toBe('rule-late');
+    expect(res.body).not.toHaveProperty('coupon');
+    expect(store.events.some((e) => e.text.includes('it was ignored'))).toBe(true);
   });
 
-  it('an INVALID Yiji coupon is still Yiji’s call: no rule coupon either', async () => {
-    store.rules = [rule()];
-    const res = await svc.createTicket(body({ coupon: { externalId: 'YC-1', type: 'amount' } }));
+  it('an invalid Yiji coupon never blocks or fails the ticket', async () => {
+    const res = await svc.createTicket(body({ coupon: { externalId: '!!', type: 'nope' } }));
     expect(res.status).toBe(201);
+    expect(store.tickets.size).toBe(1);
     expect(store.coupons.size).toBe(0);
-    expect((res.body.coupon as { status: string }).status).toBe('not_created');
+  });
+
+  it('the add-coupon call is closed (410), and writes nothing', async () => {
+    await svc.createTicket(body());
+    await expect(svc.addCoupon()).rejects.toMatchObject({
+      status: 410,
+      code: 'coupons_not_accepted',
+    });
+    expect(store.coupons.size).toBe(0);
+  });
+});
+
+describe('Coupons under maintenance: no rule coupon', () => {
+  it('ON: the ticket is created, no coupon, the ticket says why', async () => {
+    store.rules = [rule()];
+    store.maintenance = true;
+    const res = await svc.createTicket(body());
+    expect(res.status).toBe(201);
+    expect(store.tickets.size).toBe(1);
+    expect(store.coupons.size).toBe(0);
+    expect([...store.tickets.values()][0]!.compensation).toBe('Not Compensated');
+    const notes = store.events.filter((e) => e.text.includes('under maintenance'));
+    expect(notes).toHaveLength(1);
+    expect(notes[0]!.text).toContain('"Late order 30"');
+  });
+
+  it('a retry while ON adds no second note and no coupon', async () => {
+    store.rules = [rule()];
+    store.maintenance = true;
+    await svc.createTicket(body());
+    const again = await svc.createTicket(body());
+    expect(again.status).toBe(200);
+    expect(store.coupons.size).toBe(0);
+    expect(store.events.filter((e) => e.text.includes('under maintenance'))).toHaveLength(1);
+  });
+
+  it('no rule matched: no maintenance note', async () => {
+    store.rules = [rule({ complaint_type: 'Missing item' })];
+    store.maintenance = true;
+    await svc.createTicket(body());
+    expect(store.events.some((e) => e.text.includes('under maintenance'))).toBe(false);
+  });
+
+  it('OFF: the rule coupon is raised as usual', async () => {
+    store.rules = [rule()];
+    store.maintenance = false;
+    await svc.createTicket(body());
+    expect(store.coupons.size).toBe(1);
   });
 });
 
@@ -310,7 +369,7 @@ describe('one rule coupon per ticket', () => {
     const again = await svc.createTicket(body());
     expect(again.status).toBe(200);
     expect(store.coupons.size).toBe(1);
-    expect(again.body.coupon).toMatchObject({ source: 'rule' });
+    expect(again.body).not.toHaveProperty('coupon');
   });
 
   it('a replay after the rule coupon failed the first time finishes the job, once', async () => {
@@ -323,38 +382,19 @@ describe('one rule coupon per ticket', () => {
     expect(store.coupons.size).toBe(1);
   });
 
-  it('a ticket that already has a coupon (Yiji added one later) gets no rule coupon on replay', async () => {
+  it('a ticket that already has a coupon (added in the CRM) gets no rule coupon on replay', async () => {
     await svc.createTicket(body());
-    await svc.addCoupon('YT-1', {
-      externalId: 'YC-7',
-      type: 'amount',
-      value: 20,
-      totalDiscountLimit: 20,
-    });
+    const ticket = [...store.tickets.values()][0]!;
+    await store.createCoupon({
+      id: 'agent-coupon',
+      vendor: VENDOR,
+      external_id: null,
+      ticket: ticket.id,
+      status: 'pending',
+    } as unknown as NewCouponRow);
     store.rules = [rule()];
     await svc.createTicket(body());
-    expect([...store.coupons.values()].map((c) => c.external_id)).toEqual(['YC-7']);
-  });
-});
-
-describe('Yiji adds a coupon to a ticket that already has its rule coupon', () => {
-  // Owner, 2026-10-27: not added - a warning, never a second coupon.
-  it('is not created; the reply warns and names the existing coupon', async () => {
-    store.rules = [rule()];
-    await svc.createTicket(body());
-    const res = await svc.addCoupon('YT-1', {
-      externalId: 'YC-8',
-      type: 'amount',
-      value: 20,
-      totalDiscountLimit: 20,
-    });
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({
-      warning: 'rule_coupon_exists',
-      coupon: { status: 'not_created', error: { code: 'rule_coupon_exists' } },
-      existingCoupon: { source: 'rule' },
-    });
-    expect(store.coupons.size).toBe(1);
+    expect([...store.coupons.keys()]).toEqual(['agent-coupon']);
   });
 });
 
