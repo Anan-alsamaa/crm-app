@@ -29,6 +29,7 @@ import {
 } from './api.js';
 import { PolicyPills } from './PolicyPills.js';
 import { CouponRequestDialog } from './CouponRequestDialog.js';
+import { storedCouponType, storedTotalLimit } from './coupon-request-fields.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import {
   useRecordVendorIds,
@@ -726,6 +727,10 @@ export function MyCouponsPage() {
             item_name: editing.item_name,
             item_sku: editing.item_sku,
             no_other_discounts: editing.no_other_discounts ?? false,
+            total_discount_limit:
+              editing.total_discount_limit != null && editing.total_discount_limit !== ''
+                ? Number(editing.total_discount_limit)
+                : null,
           }}
           onSave={async (d) => {
             try {
@@ -736,7 +741,7 @@ export function MyCouponsPage() {
                   coupon_code: d.code,
                   issuing_side: d.issuing_side,
                   delivery_type: d.delivery_type,
-                  coupon_type: d.coupon_type,
+                  coupon_type: storedCouponType(d),
                   discount_category: d.discount_category,
                   valid_from: d.valid_from,
                   valid_to: d.valid_to,
@@ -747,6 +752,9 @@ export function MyCouponsPage() {
                   coupon_percent: d.discount_category === 'Percentage' ? d.coupon_percent : null,
                   max_discount: d.max_discount,
                   usage_limit: d.usage_limit,
+                  /* Saved with the correction - it used to be left out, so a
+                     corrected limit never reached the request (2026-11-08). */
+                  total_discount_limit: storedTotalLimit(d),
                   reason: d.compensation_reason,
                   item_name: d.item_name,
                   item_sku: d.item_sku,

@@ -165,6 +165,19 @@ describe('Edit coupon on an approved card', () => {
     expect(screen.queryByRole('button', { name: 'Edit coupon' })).not.toBeInTheDocument();
   });
 
+  it('an admin-typed limit is kept when the value changes afterwards', async () => {
+    const user = userEvent.setup();
+    renderPage([approved]);
+    await user.click(screen.getByRole('button', { name: 'Edit coupon' }));
+    const limit = screen.getByLabelText('Total discount limit (SAR)') as HTMLInputElement;
+    await user.clear(limit);
+    await user.type(limit, '70');
+    const value = screen.getByLabelText('Coupon value (SAR)');
+    await user.clear(value);
+    await user.type(value, '30');
+    expect(limit.value).toBe('70');
+  });
+
   it('Save needs a reason, then hands over the whole edited coupon - and never calls Yiji', async () => {
     const user = userEvent.setup();
     renderPage([approved]);
@@ -179,11 +192,10 @@ describe('Edit coupon on an approved card', () => {
       screen.getByPlaceholderText('Why is this approved coupon being changed?'),
       'Wrong amount',
     );
-    /* The limit (25) is now below the value (40): Save waits until it is fixed. */
-    expect(save).toBeDisabled();
-    const limit = screen.getByLabelText('Total discount limit (SAR)');
-    await user.clear(limit);
-    await user.type(limit, '40');
+    /* Private: the limit FOLLOWS the value (owner, 2026-11-08: uses x maximum
+       discount) - 25 was the calculation, so it becomes 40 by itself. */
+    const limit = screen.getByLabelText('Total discount limit (SAR)') as HTMLInputElement;
+    expect(limit.value).toBe('40');
     expect(save).toBeEnabled();
     await user.click(save);
 

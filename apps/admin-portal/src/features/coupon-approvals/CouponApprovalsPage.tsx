@@ -25,6 +25,9 @@ import {
   couponDecision,
   displayContactName,
   couponLimitProblem,
+  couponTypeProblem,
+  isGeneralCouponType,
+  privateTotalLimit,
   type CouponTermsProblem,
   normalizePhone,
   type StoreIndex,
@@ -252,11 +255,47 @@ function seedEdits(row: CouponApprovalRow): TermEdits {
     amount: String((pct ? row.coupon_percent : row.coupon_value) ?? ''),
     max_discount: String(row.max_discount ?? ''),
     usage_limit: String(row.usage_limit ?? ''),
+    /* Private with nothing stored opens with the calculation (owner,
+       2026-11-08: Number of uses x maximum discount); the admin may change it. */
     total_discount_limit:
-      row.total_discount_limit == null ? '' : String(Number(row.total_discount_limit)),
+      row.total_discount_limit != null
+        ? String(Number(row.total_discount_limit))
+        : String(isGeneralCouponType(row.coupon_type) ? '' : (privateTotalLimit(row) ?? '')),
     item_name: row.item_name ?? '',
     reason: row.reason ?? '',
   };
+}
+
+/** The limit-relevant terms of the card's edits. */
+function limitTermsOf(e: TermEdits) {
+  const pct = isPercentageCategory(e.discount_category);
+  const amount = e.amount.trim() === '' ? null : Number(e.amount);
+  return {
+    coupon_type: e.coupon_type,
+    discount_category: e.discount_category,
+    coupon_value: pct ? null : amount,
+    max_discount: pct ? (e.max_discount.trim() === '' ? null : Number(e.max_discount)) : amount,
+    usage_limit: e.usage_limit.trim() === '' ? null : Number(e.usage_limit),
+  };
+}
+
+/**
+ * KEEP A PRIVATE LIMIT IN STEP (owner, 2026-11-08). When the admin changes the
+ * value, cap, uses or type of a Private coupon, its total discount limit is
+ * recalculated (uses x maximum discount) - UNLESS the admin had typed their own
+ * number, which is theirs to keep. A General coupon's limit is never touched.
+ */
+export function withAutoLimit(prev: TermEdits, next: TermEdits, key: keyof TermEdits): TermEdits {
+  if (key === 'total_discount_limit' || isGeneralCouponType(next.coupon_type)) return next;
+  const before = privateTotalLimit(limitTermsOf(prev));
+  const typed = prev.total_discount_limit.trim();
+  const followsCalc =
+    typed === '' ||
+    isGeneralCouponType(prev.coupon_type) ||
+    (before !== null && Number(typed) === before);
+  if (!followsCalc) return next;
+  const after = privateTotalLimit(limitTermsOf(next));
+  return { ...next, total_discount_limit: after === null ? '' : String(after) };
 }
 
 /**
@@ -402,7 +441,8 @@ function ReplaceCouponForm({ row, onClose }: { row: CouponApprovalRow; onClose: 
     return { ...seeded, valid_from: d.valid_from, valid_to: d.valid_to };
   });
   const [reason, setReason] = useState('');
-  const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
+  const setEdit = (k: keyof TermEdits, v: string) =>
+    setEdits((e) => withAutoLimit(e, { ...e, [k]: v }, k));
   const terms = termsFromEdits(row, edits);
   const problem = replacementTermsProblem(terms);
   const pctNow = isPercentageCategory(edits.discount_category);
@@ -734,7 +774,8 @@ function Row({
    * reason saved earlier is shown for editing rather than appearing blank.
    */
   const [withholdReason, setWithholdReason] = useState(row.delivery_excluded_reason ?? '');
-  const setEdit = (k: keyof TermEdits, v: string) => setEdits((e) => ({ ...e, [k]: v }));
+  const setEdit = (k: keyof TermEdits, v: string) =>
+    setEdits((e) => withAutoLimit(e, { ...e, [k]: v }, k));
   const saveTerms = useSaveCouponTerms();
   const retry = useRetryCouponDelivery();
   const pending = row.status === 'pending';
@@ -799,8 +840,12 @@ function Row({
       list: CouponTermsProblem[],
       terms: Parameters<typeof couponLimitProblem>[0],
     ): CouponTermsProblem[] => {
+      const type = couponTypeProblem(terms.coupon_type);
+      const withType: CouponTermsProblem[] = type
+        ? [...list, { field: 'coupon_type', message: type }]
+        : list;
       const limit = couponLimitProblem(terms);
-      return limit ? [...list, { field: 'total_discount_limit', message: limit }] : list;
+      return limit ? [...withType, { field: 'total_discount_limit', message: limit }] : withType;
     };
     if (!editing) {
       return withLimit(
@@ -829,6 +874,8 @@ function Row({
         coupon_type: edits.coupon_type,
         discount_category: edits.discount_category,
         coupon_value: pctNow ? null : amount,
+        max_discount: pctNow ? cap : amount,
+        usage_limit: edits.usage_limit,
         total_discount_limit: edits.total_discount_limit,
       },
     );
@@ -2067,7 +2114,8 @@ export function CouponApprovalsPage() {
             coupon_percent: r.coupon_percent,
             max_discount: r.max_discount,
           }).length === 0 &&
-          couponLimitProblem(r) === null,
+          couponLimitProblem(r) === null &&
+          couponTypeProblem(r.coupon_type) === null,
       ),
     [rows],
   );
