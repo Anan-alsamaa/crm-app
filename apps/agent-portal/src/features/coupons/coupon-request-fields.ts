@@ -1,4 +1,9 @@
-import { compensationFlag, type CouponRequestDraft } from '@yiji/shared-types';
+import {
+  compensationFlag,
+  isGeneralCouponType,
+  privateTotalLimit,
+  type CouponRequestDraft,
+} from '@yiji/shared-types';
 
 /**
  * THE ONE PLACE a completed coupon form becomes the fields of a coupon request.
@@ -15,6 +20,26 @@ import { compensationFlag, type CouponRequestDraft } from '@yiji/shared-types';
  * Both callers now spread THIS, so a field added to the form reaches every
  * path or none — `coupon-request-fields.test.ts` enforces it.
  */
+/** The type as chosen (the form starts on Private). A blank or unknown type
+ *  is never turned into something else: the form will not send it, and the
+ *  worker refuses it (owner, 2026-11-08). */
+export function storedCouponType(d: Pick<CouponRequestDraft, 'coupon_type'>): string {
+  return (d.coupon_type ?? '').trim();
+}
+
+/**
+ * The total discount limit a form saves (owner, 2026-11-08): the typed number
+ * for a General coupon; for a Private one ALWAYS the calculation - Number of
+ * uses x maximum discount - so an edit to the value or the uses can never
+ * leave a stale limit behind. (Only the approving admin may override it, on
+ * the admin portal's approval card.)
+ */
+export function storedTotalLimit(d: CouponRequestDraft): number | null {
+  return isGeneralCouponType(d.coupon_type)
+    ? (d.total_discount_limit ?? null)
+    : privateTotalLimit(d);
+}
+
 export function couponTermsFromDraft(d: CouponRequestDraft) {
   const pct = d.discount_category === 'Percentage';
   return {
@@ -27,14 +52,18 @@ export function couponTermsFromDraft(d: CouponRequestDraft) {
     title: d.title,
     issuing_side: d.issuing_side,
     delivery_type: d.delivery_type,
-    coupon_type: d.coupon_type,
+    /* Private unless the agent chose General on purpose (owner, 2026-11-08):
+       a missing type is never stored, so it can never be read as General. */
+    coupon_type: storedCouponType(d),
     discount_category: d.discount_category,
     valid_from: d.valid_from,
     valid_to: d.valid_to,
     max_discount: d.max_discount,
     usage_limit: d.usage_limit,
-    /* Yiji's total given discount limit, typed by the agent (owner, 2026-11-04). */
-    total_discount_limit: d.total_discount_limit ?? null,
+    /* Yiji's total given discount limit (owner, 2026-11-08): typed by the
+       agent for a General coupon; for a Private one CALCULATED, Number of uses
+       x maximum discount - the agent never sees or types it. */
+    total_discount_limit: storedTotalLimit(d),
     brand_id: d.brand_id ?? null,
     restaurant_id: d.restaurant_id ?? null,
     item_name: d.item_name ?? null,

@@ -81,7 +81,7 @@ describe('the switch is fail-safe', () => {
       />,
       { wrapper: wrap },
     );
-    expect(await screen.findByTestId('coupon-total-limit')).toBeInTheDocument();
+    expect(await screen.findByLabelText(/coupon value/i)).toBeInTheDocument();
     expect(screen.queryByTestId('coupon-maintenance')).not.toBeInTheDocument();
   });
 });

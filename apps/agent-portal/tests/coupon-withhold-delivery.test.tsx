@@ -84,7 +84,6 @@ async function fillRequired(user: ReturnType<typeof userEvent.setup>) {
   const val = screen.getByLabelText(/coupon value/i);
   await user.clear(val);
   await user.type(val, '25');
-  await user.type(screen.getByTestId('coupon-total-limit'), '25');
   await waitFor(() => expect((val as HTMLInputElement).value).toBe('25'));
 }
 
