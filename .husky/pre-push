@@ -5,12 +5,40 @@
 # files, which had both halves) and main was broken on push. So:
 #   1. no uncommitted, staged or untracked source files - the working tree
 #      must BE the commit, or the checks below prove nothing;
-#   2. the whole repo typechecks (broken imports, missing files).
+#   2. the whole repo typechecks (broken imports, missing files);
+#   3. a RELEASE (a push to release/* or a v* tag) runs the FULL gate.
+#
+# 3 is the 2026-11-08 lesson (owner: "ensure doesn't happen again"): release
+# v1.2.26 was cut by applying a change to the services branch and testing only
+# the packages it touched - but the release workflow's quality gate runs EVERY
+# test in the repo, and the branch's older portal tests failed it. Nothing was
+# deployed, but a release must never again reach CI having skipped the gate
+# it is about to face.
 case "$(uname -s)" in
 MINGW* | MSYS* | CYGWIN*)
   [ -d "/c/Program Files/nodejs" ] && PATH="/c/Program Files/nodejs:$PATH" && export PATH
   ;;
 esac
+
+release=0
+head=$(git rev-parse HEAD)
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # A deletion pushes no commit - nothing to check.
+  case "$local_sha" in 0000000000000000000000000000000000000000) continue ;; esac
+  case "$remote_ref" in
+  refs/tags/v* | refs/heads/release/*)
+    release=1
+    # The tag (or branch) being released must be the commit checked out here,
+    # or the full gate below would test something else.
+    target=$(git rev-parse "$local_sha^{commit}" 2>/dev/null)
+    if [ "$target" != "$head" ]; then
+      echo "pre-push: refusing - $remote_ref points at $target, but the checked-out commit is $head."
+      echo "Check out the commit you are releasing, so the full gate tests exactly it."
+      exit 1
+    fi
+    ;;
+  esac
+done
 
 dirty=$(git status --porcelain --untracked-files=all -- apps services packages directus scripts)
 if [ -n "$dirty" ]; then
@@ -18,6 +46,17 @@ if [ -n "$dirty" ]; then
   echo "$dirty"
   echo "Commit or stash them, so what is checked is exactly what is pushed."
   exit 1
+fi
+
+if [ "$release" = 1 ]; then
+  echo "pre-push: RELEASE - running the full gate (pnpm verify: every test in the repo, as CI does)..."
+  pnpm verify >/tmp/pre-push-verify.log 2>&1 || {
+    tail -60 /tmp/pre-push-verify.log
+    echo "pre-push: refusing - the full gate failed; this release would fail CI. Fix it first."
+    exit 1
+  }
+  echo "pre-push: full gate passed"
+  exit 0
 fi
 
 echo "pre-push: typechecking the commit..."
