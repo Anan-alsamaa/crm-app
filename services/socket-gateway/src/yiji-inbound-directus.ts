@@ -2,6 +2,8 @@ import { createItem, readItems, readMe, updateItem } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import {
   RULE_COUPON_LIMIT_SETTING_KEY,
+  COUPONS_MAINTENANCE_SETTING_KEY,
+  parseCouponsMaintenance,
   cleanContactName,
   internationalPhone,
   isPhoneDerivedCustomerId,
@@ -522,6 +524,28 @@ export class YijiInboundDirectus implements YijiInboundStore {
       return parseRuleCouponLimit(rows[0]?.value ?? null);
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * The Global "Coupons under maintenance" switch (owner, 2026-11-05). Read
+   * fresh each time a rule matches (rare); unreadable = paused (fail-safe).
+   */
+  async couponsUnderMaintenance(): Promise<boolean> {
+    try {
+      const rows = await this.req<Array<{ value: unknown }>>(
+        readItems(
+          'app_settings' as never,
+          {
+            filter: { key: { _eq: COUPONS_MAINTENANCE_SETTING_KEY } },
+            fields: ['value'],
+            limit: 1,
+          } as never,
+        ),
+      );
+      return parseCouponsMaintenance(rows[0]?.value);
+    } catch {
+      return true;
     }
   }
 
