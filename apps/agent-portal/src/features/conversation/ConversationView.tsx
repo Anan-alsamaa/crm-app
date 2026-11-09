@@ -1322,7 +1322,7 @@ export function ConversationView({
                 : isAgent
                   ? isNote
                     ? t('conversation.internalNote')
-                    : isMahaSource(head.source)
+                    : isMahaSource(head.source) && head.source !== 'agent_joined'
                       ? t('maha.label', { defaultValue: 'Maha (AI)' })
                       : isAutoWelcome
                         ? t('conversation.autoWelcome', { defaultValue: 'Automatic welcome' })

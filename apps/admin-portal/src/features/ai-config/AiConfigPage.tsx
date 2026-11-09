@@ -414,7 +414,8 @@ export function AiConfigPage() {
             spendSar={usageQuery.data?.mahaSpendSar}
           />
         )}
-        {AUTO_REPLY_HERE && <KnowledgeBaseSection />}
+        {/* What Maha answers from - wherever she can be switched on. */}
+        <KnowledgeBaseSection />
       </div>
     </div>
   );

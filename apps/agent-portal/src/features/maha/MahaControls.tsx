@@ -31,13 +31,13 @@ export function MahaToggle({ conversationId }: { conversationId: string }) {
       onClick={toggle}
       disabled={set.isPending}
       aria-pressed={state.active}
+      iconStart={<SparkleIcon size={16} aria-hidden />}
       title={
         state.active
           ? t('maha.turnOffHint', { defaultValue: 'Turn Maha off to reply yourself' })
           : t('maha.turnOnHint', { defaultValue: 'Let Maha answer again' })
       }
     >
-      <SparkleIcon size={16} aria-hidden />
       {state.active
         ? t('maha.on', { defaultValue: 'Maha on' })
         : t('maha.off', { defaultValue: 'Maha off' })}

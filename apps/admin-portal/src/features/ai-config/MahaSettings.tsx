@@ -65,7 +65,6 @@ export function MahaSettings({
           defaultValue:
             'She answers only from the Knowledge base, never offers compensation, and hands over to the normal assignment rules.',
         })}
-        "{' '}
       </p>
 
       <MahaThisMonth spendSar={spendSar} />
