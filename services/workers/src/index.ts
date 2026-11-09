@@ -426,25 +426,29 @@ async function main(): Promise<void> {
    * reclaimed promptly.
    */
   const lockDuration = Number(process.env.WORKER_LOCK_MS ?? 300_000);
-  const workers = queueNames.map(
-    (queue) =>
-      new Worker(
-        queue,
-        async (job) => {
-          const processor = processors[queue];
-          await processor(job, deps);
-        },
-        {
-          connection,
-          concurrency: workerConcurrency,
-          prefix: bullPrefixValue,
-          lockDuration,
-          // Check for stalled jobs on the same cadence rather than the 30s
-          // default, so a long healthy job is not repeatedly inspected.
-          stalledInterval: lockDuration,
-        },
-      ),
-  );
+  /* The `maha` queue is the SOCKET GATEWAY's to consume (it delivers Maha's
+     answers to the chat); the workers only produce into it. */
+  const workers = queueNames
+    .filter((q) => q !== QUEUES.maha)
+    .map(
+      (queue) =>
+        new Worker(
+          queue,
+          async (job) => {
+            const processor = processors[queue];
+            await processor(job, deps);
+          },
+          {
+            connection,
+            concurrency: workerConcurrency,
+            prefix: bullPrefixValue,
+            lockDuration,
+            // Check for stalled jobs on the same cadence rather than the 30s
+            // default, so a long healthy job is not repeatedly inspected.
+            stalledInterval: lockDuration,
+          },
+        ),
+    );
   for (const w of workers) {
     w.on('completed', () => jobsProcessed.inc({ queue: w.name }));
     w.on('failed', (job, err) => {

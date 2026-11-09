@@ -224,7 +224,7 @@ export function createTicketRepo(client: YijiDirectusClient): TicketRepo {
 export function createConversationRepo(client: YijiDirectusClient): ConversationRepo {
   return {
     async listUnansweredConversations() {
-      return (await client.request(
+      const rows = (await client.request(
         readItems('conversations', {
           filter: {
             status: { _in: ['open', 'pending'] },
@@ -270,6 +270,26 @@ export function createConversationRepo(client: YijiDirectusClient): Conversation
           limit: -1,
         }),
       )) as ConversationRow[];
+      /*
+       * NOT WHILE MAHA HAS THE CHAT (owner, 2026-11-09): the clock starts at
+       * her handover, which rewrites session_started_at and clears the
+       * deadline. A separate query, so an environment without the field
+       * keeps the sweep exactly as it was ([[silent-empty-failures]]).
+       */
+      let maha = new Set<string>();
+      try {
+        const busy = (await client.request(
+          readItems('conversations', {
+            filter: { ai_active: { _eq: true } },
+            fields: ['id'],
+            limit: -1,
+          } as never),
+        )) as Array<{ id: string }>;
+        maha = new Set(busy.map((b) => b.id));
+      } catch {
+        /* no Maha fields here */
+      }
+      return maha.size ? rows.filter((r) => !maha.has(r.id)) : rows;
     },
     async patchConversation(id, patch) {
       await client.request(updateItem('conversations', id, patch as never));
@@ -467,6 +487,26 @@ export function createRoutingRepo(client: YijiDirectusClient) {
         readUsers({ filter, fields: ['id'], limit: -1 }) as never,
       )) as Array<{ id: string }>;
       return users.map((u) => u.id);
+    },
+
+    /**
+     * Maha has this chat (owner, 2026-11-09): the ladder stands down until
+     * she hands it over. A separate read so an environment without the field
+     * simply answers "no" - routing must never break on Maha's account.
+     */
+    async mahaActive(conversationId: string) {
+      try {
+        const rows = (await client.request(
+          readItems('conversations' as never, {
+            filter: { id: { _eq: conversationId } },
+            fields: ['ai_active'],
+            limit: 1,
+          }) as never,
+        )) as Array<{ ai_active?: boolean | null }>;
+        return rows[0]?.ai_active === true;
+      } catch {
+        return false;
+      }
     },
 
     /**

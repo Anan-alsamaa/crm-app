@@ -54,6 +54,8 @@ export interface RoutingDeps {
       status: string;
     } | null>;
     countOutboundMessages(conversationId: string): Promise<number>;
+    /** Maha has the chat: nobody is offered it until she hands over. Optional. */
+    mahaActive?(conversationId: string): Promise<boolean>;
     /**
      * Set the owner. `null` RELEASES the conversation to the unassigned pool,
      * which is where a reclaim puts a chat when nobody can take it — an
@@ -370,6 +372,12 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
    */
   if (!convo || normaliseConversationStatus(convo.status) === 'solved') {
     log('routing: conversation not routable', { id: job.conversationId });
+    return;
+  }
+  /* Maha is answering (owner, 2026-11-09). Her handover queues a fresh
+     ladder; an agent turning her off takes the chat themselves. */
+  if (job.stage !== 'reclaim' && (await directus.mahaActive?.(convo.id))) {
+    log('routing: Maha has this chat, standing down', { id: convo.id });
     return;
   }
 

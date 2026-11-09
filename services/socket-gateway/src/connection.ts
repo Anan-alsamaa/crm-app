@@ -40,6 +40,7 @@ import {
 } from './attachments.js';
 import { createTokenBucket } from './rate-limit.js';
 import { notifyNoteMentions } from './mention-notify.js';
+import { beforeAgentMessage, mahaMode, onCustomerMessage, type MahaDeps } from './maha.js';
 
 /**
  * Whether this agent may be handed a customer chat — and therefore is worth
@@ -137,6 +138,8 @@ interface SocketData {
 
 export interface ConnectionDeps {
   io: Server;
+  /** Maha (owner, 2026-11-09). Absent = no Maha: every chat goes to agents. */
+  maha?: MahaDeps;
   directus: GatewayDirectus;
   directusUrl: string;
   verifier: CustomerVerifier;
@@ -1289,6 +1292,21 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         }
       }
       const senderType = data.kind === 'agent' ? 'agent' : 'customer';
+      /* MAHA HAS THIS CHAT: an agent must turn her off first (the portal locks
+         the box; this is the backstop). After a handover the agent's first
+         message is introduced by name - written before theirs. */
+      if (data.kind === 'agent' && data.agentId && deps.maha) {
+        const gate = await beforeAgentMessage(deps.maha, {
+          conversationId: convId,
+          agentId: data.agentId,
+        });
+        if (gate.blocked) {
+          return socket.emit(SOCKET_EVENTS.error, {
+            code: 'maha_active',
+            message: 'Maha is handling this chat - turn her off to reply',
+          });
+        }
+      }
       const saved = await directus.persistMessage({
         conversationId: convId,
         senderType,
@@ -1310,15 +1328,38 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
         ...(data.kind === 'agent' && data.agentId ? { senderUserId: data.agentId } : {}),
       };
       io.to(rooms.conversation(convId)).emit(SOCKET_EVENTS.messageNew, payload);
+      /*
+       * DOES MAHA HAVE THIS CHAT? (owner, 2026-11-09) Decided before the alert,
+       * the welcome and the routing below, all three of which she replaces.
+       * Any failure inside answers `false`: the chat goes to people as before.
+       */
+      const sessionStart =
+        data.kind === 'customer' && (data.welcomePending === true || saved.sessionStarted === true);
+      const mahaHas =
+        data.kind === 'customer' && deps.maha
+          ? await onCustomerMessage(deps.maha, {
+              conversationId: convId,
+              messageId: saved.id,
+              text: content,
+              hasAttachments: (attachments?.length ?? 0) > 0,
+              sessionStart,
+              vendorId: data.vendorId ?? null,
+            }).catch((err: unknown) => {
+              logger.warn({ err, convId }, 'maha check failed - agents take this chat');
+              return false;
+            })
+          : false;
       // Signal every agent inbox to refresh (covers conversations they haven't joined).
       /* `senderType` lets the portal raise its new-chat alert for a CUSTOMER
          message only, never an agent's own reply (owner, 2026-10-13). No
          content travels here: this room reaches every agent, including ones
-         who may not read this chat - the portal reads the preview itself. */
-      io.to(rooms.agentsAll()).emit(SOCKET_EVENTS.inboxActivity, {
-        conversationId: convId,
-        senderType,
-      });
+         who may not read this chat - the portal reads the preview itself.
+         While Maha has the chat it refreshes silently: the alert rings at the
+         handover. */
+      io.to(rooms.agentsAll()).emit(
+        SOCKET_EVENTS.inboxActivity,
+        mahaHas ? { conversationId: convId, silent: true } : { conversationId: convId, senderType },
+      );
 
       /*
        * THE AUTOMATIC WELCOME, ONCE PER SESSION (owner, 2026-10-06).
@@ -1334,7 +1375,8 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       if (data.kind === 'customer') {
         const greet = data.welcomePending === true || saved.sessionStarted === true;
         data.welcomePending = false;
-        if (greet) {
+        // Maha introduced herself instead (owner: no "within 2 minutes").
+        if (greet && !mahaHas) {
           await sendAutoWelcome(deps, convId, {
             name: data.contactName ?? null,
             firstText: content,
@@ -1407,7 +1449,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
       // handled. The stage-0 job is idempotent per conversation, so a customer
       // sending three messages in a row starts one ladder, not three racing
       // ones; and the worker stands down if someone already owns it.
-      if (senderType === 'customer') {
+      if (senderType === 'customer' && !mahaHas) {
         void producer
           .enqueueRouting({
             conversationId: convId,
@@ -1416,11 +1458,15 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
             outboundCountAtSchedule: 0,
           })
           .catch((err: unknown) => logger.warn({ err }, 'auto-assign enqueue failed'));
-        /* AI auto-reply draft (shadow, owner 2026-10-13). The worker asks the
-           AI gateway, which says no when the feature is off for this vendor. */
-        void producer
-          .enqueueAiAutoReply?.(convId)
-          .catch((err: unknown) => logger.warn({ err, convId }, 'ai auto-reply enqueue failed'));
+        /* ASSIST: Maha drafts the agent's reply (owner, 2026-10-13 / 2026-11-09).
+           Only when the vendor's mode is `assist` - read here, so no job is
+           queued for a vendor that has Maha off. */
+        if (deps.maha) {
+          const maha = deps.maha;
+          void mahaMode(maha, data.vendorId ?? null)
+            .then((mode) => (mode === 'assist' ? producer.enqueueAiAutoReply?.(convId) : undefined))
+            .catch((err: unknown) => logger.warn({ err, convId }, 'ai auto-reply enqueue failed'));
+        }
       }
       // Agent activity pushes them to the back of the idle queue, so the next
       // conversation goes to whoever has been waiting longest.

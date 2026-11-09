@@ -393,6 +393,7 @@ export const processors: Record<QueueName, Processor> = {
       gatewayToken: deps.ai.gatewayToken,
       workerUserId: deps.ai.workerUserId,
       logger: deps.logger,
+      mahaQueue: deps.queues[QUEUES.maha],
     };
     await processAiJob(job as Job<AiJob>, aiDeps);
   },
@@ -739,6 +740,11 @@ export const processors: Record<QueueName, Processor> = {
    * late-orders-poll.ts. Without Redis there is nothing to store it in, and
    * the gateway keeps asking Yiji itself, exactly as before.
    */
+  /* Consumed by the SOCKET GATEWAY, never here (the workers do not run a
+     worker for it - see index.ts). Present only to keep the map complete. */
+  [QUEUES.maha]: async (job, deps) => {
+    deps.logger.warn({ jobId: job.id }, 'maha job reached the workers - ignored');
+  },
   [QUEUES.lateOrders]: async (_job, deps) => {
     if (!deps.redis) return;
     await runLateOrdersPoll({

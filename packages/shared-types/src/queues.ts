@@ -18,6 +18,8 @@ export const QUEUES = {
   customerPush: 'customer-push',
   /** The live late-orders poller (owner, 2026-10-12) - one repeatable job a minute. */
   lateOrders: 'late-orders',
+  /** Maha's answers on their way to the chat; consumed by the SOCKET GATEWAY. */
+  maha: 'maha',
 } as const;
 export type QueueName = (typeof QUEUES)[keyof typeof QUEUES];
 
@@ -42,8 +44,12 @@ export type NotificationJob = z.infer<typeof NotificationJob>;
 
 // --- ai ---
 export const AiJob = z.object({
-  job: z.enum(['summarize', 'score_lead', 'auto_reply']),
+  /* auto_reply = Assist (a draft for the agent); maha_reply = Auto (Maha
+     answers the customer, delivered through the `maha` queue). */
+  job: z.enum(['summarize', 'score_lead', 'auto_reply', 'maha_reply']),
   conversationId: z.string(),
+  /** maha_reply: the customer message being answered. */
+  forMessageId: z.string().optional(),
 });
 export type AiJob = z.infer<typeof AiJob>;
 

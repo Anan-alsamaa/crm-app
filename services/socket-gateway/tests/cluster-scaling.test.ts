@@ -36,8 +36,10 @@ describe('multi-instance scaling guards', () => {
       // Cluster#duplicate does not carry the dnsLookup override the factory
       // installs for ElastiCache's private node addresses.
       expect(INDEX_SRC).not.toContain('pubClient.duplicate()');
-      const calls = INDEX_SRC.match(/createRedis\(config\.REDIS_URL/g) ?? [];
-      expect(calls.length).toBe(2);
+      // The adapter's two clients, each from the factory. (Maha's queue
+      // listener opens its own connection too - 2026-11-09.)
+      expect(INDEX_SRC).toMatch(/pubClient = createRedis\(config\.REDIS_URL/);
+      expect(INDEX_SRC).toMatch(/subClient = createRedis\(config\.REDIS_URL/);
     });
 
     it('detects a cluster endpoint from the hostname the console gives you', () => {

@@ -14,7 +14,13 @@ export type MessageSource =
   | 'ai_enhance'
   | 'auto_welcome'
   | 'internal_note'
-  | 'system';
+  | 'system'
+  /* Maha (owner, 2026-11-09): her answer, her handover line, and the
+     "<name> is with you" line before the agent's first message. All three are
+     automated (no sender_user). */
+  | 'maha'
+  | 'maha_handover'
+  | 'agent_joined';
 
 export interface ComposerOrigin {
   source: 'quick_reply' | 'ai_suggestion' | 'ai_enhance';
@@ -38,13 +44,15 @@ export function messageSourceFields(input: {
   isInternalNote?: boolean;
   content: string;
   origin?: ComposerOrigin | null;
+  /** Which automated message this is, when it is not the plain welcome. */
+  automatedSource?: 'maha' | 'maha_handover' | 'agent_joined';
 }): MessageSourceFields {
   const none = { quick_reply_id: null, source_text: null, source_edited: null };
   if (input.senderType === 'customer') return { source: 'customer', ...none };
   if (input.senderType === 'system') return { source: 'system', ...none };
   if (input.isInternalNote) return { source: 'internal_note', ...none };
   // An agent-style message with no person behind it is the automatic welcome.
-  if (!input.senderUser) return { source: 'auto_welcome', ...none };
+  if (!input.senderUser) return { source: input.automatedSource ?? 'auto_welcome', ...none };
   const o = input.origin;
   if (!o || !o.text.trim()) return { source: 'typed', ...none };
   return {

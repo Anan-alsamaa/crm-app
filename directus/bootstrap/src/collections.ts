@@ -385,6 +385,37 @@ export const collections: CollectionSpec[] = [
         type: 'json',
         note: 'AI auto-reply, SHADOW mode (owner, 2026-10-13): what the AI would have answered to the latest customer message - reply or handover, with a reason. Shown to agents only; never sent to the customer. See docs/AI-AUTO-REPLY-PLAN.md.',
       },
+      /* MAHA, the chat assistant (owner, 2026-11-09). Need apply:fields (or
+         scripts/add-maha-fields.mjs) on an environment BEFORE the services
+         that read them; every reader treats an error as "no Maha here". */
+      {
+        field: 'ai_active',
+        type: 'boolean',
+        defaultValue: false,
+        note: 'Maha is handling this chat: no routing, no alert, agents may not send until somebody turns her off.',
+      },
+      {
+        field: 'ai_replies',
+        type: 'integer',
+        defaultValue: 0,
+        note: "Maha's replies in this session.",
+      },
+      {
+        field: 'ai_handover_at',
+        type: 'dateTime',
+        note: 'When Maha passed the chat to people (or an agent turned her off).',
+      },
+      { field: 'ai_handover_reason', type: 'string', note: 'Why Maha handed over.' },
+      {
+        field: 'ai_handover_summary',
+        type: 'text',
+        note: "Maha's one- or two-line summary for the agent who takes the chat.",
+      },
+      {
+        field: 'ai_agent_joined_at',
+        type: 'dateTime',
+        note: 'When the agent was introduced to the customer by name after the handover.',
+      },
       {
         field: 'last_order_at',
         type: 'dateTime',

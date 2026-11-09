@@ -40,3 +40,4 @@ export * from './releases.js';
 export const SHARED_TYPES_VERSION = '0.0.0';
 export * from './order-id.js';
 export * from './marketing-coupons.js';
+export * from './maha.js';

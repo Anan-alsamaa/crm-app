@@ -16,7 +16,11 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify';
 import type { Redis, Cluster } from 'ioredis';
-import { createRedis } from '@yiji/shared-config/redis';
+import { createRedis, bullPrefix } from '@yiji/shared-config/redis';
+import { readAiConfigRaw, mahaSpendKey } from '@yiji/shared-config/ai-config';
+import { Worker } from 'bullmq';
+import { MahaDeliverJob, QUEUES } from '@yiji/shared-types';
+import { deliver as mahaDeliver, setMaha, type MahaDeps } from './maha.js';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
@@ -468,6 +472,68 @@ async function main(): Promise<void> {
    * same photo. Built once here rather than inline, so there is only one list
    * and it cannot drift.
    */
+  /*
+   * MAHA (owner, 2026-11-09). Needs Redis: her settings and budget live there
+   * and her answers arrive on the `maha` queue. Without Redis there is no
+   * Maha and every chat goes to agents, exactly as before.
+   */
+  let mahaDeps: MahaDeps | undefined;
+  if (pubClient) {
+    const redis = pubClient;
+    mahaDeps = {
+      directus,
+      readConfig: async (vendorId) => {
+        const { global, override } = await readAiConfigRaw((k) => redis.get(k), vendorId);
+        return { ...global, ...override };
+      },
+      spendSar: async (vendorId) =>
+        vendorId ? Number((await redis.get(mahaSpendKey(vendorId))) ?? 0) || 0 : 0,
+      emitToConversation: (id, event, payload) =>
+        io.to(rooms.conversation(id)).emit(event, payload),
+      emitToAgents: (event, payload) => io.to(rooms.agentsAll()).emit(event, payload),
+      enqueueRouting: async (conversationId) => {
+        await producer.enqueueRouting({
+          conversationId,
+          stage: 'assign',
+          attemptedAgentIds: [],
+          outboundCountAtSchedule: 0,
+        });
+      },
+      enqueueMahaReply: async (c, m) => {
+        if (!producer.enqueueMahaReply) throw new Error('queue disabled');
+        await producer.enqueueMahaReply(c, m);
+      },
+      enqueueWatchdog: async (c, m) => {
+        if (!producer.enqueueMahaWatchdog) throw new Error('queue disabled');
+        await producer.enqueueMahaWatchdog(c, m);
+      },
+      logger,
+    };
+    /* Maha's answers and watchdogs, delivered here because only the gateway
+       can write a message AND put it on the open widget. One job at a time
+       per instance is plenty (a few per minute at peak). */
+    const deps = mahaDeps;
+    const mahaWorker = new Worker(
+      QUEUES.maha,
+      async (job) => {
+        const parsed = MahaDeliverJob.safeParse(job.data);
+        if (!parsed.success) {
+          logger.warn({ jobId: job.id }, 'maha: malformed job dropped');
+          return;
+        }
+        await mahaDeliver(deps, parsed.data);
+      },
+      {
+        connection: createRedis(config.REDIS_URL, { maxRetriesPerRequest: null }),
+        prefix: bullPrefix(config.REDIS_URL),
+        concurrency: 4,
+      },
+    );
+    mahaWorker.on('failed', (job, err) =>
+      logger.warn({ jobId: job?.id, err: err.message }, 'maha: delivery failed'),
+    );
+  }
+
   const attachmentPolicy = parseAttachmentPolicy(
     config.ATTACHMENT_MAX_BYTES,
     config.ATTACHMENT_ALLOWED_MIME,
@@ -475,6 +541,7 @@ async function main(): Promise<void> {
 
   registerConnection({
     io,
+    ...(mahaDeps ? { maha: mahaDeps } : {}),
     directus,
     directusUrl: config.DIRECTUS_INTERNAL_URL,
     verifier,
@@ -1420,6 +1487,30 @@ async function main(): Promise<void> {
    * implementation of "send a message" would drift from the first, and the
    * push enqueue is the half this feature depends on.
    */
+  /*
+   * MAHA'S PER-CHAT SWITCH (owner, 2026-11-09). Off: the agent takes the chat
+   * (and may reply). On: Maha answers again. Anyone who may work chats.
+   */
+  app.post('/chat/maha', async (req, reply) => {
+    const identity = await requirePrivilege(req, reply, [
+      'receive_chats',
+      'assign_chats',
+      'close_chats',
+    ]);
+    if (!identity) return reply;
+    const body = (req.body ?? {}) as { conversationId?: unknown; on?: unknown };
+    if (typeof body.conversationId !== 'string' || typeof body.on !== 'boolean') {
+      return reply.code(400).send({ ok: false, error: 'conversationId and on are required' });
+    }
+    if (!mahaDeps) return reply.code(503).send({ ok: false, error: 'maha_unavailable' });
+    const out = await setMaha(mahaDeps, {
+      conversationId: body.conversationId,
+      on: body.on,
+      agentId: identity.id,
+    });
+    return out.ok ? reply.send({ ok: true }) : reply.code(409).send(out);
+  });
+
   app.post('/chat/agent-initiate', async (req, reply) => {
     /* Staff only, and the ROLE is checked rather than the button being hidden:
        an outbound message to a customer is exactly the sort of thing that must

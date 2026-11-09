@@ -7,6 +7,7 @@ import {
   deleteItem,
   uploadFiles,
   readUsers,
+  readUser,
 } from '@directus/sdk';
 import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-config';
 import type { ComposerOrigin, SenderType, YijiUsageRow } from '@yiji/shared-types';
@@ -20,6 +21,7 @@ import {
 import type { CustomerClaims } from './auth/customer-jwt.js';
 import type { AttachmentMeta } from './attachments.js';
 import type { AssignmentEntity, AssignmentEntityType } from './assignment-notify.js';
+import type { MahaState } from './maha.js';
 
 /**
  * Gateway persistence via the Directus service account. The gateway is the sole
@@ -899,6 +901,8 @@ export class GatewayDirectus {
     isInternalNote?: boolean;
     /** What the agent's composer inserted, if anything (owner, 2026-10-07). */
     origin?: ComposerOrigin;
+    /** Maha's automated messages say which they are (owner, 2026-11-09). */
+    automatedSource?: 'maha' | 'maha_handover' | 'agent_joined';
   }): Promise<{
     id: string;
     createdAt: string;
@@ -934,6 +938,7 @@ export class GatewayDirectus {
           isInternalNote: input.isInternalNote ?? false,
           content: input.content,
           origin: input.origin ?? null,
+          ...(input.automatedSource ? { automatedSource: input.automatedSource } : {}),
         }),
       } as never),
     )) as { id: string };
@@ -1080,6 +1085,85 @@ export class GatewayDirectus {
       }
     }
     return { id: created.id, createdAt: now, ...(sessionStarted ? { sessionStarted: true } : {}) };
+  }
+
+  /**
+   * MAHA'S STATE ON A CHAT (owner, 2026-11-09). Read on its own, never folded
+   * into another query: an environment without the Maha fields answers this
+   * with an error, and the caller treats that as "Maha is not here" rather
+   * than failing the customer's message.
+   */
+  async getMahaState(conversationId: string): Promise<MahaState | null> {
+    try {
+      const rows = (await this.client.request(
+        readItems('conversations', {
+          filter: { id: { _eq: conversationId } },
+          fields: [
+            'id',
+            'vendor',
+            'assigned_agent',
+            'ai_active',
+            'ai_replies',
+            'ai_handover_at',
+            'ai_agent_joined_at',
+          ],
+          limit: 1,
+        } as never),
+      )) as Array<{
+        id: string;
+        vendor?: string | null;
+        assigned_agent?: string | null;
+        ai_active?: boolean | null;
+        ai_replies?: number | null;
+        ai_handover_at?: string | null;
+        ai_agent_joined_at?: string | null;
+      }>;
+      const r = rows?.[0];
+      if (!r) return null;
+      return {
+        vendorId: r.vendor ?? null,
+        assignedAgent: r.assigned_agent ?? null,
+        active: r.ai_active === true,
+        replies: Number(r.ai_replies ?? 0) || 0,
+        handoverAt: r.ai_handover_at ?? null,
+        agentJoinedAt: r.ai_agent_joined_at ?? null,
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  /** Write Maha's fields (and, on a handover, the SLA restart) on a chat. */
+  async setMahaState(conversationId: string, patch: Record<string, unknown>): Promise<void> {
+    await this.client.request(updateItem('conversations', conversationId, patch as never));
+  }
+
+  /** The newest message the customer can see: who sent it, and its id. */
+  async latestVisibleMessage(
+    conversationId: string,
+  ): Promise<{ id: string; senderType: string; senderUser: string | null } | null> {
+    const rows = (await this.client.request(
+      readItems('messages', {
+        filter: { conversation: { _eq: conversationId }, is_internal_note: { _neq: true } },
+        fields: ['id', 'sender_type', 'sender_user'],
+        sort: ['-date_created'],
+        limit: 1,
+      } as never),
+    )) as Array<{ id: string; sender_type: string; sender_user: string | null }>;
+    const r = rows?.[0];
+    return r ? { id: r.id, senderType: r.sender_type, senderUser: r.sender_user ?? null } : null;
+  }
+
+  /** An agent's first name, for "<name> from customer service is with you". */
+  async userFirstName(userId: string): Promise<string | null> {
+    try {
+      const u = (await this.client.request(
+        readUser(userId, { fields: ['first_name'] } as never),
+      )) as { first_name?: string | null } | null;
+      return u?.first_name?.trim() || null;
+    } catch {
+      return null;
+    }
   }
 
   /**

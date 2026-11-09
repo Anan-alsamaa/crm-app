@@ -34,6 +34,8 @@ export interface AiDeps {
   /** Worker's stable user id for rate-limit scoping (matches a Directus service-account user). */
   workerUserId: string;
   logger: Logger;
+  /** Where Maha's answers go: the socket gateway consumes it (2026-11-09). */
+  mahaQueue?: { add(name: string, data: unknown, opts?: unknown): Promise<unknown> };
 }
 
 async function call<T>(
@@ -108,6 +110,11 @@ export async function processAiJob(job: Job<AiJob>, deps: AiDeps): Promise<void>
     return;
   }
 
+  if (kind === 'maha_reply') {
+    await mahaReply(deps, conversationId, vendorId, job.data.forMessageId ?? null);
+    return;
+  }
+
   deps.logger.warn({ kind, conversationId }, 'unknown ai job kind');
 }
 
@@ -158,5 +165,77 @@ async function autoReplyDraft(deps: AiDeps, conversationId: string, vendorId: st
   deps.logger.info(
     { conversationId, action: out.action, blocked: out.blocked },
     'ai auto-reply draft stored (shadow)',
+  );
+}
+
+/**
+ * MAHA, AUTO MODE (owner, 2026-11-09): ask the AI gateway what Maha says to
+ * the customer's latest message and hand the decision to the socket gateway
+ * (`maha` queue), which writes it into the chat. Never retried: a second
+ * answer would be a duplicate message, and the gateway's watchdog hands the
+ * chat to a person if no answer lands.
+ *
+ *  - skipped when Maha no longer has the chat, or the customer has written
+ *    again since (the newer job answers both - one answer per burst);
+ *  - any gateway failure is delivered as a HANDOVER, so the customer is never
+ *    left waiting on an error.
+ */
+async function mahaReply(
+  deps: AiDeps,
+  conversationId: string,
+  vendorId: string,
+  forMessageId: string | null,
+): Promise<void> {
+  if (!forMessageId || !deps.mahaQueue) return;
+  const { readItem, readItems } = await import('@directus/sdk');
+  const conv = (await deps.directus.request(
+    readItem('conversations', conversationId, { fields: ['ai_active', 'ai_replies'] } as never),
+  )) as { ai_active?: boolean | null; ai_replies?: number | null } | null;
+  if (conv?.ai_active !== true) return;
+  const [last] = (await deps.directus.request(
+    readItems('messages', {
+      filter: { conversation: { _eq: conversationId }, is_internal_note: { _neq: true } },
+      fields: ['id'],
+      sort: ['-date_created'],
+      limit: 1,
+    }),
+  )) as Array<{ id: string }>;
+  if (last?.id !== forMessageId) return;
+
+  let decision: AutoReplyResponse;
+  try {
+    const res = await fetch(`${deps.gatewayUrl}${AI_ENDPOINTS.autoReply}`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${deps.gatewayToken}`,
+        'x-yiji-user': deps.workerUserId,
+        'x-yiji-vendor': vendorId,
+      },
+      body: JSON.stringify({
+        conversationId,
+        mode: 'auto',
+        aiReplies: Number(conv.ai_replies ?? 0) || 0,
+      }),
+      signal: AbortSignal.timeout(35_000),
+    });
+    if (!res.ok) throw new Error(`AI gateway auto-reply -> ${res.status}`);
+    decision = (await res.json()) as AutoReplyResponse;
+  } catch (err) {
+    deps.logger.warn({ err, conversationId }, 'maha: no answer from the AI gateway - handing over');
+    decision = { action: 'handover', reply: null, reason: 'ai_error:gateway', blocked: false };
+  }
+  await deps.mahaQueue.add('deliver', {
+    kind: 'deliver',
+    conversationId,
+    forMessageId,
+    action: decision.action,
+    reply: decision.reply ?? null,
+    reason: decision.reason ?? null,
+    summary: decision.summary ?? null,
+  });
+  deps.logger.info(
+    { conversationId, action: decision.action, reason: decision.reason },
+    'maha decision queued',
   );
 }

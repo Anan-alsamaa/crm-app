@@ -17,6 +17,7 @@ import {
   type CouponReplaceJob,
   COUPON_REPLACE_JOB_NAME,
   ROUTING_RECLAIM_WAIT_MS,
+  MAHA_WATCHDOG_MS,
 } from '@yiji/shared-types';
 
 /**
@@ -72,11 +73,17 @@ export interface SideEffectProducer {
    * BullMQ id blocks the next add). Optional: test stubs need not provide it.
    */
   enqueueAiAutoReply?(conversationId: string): Promise<void>;
+  /** Maha (owner, 2026-11-09): ask the workers for her answer to this message. */
+  enqueueMahaReply?(conversationId: string, forMessageId: string): Promise<void>;
+  /** ...and hand over if no answer has landed by the deadline. */
+  enqueueMahaWatchdog?(conversationId: string, forMessageId: string): Promise<void>;
   close(): Promise<void>;
 }
 
 /** Coalesces a burst of customer messages into one AI draft. */
 const AI_AUTO_REPLY_DELAY_MS = 4_000;
+/** Maha waits this long for the customer to finish typing a burst. */
+const MAHA_REPLY_DELAY_MS = 2_500;
 
 class NoopProducer implements SideEffectProducer {
   constructor(private readonly logger: Logger) {}
@@ -126,6 +133,7 @@ class BullProducer implements SideEffectProducer {
   private readonly coupons: Queue;
   private readonly customerPush: Queue;
   private readonly ai: Queue;
+  private readonly maha: Queue;
   private readonly connection: Redis | Cluster;
   /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua
    * scripts fail with CROSSSLOT — hence the hash tag. undefined on
@@ -161,17 +169,32 @@ class BullProducer implements SideEffectProducer {
       prefix: this.prefix,
     });
     this.ai = new Queue(QUEUES.ai, { connection: this.connection, prefix: this.prefix });
+    this.maha = new Queue(QUEUES.maha, { connection: this.connection, prefix: this.prefix });
   }
   async enqueueAiAutoReply(conversationId: string): Promise<void> {
-    /* Parked (owner, 2026-10-14): nothing is queued unless this environment
-       sets AI_AUTO_REPLY=on. Without it every customer message would queue a
-       job that can only be refused - and on production, where the worker
-       cannot reach the AI gateway, fail and retry into the logs. */
-    if (process.env.AI_AUTO_REPLY !== 'on') return;
+    /* Queued only for a vendor whose Maha mode is `assist` - the caller reads
+       the mode (owner, 2026-11-09), so nothing is queued while she is off. */
     await this.ai.add(
       'auto_reply',
       { job: 'auto_reply', conversationId },
       { ...DEFAULT_JOB_OPTIONS, delay: AI_AUTO_REPLY_DELAY_MS },
+    );
+  }
+  async enqueueMahaReply(conversationId: string, forMessageId: string): Promise<void> {
+    /* A short delay so a burst of messages is answered once: the worker skips
+       a job whose message is no longer the newest. No custom jobId - a BullMQ
+       id blocks the next add ([[bullmq-jobid-blocks-retry]]). */
+    await this.ai.add(
+      'maha_reply',
+      { job: 'maha_reply', conversationId, forMessageId },
+      { ...DEFAULT_JOB_OPTIONS, attempts: 1, delay: MAHA_REPLY_DELAY_MS },
+    );
+  }
+  async enqueueMahaWatchdog(conversationId: string, forMessageId: string): Promise<void> {
+    await this.maha.add(
+      'watchdog',
+      { kind: 'watchdog', conversationId, forMessageId },
+      { ...DEFAULT_JOB_OPTIONS, delay: MAHA_WATCHDOG_MS },
     );
   }
   async enqueueImport(job: ImportJob): Promise<string | null> {
@@ -326,6 +349,7 @@ class BullProducer implements SideEffectProducer {
   async close(): Promise<void> {
     await this.automation.close();
     await this.ai.close();
+    await this.maha.close();
     await this.imports.close();
     await this.reports.close();
     await this.notifications.close();

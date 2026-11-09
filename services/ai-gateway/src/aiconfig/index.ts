@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
-import { envKey } from '@yiji/shared-config/redis';
 import { AiFeatureConfig } from '@yiji/shared-types';
+import { aiConfigKey, aiConfigVendorKey, readAiConfigRaw } from '@yiji/shared-config/ai-config';
 
 /**
  * Redis-backed AI config.
@@ -21,40 +21,19 @@ import { AiFeatureConfig } from '@yiji/shared-types';
  * cluster, and these keys were bare - so switching an AI feature on in the
  * STAGING admin portal switched it on in production too. They are namespaced
  * now (envKey); the bare key is read once as a fallback so production keeps
- * the settings it has until someone saves again.
+ * the settings it has until someone saves again. Key names: shared-config/ai-config.
  */
-const LEGACY_KEY = 'ai:config:global';
-const legacyVendorKey = (vendorId: string): string => `ai:config:vendor:${vendorId}`;
-const KEY = (): string => envKey(LEGACY_KEY);
-export const vendorConfigKey = (vendorId: string): string => envKey(legacyVendorKey(vendorId));
+const KEY = aiConfigKey;
+export const vendorConfigKey = aiConfigVendorKey;
 
 type Config = typeof AiFeatureConfig._type;
-
-function parseObject(raw: string | null): Record<string, unknown> | null {
-  if (!raw) return null;
-  try {
-    const v = JSON.parse(raw) as unknown;
-    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
-}
 
 export class AiConfigStore {
   constructor(private readonly redis: Redis) {}
 
   /** The config for `vendorId` (its override over the global), or the global one. */
   async get(vendorId?: string): Promise<Config> {
-    const [globalRaw, vendorRaw] = await Promise.all([
-      this.redis.get(KEY()).then((v) => v ?? this.redis.get(LEGACY_KEY)),
-      vendorId
-        ? this.redis
-            .get(vendorConfigKey(vendorId))
-            .then((v) => v ?? this.redis.get(legacyVendorKey(vendorId)))
-        : Promise.resolve(null),
-    ]);
-    const global = parseObject(globalRaw) ?? {};
-    const override = parseObject(vendorRaw) ?? {};
+    const { global, override } = await readAiConfigRaw((k) => this.redis.get(k), vendorId);
     try {
       return AiFeatureConfig.parse({ ...global, ...override });
     } catch {

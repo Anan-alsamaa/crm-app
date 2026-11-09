@@ -1,4 +1,5 @@
 import { envKey } from '@yiji/shared-config/redis';
+import { mahaSpendKey } from '@yiji/shared-config/ai-config';
 import type { Redis } from 'ioredis';
 
 /**
@@ -209,14 +210,11 @@ export const SAR_PER_USD = 3.75;
  * calendar month (UTC), namespaced per environment like MonthlyCap.
  */
 export class MahaSpend {
-  constructor(
-    private readonly redis: Redis,
-    private readonly keyPrefix = envKey('maha:spend'),
-  ) {}
+  constructor(private readonly redis: Redis) {}
 
-  private key(vendorId: string, now = new Date()): string {
-    const m = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
-    return `${this.keyPrefix}:${vendorId}:${m}`;
+  /* Shared with the socket gateway, which reads it before a session starts. */
+  private key(vendorId: string): string {
+    return mahaSpendKey(vendorId);
   }
 
   async get(vendorId: string): Promise<number> {
