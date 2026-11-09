@@ -3,6 +3,7 @@ import {
   chatSessions,
   sessionTimingRows,
   sessionRating,
+  mahaSessionStats,
   type SessionMessage,
 } from '../src/chat-sessions.js';
 import { firstResponseSec, type ChatTiming } from '../src/agent-performance.js';
@@ -164,5 +165,83 @@ describe('sessionRating - one rating, one session', () => {
     const ratings = [{ score: 4, at: null }];
     expect(sessionRating(rows[0]!, ratings)).toBeNull();
     expect(sessionRating(rows[1]!, ratings)).toBe(4);
+  });
+});
+
+describe('Maha (owner, 2026-11-09)', () => {
+  const conv = {
+    id: C,
+    status: 'open',
+    assigned_agent: 'agent-1',
+    solved_at: null,
+    date_created: '2026-11-09T10:00:00.000Z',
+    initiated_by: 'customer',
+  };
+  const auto = (at: string, source: string) => msg(at, 'agent', { sender_user: null, source });
+  const human = (at: string) => msg(at, 'agent', { sender_user: 'agent-1', source: 'typed' });
+  const cust = (at: string) => msg(at, 'customer', { source: 'customer' });
+
+  it('measures the agent from the HANDOVER, not the customer first message', () => {
+    const messages = [
+      cust('2026-11-09T10:00:00.000Z'),
+      auto('2026-11-09T10:00:01.000Z', 'maha_intro'),
+      auto('2026-11-09T10:00:05.000Z', 'maha'),
+      cust('2026-11-09T10:10:00.000Z'),
+      auto('2026-11-09T10:10:04.000Z', 'maha_handover'),
+      human('2026-11-09T10:12:04.000Z'),
+    ];
+    const [row] = sessionTimingRows([conv], messages, {}, () => false);
+    expect(row).toMatchObject({
+      firstCustomerAt: '2026-11-09T10:10:04.000Z',
+      firstAgentAt: '2026-11-09T10:12:04.000Z',
+      firstAgentBy: 'agent-1',
+    });
+  });
+
+  it('an agent who turned Maha off is measured from the customer message after her last answer', () => {
+    const messages = [
+      cust('2026-11-09T10:00:00.000Z'),
+      auto('2026-11-09T10:00:01.000Z', 'maha_intro'),
+      auto('2026-11-09T10:00:05.000Z', 'maha'),
+      cust('2026-11-09T10:20:00.000Z'),
+      auto('2026-11-09T10:21:00.000Z', 'agent_joined'),
+      human('2026-11-09T10:21:00.500Z'),
+    ];
+    const [row] = sessionTimingRows([conv], messages, {}, () => false);
+    expect(row!.firstCustomerAt).toBe('2026-11-09T10:20:00.000Z');
+  });
+
+  it('a session Maha resolved alone is nobody s to answer - not a row, counted for her', () => {
+    const messages = [
+      cust('2026-11-09T10:00:00.000Z'),
+      auto('2026-11-09T10:00:01.000Z', 'maha_intro'),
+      auto('2026-11-09T10:00:05.000Z', 'maha'),
+    ];
+    expect(sessionTimingRows([conv], messages, {}, () => false)).toEqual([]);
+    expect(mahaSessionStats(messages, {})).toEqual({ taken: 1, handledByMaha: 1, handedOver: 0 });
+  });
+
+  it('counts a handover for Maha, and a session she never had not at all', () => {
+    const handed = [
+      cust('2026-11-09T10:00:00.000Z'),
+      auto('2026-11-09T10:00:01.000Z', 'maha_intro'),
+      auto('2026-11-09T10:00:04.000Z', 'maha_handover'),
+      human('2026-11-09T10:01:00.000Z'),
+    ];
+    const plain = [
+      { ...cust('2026-11-09T11:00:00.000Z'), conversation: 'other' },
+      { ...human('2026-11-09T11:01:00.000Z'), conversation: 'other' },
+    ];
+    expect(mahaSessionStats([...handed, ...plain], {})).toEqual({
+      taken: 1,
+      handledByMaha: 0,
+      handedOver: 1,
+    });
+  });
+
+  it('a chat Maha never touched is measured exactly as before', () => {
+    const messages = [cust('2026-11-09T10:00:00.000Z'), human('2026-11-09T10:03:00.000Z')];
+    const [row] = sessionTimingRows([conv], messages, {}, () => false);
+    expect(row!.firstCustomerAt).toBe('2026-11-09T10:00:00.000Z');
   });
 });

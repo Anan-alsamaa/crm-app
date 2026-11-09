@@ -223,8 +223,10 @@ export class MahaSpend {
 
   async add(vendorId: string, usd: number | null): Promise<void> {
     if (!usd || usd <= 0) return;
-    const key = this.key(vendorId);
-    await this.redis.incrbyfloat(key, usd * SAR_PER_USD);
-    await this.redis.expire(key, 60 * 60 * 24 * 40);
+    // Per vendor (the cap) and in total (the admin page's "this month").
+    for (const key of [this.key(vendorId), this.key('all')]) {
+      await this.redis.incrbyfloat(key, usd * SAR_PER_USD);
+      await this.redis.expire(key, 60 * 60 * 24 * 40);
+    }
   }
 }

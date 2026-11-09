@@ -407,7 +407,12 @@ export function AiConfigPage() {
         </section>
 
         {draft && (
-          <MahaSettings draft={draft} onChange={setDraft} scriptedAvailable={AUTO_REPLY_HERE} />
+          <MahaSettings
+            draft={draft}
+            onChange={setDraft}
+            scriptedAvailable={AUTO_REPLY_HERE}
+            spendSar={usageQuery.data?.mahaSpendSar}
+          />
         )}
         {AUTO_REPLY_HERE && <KnowledgeBaseSection />}
       </div>

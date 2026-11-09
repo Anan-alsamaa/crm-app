@@ -105,6 +105,7 @@ export {
   chatSessions,
   sessionInRange,
   sessionTimingRows,
+  mahaSessionStats,
   sessionRating,
   type ChatSession,
   type SessionMessage,

@@ -920,7 +920,9 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const vendorId = (req.query as { vendorId?: string } | undefined)?.vendorId ?? caller.vendorId;
     const used = await deps.monthlyCap.currentUsage(`vendor:${vendorId}`);
     const config = await deps.configStore.get(vendorId);
-    return reply.send({ used, cap: config.monthlyCap });
+    // Maha's spend this month, SAR at the paid list price (2026-11-09).
+    const mahaSpendSar = deps.mahaSpend ? await deps.mahaSpend.get('all') : 0;
+    return reply.send({ used, cap: config.monthlyCap, mahaSpendSar });
   });
 }
 

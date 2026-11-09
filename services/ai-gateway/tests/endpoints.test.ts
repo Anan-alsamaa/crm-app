@@ -439,6 +439,6 @@ describe('admin endpoints', () => {
       headers: adminAuth,
     });
     expect(r.statusCode).toBe(200);
-    expect(r.json()).toEqual({ used: 0, cap: 0 });
+    expect(r.json()).toEqual({ used: 0, cap: 0, mahaSpendSar: 0 });
   });
 });

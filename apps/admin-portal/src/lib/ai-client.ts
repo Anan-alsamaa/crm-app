@@ -61,7 +61,7 @@ export const aiAdmin = {
       body: JSON.stringify(next),
     });
   },
-  async getUsage(c: CallerHeaders): Promise<{ used: number; cap: number }> {
+  async getUsage(c: CallerHeaders): Promise<{ used: number; cap: number; mahaSpendSar?: number }> {
     return fetchJson(`${GATEWAY_URL}/admin/usage`, { headers: await authHeaders(c) });
   },
 };

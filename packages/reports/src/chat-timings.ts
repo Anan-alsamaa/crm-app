@@ -30,6 +30,8 @@ export interface TimingMessage {
    * for the field simply gets `firstAgentBy: null` and the old behaviour.
    */
   sender_user?: string | null;
+  /** Where the words came from; Maha's messages say `maha*` (2026-11-09). */
+  source?: string | null;
 }
 
 export interface ConversationTimestamps {
@@ -53,7 +55,19 @@ export interface ConversationTimestamps {
    * For an agent-started chat this is the outreach itself (owner, 2026-10-07).
    */
   firstAgentAnyAt: string | null;
+  /**
+   * MAHA (owner, 2026-11-09): she had this chat and no person ever wrote in
+   * it - resolved by her, so it is not an unanswered chat and belongs to no
+   * agent's numbers.
+   */
+  handledByMaha: boolean;
+  /** When Maha handed it to people, if she did. */
+  mahaHandoverAt: string | null;
+  /** Maha took part at all (introduced herself or answered). */
+  hadMaha: boolean;
 }
+
+const MAHA_FLOW = new Set(['maha_intro', 'maha', 'maha_handover']);
 
 /**
  * Per-conversation first-customer and first-response times.
@@ -72,12 +86,23 @@ export function conversationTimestamps(
      to the agent who actually made it. */
   const agentMsgs = new Map<string, Array<{ at: string; by: string | null }>>();
 
+  const customerTimes = new Map<string, string[]>();
+  const mahaMsgs = new Map<string, Array<{ at: string; source: string }>>();
   for (const m of messages) {
     if (!m.date_created) continue;
     if (m.sender_type === 'customer') {
       const seen = firstCustomer.get(m.conversation);
       if (!seen || m.date_created < seen) firstCustomer.set(m.conversation, m.date_created);
+      const ct = customerTimes.get(m.conversation);
+      if (ct) ct.push(m.date_created);
+      else customerTimes.set(m.conversation, [m.date_created]);
     } else if (m.sender_type === 'agent') {
+      if (m.source && MAHA_FLOW.has(m.source)) {
+        const ml = mahaMsgs.get(m.conversation);
+        const e = { at: m.date_created, source: m.source };
+        if (ml) ml.push(e);
+        else mahaMsgs.set(m.conversation, [e]);
+      }
       /*
        * THE AUTOMATIC WELCOME IS NOT A REPLY (owner, 2026-10-06). It is sent a
        * second after the customer's first message, so counted it would make
@@ -95,9 +120,39 @@ export function conversationTimestamps(
   }
 
   const out = new Map<string, ConversationTimestamps>();
-  for (const id of new Set([...firstCustomer.keys(), ...agentMsgs.keys()])) {
-    const customerAt = firstCustomer.get(id) ?? null;
+  for (const id of new Set([...firstCustomer.keys(), ...agentMsgs.keys(), ...mahaMsgs.keys()])) {
+    let customerAt = firstCustomer.get(id) ?? null;
     const agents = agentMsgs.get(id) ?? [];
+    /*
+     * MAHA HAD THE CHAT FIRST (owner, 2026-11-09: the clock starts at the
+     * handover). The agent is measured from when the customer started waiting
+     * for a PERSON: her handover line, or - when an agent took over by turning
+     * her off - the customer's first message after her last answer.
+     */
+    const maha = mahaMsgs.get(id) ?? [];
+    const handover =
+      maha
+        .filter((x) => x.source === 'maha_handover')
+        .map((x) => x.at)
+        .sort()[0] ?? null;
+    if (maha.length && customerAt) {
+      const humans = agents
+        .filter((a) => a.at >= customerAt!)
+        .map((a) => a.at)
+        .sort();
+      const before = humans[0] ?? '￿';
+      const last = maha
+        .filter((x) => x.at <= before)
+        .sort((a, b) => (a.at < b.at ? -1 : 1))
+        .pop();
+      if (last) {
+        const waitingSince =
+          last.source === 'maha_handover'
+            ? last.at
+            : ((customerTimes.get(id) ?? []).filter((t) => t > last.at).sort()[0] ?? last.at);
+        if (waitingSince > customerAt) customerAt = waitingSince;
+      }
+    }
     // ISO-8601 UTC strings compare correctly as strings, and every timestamp
     // here comes from Directus in that form.
     const eligible = customerAt ? agents.filter((m) => m.at >= customerAt) : agents;
@@ -113,6 +168,9 @@ export function conversationTimestamps(
       firstAgentAt: first?.at ?? null,
       firstAgentBy: first?.by ?? null,
       firstAgentAnyAt: agents.length ? agents.reduce((a, b) => (a.at <= b.at ? a : b)).at : null,
+      handledByMaha: maha.length > 0 && agents.length === 0,
+      mahaHandoverAt: handover,
+      hadMaha: maha.length > 0,
     });
   }
   return out;

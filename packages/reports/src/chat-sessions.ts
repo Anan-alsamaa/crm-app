@@ -49,6 +49,12 @@ export interface ChatSession {
   firstAgentBy: string | null;
   /** The earliest human agent message in the session, customer or not. */
   firstAgentAnyAt: string | null;
+  /** Maha resolved it on her own - no person wrote (2026-11-09). */
+  handledByMaha: boolean;
+  /** When Maha handed it to people, if she did. */
+  mahaHandoverAt: string | null;
+  /** Maha took part in this session. */
+  hadMaha: boolean;
 }
 
 /** How soon after the opening message the automatic welcome lands. */
@@ -59,7 +65,9 @@ function opensSession(msgs: readonly SessionMessage[], i: number): boolean {
   if (m.sender_type !== 'customer') return false;
   if (m.starts_session === true) return true;
   const next = msgs[i + 1];
-  if (!next || next.source !== 'auto_welcome' || !m.date_created || !next.date_created) {
+  /* Maha's introduction replaces the welcome when she has the chat. */
+  const greeted = next?.source === 'auto_welcome' || next?.source === 'maha_intro';
+  if (!next || !greeted || !m.date_created || !next.date_created) {
     return false;
   }
   const gap = Date.parse(next.date_created) - Date.parse(m.date_created);
@@ -115,6 +123,9 @@ export function chatSessions(messages: readonly SessionMessage[]): Map<string, C
         firstAgentAt: t?.firstAgentAt ?? null,
         firstAgentBy: t?.firstAgentBy ?? null,
         firstAgentAnyAt: t?.firstAgentAnyAt ?? null,
+        handledByMaha: t?.handledByMaha ?? false,
+        mahaHandoverAt: t?.mahaHandoverAt ?? null,
+        hadMaha: t?.hadMaha ?? false,
       };
     });
     out.set(conversation, sessions);
@@ -167,6 +178,12 @@ export interface SessionTimingRow<C extends SessionConversation> {
   startedAt: string | null;
   initiatedBy: 'agent' | 'customer';
   firstOutreachAt: string | null;
+  /**
+   * Maha resolved this session herself (2026-11-09). Such sessions are NOT in
+   * `sessionTimingRows` - they are nobody's to answer - and are counted by
+   * `mahaSessionStats` instead.
+   */
+  handledByMaha?: boolean;
 }
 
 /**
@@ -216,6 +233,8 @@ export function sessionTimingRows<C extends SessionConversation>(
     list.forEach((s, i) => {
       const startedAt = i === 0 ? (c.date_created ?? s.startAt) : s.startAt;
       if (!sessionInRange({ startAt: startedAt }, range.from, range.to)) return;
+      // Maha resolved it: nobody's to answer, so in no agent's numbers.
+      if (s.handledByMaha) return;
       rows.push({
         conversation: c,
         conversationId: c.id,
@@ -261,4 +280,33 @@ export function sessionRating(
     if (t >= from && t < to && (!best || t >= best.t)) best = { score: r.score, t };
   }
   return best ? best.score : null;
+}
+
+/**
+ * MAHA'S OWN NUMBERS (owner, 2026-11-09): of the in-range sessions she took,
+ * how many she resolved alone and how many went to people (and when).
+ */
+export function mahaSessionStats(
+  messages: readonly SessionMessage[],
+  range: { from?: string | null; to?: string | null },
+): { taken: number; handledByMaha: number; handedOver: number } {
+  let taken = 0;
+  let handledByMaha = 0;
+  let handedOver = 0;
+  const mahaConvs = new Set(
+    messages
+      .filter((m) => m.source === 'maha_intro' || m.source === 'maha')
+      .map((m) => m.conversation),
+  );
+  const sessions = chatSessions(messages.filter((m) => mahaConvs.has(m.conversation)));
+  for (const list of sessions.values()) {
+    for (const s of list) {
+      if (!sessionInRange(s, range.from, range.to)) continue;
+      if (!s.hadMaha) continue;
+      taken += 1;
+      if (s.handledByMaha) handledByMaha += 1;
+      else handedOver += 1;
+    }
+  }
+  return { taken, handledByMaha, handedOver };
 }
