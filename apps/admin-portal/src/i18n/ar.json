@@ -817,6 +817,7 @@
     "couponPercent": "نسبة الكوبون %",
     "couponValue": "قيمة الكوبون (ر.س)",
     "itemShort": "الصنف",
+    "raisedFrom": "مصدر الكوبون",
     "noOtherDiscounts": "لا يمكن استخدامها مع خصومات أخرى",
     "totalLimit": {
       "label": "الحد الإجمالي للخصم (ريال)"
