@@ -22,6 +22,7 @@ import {
 } from '../inbox/api.js';
 import { getSocket } from '../../lib/socket.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { MahaToggle } from '../maha/MahaControls.js';
 import { useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
 
 const PRIORITIES: Priority[] = ['low', 'medium', 'high', 'urgent'];
@@ -406,6 +407,8 @@ export function ConversationToolbar({
               it gets a primary-weight button in its own hue; once solved it
               steps back to a quiet outline, since the case needs nothing more.
               A new customer message flips it back automatically (gateway). */}
+          {/* Maha's per-chat switch (owner, 2026-11-09). */}
+          <MahaToggle conversationId={conversation.id} />
           {/* `close_chats` (owner, 2026-10-06) gates both directions. */}
           {canClose && (
             <Button

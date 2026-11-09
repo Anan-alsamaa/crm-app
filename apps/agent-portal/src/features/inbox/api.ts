@@ -91,6 +91,8 @@ export interface ConversationMessage {
   sender_user?: string | null;
   /** Set when the sending agent corrected it; rendered as a small "edited". */
   edited_at?: string | null;
+  /** Where the words came from; `maha*` marks Maha's messages (2026-11-09). */
+  source?: string | null;
   /** Set when the sending agent withdrew it; content is '' and it renders as a placeholder. */
   deleted_at?: string | null;
   attachments?: MessageAttachment[];
@@ -724,6 +726,8 @@ export function useMessages(conversationId: string | null) {
             'sender_user',
             'edited_at',
             'deleted_at',
+            // Maha's messages are labelled as hers (owner, 2026-11-09).
+            'source',
           ],
           /*
            * NEWEST 500, put back in reading order.

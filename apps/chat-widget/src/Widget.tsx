@@ -557,6 +557,11 @@ export function Widget({ config }: { config: WidgetConfig }) {
    * until there is something true to say.
    */
   const [agentsOnline, setAgentsOnline] = useState<number | null>(null);
+  /* Maha answers this chat (owner, 2026-11-09): the customer is never told
+     "our team is offline" while she is answering. Off after her handover. */
+  const [mahaOn, setMahaOn] = useState(false);
+  const agentsOnlineRef = useRef<number | null>(null);
+  agentsOnlineRef.current = agentsOnline;
   // True once the "agents are offline" auto-reply has been shown for the current
   // offline period; reset when an agent comes online so it can show again later.
   const offlineNoticedRef = useRef(false);
@@ -711,7 +716,9 @@ export function Widget({ config }: { config: WidgetConfig }) {
           contact,
           isNew,
           agentInitiated,
+          mahaOn: maha,
         }) => {
+          setMahaOn(maha === true);
           // null on a fresh session; `onConversationReady` fills it in when the
           // customer's first message creates the conversation.
           convoRef.current = conversationId;
@@ -830,9 +837,32 @@ export function Widget({ config }: { config: WidgetConfig }) {
                online or not, so it proves nothing about presence. */
             const fromPerson = msg.senderType === 'agent' && !msg.automated;
             const next = prev.filter((m) => !(fromPerson && m.localNotice === 'agents-offline'));
+            /* Maha handed over and nobody is online: NOW the customer is told
+               the team will reply when back (owner, 2026-11-09). */
+            if (
+              msg.maha === 'maha_handover' &&
+              agentsOnlineRef.current === 0 &&
+              !offlineNoticedRef.current
+            ) {
+              offlineNoticedRef.current = true;
+              return [
+                ...next,
+                msg,
+                {
+                  id: clientId(),
+                  conversationId: msg.conversationId,
+                  senderType: 'system' as const,
+                  content: tr.offlineAutoReply,
+                  attachments: [],
+                  createdAt: new Date().toISOString(),
+                  localNotice: 'agents-offline' as const,
+                },
+              ];
+            }
             return [...next, msg];
           });
           if (msg.senderType === 'agent' && !msg.automated) offlineNoticedRef.current = false;
+          if (msg.maha === 'maha_handover') setMahaOn(false);
           if (msg.senderType !== 'customer' && !openRef.current) setUnread((u) => u + 1);
         },
         onHistory: (history) => {
@@ -1207,7 +1237,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
     // Agents offline: reassure the customer their message was received and an
     // agent will reply once back. Shown once per offline period so we never spam
     // it; the presence handler resets the flag when an agent comes online.
-    if (agentsOnline === 0 && !offlineNoticedRef.current) {
+    if (!mahaOn && agentsOnline === 0 && !offlineNoticedRef.current) {
       offlineNoticedRef.current = true;
       setMessages((prev) => [
         ...prev,
@@ -1588,8 +1618,10 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   a guess, and the wrong guess turns a working service into one
                   that looks abandoned. */}
               {agentsOnline !== null && (
-                <span className={`yiji-header-status${agentsOnline === 0 ? ' offline' : ''}`}>
-                  {agentsOnline === 0 ? tr.offlineTitle : tr.online}
+                <span
+                  className={`yiji-header-status${agentsOnline === 0 && !mahaOn ? ' offline' : ''}`}
+                >
+                  {agentsOnline === 0 && !mahaOn ? tr.offlineTitle : tr.online}
                 </span>
               )}
             </div>
@@ -1953,7 +1985,7 @@ export function Widget({ config }: { config: WidgetConfig }) {
                   and WhatsApp numbers are the only way through — withholding
                   them because `ready` never arrived leaves them with a dead
                   panel and no route to a human. */}
-              {(status === 'error' || (ready && agentsOnline === 0)) && (
+              {(status === 'error' || (ready && agentsOnline === 0 && !mahaOn)) && (
                 <div className="yiji-offline" role="region" aria-label={tr.offlineTitle}>
                   <p className="yiji-offline-body">
                     <span className="yiji-offline-body-icon" aria-hidden>

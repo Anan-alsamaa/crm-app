@@ -26,6 +26,7 @@ import {
   displayContactName,
   isAutomatedAgentMessage,
   type ComposerOrigin,
+  isMahaSource,
   type MessageDeleted,
   type MessageEdited,
   type MessageNew,
@@ -52,6 +53,8 @@ import { EnhanceButton } from './EnhanceButton.js';
 import { useDismissOnOutside } from '../../lib/useDismissOnOutside.js';
 import { PushUnreachableNotice } from './PushUnreachableNotice.js';
 import { AiDraftCard } from './AiDraftCard.js';
+import { MahaBanner } from '../maha/MahaControls.js';
+import { mahaKey, useMahaState } from '../maha/api.js';
 import { runtimeConfig } from '@yiji/shared-config';
 
 /* AI auto-reply is parked (owner, 2026-10-14): its shadow drafts exist on
@@ -176,6 +179,9 @@ export function ConversationView({
   } | null>(null);
   const [draft, setDraft] = useState('');
   const [internalNote, setInternalNote] = useState(false);
+  /* Maha (owner, 2026-11-09): while she has the chat the reply box is locked. */
+  const maha = useMahaState(conversationId).data;
+  const mahaActive = maha?.active === true;
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [mentionMenu, setMentionMenu] = useState<{ query: string; from: number } | null>(null);
   const [pending, setPending] = useState<
@@ -314,6 +320,8 @@ export function ConversationView({
              never null — null would relabel a person's reply as automated. */
           sender_user:
             msg.senderUserId ?? (msg.senderType === 'agent' && !msg.automated ? undefined : null),
+          // Maha's messages say so (owner, 2026-11-09).
+          source: (msg as MessageNew & { maha?: string }).maha ?? null,
           // message:new only carries attachment ids (no type/size). For our own
           // optimistic echo we keep the richer local metadata below; for inbound
           // messages we refetch to resolve filename/type/size into thumbnails.
@@ -395,6 +403,7 @@ export function ConversationView({
          */
         void qc.invalidateQueries({ queryKey: ['conversation', conversationId] });
         void qc.invalidateQueries({ queryKey: ['messages', conversationId] });
+        void qc.invalidateQueries({ queryKey: mahaKey(conversationId) });
       };
       const onNoteDeleted = (e: { conversationId: string; noteId: string }) => {
         if (e.conversationId !== conversationId) return;
@@ -601,6 +610,8 @@ export function ConversationView({
   }, [all, customerTyping]);
 
   const send = () => {
+    /* Maha has this chat: the box is locked; Enter must not slip past it. */
+    if (mahaActive && !internalNote) return;
     const content = draft.trim();
     const attachmentIds = pending.map((p) => p.id);
     // A reply needs text OR at least one attachment; internal notes are text-only.
@@ -1306,16 +1317,19 @@ export function ConversationView({
                 : isAgent
                   ? isNote
                     ? t('conversation.internalNote')
-                    : isAutoWelcome
-                      ? t('conversation.autoWelcome', { defaultValue: 'Automatic welcome' })
-                      : agentLabel?.kind === 'self'
-                        ? agentName
-                          ? t('conversation.youNamed', {
-                              defaultValue: '{{name}} (You)',
-                              name: agentName,
-                            })
-                          : t('conversation.you', { defaultValue: 'You' })
-                        : (agentName ?? t('conversation.agentFallback', { defaultValue: 'Agent' }))
+                    : isMahaSource(head.source)
+                      ? t('maha.label', { defaultValue: 'Maha (AI)' })
+                      : isAutoWelcome
+                        ? t('conversation.autoWelcome', { defaultValue: 'Automatic welcome' })
+                        : agentLabel?.kind === 'self'
+                          ? agentName
+                            ? t('conversation.youNamed', {
+                                defaultValue: '{{name}} (You)',
+                                name: agentName,
+                              })
+                            : t('conversation.you', { defaultValue: 'You' })
+                          : (agentName ??
+                            t('conversation.agentFallback', { defaultValue: 'Agent' }))
                   : contactName;
               // Day separator when the calendar day changes from the previous run.
               const prevRun = grouped[runIdx - 1];
@@ -1662,6 +1676,9 @@ export function ConversationView({
                 puts them here and agents already reach for them there. Hidden on
                 an internal note: a canned customer reply is never the right
                 thing to say to the team. */}
+            {!internalNote && (
+              <MahaBanner className="mb-2" conversationId={conversationId} state={maha} />
+            )}
             {!internalNote && SHOW_AI_DRAFTS && (
               <AiDraftCard
                 className="mb-2"
@@ -1946,6 +1963,9 @@ export function ConversationView({
                 <textarea
                   ref={draftRef}
                   rows={1}
+                  /* Locked while Maha answers (owner, 2026-11-09); internal
+                     notes to the team stay open. */
+                  disabled={mahaActive && !internalNote}
                   className={cn(
                     'block min-h-10 min-w-0 flex-1 resize-none bg-transparent py-2 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground',
                     internalNote ? 'px-2.5 placeholder:text-note-foreground/70' : 'px-1.5',
@@ -1981,7 +2001,10 @@ export function ConversationView({
                 <button
                   type="button"
                   onClick={send}
-                  disabled={draft.trim().length === 0 && (internalNote || pending.length === 0)}
+                  disabled={
+                    (mahaActive && !internalNote) ||
+                    (draft.trim().length === 0 && (internalNote || pending.length === 0))
+                  }
                   aria-label={t('actions.send', { ns: 'common' })}
                   title={t('actions.send', { ns: 'common' })}
                   className={cn(

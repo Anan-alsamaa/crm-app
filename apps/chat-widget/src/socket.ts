@@ -22,6 +22,8 @@ export interface WidgetMessage {
    * arrived, with nothing on screen saying so and no way to retry.
    */
   status?: 'sending' | 'sent' | 'failed';
+  /** Maha's messages (owner, 2026-11-09): `maha`, `maha_handover`, `agent_joined`. */
+  maha?: string;
   /**
    * This bubble is the WIDGET'S OWN notice, not a real message.
    *
@@ -155,6 +157,8 @@ export interface SocketCallbacks {
        the field; it is ignored. */
     /** True when an AGENT opened this chat — suppresses the auto greeting. */
     agentInitiated?: boolean;
+    /** Maha answers this chat: no "team offline" notice (owner, 2026-11-09). */
+    mahaOn?: boolean;
   }) => void;
   onMessage: (msg: WidgetMessage) => void;
   /** A message was edited — an agent's reply or the customer's own (EMA-33). */
@@ -441,6 +445,7 @@ export function connectWidget(
       isNew?: boolean;
       /** True when an AGENT opened this chat — suppresses the auto greeting. */
       agentInitiated?: boolean;
+      mahaOn?: boolean;
     }) => cb.onReady({ ...info, agentsOnline: info.agentsOnline ?? 0 }),
   );
   socket.on('conversation:ready', (info: { conversationId: string }) =>

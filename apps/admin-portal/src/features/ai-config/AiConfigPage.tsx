@@ -7,6 +7,7 @@ import type { AiFeatureConfig } from '@yiji/shared-types';
 import { aiAdmin } from '../../lib/ai-client.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { KnowledgeBaseSection } from './KnowledgeBaseSection.js';
+import { MahaSettings } from './MahaSettings.js';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { runtimeConfig } from '@yiji/shared-config';
 
@@ -137,13 +138,8 @@ const FEATURES: Array<{ key: keyof Config; label: string; hint: string; glyph: G
     hint: 'Lets staff ask short “how do I…?” questions about this CRM.',
     glyph: HelpAssistantGlyph,
   },
-  {
-    /* AI auto-reply, SHADOW mode (owner, 2026-10-13): off by default. */
-    key: 'autoReply',
-    label: 'AI auto-reply (shadow)',
-    hint: 'For each customer message, drafts what the AI would answer - shown to agents only. Nothing is sent to customers. Answers come from the Knowledge base.',
-    glyph: SuggestReplyGlyph,
-  },
+  /* The old shadow auto-reply switch is Maha's Off / Assist / Auto now
+     (owner, 2026-11-09) - see MahaSettings below the feature list. */
 ];
 
 export function AiConfigPage() {
@@ -362,7 +358,7 @@ export function AiConfigPage() {
             </ul>
           ) : (
             <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {FEATURES.filter((f) => f.key !== 'autoReply' || AUTO_REPLY_HERE).map((f) => {
+              {FEATURES.map((f) => {
                 const enabled = draft[f.key] as boolean;
                 const Glyph = f.glyph;
                 return (
@@ -410,6 +406,9 @@ export function AiConfigPage() {
           )}
         </section>
 
+        {draft && (
+          <MahaSettings draft={draft} onChange={setDraft} scriptedAvailable={AUTO_REPLY_HERE} />
+        )}
         {AUTO_REPLY_HERE && <KnowledgeBaseSection />}
       </div>
     </div>

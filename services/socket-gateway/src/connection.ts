@@ -40,7 +40,13 @@ import {
 } from './attachments.js';
 import { createTokenBucket } from './rate-limit.js';
 import { notifyNoteMentions } from './mention-notify.js';
-import { beforeAgentMessage, mahaMode, onCustomerMessage, type MahaDeps } from './maha.js';
+import {
+  beforeAgentMessage,
+  mahaMode,
+  mahaTakesSession,
+  onCustomerMessage,
+  type MahaDeps,
+} from './maha.js';
 
 /**
  * Whether this agent may be handed a customer chat — and therefore is worth
@@ -970,11 +976,36 @@ async function onCustomerConnect(socket: Socket, deps: ConnectionDeps): Promise<
     vendorId: data.vendorId,
     online,
   });
+  /*
+   * WILL MAHA ANSWER THIS CUSTOMER? (owner, 2026-11-09) So the widget does not
+   * tell them "our team is offline" while Maha is answering. She has the chat
+   * already, or the next message would start a session she takes - unless the
+   * chat is open in an agent's hands after a handover.
+   */
+  let mahaOn = false;
+  if (deps.maha) {
+    try {
+      const st = data.conversationId
+        ? await deps.maha.directus.getMahaState(data.conversationId)
+        : null;
+      if (st?.active) mahaOn = true;
+      else {
+        const status = data.conversationId
+          ? await directus.getConversationStatus(data.conversationId)
+          : null;
+        const withAgents = !!st?.handoverAt && status === 'open';
+        mahaOn = !withAgents && (await mahaTakesSession(deps.maha, data.vendorId ?? null));
+      }
+    } catch {
+      mahaOn = false;
+    }
+  }
   // Tell the widget which conversation it is attached to + vendor branding,
   // the current agent-online count (so it can render the offline fallback on
   // connect without waiting for the next agents:presence pulse), and the
   // contact identity so a returning, named customer is greeted by name.
   socket.emit('ready', {
+    mahaOn,
     // null until the customer sends something. The widget receives the real id
     // on `conversation:ready`, emitted the moment the conversation is created.
     conversationId: data.conversationId ?? null,
