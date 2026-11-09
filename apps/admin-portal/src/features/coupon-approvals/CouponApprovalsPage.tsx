@@ -32,6 +32,7 @@ import {
   normalizePhone,
   type StoreIndex,
   normalizeOrderId,
+  couponRaisedFromLabel,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { FIELD_LABEL, FILTER_CARD, PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
@@ -903,6 +904,11 @@ function Row({
               <Term
                 label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
                 value={row.issuing_side}
+              />
+              {/* Where it was raised (owner, 2026-11-09). */}
+              <Term
+                label={t('coupons.raisedFrom', { defaultValue: 'Raised from' })}
+                value={couponRaisedFromLabel(row.raised_from)}
               />
               {/* A real term, approved rather than discovered. The column is a
                   NEGATIVE — "Yes" means the customer is restricted. */}

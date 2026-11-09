@@ -18,6 +18,7 @@ import {
   YIJI_USAGE_ACCOUNTS,
   YIJI_USAGE_OUTCOMES,
   YIJI_USAGE_SERVICES,
+  COUPON_RAISED_FROM,
 } from '@yiji/shared-types';
 
 export type FieldType =
@@ -1003,6 +1004,15 @@ export const collections: CollectionSpec[] = [
         field: 'removal_detail',
         type: 'text',
         note: 'What happened on Yiji: the order it was used on, or why removal failed.',
+      },
+      {
+        /* Where the coupon was raised (owner, 2026-11-09). Needs apply:fields on
+           staging and prod BEFORE the portals that send it. */
+        field: 'raised_from',
+        type: 'string',
+        choices: [...COUPON_RAISED_FROM],
+        index: true,
+        note: 'Where this coupon was raised: late_orders (Late Orders page), ticket (a ticket or chat), yiji_api (Yiji ticket API rule). A replacement keeps its original value.',
       },
     ],
   },
