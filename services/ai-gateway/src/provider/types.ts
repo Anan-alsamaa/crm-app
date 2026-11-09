@@ -20,6 +20,11 @@ export interface AiRunInput {
   temperature?: number;
   /** Optional max output tokens. */
   maxOutputTokens?: number;
+  /**
+   * Optional JSON schema (OpenAPI subset). When set, the provider asks the model
+   * for JSON that MUST match it (structured output) instead of free text.
+   */
+  responseSchema?: Record<string, unknown>;
 }
 
 /** Token counts reported by the provider, when it reports them. */

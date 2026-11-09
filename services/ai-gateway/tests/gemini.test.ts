@@ -7,7 +7,7 @@ vi.mock('@google/generative-ai', () => ({
   GoogleGenerativeAI: vi.fn().mockImplementation(() => ({ getGenerativeModel })),
 }));
 
-import { GeminiProvider } from '../src/provider/gemini.js';
+import { GeminiProvider, generationConfigFor } from '../src/provider/gemini.js';
 import { AiProviderError } from '../src/provider/types.js';
 
 const input = {
@@ -67,5 +67,29 @@ describe('GeminiProvider', () => {
     generateContent.mockRejectedValueOnce(new Error('socket hang up'));
     const provider = new GeminiProvider('key');
     await expect(provider.run(input)).rejects.toMatchObject({ code: 'upstream', status: 502 });
+  });
+});
+
+describe('generationConfigFor', () => {
+  const schema = { type: 'OBJECT', properties: { action: { type: 'STRING' } } };
+  it('keeps the 2.5 request unchanged when no schema is asked for', () => {
+    expect(generationConfigFor('gemini-2.5-flash', input)).toEqual({
+      temperature: 0.4,
+      maxOutputTokens: 4096,
+    });
+  });
+  it('asks for JSON matching the schema when one is given', () => {
+    expect(
+      generationConfigFor('gemini-2.5-flash', { ...input, responseSchema: schema }),
+    ).toMatchObject({
+      responseMimeType: 'application/json',
+      responseSchema: schema,
+    });
+  });
+  it('sets thinking to low on Gemini 3.x only', () => {
+    expect(generationConfigFor('gemini-3.8-flash', input)).toMatchObject({
+      thinkingConfig: { thinkingLevel: 'low' },
+    });
+    expect(generationConfigFor('gemini-2.5-flash', input)).not.toHaveProperty('thinkingConfig');
   });
 });

@@ -33,10 +33,7 @@ export class GeminiProvider implements AIProvider {
       {
         model: this.model,
         systemInstruction: input.system,
-        generationConfig: {
-          temperature: input.temperature ?? 0.4,
-          maxOutputTokens: input.maxOutputTokens ?? 4096,
-        },
+        generationConfig: generationConfigFor(this.model, input) as never,
       },
       { timeout: REQUEST_TIMEOUT_MS },
     );
@@ -81,6 +78,26 @@ export class GeminiProvider implements AIProvider {
     }
     throw classifyGeminiError(lastErr);
   }
+}
+
+/**
+ * The request's generationConfig. The SDK forwards it to the REST API as-is, so
+ * fields newer than its typings (thinkingConfig) still reach Gemini.
+ *  - responseSchema -> structured JSON output (the model cannot answer off-shape).
+ *  - Gemini 3.x -> thinkingLevel 'low': cheaper and faster for chat replies.
+ *    2.x models reject thinkingLevel, so they keep their current default.
+ */
+export function generationConfigFor(model: string, input: AiRunInput): Record<string, unknown> {
+  const cfg: Record<string, unknown> = {
+    temperature: input.temperature ?? 0.4,
+    maxOutputTokens: input.maxOutputTokens ?? 4096,
+  };
+  if (input.responseSchema) {
+    cfg.responseMimeType = 'application/json';
+    cfg.responseSchema = input.responseSchema;
+  }
+  if (/^gemini-3/.test(model)) cfg.thinkingConfig = { thinkingLevel: 'low' };
+  return cfg;
 }
 
 function delay(ms: number): Promise<void> {
