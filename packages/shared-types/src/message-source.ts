@@ -18,6 +18,7 @@ export type MessageSource =
   /* Maha (owner, 2026-11-09): her answer, her handover line, and the
      "<name> is with you" line before the agent's first message. All three are
      automated (no sender_user). */
+  | 'maha_intro'
   | 'maha'
   | 'maha_handover'
   | 'agent_joined';
@@ -45,7 +46,7 @@ export function messageSourceFields(input: {
   content: string;
   origin?: ComposerOrigin | null;
   /** Which automated message this is, when it is not the plain welcome. */
-  automatedSource?: 'maha' | 'maha_handover' | 'agent_joined';
+  automatedSource?: 'maha_intro' | 'maha' | 'maha_handover' | 'agent_joined';
 }): MessageSourceFields {
   const none = { quick_reply_id: null, source_text: null, source_edited: null };
   if (input.senderType === 'customer') return { source: 'customer', ...none };

@@ -16,6 +16,10 @@ function harness(opts: {
   customerTexts?: string[];
   latest?: { id: string; senderType: string; senderUser: string | null } | null;
   failEnqueue?: boolean;
+  /** The customer's newest message id (default m1). */
+  customerLatest?: string;
+  /** Somebody already answered after it. */
+  answered?: boolean;
   readConfigThrows?: boolean;
   now?: Date;
 }) {
@@ -41,6 +45,7 @@ function harness(opts: {
     watchdogs: [] as string[],
   };
   let latest = opts.latest ?? { id: 'm1', senderType: 'customer', senderUser: null };
+  let answered = opts.answered ?? false;
   const deps: MahaDeps = {
     directus: {
       getMahaState: async () => (state ? { ...state } : null),
@@ -58,11 +63,18 @@ function harness(opts: {
       },
       persistMessage: async (input) => {
         calls.messages.push({ content: input.content, source: input.automatedSource });
+        if (input.automatedSource === 'maha' || input.automatedSource === 'maha_handover')
+          answered = true;
         const id = `auto${calls.messages.length}`;
         latest = { id, senderType: 'agent', senderUser: null };
         return { id, createdAt: '2026-11-09T10:00:00.000Z' };
       },
       latestVisibleMessage: async () => latest,
+      latestCustomerMessage: async () => ({
+        id: opts.customerLatest ?? 'm1',
+        at: '2026-11-09T09:59:50.000Z',
+      }),
+      answeredSince: async () => answered,
       userFirstName: async () => 'Sara',
       recentCustomerTexts: async () => opts.customerTexts ?? ['وين طلبي'],
     },
@@ -107,7 +119,7 @@ describe('a new session', () => {
     expect(await onCustomerMessage(h.deps, msg())).toBe(true);
     expect(h.state()?.active).toBe(true);
     expect(h.calls.messages).toEqual([
-      { content: 'أهلاً، معك مها من خدمة عملاء يجي 🌷 كيف أقدر أخدمك؟', source: 'maha' },
+      { content: 'أهلاً، معك مها من خدمة عملاء يجي 🌷 كيف أقدر أخدمك؟', source: 'maha_intro' },
     ]);
     expect(h.calls.replies).toEqual(['m1']);
     expect(h.calls.watchdogs).toEqual(['m1']);
@@ -164,7 +176,7 @@ describe('a new session', () => {
     expect(await onCustomerMessage(h.deps, msg())).toBe(true);
     expect(h.state()?.active).toBe(false);
     expect(h.calls.routing).toBe(1);
-    expect(h.calls.messages.map((m) => m.source)).toEqual(['maha', 'maha_handover']);
+    expect(h.calls.messages.map((m) => m.source)).toEqual(['maha_intro', 'maha_handover']);
   });
 });
 
@@ -195,6 +207,14 @@ describe("delivering Maha's decision", () => {
       ...over,
     }) as never;
 
+  it('answers the question even though her introduction came after it', async () => {
+    const h = harness({
+      state: { active: true },
+      latest: { id: 'intro', senderType: 'agent', senderUser: null },
+    });
+    await deliver(h.deps, job());
+    expect(h.calls.messages).toEqual([{ content: 'طلبك في الطريق', source: 'maha' }]);
+  });
   it('a reply is written as Maha, counted, and refreshes the inbox silently', async () => {
     const h = harness({ state: { active: true, replies: 1 } });
     await deliver(h.deps, job());
@@ -207,7 +227,7 @@ describe("delivering Maha's decision", () => {
   it('is dropped when the customer has written again (the newer job answers)', async () => {
     const h = harness({
       state: { active: true },
-      latest: { id: 'm2', senderType: 'customer', senderUser: null },
+      customerLatest: 'm2',
     });
     await deliver(h.deps, job());
     expect(h.calls.messages).toEqual([]);
@@ -253,6 +273,14 @@ describe("delivering Maha's decision", () => {
 
 describe('the watchdog', () => {
   const wd = { kind: 'watchdog', conversationId: 'c1', forMessageId: 'm1' } as const;
+  it("is not fooled by Maha's introduction (which answers nothing)", async () => {
+    const h = harness({
+      state: { active: true },
+      latest: { id: 'intro', senderType: 'agent', senderUser: null },
+    });
+    await deliver(h.deps, wd);
+    expect(h.calls.patches.at(-1)).toMatchObject({ ai_handover_reason: 'ai_timeout' });
+  });
   it('hands over when the customer is still waiting', async () => {
     const h = harness({ state: { active: true } });
     await deliver(h.deps, wd);
@@ -265,7 +293,7 @@ describe('the watchdog', () => {
   it('does nothing once Maha has answered', async () => {
     const h = harness({
       state: { active: true },
-      latest: { id: 'r1', senderType: 'agent', senderUser: null },
+      answered: true,
     });
     await deliver(h.deps, wd);
     expect(h.calls.routing).toBe(0);

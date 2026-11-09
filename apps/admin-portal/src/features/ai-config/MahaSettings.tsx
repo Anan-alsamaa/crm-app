@@ -138,7 +138,7 @@ export function MahaSettings({
             </span>
             {t('maha.scriptedHint', {
               defaultValue:
-                'Free and repeatable, no Google calls. Type [[handover]], [[fail]], [[slow]], [[compensation]], [[human]], [[empty]] or [[garbage]] in a test message to drive each case.',
+                'Free and repeatable, no Google calls. Type [[handover]], [[fail]], [[slow]], [[offerx]], [[claimx]], [[empty]] or [[garbage]] in a test message to drive each case.',
             })}
           </span>
         </label>

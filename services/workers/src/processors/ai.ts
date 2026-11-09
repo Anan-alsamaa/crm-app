@@ -192,9 +192,16 @@ async function mahaReply(
     readItem('conversations', conversationId, { fields: ['ai_active', 'ai_replies'] } as never),
   )) as { ai_active?: boolean | null; ai_replies?: number | null } | null;
   if (conv?.ai_active !== true) return;
+  /* Skip unless this is still the customer's NEWEST message (one answer per
+     burst). Customer messages only: Maha's introduction lands after the first
+     question and must not make it look stale. */
   const [last] = (await deps.directus.request(
     readItems('messages', {
-      filter: { conversation: { _eq: conversationId }, is_internal_note: { _neq: true } },
+      filter: {
+        conversation: { _eq: conversationId },
+        sender_type: { _eq: 'customer' },
+        is_internal_note: { _neq: true },
+      },
       fields: ['id'],
       sort: ['-date_created'],
       limit: 1,

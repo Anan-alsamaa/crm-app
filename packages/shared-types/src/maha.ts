@@ -22,7 +22,8 @@ import { z } from 'zod';
  */
 
 /** What a message Maha's flow wrote says it is (`messages.source`). */
-export const MAHA_SOURCES = ['maha', 'maha_handover', 'agent_joined'] as const;
+/* `maha_intro` is her introduction - never an answer to anything. */
+export const MAHA_SOURCES = ['maha_intro', 'maha', 'maha_handover', 'agent_joined'] as const;
 export type MahaSource = (typeof MAHA_SOURCES)[number];
 
 export function isMahaSource(source: string | null | undefined): boolean {

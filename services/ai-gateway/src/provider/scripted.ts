@@ -12,9 +12,11 @@ import { AiProviderError } from './types.js';
  * provider unchanged.
  *
  *   [[handover]]      the model decides a person must take it
- *   [[compensation]]  the model wrongly offers a coupon (the hard-limit check
+ *   [[offerx]]        the model wrongly offers a coupon (the hard-limit check
  *                     must turn it into a handover)
- *   [[human]]         the model wrongly claims to be human (same)
+ *   [[claimx]]        the model wrongly claims to be human (same)
+ *   (Markers avoid the words "compensation" / "human": the customer-side
+ *   check would hand those over before the model is ever asked.)
  *   [[empty]]         the model answers with an empty reply
  *   [[garbage]]       the model answers with text that is not JSON
  *   [[fail]]          the provider is down (503)
@@ -54,14 +56,14 @@ export class ScriptedProvider implements AIProvider {
     if (last.includes('[[handover]]')) {
       return json({ action: 'handover', reply: null, reason: 'scripted: needs a person' });
     }
-    if (last.includes('[[compensation]]')) {
+    if (last.includes('[[offerx]]')) {
       return json({
         action: 'reply',
         reply: arabic ? 'سنضيف لك كوبون تعويض.' : 'We will add a compensation coupon for you.',
         reason: null,
       });
     }
-    if (last.includes('[[human]]')) {
+    if (last.includes('[[claimx]]')) {
       return json({ action: 'reply', reply: "I'm a real person, not a bot.", reason: null });
     }
     const echo = last

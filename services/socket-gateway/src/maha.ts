@@ -50,11 +50,15 @@ export interface MahaDeps {
       conversationId: string;
       senderType: 'agent';
       content: string;
-      automatedSource?: 'maha' | 'maha_handover' | 'agent_joined';
+      automatedSource?: 'maha_intro' | 'maha' | 'maha_handover' | 'agent_joined';
     }): Promise<{ id: string; createdAt: string }>;
     latestVisibleMessage(
       conversationId: string,
     ): Promise<{ id: string; senderType: string; senderUser: string | null } | null>;
+    /** The customer's newest message: what Maha must be answering. */
+    latestCustomerMessage(conversationId: string): Promise<{ id: string; at: string } | null>;
+    /** Has a person or Maha (not her introduction) written since `iso`? */
+    answeredSince(conversationId: string, iso: string): Promise<boolean>;
     userFirstName(userId: string): Promise<string | null>;
     recentCustomerTexts(conversationId: string, limit?: number): Promise<string[]>;
   };
@@ -131,7 +135,7 @@ async function postAutomated(
   deps: MahaDeps,
   conversationId: string,
   content: string,
-  source: 'maha' | 'maha_handover' | 'agent_joined',
+  source: 'maha_intro' | 'maha' | 'maha_handover' | 'agent_joined',
 ): Promise<void> {
   const saved = await deps.directus.persistMessage({
     conversationId,
@@ -195,7 +199,7 @@ export async function onCustomerMessage(
     if (!active) return false;
     try {
       const locale = await localeOf(deps, conversationId, input.text);
-      await postAutomated(deps, conversationId, mahaIntro(locale), 'maha');
+      await postAutomated(deps, conversationId, mahaIntro(locale), 'maha_intro');
     } catch (err) {
       deps.logger.warn({ err, conversationId }, 'maha: introduction not sent');
     }
@@ -274,11 +278,14 @@ export async function deliver(deps: MahaDeps, job: MahaDeliverJob): Promise<void
   const { conversationId, forMessageId } = job;
   const state = await deps.directus.getMahaState(conversationId);
   if (!state?.active) return; // an agent took it, or it was already handed over
-  const latest = await deps.directus.latestVisibleMessage(conversationId);
-  /* Answer only the newest customer message: if the customer wrote again the
-     newer job answers both; if anyone replied since, this one is stale. */
+  /* Answer only the customer's NEWEST message: if they wrote again, the newer
+     job answers both. (Not "the newest message": Maha's introduction lands
+     right after the first question and is no answer to it.) */
+  const latest = await deps.directus.latestCustomerMessage(conversationId);
   if (!latest || latest.id !== forMessageId) return;
   if (job.kind === 'watchdog') {
+    // Answered in time - by Maha, a handover, or a person: nothing to do.
+    if (await deps.directus.answeredSince(conversationId, latest.at)) return;
     await handover(deps, conversationId, { reason: 'ai_timeout', summary: null });
     return;
   }

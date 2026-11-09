@@ -231,10 +231,10 @@ async function main(): Promise<void> {
     },
   });
 
-  /* The scripted test AI exists ONLY on staging (owner, 2026-11-09): a vendor's
-     chatAiScripted switch is ignored anywhere else, so it can never answer a
-     real customer. */
-  const isStaging = /staging/i.test(process.env.REDIS_NAMESPACE ?? '');
+  /* The scripted test AI exists ONLY on staging and the local rehearsal stack
+     (owner, 2026-11-09): a vendor's chatAiScripted switch is ignored anywhere
+     else - production is `yiji-prod` - so it can never answer a real customer. */
+  const isStaging = /staging|local/i.test(process.env.REDIS_NAMESPACE ?? '');
   await registerAiRoutes(app, {
     provider,
     ...(isStaging ? { scripted: new ScriptedProvider(provider) } : {}),

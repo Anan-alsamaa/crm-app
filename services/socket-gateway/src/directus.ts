@@ -902,7 +902,7 @@ export class GatewayDirectus {
     /** What the agent's composer inserted, if anything (owner, 2026-10-07). */
     origin?: ComposerOrigin;
     /** Maha's automated messages say which they are (owner, 2026-11-09). */
-    automatedSource?: 'maha' | 'maha_handover' | 'agent_joined';
+    automatedSource?: 'maha_intro' | 'maha' | 'maha_handover' | 'agent_joined';
   }): Promise<{
     id: string;
     createdAt: string;
@@ -1152,6 +1152,45 @@ export class GatewayDirectus {
     )) as Array<{ id: string; sender_type: string; sender_user: string | null }>;
     const r = rows?.[0];
     return r ? { id: r.id, senderType: r.sender_type, senderUser: r.sender_user ?? null } : null;
+  }
+
+  /** The customer's newest message (id + time): what Maha must be answering. */
+  async latestCustomerMessage(conversationId: string): Promise<{ id: string; at: string } | null> {
+    const rows = (await this.client.request(
+      readItems('messages', {
+        filter: {
+          conversation: { _eq: conversationId },
+          sender_type: { _eq: 'customer' },
+          is_internal_note: { _neq: true },
+        },
+        fields: ['id', 'date_created'],
+        sort: ['-date_created'],
+        limit: 1,
+      } as never),
+    )) as Array<{ id: string; date_created: string }>;
+    const r = rows?.[0];
+    return r ? { id: r.id, at: r.date_created } : null;
+  }
+
+  /**
+   * Has the customer been answered since `iso` - by a person, by Maha, or by
+   * her handover line? Her introduction does not count: it answers nothing.
+   */
+  async answeredSince(conversationId: string, iso: string): Promise<boolean> {
+    const rows = (await this.client.request(
+      readItems('messages', {
+        filter: {
+          conversation: { _eq: conversationId },
+          sender_type: { _eq: 'agent' },
+          is_internal_note: { _neq: true },
+          date_created: { _gt: iso },
+          _or: [{ sender_user: { _nnull: true } }, { source: { _in: ['maha', 'maha_handover'] } }],
+        },
+        fields: ['id'],
+        limit: 1,
+      } as never),
+    )) as Array<{ id: string }>;
+    return Array.isArray(rows) && rows.length > 0;
   }
 
   /** An agent's first name, for "<name> from customer service is with you". */
