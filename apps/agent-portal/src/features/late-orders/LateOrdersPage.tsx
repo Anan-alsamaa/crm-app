@@ -2951,6 +2951,7 @@ export function LateOrdersPage() {
             <CouponRequestDialog
               open
               onClose={() => setCoupon(null)}
+              raisedFrom="late_orders"
               ticketId={coupon.ticketId}
               orderId={coupon.row.orderId}
               contactId={coupon.contactId}

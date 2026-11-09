@@ -19,6 +19,7 @@ import {
   YIJI_USAGE_ACCOUNTS,
   YIJI_USAGE_OUTCOMES,
   YIJI_USAGE_SERVICES,
+  COUPON_RAISED_FROM,
 } from '@yiji/shared-types';
 
 export type FieldType =
@@ -1042,6 +1043,15 @@ export const collections: CollectionSpec[] = [
         type: 'string',
         index: true,
         note: 'The id of this coupon on the VENDOR platform that requested it (Yiji inbound API, 2026-10-27). Empty for every coupon an agent asked for. Unique per vendor (uq_coupon_approvals_vendor_external_id): a retried request returns the same coupon.',
+      },
+      {
+        /* Where the coupon was raised (owner, 2026-11-09). Needs apply:fields on
+           staging and prod BEFORE the portals that send it. */
+        field: 'raised_from',
+        type: 'string',
+        choices: [...COUPON_RAISED_FROM],
+        index: true,
+        note: 'Where this coupon was raised: late_orders (Late Orders page), ticket (a ticket or chat), yiji_api (Yiji ticket API rule). A replacement keeps its original value.',
       },
       {
         field: 'replace_reason',

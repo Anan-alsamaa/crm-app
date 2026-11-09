@@ -6,6 +6,7 @@ import {
   startCouponReplacement,
   waitForCouponReplacement,
   type CouponApprovalStatus,
+  type CouponRaisedFrom,
   type CouponFields,
   type CouponReplacementTerms,
   type CouponReplaceState,
@@ -65,6 +66,8 @@ export interface CouponRequestRow {
   ticket: { id: string; subject: string | null; order_id: string | null } | null;
   /** The order, for a coupon raised WITHOUT a ticket — every late-order one. */
   order_id: string | null;
+  /** Where it was raised (late_orders | ticket | yiji_api), 2026-11-09. */
+  raised_from?: string | null;
   /** The number when no contact row carries it — every late-order one. */
   customer_phone: string | null;
   contact: { id: string; name: string | null; phone: string | null } | null;
@@ -229,6 +232,11 @@ export interface CreateCouponRequestInput extends CouponFields {
    */
   policy_rule?: string;
   differs_from_policy?: boolean;
+  /**
+   * Where it was raised (owner, 2026-11-09). Defaults to `ticket` in
+   * `sendCouponRequest`; the Late Orders page passes `late_orders`.
+   */
+  raised_from?: CouponRaisedFrom;
   /* Resolved from the ticket's order, never chosen in the form. */
   brand_id?: string | null;
   restaurant_id?: string | null;
@@ -325,7 +333,7 @@ export async function sendCouponRequest(
     const row = await createCouponRequestIdempotent(
       directus,
       id,
-      { ...rest, ...vendor } as Record<string, unknown>,
+      { ...rest, raised_from: rest.raised_from ?? 'ticket', ...vendor } as Record<string, unknown>,
       {
         ...opts,
         onAttemptFailed: (attempt, c, err) =>
@@ -527,6 +535,7 @@ export const TICKET_COUPON_REPLACE_FIELDS = [
   'restaurant_id',
   'delivery_excluded',
   'delivery_excluded_reason',
+  'raised_from',
   'replace_reason',
   { replaces: ['id', 'coupon_code'] },
   { replaced_by: ['id', 'coupon_code'] },

@@ -26,7 +26,7 @@ import {
   toast,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
-import { couponDecision } from '@yiji/shared-types';
+import { COUPON_RAISED_FROM, couponDecision, couponRaisedFromLabel } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { displayContactName, normalizePhone } from '@yiji/shared-types';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
@@ -98,6 +98,8 @@ interface Row {
   delivery_type: string | null;
   coupon_type: string | null;
   discount_category: string | null;
+  /** Where it was raised (late_orders | ticket | yiji_api), 2026-11-09. */
+  raised_from?: string | null;
   brand_id: string | null;
   restaurant_id: string | null;
   item_name: string | null;
@@ -175,6 +177,7 @@ export function useAllCoupons() {
               'item_name',
               'item_sku',
               'delivery_excluded_reason',
+              'raised_from',
               // See the note on `order_id` above: without this the Order column
               // is empty for every coupon raised from a late order.
               'order_id',
@@ -299,6 +302,7 @@ const COMPENSATION_COLUMN_KEYS = [
   'brand',
   'store',
   'order',
+  'raisedFrom',
   'item',
   'issuing',
   'delivery',
@@ -390,6 +394,8 @@ export function AllCompensationPage() {
   const [to, setTo] = useState('');
   const [agent, setAgent] = useState('');
   const [status, setStatus] = useState('');
+  /* Where it was raised (owner, 2026-11-09); '' = everywhere. */
+  const [raisedFrom, setRaisedFrom] = useState('');
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   // The right page size differs by task: 25 to read the queue, 500 to scan a
@@ -449,6 +455,7 @@ export function AllCompensationPage() {
       if (to && day > to) return false;
       if (agent && r.requested_by?.id !== agent) return false;
       if (status && (r.status ?? 'pending') !== status) return false;
+      if (raisedFrom && (r.raised_from ?? '') !== raisedFrom) return false;
       if (q) {
         const hay = [
           r.coupon_code,
@@ -471,7 +478,7 @@ export function AllCompensationPage() {
       }
       return true;
     });
-  }, [list, from, to, agent, status, query, itemOf]);
+  }, [list, from, to, agent, status, raisedFrom, query, itemOf]);
 
   /**
    * This report's own headline numbers, over the FILTERED set — a summary that
@@ -602,6 +609,12 @@ export function AllCompensationPage() {
       /* The ticket's order first — `couponOrderId` prefers it, and the two are
          never both set — then the row's own. */
       get: (r) => r.ticket?.order_id ?? r.order_id ?? '',
+    },
+    {
+      /* Where it was raised (owner, 2026-11-09): Late Orders page, Ticket, Yiji API. */
+      key: 'raisedFrom',
+      label: t('coupons.raisedFrom', { defaultValue: 'Raised from' }),
+      get: (r) => couponRaisedFromLabel(r.raised_from),
     },
     {
       key: 'item',
@@ -783,10 +796,11 @@ export function AllCompensationPage() {
     setTo('');
     setAgent('');
     setStatus('');
+    setRaisedFrom('');
     setQuery('');
     setPage(1);
   };
-  const filtering = Boolean(from || to || agent || status || query.trim());
+  const filtering = Boolean(from || to || agent || status || raisedFrom || query.trim());
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -908,6 +922,19 @@ export function AllCompensationPage() {
                 options: statuses.map((st) => ({
                   value: st,
                   label: String(t(`status.${st}`, { ns: 'common', defaultValue: st })),
+                })),
+              },
+              {
+                key: 'raisedFrom',
+                label: String(t('coupons.raisedFrom', { defaultValue: 'Raised from' })),
+                value: raisedFrom,
+                onChange: (v) => {
+                  setRaisedFrom(v);
+                  setPage(1);
+                },
+                options: COUPON_RAISED_FROM.map((v) => ({
+                  value: v,
+                  label: couponRaisedFromLabel(v),
                 })),
               },
             ]}

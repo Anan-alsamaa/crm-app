@@ -25,6 +25,7 @@ import {
   parseDeliveryTypes,
   toggleDeliveryType,
   type CouponRequestDraft,
+  type CouponRaisedFrom,
   differsFromPolicy,
   normalizePhone,
 } from '@yiji/shared-types';
@@ -68,6 +69,11 @@ export interface CouponRequestDialogProps {
    * coupon is about, and a second source would be one to disagree with it.
    */
   orderId?: string | null;
+  /**
+   * Where the coupon is raised (owner, 2026-11-09): the Late Orders page says
+   * `late_orders`; everything else is a ticket (chats included).
+   */
+  raisedFrom?: CouponRaisedFrom;
   contactId: string | null;
   /** Seeds the title — what operations search by. */
   customerPhone: string | null;
@@ -369,6 +375,7 @@ function CouponRequestForm({
   onClose,
   ticketId,
   orderId,
+  raisedFrom,
   contactId,
   customerPhone,
   description,
@@ -602,6 +609,7 @@ function CouponRequestForm({
         // Only when there is no ticket: `couponOrderId` prefers the ticket's
         // order, and writing both would create a second thing to disagree.
         order_id: ticketId ? null : (orderId ?? null),
+        raised_from: raisedFrom ?? 'ticket',
         contact: contactId,
         /*
          * THE NUMBER, when no contact row carries it.

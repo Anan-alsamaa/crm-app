@@ -240,6 +240,16 @@ describe('sendCouponRequest (the hook body): traceability', () => {
     expect(posts()[0]!.body).toMatchObject({ id: 'req-2', vendor: 'vendor-yiji', ticket: 'tk1' });
   });
 
+  it('says where it was raised: Ticket unless the caller says otherwise (2026-11-09)', async () => {
+    await sendCouponRequest({ ...input, id: 'req-3' }, { sleep });
+    await sendCouponRequest(
+      { ...input, id: 'req-4', ticket: null, order_id: '1370823', raised_from: 'late_orders' },
+      { sleep },
+    );
+    expect(posts()[0]!.body).toMatchObject({ id: 'req-3', raised_from: 'ticket' });
+    expect(posts()[1]!.body).toMatchObject({ id: 'req-4', raised_from: 'late_orders' });
+  });
+
   it('makes an id when the caller gives none', async () => {
     await sendCouponRequest(input, { sleep });
     expect(typeof posts()[0]!.body!.id).toBe('string');
