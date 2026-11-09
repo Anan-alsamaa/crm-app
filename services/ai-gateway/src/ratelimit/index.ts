@@ -199,3 +199,34 @@ export class DailyQuota {
     return raw ? Number.parseInt(raw, 10) : 0;
   }
 }
+
+/** USD -> SAR, the riyal's peg. */
+export const SAR_PER_USD = 3.75;
+
+/**
+ * MAHA'S MONTHLY SPEND, in SAR at the paid list price (owner, 2026-11-09:
+ * a monthly spend cap; at the cap new chats go to agents). Per vendor, per
+ * calendar month (UTC), namespaced per environment like MonthlyCap.
+ */
+export class MahaSpend {
+  constructor(
+    private readonly redis: Redis,
+    private readonly keyPrefix = envKey('maha:spend'),
+  ) {}
+
+  private key(vendorId: string, now = new Date()): string {
+    const m = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    return `${this.keyPrefix}:${vendorId}:${m}`;
+  }
+
+  async get(vendorId: string): Promise<number> {
+    return Number((await this.redis.get(this.key(vendorId))) ?? 0) || 0;
+  }
+
+  async add(vendorId: string, usd: number | null): Promise<void> {
+    if (!usd || usd <= 0) return;
+    const key = this.key(vendorId);
+    await this.redis.incrbyfloat(key, usd * SAR_PER_USD);
+    await this.redis.expire(key, 60 * 60 * 24 * 40);
+  }
+}

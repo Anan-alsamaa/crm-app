@@ -65,7 +65,16 @@ export type SuggestReplyResponse = z.infer<typeof SuggestReplyResponse>;
  * the workers ask, never a browser. `handover` means a person must take it.
  * In SHADOW mode the result is stored as an agents-only draft and never sent.
  */
-export const AutoReplyRequest = z.object({ conversationId: z.string().uuid() });
+export const AutoReplyRequest = z.object({
+  conversationId: z.string().uuid(),
+  /** Maha's replies so far in this session; at the vendor's limit she hands over. */
+  aiReplies: z.number().int().nonnegative().optional(),
+  /**
+   * `auto` (Maha answers the customer) or `assist` (a draft for the agent).
+   * Auto also checks the spend cap and Maha's hours; absent = assist.
+   */
+  mode: z.enum(['assist', 'auto']).optional(),
+});
 export type AutoReplyRequest = z.infer<typeof AutoReplyRequest>;
 export const AutoReplyResponse = z.object({
   action: z.enum(['reply', 'handover']),
@@ -75,6 +84,8 @@ export const AutoReplyResponse = z.object({
   reason: z.string().nullable(),
   /** True when the hard-limit check turned a reply into a handover. */
   blocked: z.boolean().default(false),
+  /** On a handover: one or two lines for the agent who takes the chat. */
+  summary: z.string().nullable().optional(),
 });
 export type AutoReplyResponse = z.infer<typeof AutoReplyResponse>;
 
@@ -242,6 +253,40 @@ export const AiFeatureConfig = z.object({
   autoReply: z.boolean().default(false),
   /** Hand over after this many AI replies in one session. */
   autoReplyMaxTurns: z.number().int().min(1).max(10).default(3),
+  /**
+   * MAHA, THE CHAT ASSISTANT (owner, 2026-11-09). One switch per vendor:
+   *  - off:    as today; nothing reaches the AI.
+   *  - assist: Maha drafts a reply for the agent (one-click send); the
+   *            customer only ever hears from people.
+   *  - auto:   Maha answers the customer herself and hands over to the normal
+   *            routing when the chat needs a person.
+   * OFF by default everywhere. A vendor still on the old `autoReply` flag
+   * reads as `assist` (it only ever drafted).
+   */
+  chatAi: z.enum(['off', 'assist', 'auto']).optional(),
+  /**
+   * Monthly spend cap for Maha, in SAR, at the paid list price. At the cap new
+   * chats go straight to agents. 0 = no cap.
+   */
+  chatAiMonthlyCapSar: z.number().nonnegative().default(250),
+  /**
+   * Hours Maha works, Riyadh time, "HH:MM". from === to means all day
+   * (owner, 2026-11-09: all day).
+   */
+  chatAiFrom: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('00:00'),
+  chatAiTo: z
+    .string()
+    .regex(/^\d{2}:\d{2}$/)
+    .default('00:00'),
+  /**
+   * STAGING ONLY: Maha's replies come from the scripted test AI (markers such
+   * as [[handover]] in the customer's message) instead of Gemini - free and
+   * repeatable. Ignored on production by the gateway.
+   */
+  chatAiScripted: z.boolean().default(false),
 });
 export type AiFeatureConfig = z.infer<typeof AiFeatureConfig>;
 
@@ -260,4 +305,28 @@ export function textLanguage(text: string | undefined | null): 'ar' | 'en' | und
   const latin = (text.match(/[A-Za-z]/g) ?? []).length;
   if (arabic === 0 && latin === 0) return undefined;
   return arabic >= latin ? 'ar' : 'en';
+}
+
+/** The vendor's Maha mode, honouring the old shadow flag (see `chatAi`). */
+export function chatAiMode(
+  cfg: Pick<AiFeatureConfig, 'chatAi' | 'autoReply'>,
+): 'off' | 'assist' | 'auto' {
+  if (cfg.chatAi) return cfg.chatAi;
+  return cfg.autoReply ? 'assist' : 'off';
+}
+
+/** Is `now` inside Maha's hours (Riyadh, UTC+3, no DST)? from === to = all day. */
+export function withinChatAiHours(
+  cfg: Pick<AiFeatureConfig, 'chatAiFrom' | 'chatAiTo'>,
+  now: Date,
+): boolean {
+  const toMin = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    return (h ?? 0) * 60 + (m ?? 0);
+  };
+  const from = toMin(cfg.chatAiFrom);
+  const to = toMin(cfg.chatAiTo);
+  if (from === to) return true;
+  const riyadh = (now.getUTCHours() * 60 + now.getUTCMinutes() + 180) % 1440;
+  return from < to ? riyadh >= from && riyadh < to : riyadh >= from || riyadh < to;
 }

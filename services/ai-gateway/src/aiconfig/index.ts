@@ -100,5 +100,4 @@ export const FEATURE_BY_ENDPOINT: Record<string, keyof typeof AiFeatureConfig._t
   '/semantic-search': 'semanticSearch',
   '/score-lead': 'scoreLead',
   '/help-assistant': 'helpAssistant',
-  '/auto-reply': 'autoReply',
 };

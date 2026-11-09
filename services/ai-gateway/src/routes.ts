@@ -7,6 +7,8 @@ import {
   LocalizedConversationRef,
   SuggestReplyRequest,
   AutoReplyRequest,
+  chatAiMode,
+  withinChatAiHours,
   type AutoReplyResponse,
   SemanticSearchRequest,
   HelpAssistantRequest,
@@ -24,11 +26,11 @@ import {
 import { z } from 'zod';
 import { verifyCaller, AuthError, scopeCallerToVendor, type Caller } from './auth/index.js';
 import { AiConfigStore, FEATURE_BY_ENDPOINT } from './aiconfig/index.js';
-import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.js';
+import { SlidingWindowLimiter, MonthlyCap, DailyQuota, type MahaSpend } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
 import { redactDeep, unredact } from './redaction/index.js';
 import { prompts } from './prompts/index.js';
-import { autoReplyPrompt } from './prompts/auto-reply.js';
+import { autoReplyPrompt, AUTO_REPLY_RESPONSE_SCHEMA } from './prompts/auto-reply.js';
 import { preCheck, postCheck } from './autoreply-guard.js';
 import type { AIProvider } from './provider/types.js';
 import { AiProviderError } from './provider/types.js';
@@ -54,6 +56,10 @@ export interface RouteDeps {
   logAiCall?: AiCallSink;
   /** The workers' token: the only caller /auto-reply accepts. */
   serviceToken?: string;
+  /** STAGING ONLY: the scripted test AI for Maha (see provider/scripted.ts). */
+  scripted?: AIProvider;
+  /** Maha's monthly spend per vendor, for the SAR cap. Optional in tests. */
+  mahaSpend?: Pick<MahaSpend, 'get' | 'add'>;
 }
 
 type Json = Record<string, unknown>;
@@ -208,14 +214,21 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     user: string,
     schema: z.ZodType<T>,
     extract: (text: string) => T,
+    opts: {
+      responseSchema?: Record<string, unknown>;
+      scripted?: boolean;
+      /** The call's estimated cost (USD, paid list price), once it is known. */
+      onCost?: (usd: number | null) => void;
+    } = {},
   ): Promise<T> {
+    const provider = opts.scripted && deps.scripted ? deps.scripted : deps.provider;
     // PII redaction before the outbound call — this is the perimeter
     const { redacted, entries } = redactDeep({ system, user });
     const started = Date.now();
     const log = (row: Partial<AiCallRow>) =>
       void deps.logAiCall?.({
         endpoint,
-        provider: deps.provider.name,
+        provider: provider.name,
         model: null,
         status: 'ok',
         error_code: null,
@@ -231,10 +244,11 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       });
     let out: Awaited<ReturnType<AIProvider['run']>>;
     try {
-      out = await deps.provider.run({
+      out = await provider.run({
         endpoint,
         system: redacted.system,
         user: redacted.user,
+        ...(opts.responseSchema ? { responseSchema: opts.responseSchema } : {}),
       });
     } catch (err) {
       log({
@@ -250,6 +264,7 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
       thinking_tokens: out.usage?.thinkingTokens ?? null,
       est_cost_usd: estimateCostUsd(out.model, out.usage),
     });
+    opts.onCost?.(estimateCostUsd(out.model, out.usage));
     // ...and restored on the way back in. The placeholders exist to keep values
     // away from the PROVIDER, not from the user, who supplied them and is
     // already cleared to see them. Without this, a reply that quotes an address
@@ -340,9 +355,16 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     }
   });
 
-  /* ── /auto-reply (owner, 2026-10-13) ─────────────────────────────
-   * Service-only: the workers ask, a browser never may. Shadow mode stores the
-   * answer for agents; nothing here sends anything to a customer. */
+  /* ── /auto-reply: MAHA (owner, 2026-10-13; live replies 2026-11-09) ──
+   * Service-only: the workers ask, a browser never may. Decides what Maha says
+   * to the latest customer message - a reply, or a handover with a reason and
+   * a summary for the agent. Sends nothing itself: in `auto` the socket
+   * gateway delivers it, in `assist` it becomes the agent's draft.
+   *
+   * Every decision that needs no model is made here first, in code: the hard
+   * limits, the reply limit, an image/voice/file, the spend cap and Maha's
+   * hours. A handover is ALWAYS a valid answer, so a failure anywhere ends
+   * with a person taking the chat - never with a customer left waiting. */
   app.post(AI_ENDPOINTS.autoReply, async (req, reply) => {
     const m = /^Bearer\s+(.+)$/i.exec(req.headers.authorization ?? '');
     if (!m) return reply.code(401).send({ error: 'unauthorized' });
@@ -354,34 +376,58 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
     const body = AutoReplyRequest.safeParse(req.body);
     if (!body.success)
       return reply.code(400).send({ error: 'invalid_body', issues: body.error.format() });
-    const ctx = await deps.directus.getConversation(body.data.conversationId);
+    const { conversationId } = body.data;
+    const ctx = await deps.directus.getConversation(conversationId);
     if (!ctx) return reply.code(404).send({ error: 'conversation_not_found' });
     const scoped = scopeCallerToVendor(caller, ctx.vendor);
+    const config = await deps.configStore.get(scoped.vendorId);
+    if (chatAiMode(config) === 'off') return reply.code(403).send({ error: 'feature_disabled' });
+    const auto = body.data.mode === 'auto';
 
     const visible = ctx.messages.filter((x) => !x.is_internal_note);
     const lastCustomer = [...visible].reverse().find((x) => x.sender_type === 'customer');
     if (!lastCustomer) return reply.code(409).send({ error: 'no_customer_message' });
+    const text = (lastCustomer.content ?? '').trim();
 
-    // The hard limits that need no model: a person, money back, or "are you a bot".
-    const early = preCheck(lastCustomer.content ?? '');
-    if (early) {
-      const config = await deps.configStore.get(scoped.vendorId);
-      if (!config.autoReply) return reply.code(403).send({ error: 'feature_disabled' });
-      const out: AutoReplyResponse = {
-        action: 'handover',
-        reply: null,
-        reason: early,
-        blocked: false,
-      };
-      return reply.send(out);
+    const handover = (reason: string, blocked = false): AutoReplyResponse => ({
+      action: 'handover',
+      reply: null,
+      reason,
+      blocked,
+      summary: null,
+    });
+
+    // Decisions that need no model.
+    const early = preCheck(text);
+    if (early) return reply.send(handover(early));
+    // An image, voice note or file: Maha cannot see it, a person must.
+    if (!text) return reply.send(handover('attachment'));
+    if ((body.data.aiReplies ?? 0) >= config.autoReplyMaxTurns) {
+      return reply.send(handover('reply_limit'));
+    }
+    if (auto) {
+      if (!withinChatAiHours(config, new Date())) return reply.send(handover('outside_hours'));
+      const cap = config.chatAiMonthlyCapSar;
+      if (cap > 0 && deps.mahaSpend && (await deps.mahaSpend.get(scoped.vendorId)) >= cap) {
+        return reply.send(handover('spend_cap'));
+      }
     }
 
-    const cacheKey = `auto:${body.data.conversationId}:${lastCustomer.id}`;
-    const gateRes = await gate(scoped, reply, AI_ENDPOINTS.autoReply, cacheKey, req.ip);
+    const cacheKey = `auto:${conversationId}:${lastCustomer.id}:${body.data.aiReplies ?? 0}`;
+    /* Rate limits per CONVERSATION, not per caller: every Maha call comes
+       from the one workers account, and a per-user budget would be shared by
+       every customer writing at once. */
+    const gateRes = await gate(
+      { ...scoped, userId: `maha:${conversationId}` },
+      reply,
+      AI_ENDPOINTS.autoReply,
+      cacheKey,
+      req.ip,
+    );
     if (!gateRes) return;
     if (gateRes.cached) return reply.send(gateRes.cached as AutoReplyResponse);
 
-    const source = await deps.directus.getAutoReplyContext(body.data.conversationId, ctx.vendor);
+    const source = await deps.directus.getAutoReplyContext(conversationId, ctx.vendor);
     const p = autoReplyPrompt({
       transcript: visible
         .filter((x) => x.sender_type === 'customer' || x.sender_type === 'agent')
@@ -391,37 +437,51 @@ export async function registerAiRoutes(app: FastifyInstance, deps: RouteDeps): P
         })),
       knowledge: source.knowledge,
       order: source.order,
-      arabic: /[؀-ۿ]/.test(lastCustomer.content ?? ''),
+      arabic: /[؀-ۿ]/.test(text),
     });
     const schema = z.object({
       action: z.enum(['reply', 'handover']),
       reply: z.string().nullable().optional(),
       reason: z.string().nullable().optional(),
+      summary: z.string().nullable().optional(),
     });
     try {
       const raw = await runWith(
-        { caller: scoped, conversationId: body.data.conversationId },
+        { caller: scoped, conversationId },
         AI_ENDPOINTS.autoReply,
         cacheKey,
         p.system,
         p.user,
         schema,
-        (text) => parseJson(text, schema),
+        (t) => parseJson(t, schema),
+        {
+          responseSchema: AUTO_REPLY_RESPONSE_SCHEMA,
+          scripted: config.chatAiScripted,
+          ...(auto && deps.mahaSpend
+            ? { onCost: (usd) => void deps.mahaSpend?.add(scoped.vendorId, usd) }
+            : {}),
+        },
       );
       let out: AutoReplyResponse = {
         action: raw.action,
         reply: raw.action === 'reply' ? (raw.reply ?? '').trim() || null : null,
         reason: raw.reason ?? null,
         blocked: false,
+        summary: raw.action === 'handover' ? (raw.summary ?? null) : null,
       };
-      if (out.action === 'reply' && !out.reply) {
-        out = { action: 'handover', reply: null, reason: 'empty_reply', blocked: false };
-      }
+      if (out.action === 'reply' && !out.reply) out = handover('empty_reply');
       // The model's answer is checked in code before anyone can use it.
       const broken = out.reply ? postCheck(out.reply) : null;
-      if (broken) out = { action: 'handover', reply: null, reason: broken, blocked: true };
+      if (broken) out = handover(broken, true);
       return reply.send(out);
     } catch (err) {
+      /* In auto, a model failure is a HANDOVER, not an error: the customer is
+         waiting and a person must take it now. Logged by runWith. */
+      if (auto) {
+        const why =
+          err instanceof AiProviderError ? `ai_error:${err.code}` : 'ai_error:invalid_response';
+        return reply.send(handover(why));
+      }
       handleProviderError(reply, err);
     }
   });

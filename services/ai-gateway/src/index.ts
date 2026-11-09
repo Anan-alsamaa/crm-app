@@ -12,8 +12,9 @@ import pino from 'pino';
 import { loadConfig } from './config.js';
 import { registerAiRoutes } from './routes.js';
 import { GeminiProvider } from './provider/gemini.js';
+import { ScriptedProvider } from './provider/scripted.js';
 import { AiConfigStore } from './aiconfig/index.js';
-import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.js';
+import { SlidingWindowLimiter, MonthlyCap, DailyQuota, MahaSpend } from './ratelimit/index.js';
 import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
@@ -230,8 +231,14 @@ async function main(): Promise<void> {
     },
   });
 
+  /* The scripted test AI exists ONLY on staging (owner, 2026-11-09): a vendor's
+     chatAiScripted switch is ignored anywhere else, so it can never answer a
+     real customer. */
+  const isStaging = /staging/i.test(process.env.REDIS_NAMESPACE ?? '');
   await registerAiRoutes(app, {
     provider,
+    ...(isStaging ? { scripted: new ScriptedProvider(provider) } : {}),
+    mahaSpend: new MahaSpend(redis),
     // One row per AI call: tokens, estimated cost, latency (owner, 2026-10-07).
     logAiCall: (row) => directus.logAiCall(row),
     serviceToken: config.SVC_AI_TOKEN,
