@@ -55,11 +55,6 @@ import { PushUnreachableNotice } from './PushUnreachableNotice.js';
 import { AiDraftCard } from './AiDraftCard.js';
 import { MahaBanner } from '../maha/MahaControls.js';
 import { mahaKey, useMahaState } from '../maha/api.js';
-import { runtimeConfig } from '@yiji/shared-config';
-
-/* AI auto-reply is parked (owner, 2026-10-14): its shadow drafts exist on
-   staging only, and production has no ai_draft field to read. */
-const SHOW_AI_DRAFTS = runtimeConfig().ENVIRONMENT === 'staging';
 import { resolveMentions } from './mentions.js';
 import { InlineMessageEditor, MessageActions } from './MessageEditControls.js';
 import {
@@ -182,6 +177,9 @@ export function ConversationView({
   /* Maha (owner, 2026-11-09): while she has the chat the reply box is locked. */
   const maha = useMahaState(conversationId).data;
   const mahaActive = maha?.active === true;
+  /* Assist's one-click send: the draft is put in the box (so the send is
+     recorded as an AI suggestion, unedited) and sent on the next render. */
+  const [sendDraftNow, setSendDraftNow] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [mentionMenu, setMentionMenu] = useState<{ query: string; from: number } | null>(null);
   const [pending, setPending] = useState<
@@ -949,6 +947,13 @@ export function ConversationView({
    *     worded reply. It reuses the canned reply's `replacedDraftRef` plus
    *     Ctrl+Z rather than inventing a second idea of undo.
    */
+  /* Assist's one-click send: once Maha's draft is in the box, send it. */
+  useEffect(() => {
+    if (sendDraftNow === null || draft !== sendDraftNow) return;
+    setSendDraftNow(null);
+    send();
+  }, [sendDraftNow, draft]);
+
   const applyEnhanced = (text: string, source: 'ai_enhance' | 'ai_suggestion' = 'ai_enhance') => {
     originRef.current = { source, text };
     const prior = draft;
@@ -1679,13 +1684,19 @@ export function ConversationView({
             {!internalNote && (
               <MahaBanner className="mb-2" conversationId={conversationId} state={maha} />
             )}
-            {!internalNote && SHOW_AI_DRAFTS && (
+            {/* ASSIST (owner, 2026-11-09): Maha's draft, sent in one click or
+                edited first. Not while she is answering the customer herself. */}
+            {!internalNote && !mahaActive && (
               <AiDraftCard
                 className="mb-2"
                 conversationId={conversationId}
                 awaitingMessageId={awaitingMessageId?.id ?? null}
                 awaitingAt={awaitingMessageId?.at ?? null}
                 onUse={(text) => applyEnhanced(text, 'ai_suggestion')}
+                onSend={(text) => {
+                  applyEnhanced(text, 'ai_suggestion');
+                  setSendDraftNow(text);
+                }}
               />
             )}
             {/*

@@ -25,6 +25,7 @@ export function AiDraftCard({
   awaitingMessageId,
   awaitingAt,
   onUse,
+  onSend,
   className,
 }: {
   conversationId: string;
@@ -33,6 +34,8 @@ export function AiDraftCard({
   /** When that message was sent (ISO). */
   awaitingAt: string | null;
   onUse: (text: string) => void;
+  /** Assist mode's one click (owner, 2026-11-09): send Maha's draft as is. */
+  onSend?: (text: string) => void;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -73,12 +76,19 @@ export function AiDraftCard({
     >
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold text-primary">
-          {t('aiDraft.title', { defaultValue: 'AI suggestion - not sent' })}
+          {t('aiDraft.title', { defaultValue: "Maha's suggestion - not sent" })}
         </span>
         {draft.action === 'reply' && draft.reply && (
-          <Button size="sm" variant="ghost" onClick={() => onUse(draft.reply ?? '')}>
-            {t('aiDraft.use', { defaultValue: 'Use this' })}
-          </Button>
+          <span className="flex items-center gap-1">
+            <Button size="sm" variant="ghost" onClick={() => onUse(draft.reply ?? '')}>
+              {t('aiDraft.use', { defaultValue: 'Edit first' })}
+            </Button>
+            {onSend && (
+              <Button size="sm" onClick={() => onSend(draft.reply ?? '')}>
+                {t('aiDraft.send', { defaultValue: 'Send' })}
+              </Button>
+            )}
+          </span>
         )}
       </div>
       {draft.action === 'reply' && draft.reply ? (
