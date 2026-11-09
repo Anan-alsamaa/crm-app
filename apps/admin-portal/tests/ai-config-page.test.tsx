@@ -67,12 +67,11 @@ describe('AiConfigPage', () => {
     renderPage();
     expect(screen.getByRole('heading', { name: 'AI assistance', level: 1 })).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('Summarize conversation')).toBeInTheDocument());
-    expect(screen.getAllByRole('switch').length).toBe(9);
-    // AI auto-reply (owner, 2026-10-13) is off unless someone turns it on.
-    expect(screen.getByRole('switch', { name: 'AI auto-reply (shadow)' })).toHaveAttribute(
-      'aria-checked',
-      'false',
-    );
+    expect(screen.getAllByRole('switch').length).toBe(8);
+    // The old shadow switch is Maha's Off / Assist / Auto now (2026-11-09),
+    // and she is Off unless someone turns her on.
+    expect(screen.getByRole('radio', { name: /^Off/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('radio', { name: /^Auto/ })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('renders the help-assistant toggle and its daily allowance field', async () => {
