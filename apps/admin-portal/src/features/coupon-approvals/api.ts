@@ -72,6 +72,8 @@ export interface CouponApprovalRow {
   /** Marked never-send — a test row, or honoured in the branch instead. */
   delivery_excluded: boolean | null;
   delivery_excluded_reason: string | null;
+  /** Where it was raised (late_orders | ticket | yiji_api), 2026-11-09. */
+  raised_from?: string | null;
   /**
    * Yiji's coupon id for a WITHHELD coupon, created there unassigned (owner,
    * 2026-10-06). Never a customer grant — that is `yiji_coupon_user_id`.
@@ -238,6 +240,7 @@ const COUPON_APPROVAL_FIELDS = [
   'yiji_push_error',
   'delivery_excluded',
   'delivery_excluded_reason',
+  'raised_from',
   'yiji_coupon_id',
   'awaiting_signup_at',
   'signup_checked_at',

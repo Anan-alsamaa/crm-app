@@ -587,7 +587,10 @@ export class YijiInboundDirectus implements YijiInboundStore {
   }
 
   async createCoupon(row: NewCouponRow): Promise<void> {
-    await this.req(createItem('coupon_approvals' as never, row as never));
+    /* Every coupon this API raises is a Yiji API one (owner, 2026-11-09). */
+    await this.req(
+      createItem('coupon_approvals' as never, { ...row, raised_from: 'yiji_api' } as never),
+    );
   }
 
   async setTicketCompensation(id: string, value: 'Compensated' | 'Not Compensated'): Promise<void> {

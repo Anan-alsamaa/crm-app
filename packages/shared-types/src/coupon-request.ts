@@ -70,6 +70,32 @@ export function couponDecision(status: string | null | undefined): CouponDecisio
   }
 }
 
+/**
+ * WHERE A COUPON WAS RAISED (owner, 2026-11-09): saved on every coupon so the
+ * compensation data says it, instead of being guessed from which links happen
+ * to be empty. Chats and tickets are the same place for this purpose.
+ *  - `late_orders`: the Late Orders page (a late DELIVERY has no ticket; a late
+ *    PREPARATION gets one beside it, and is still `late_orders`).
+ *  - `ticket`: a ticket, including one raised from a chat.
+ *  - `yiji_api`: raised by the Yiji ticket API's compensation rules.
+ * A replacement keeps its original's value.
+ */
+export const COUPON_RAISED_FROM = ['late_orders', 'ticket', 'yiji_api'] as const;
+export type CouponRaisedFrom = (typeof COUPON_RAISED_FROM)[number];
+
+const RAISED_FROM_LABEL: Record<CouponRaisedFrom, string> = {
+  late_orders: 'Late Orders page',
+  ticket: 'Ticket',
+  yiji_api: 'Yiji API',
+};
+
+/** The words shown for a stored value; `-` when a coupon has none. */
+export function couponRaisedFromLabel(value: string | null | undefined): string {
+  return (COUPON_RAISED_FROM as readonly string[]).includes(value ?? '')
+    ? RAISED_FROM_LABEL[value as CouponRaisedFrom]
+    : '-';
+}
+
 /** Approved AND the terms were changed first — a different event, worth seeing. */
 export function couponWasAmended(
   status: string | null | undefined,

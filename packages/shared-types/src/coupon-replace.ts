@@ -184,6 +184,8 @@ export interface ReplaceableCoupon {
   compensation?: string | null;
   delivery_excluded?: boolean | null;
   delivery_excluded_reason?: string | null;
+  /** Where the original was raised; the replacement keeps it (2026-11-09). */
+  raised_from?: string | null;
 }
 
 /**
@@ -226,6 +228,8 @@ export function buildReplacementCoupon(
     compensation: old.compensation ?? 'Compensated',
     delivery_excluded: old.delivery_excluded === true,
     delivery_excluded_reason: old.delivery_excluded_reason ?? null,
+    // Only when the old row was read WITH it: never guess a source.
+    ...(old.raised_from ? { raised_from: old.raised_from } : {}),
     // The edited TERMS.
     title: terms.title.trim(),
     issuing_side: terms.issuing_side.trim(),

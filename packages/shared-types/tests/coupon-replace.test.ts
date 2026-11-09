@@ -186,6 +186,17 @@ describe('the replacement row', () => {
       delivery_excluded: false,
     });
   });
+  it('keeps where the original was raised, and never guesses one', () => {
+    const ctx = { id: 'n', code: 'C', editorId: null, reason: 'x', now: TODAY };
+    expect(
+      buildReplacementCoupon({ ...OLD, raised_from: 'late_orders' }, TERMS, ctx),
+    ).toMatchObject({
+      raised_from: 'late_orders',
+    });
+    expect(buildReplacementCoupon({ ...OLD, raised_from: null }, TERMS, ctx)).not.toHaveProperty(
+      'raised_from',
+    );
+  });
   it('writes ONE money column, and an amount is its own ceiling', () => {
     expect(row).toMatchObject({ coupon_value: 40, coupon_percent: null, max_discount: 40 });
     const pct = buildReplacementCoupon(
@@ -338,5 +349,17 @@ describe('waiting for the workers', () => {
     const out = await waitForCouponReplacement(read, { sleep, intervalMs: 10, timeoutMs: 30 });
     expect(out.state).toBe('working');
     expect(read).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe('where a coupon was raised (owner, 2026-11-09)', () => {
+  it('names each place, and shows a dash for a coupon without one', async () => {
+    const { couponRaisedFromLabel, COUPON_RAISED_FROM } = await import('../src/coupon-request.js');
+    expect(COUPON_RAISED_FROM).toEqual(['late_orders', 'ticket', 'yiji_api']);
+    expect(couponRaisedFromLabel('late_orders')).toBe('Late Orders page');
+    expect(couponRaisedFromLabel('ticket')).toBe('Ticket');
+    expect(couponRaisedFromLabel('yiji_api')).toBe('Yiji API');
+    expect(couponRaisedFromLabel(null)).toBe('-');
+    expect(couponRaisedFromLabel('chat')).toBe('-');
   });
 });
