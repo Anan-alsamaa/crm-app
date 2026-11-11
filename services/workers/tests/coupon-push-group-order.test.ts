@@ -266,3 +266,90 @@ describe('a coupon on a group order', () => {
     expect(t.grant()?.orderId).toBe(1370743);
   });
 });
+
+/* ONE COUPON, ONE GRANT (2026-11-11): on staging two pushes of OPS-HNXZRMZC ran
+   at the same moment and the customer's wallet got the coupon twice. */
+describe('a coupon is never granted twice', () => {
+  const exists = () =>
+    Object.assign(new Error('refused'), {
+      name: 'YijiRefusedError',
+      status: 400,
+      body: {
+        result: 2,
+        exceptionMessage: "Message: Coupon with Code 'OPS-GROUP001' already exists!",
+      },
+    });
+
+  it('a second push while one is running steps aside: nothing is sent', async () => {
+    const t = setup({ group: null, row: { ticket: { order_id: '1372248' } } as never });
+    const lock = { acquire: vi.fn(async () => false), release: vi.fn(async () => {}) };
+    const out = await processCouponPushJob(
+      { data: { couponApprovalId: 'ca-group' } } as Job<{ couponApprovalId: string }>,
+      {
+        directus: { request: vi.fn() } as never,
+        logger,
+        postCoupon: t.postCoupon as never,
+        yijiTenantId: '1',
+        lock,
+      },
+    );
+    expect(out).toBe('busy');
+    expect(t.postCoupon).not.toHaveBeenCalled();
+    expect(lock.release).not.toHaveBeenCalled();
+  });
+
+  it('the lock is released when the push finishes', async () => {
+    const t = setup({ group: null, row: { ticket: { order_id: '1372248' } } as never });
+    const lock = { acquire: vi.fn(async () => true), release: vi.fn(async () => {}) };
+    const directus = {
+      request: vi.fn(async () => ({ status: 'assigned', yiji_coupon_user_id: '1' })),
+    };
+    await processCouponPushJob(
+      { data: { couponApprovalId: 'ca-group' } } as Job<{ couponApprovalId: string }>,
+      {
+        directus: directus as never,
+        logger,
+        postCoupon: t.postCoupon as never,
+        yijiTenantId: '1',
+        lock,
+      },
+    );
+    expect(lock.acquire).toHaveBeenCalledWith('coupon-push:ca-group', expect.any(Number));
+    expect(lock.release).toHaveBeenCalledWith('coupon-push:ca-group');
+  });
+
+  it('"already exists" and the customer already holds it: recorded, NOT attached again', async () => {
+    const patches: Array<Record<string, unknown>> = [];
+    const directus = {
+      request: vi.fn(async (arg: unknown) => {
+        const a = arg as Record<string, unknown>;
+        if ('payload' in a) {
+          patches.push(a.payload as Record<string, unknown>);
+          return {};
+        }
+        if ('opts' in a && !('id' in a)) return [];
+        return { ...ROW, ticket: { order_id: null }, order_id: null };
+      }),
+    };
+    const paths: string[] = [];
+    const postCoupon = vi.fn(async (path: string) => {
+      paths.push(path);
+      if (path === YIJI_UNASSIGNED_COUPON_PATH) throw exists();
+      return {};
+    });
+    const out = await processCouponPushJob(
+      { data: { couponApprovalId: 'ca-group' } } as Job<{ couponApprovalId: string }>,
+      {
+        directus: directus as never,
+        logger,
+        postCoupon: postCoupon as never,
+        findCustomer: vi.fn(async () => 'yiji-user-1') as never,
+        findUserCoupon: vi.fn(async () => ({ couponUserId: '32078', couponId: 89126 })) as never,
+        yijiTenantId: '1',
+      },
+    );
+    expect(out).toBe('delivered');
+    expect(paths.some((p) => p.includes('AddCouponToUserByCode'))).toBe(false);
+    expect(patches.at(-1)).toMatchObject({ status: 'assigned', yiji_coupon_user_id: '32078' });
+  });
+});

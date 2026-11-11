@@ -535,10 +535,24 @@ describe('a coupon an earlier attempt already created', () => {
   }
 
   it('attaches it by code and records the grant Yiji shows', async () => {
-    const { d, postCoupon, patches } = setup();
+    const { d, postCoupon, patches, findUserCoupon } = setup();
+    /* Not in the wallet when first looked at (2026-11-11: the look comes
+       BEFORE attaching), there once attached. */
+    findUserCoupon.mockResolvedValueOnce(null);
     await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
     expect(postCoupon.mock.calls[1]![0]).toBe(
       `${YIJI_ATTACH_BY_CODE_PATH}/yiji-user-abc/OPS-433RHNBB`,
+    );
+    expect(patches).toContainEqual(
+      expect.objectContaining({ status: 'assigned', yiji_coupon_user_id: '21777' }),
+    );
+  });
+
+  it('already in the wallet (a parallel push attached it): recorded, never attached twice', async () => {
+    const { d, postCoupon, patches } = setup();
+    await expect(processCouponPushJob(job(), d)).resolves.toBe('delivered');
+    expect(postCoupon.mock.calls.map((c) => c[0])).not.toContainEqual(
+      expect.stringContaining(YIJI_ATTACH_BY_CODE_PATH),
     );
     expect(patches).toContainEqual(
       expect.objectContaining({ status: 'assigned', yiji_coupon_user_id: '21777' }),
