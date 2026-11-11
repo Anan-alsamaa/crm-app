@@ -138,6 +138,7 @@ export function OrderHeader({
         <div className="mt-0.5 text-2xs text-muted-foreground tabular-nums">
           {fmtDateTime(order.placedAt)}
         </div>
+        <GroupOrderNote order={order} />
       </div>
       {/* Never shrinks and never gets overlapped — the money is the one number
           on this row an agent must read exactly. */}
@@ -146,6 +147,58 @@ export function OrderHeader({
       </div>
     </div>
   );
+}
+
+/**
+ * GROUP (food-court) ORDERS (owner, 2026-11-11): one order to several
+ * restaurants. Yiji holds a MASTER and one suborder per restaurant; the CRM
+ * shows the group once and gives it ONE coupon, on the master.
+ */
+function GroupOrderNote({
+  order,
+}: {
+  order: YijiOrder & { groupSuborders?: Array<Pick<YijiOrder, 'orderId' | 'brandName'>> };
+}) {
+  const { t } = useTranslation();
+  if (order.groupRole === 'master') {
+    const subs = order.groupSuborders ?? [];
+    const brands = subs
+      .map((s) => s.brandName?.trim() || `#${s.orderId}`)
+      .filter((v, i, a) => a.indexOf(v) === i)
+      .join(', ');
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
+        <Pill tone="blue" size="sm">
+          {t('commerce.groupOrder', { defaultValue: 'Group order' })}
+        </Pill>
+        {subs.length > 0 && (
+          <span>
+            {t('commerce.groupOrderRestaurants', {
+              n: subs.length,
+              defaultValue: 'Restaurants: {{n}}',
+            })}
+            {brands ? `: ${brands}` : ''}
+          </span>
+        )}
+      </div>
+    );
+  }
+  if (order.groupRole === 'sub' && order.groupMasterId) {
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
+        <Pill tone="blue" size="sm">
+          {t('commerce.groupSuborder', { defaultValue: 'Part of a group order' })}
+        </Pill>
+        <span>
+          {t('commerce.groupSuborderHint', {
+            master: order.groupMasterId,
+            defaultValue: 'A coupon goes on the group order #{{master}}',
+          })}
+        </span>
+      </div>
+    );
+  }
+  return null;
 }
 
 function TotalsRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {

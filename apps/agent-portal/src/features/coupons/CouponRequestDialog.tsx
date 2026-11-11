@@ -35,6 +35,7 @@ import { couponTermsFromDraft } from './coupon-request-fields.js';
 import { newCouponRequestId } from './coupon-request-send.js';
 import { useCouponsUnderMaintenance } from './maintenance.js';
 import { CouponMaintenancePanel } from './CouponMaintenance.js';
+import { useGroupOrderCheck } from './group-order-check.js';
 
 /**
  * The coupon an agent asks a supervisor to approve.
@@ -74,6 +75,11 @@ export interface CouponRequestDialogProps {
    * `late_orders`; everything else is a ticket (chats included).
    */
   raisedFrom?: CouponRaisedFrom;
+  /**
+   * The commerce vendor of the order, for the group-order check (owner,
+   * 2026-11-11). Optional: for a ticket it is read from the ticket.
+   */
+  vendorId?: string | null;
   contactId: string | null;
   /** Seeds the title — what operations search by. */
   customerPhone: string | null;
@@ -376,6 +382,7 @@ function CouponRequestForm({
   ticketId,
   orderId,
   raisedFrom,
+  vendorId,
   contactId,
   customerPhone,
   description,
@@ -573,14 +580,33 @@ function CouponRequestForm({
             defaultValue: 'Enter the total discount limit (SAR) to send this General coupon.',
           })
         : null;
+  /*
+   * GROUP ORDERS (owner, 2026-11-11): one coupon per group order, on the
+   * master. A group order that already has a coupon blocks a second one.
+   */
+  const groupCheck = useGroupOrderCheck({
+    open,
+    ticketId: ticketId || null,
+    orderId: orderId ?? null,
+    vendorId: vendorId ?? null,
+    excludeId: editingId ?? null,
+  }).data;
+  const groupCovered = !onSave && !!groupCheck?.coveredBy;
   /** The first thing wrong, named — not "check the highlighted fields". */
-  const blockedReason = !parsed.success
-    ? (parsed.error.issues[0]?.message ?? '')
-    : general && !generalAck
-      ? t('coupons.general.ackNeeded', {
-          defaultValue: 'Confirm the General coupon warning to send it.',
-        })
-      : '';
+  const blockedReason = groupCovered
+    ? t('coupons.groupCovered', {
+        master: groupCheck?.masterId,
+        code: groupCheck?.coveredBy?.code ?? '',
+        defaultValue:
+          'Group order #{{master}} already has coupon {{code}}. A group order gets one coupon only.',
+      })
+    : !parsed.success
+      ? (parsed.error.issues[0]?.message ?? '')
+      : general && !generalAck
+        ? t('coupons.general.ackNeeded', {
+            defaultValue: 'Confirm the General coupon warning to send it.',
+          })
+        : '';
 
   const submit = () => {
     if (!parsed.success) return;
@@ -730,6 +756,7 @@ function CouponRequestForm({
             /* A taken code blocks the send outright. Letting it through would
                hand Yiji a duplicate idempotency-key and deliver nothing. */
             disabled={
+              groupCovered ||
               !parsed.success ||
               (general && !generalAck) ||
               (codeTaken && !replaceMode) ||
@@ -750,6 +777,19 @@ function CouponRequestForm({
       }
     >
       <DrawerSection title={t('coupons.theCoupon', { defaultValue: 'The coupon' })}>
+        {/* GROUP ORDER (owner, 2026-11-11): say where the coupon goes. */}
+        {groupCheck && (
+          <p
+            data-testid="coupon-group-note"
+            className="rounded-2xl bg-primary/[0.06] px-3.5 py-2.5 text-xs leading-relaxed text-foreground"
+          >
+            {t('coupons.groupNote', {
+              master: groupCheck.masterId,
+              defaultValue:
+                'This is a group order. The coupon goes on group order #{{master}}, and its restaurants get equal shares.',
+            })}
+          </p>
+        )}
         {/* THE POLICY behind a pre-filled coupon (owner, 2026-10-27). */}
         {policy && (
           <p

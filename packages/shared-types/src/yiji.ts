@@ -74,6 +74,14 @@ export interface YijiOrder {
   totalPointAmount?: number;
   totalCouponAmount?: number;
   totalDiscount?: number;
+  /**
+   * GROUP (food-court) ORDERS (owner, 2026-11-11): `master` for the order that
+   * holds a group, `sub` for one restaurant's part of it - see `order-group.ts`.
+   * `groupMasterId` is the master (its own id for a master). Absent for an
+   * ordinary order. A group order takes ONE coupon, on the master.
+   */
+  groupRole?: 'master' | 'sub';
+  groupMasterId?: string;
 }
 
 /** One step in an order's status timeline. */

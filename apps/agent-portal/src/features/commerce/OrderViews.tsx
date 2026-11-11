@@ -2,7 +2,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cn, Skeleton } from '@yiji/ui';
-import type { YijiOrder } from '@yiji/shared-types';
+import { collapseGroupOrders, type YijiOrder } from '@yiji/shared-types';
 /*
  * THE ORDER CARD ITSELF NOW LIVES IN A PACKAGE (ops, 2026-10-04).
  *
@@ -400,7 +400,9 @@ export function LatestOrder({
    */
   const liveOrders = orders.data?.orders;
   const live = liveOrders && liveOrders.length > 0 ? liveOrders : null;
-  const recent = (live ?? (stamped ? [stamped] : [])).slice(0, 2);
+  /* A group order is ONE order here (owner, 2026-11-11): Yiji lists its master
+     and every suborder, which took both slots and invited a second coupon. */
+  const recent = collapseGroupOrders(live ?? (stamped ? [stamped] : [])).slice(0, 2);
   /*
    * The pinned order leads, and is never dropped by the slice.
    *
@@ -609,7 +611,7 @@ export function CustomerOrders({
         </p>
       ) : orders.data && orders.data.length > 0 ? (
         <ul className="space-y-2">
-          {orders.data.map((o) => (
+          {collapseGroupOrders(orders.data).map((o) => (
             <li key={o.orderId}>
               <ExpandableOrder vendorId={vendorId} summary={o} />
             </li>
