@@ -58,8 +58,19 @@ import { ViewSwitch } from '../../components/ViewSwitch.js';
  * page sees exactly the list they always had. The server keeps the owner's
  * switches out of their saves too (app-roles-sync `keepOwnerPrivileges`).
  */
+/* PENDING ON PRODUCTION (owner, 2026-11-11): auto compensation (its rules
+   editor) and the Marketing portal are held, so their switches are not offered
+   on this release branch. Main and staging keep them. */
+const HELD_ON_PROD: readonly string[] = [
+  'manage_compensation_rules',
+  'use_marketing_portal',
+  'manage_marketing',
+  'approve_marketing',
+];
 const toPrivs = (keys: readonly Privilege[]) =>
-  keys.map((key) => ({ key, group: PRIVILEGE_GROUP[key] as string }));
+  keys
+    .filter((key) => !HELD_ON_PROD.includes(key))
+    .map((key) => ({ key, group: PRIVILEGE_GROUP[key] as string }));
 const SHARED_PRIVS = toPrivs(PRIVILEGES);
 /* The owner sees one line per dashboard and per report instead of the old
    "View dashboards & reports" (owner, 2026-10-12); `view_dashboard` becomes

@@ -216,7 +216,6 @@ jobs:
         run: |
           pnpm --filter @yiji/agent-portal build
           pnpm --filter @yiji/admin-portal build
-          pnpm --filter @yiji/marketing-portal build
 
       - name: Generate runtime config
         # On S3 there is no container, so nothing writes config.js the way
@@ -227,8 +226,6 @@ jobs:
             apps/agent-portal/dist/config.js
           ./scripts/gen-portal-config.sh ${{ needs.plan.outputs.environment }} \
             apps/admin-portal/dist/config.js
-          ./scripts/gen-portal-config.sh ${{ needs.plan.outputs.environment }} \
-            apps/marketing-portal/dist/config.js
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v6
@@ -258,15 +255,8 @@ jobs:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
           RELEASE_VERSION: ${{ github.ref_name }}
         run: |
-          for app in agent admin marketing; do
+          for app in agent admin; do
             BUCKET="crm-${ENVIRONMENT}-${app}-portal"
-            # THE MARKETING PORTAL IS STAGING-ONLY FOR NOW (owner, 2026-11-02):
-            # its production bucket and site are not created yet. Remove this
-            # skip in the same change that creates them.
-            if [ "$app" = "marketing" ] && [ "$ENVIRONMENT" = "prod" ]; then
-              echo "::notice::marketing portal not deployed to prod yet (no prod bucket)"
-              continue
-            fi
             # Does THIS surface wait for the owner? Only the agent portal, and
             # only on prod.
             if [ "$ENVIRONMENT" = "prod" ] && [ "$app" = "agent" ]; then
@@ -590,7 +580,12 @@ jobs:
     # `approve` must genuinely have SUCCEEDED — `always()` would otherwise let a
     # rejected or cancelled approval through, which is the one thing the gate
     # exists to prevent.
-    if: always() && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success' && needs.approve.result == 'success'
+    #
+    # PORTALS-ONLY RELEASE BRANCH (owner, 2026-11-04): production SERVICES ship
+    # from release/svc-* (their own built images). A tag on THIS branch would
+    # otherwise promote `:main`'s services - unreleased work - so on prod it
+    # ships the portals (parked for Update now) and deploys NO service.
+    if: always() && needs.plan.outputs.environment != 'prod' && needs.plan.result == 'success' && needs.build.result != 'failure' && needs.portals.result == 'success' && needs.approve.result == 'success'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
