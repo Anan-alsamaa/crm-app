@@ -186,8 +186,9 @@ beforeEach(() => {
 });
 
 const body = (over: Record<string, unknown> = {}) => ({
-  externalId: 'YT-1',
   customer: { phone: '0501234567' },
+  orderNumber: '1280043',
+  occurredAt: '2026-11-11T12:00:00+03:00',
   restaurantId: '501',
   complaintType: 'Late order',
   serviceType: 'Delivery',
@@ -219,7 +220,7 @@ describe('a Yiji ticket: the rule decides', () => {
     expect(res.body).toEqual({
       ticketId: c.ticket,
       ticketNumber: expect.any(String),
-      externalId: 'YT-1',
+      externalId: expect.stringMatching(/^auto:[0-9a-f]{64}$/),
     });
     // The history line names the rule.
     expect(store.events.map((e) => e.text)).toContain(
@@ -246,7 +247,7 @@ describe('a Yiji ticket: the rule decides', () => {
     await svc.createTicket(body({ delayMinutes: 75 }));
     expect([...store.coupons.values()][0]!.policy_rule).toBe('very-late');
 
-    await svc.createTicket(body({ externalId: 'YT-2', delayMinutes: 20 }));
+    await svc.createTicket(body({ occurredAt: '2026-11-11T13:00:00+03:00', delayMinutes: 20 }));
     const second = [...store.coupons.values()].find((c) => c.policy_rule === 'plain');
     expect(second?.coupon_value).toBe(10);
   });

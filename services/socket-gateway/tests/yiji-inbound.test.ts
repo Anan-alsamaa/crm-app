@@ -7,6 +7,7 @@ import {
   couponPolicyProblems,
   createYijiInboundService,
   registerYijiInboundApi,
+  ticketFingerprint,
   apiCouponStatus,
   type CouponPolicy,
   type InboundCoupon,
@@ -251,7 +252,6 @@ function signed(
 }
 
 const ticketBody = (over: Record<string, unknown> = {}) => ({
-  externalId: 'YT-1001',
   customer: { phone: '+966501234567', name: 'Sara', yijiCustomerId: '77881' },
   orderNumber: '1280043',
   restaurantId: '501',
@@ -262,6 +262,18 @@ const ticketBody = (over: Record<string, unknown> = {}) => ({
   attachments: ['https://cdn.yiji.example/p/1.jpg'],
   occurredAt: '2026-10-27T13:30:00+03:00',
   ...over,
+});
+
+/* The CRM's own duplicate-check key for ticketBody() (owner, 2026-11-11). */
+const KEY = ticketFingerprint({
+  phone: '0501234567',
+  restaurantId: '501',
+  orderNumber: '1280043',
+  complaintType: 'Missing item',
+  serviceType: 'Delivery',
+  occurredAt: '2026-10-27T13:30:00+03:00',
+  description: 'The fries were missing from the order.',
+  attachments: ['https://cdn.yiji.example/p/1.jpg'],
 });
 
 const amountCoupon = (over: Record<string, unknown> = {}) => ({
@@ -318,7 +330,7 @@ describe('signature', () => {
     const res = await off.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
     expect(res.statusCode).toBe(503);
     expect(res.json().error).toBe('not_configured');
-    const get = await off.inject(signed('GET', '/webhooks/yiji/tickets/YT-1001'));
+    const get = await off.inject(signed('GET', `/webhooks/yiji/tickets/${KEY}`));
     expect(get.statusCode).toBe(503);
   });
 
@@ -338,13 +350,13 @@ describe('POST /webhooks/yiji/tickets - ticket only', () => {
     expect(res.statusCode).toBe(201);
     const body = res.json();
     expect(body.coupon).toBeUndefined();
-    expect(body.externalId).toBe('YT-1001');
+    expect(body.externalId).toBe(KEY);
     expect(body.ticketNumber).toMatch(/^[0-9A-F]{8}$/);
 
     const t = store.tickets.get(body.ticketId)!;
     expect(t).toMatchObject({
       vendor: VENDOR,
-      external_id: 'YT-1001',
+      external_id: KEY,
       status: 'pending',
       complaint_source: 'Yiji',
       complaint_type: 'Missing item', // canonical spelling
@@ -359,7 +371,7 @@ describe('POST /webhooks/yiji/tickets - ticket only', () => {
     expect(t.description).toContain('https://cdn.yiji.example/p/1.jpg');
     const contact = store.contacts.get(t.contact)!;
     expect(contact).toMatchObject({ phone: '0501234567', name: 'Sara', yiji: '77881' });
-    expect(store.events.map((e) => e.text)).toEqual(['Created by Yiji (externalId YT-1001).']);
+    expect(store.events.map((e) => e.text)).toEqual([`Created by Yiji (externalId ${KEY}).`]);
     expect(store.events[0]!.actor).toBe(ACTOR);
   });
 
@@ -388,7 +400,7 @@ describe('Yiji only creates tickets (owner, 2026-11-05)', () => {
     expect(store.coupons.size).toBe(0);
     expect(store.tickets.get(body.ticketId)!.compensation).toBe('Not Compensated');
     expect(store.events.map((e) => e.text)).toEqual([
-      'Created by Yiji (externalId YT-1001).',
+      `Created by Yiji (externalId ${KEY}).`,
       expect.stringContaining('it was ignored'),
     ]);
   });
@@ -405,7 +417,7 @@ describe('Yiji only creates tickets (owner, 2026-11-05)', () => {
   it('the add-coupon call answers 410 coupons_not_accepted and writes nothing', async () => {
     await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
     for (const url of [
-      '/webhooks/yiji/tickets/YT-1001/coupons',
+      `/webhooks/yiji/tickets/${KEY}/coupons`,
       '/webhooks/yiji/tickets/NOPE/coupons',
     ]) {
       const res = await app.inject(signed('POST', url, amountCoupon()));
@@ -418,7 +430,7 @@ describe('Yiji only creates tickets (owner, 2026-11-05)', () => {
   it('the add-coupon call still needs a valid signature', async () => {
     const req = signed(
       'POST',
-      '/webhooks/yiji/tickets/YT-1001/coupons',
+      `/webhooks/yiji/tickets/${KEY}/coupons`,
       amountCoupon(),
       nowTs(),
       'not-the-secret',
@@ -435,6 +447,52 @@ describe('idempotency', () => {
     expect(b.statusCode).toBe(200);
     expect(b.json()).toEqual(a.json());
     expect(store.tickets.size).toBe(1);
+  });
+
+  /* THE CRM'S OWN DUPLICATE CHECK (owner, 2026-11-11): Yiji sends no id. */
+  it('a retry is the same complaint however the phone and time are written', async () => {
+    const a = await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
+    const b = await app.inject(
+      signed(
+        'POST',
+        '/webhooks/yiji/tickets',
+        ticketBody({
+          customer: { phone: '0501234567', name: 'Sara' },
+          occurredAt: '2026-10-27T10:30:00Z',
+          orderNumber: '01280043',
+          complaintType: 'MISSING ITEM',
+        }),
+      ),
+    );
+    expect(a.statusCode).toBe(201);
+    expect(b.statusCode).toBe(200);
+    expect(b.json().ticketId).toBe(a.json().ticketId);
+    expect(a.json().externalId).toBe(KEY);
+    expect(store.tickets.size).toBe(1);
+  });
+
+  it('anything different is a NEW ticket: words, time, order or branch', async () => {
+    await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
+    for (const over of [
+      { description: 'Also the drink was missing.' },
+      { occurredAt: '2026-10-28T13:30:00+03:00' },
+      { orderNumber: '1280044' },
+      { restaurantId: '502' },
+      { complaintType: 'Order cold' },
+    ]) {
+      const r = await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody(over)));
+      expect([201, 400, 422]).toContain(r.statusCode);
+    }
+    // 502 is an unknown branch in this fixture (refused); every other one is new.
+    expect(store.tickets.size).toBe(5);
+  });
+
+  it('an externalId sent by an old client is ignored, never refused', async () => {
+    const r = await app.inject(
+      signed('POST', '/webhooks/yiji/tickets', ticketBody({ externalId: '!!not valid!!' })),
+    );
+    expect(r.statusCode).toBe(201);
+    expect(r.json().externalId).toBe(KEY);
   });
 
   it('a replay with a different body changes nothing', async () => {
@@ -459,7 +517,15 @@ describe('validation: 400 with field messages, never 500', () => {
     const { error, fields } = res.json();
     expect(error).toBe('validation_failed');
     expect(Object.keys(fields)).toEqual(
-      expect.arrayContaining(['externalId', 'customer', 'restaurantId', 'complaintType']),
+      expect.arrayContaining([
+        'customer',
+        'restaurantId',
+        'complaintType',
+        'orderNumber',
+        'description',
+        'serviceType',
+        'occurredAt',
+      ]),
     );
   });
 
@@ -525,13 +591,13 @@ describe('GET /webhooks/yiji/tickets/:externalId', () => {
     store.tickets.get(ticketId)!.status = 'solved' as never;
     store.tickets.get(ticketId)!.compensation = 'Compensated' as never;
 
-    const res = await app.inject(signed('GET', '/webhooks/yiji/tickets/YT-1001'));
+    const res = await app.inject(signed('GET', `/webhooks/yiji/tickets/${KEY}`));
     expect(res.statusCode).toBe(200);
     expect(res.headers['cache-control']).toBe('no-store');
     const body = res.json();
     expect(body).toMatchObject({
       ticketId,
-      externalId: 'YT-1001',
+      externalId: KEY,
       status: 'solved',
       compensation: 'Compensated',
     });
@@ -636,14 +702,8 @@ describe('POST /webhooks/yiji/tickets - late preparation notifies the branch', (
     await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody()));
     expect(store.notifications).toHaveLength(1);
     expect(store.notifications[0]).toMatchObject({ complaint_type: 'Missing item' });
-    for (const [i, t] of ['driver attitude', 'technical issue'].entries())
-      await app.inject(
-        signed(
-          'POST',
-          '/webhooks/yiji/tickets',
-          ticketBody({ externalId: `YT-N-${i}`, complaintType: t }),
-        ),
-      );
+    for (const t of ['driver attitude', 'technical issue'])
+      await app.inject(signed('POST', '/webhooks/yiji/tickets', ticketBody({ complaintType: t })));
     expect(store.notifications).toHaveLength(1);
   });
 

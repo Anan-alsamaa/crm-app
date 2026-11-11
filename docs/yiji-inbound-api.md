@@ -14,6 +14,17 @@ INTERNAL reference (the partner-facing spec is the short ticket-only text sent o
 - `POST /tickets/{externalId}/coupons` is **closed**: `410 coupons_not_accepted`.
 - `GET /tickets/{externalId}` still returns the ticket and its coupons.
 
+**Since 2026-11-11 (owner): Yiji sends NO `externalId`.** Yiji keeps no record of its
+complaints, so the CRM makes the duplicate check itself: it fingerprints the whole complaint
+(phone, branch, order, complaint type, service type, `occurredAt`, description, order value,
+delay, attachments) and stores it as the ticket's `externalId` (`auto:<sha256>`). A request
+identical in all of those - a retry after a timeout, or the customer pressing Submit twice - gets
+**200 with the ticket already created**, however much later. Anything different is a new ticket.
+An `externalId` still sent by an old client is ignored. The reply carries the CRM's key in
+`externalId`, which `GET /tickets/{externalId}` accepts. **Treat 200 and 201 alike: both are
+success.** Required since the same day: `orderNumber`, `description`, `serviceType`,
+`occurredAt` (with `customer.phone`, `restaurantId`, `complaintType`).
+
 The sections below about Yiji-sent coupons describe the API before 2026-11-05 and no longer apply.
 
 | Environment | Base URL                                        |
@@ -87,7 +98,6 @@ Send the same string you signed (`body`), not a re-serialised object.
 
 ```json
 {
-  "externalId": "YT-1001",
   "customer": { "phone": "+966501234567", "name": "Sara", "yijiCustomerId": "77881" },
   "orderNumber": "1280043",
   "restaurantId": "501",
@@ -111,19 +121,19 @@ Send the same string you signed (`body`), not a re-serialised object.
 
 | Field                         | Req. | Notes                                                                                                                                                                                                                                                     |
 | ----------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `externalId`                  | yes  | Your ticket id. 1–100 chars: letters, digits, `. _ : -`. The idempotency key.                                                                                                                                                                             |
+| `externalId`                  | —    | **Not sent** (since 2026-11-11). Ignored if present: the CRM builds the duplicate-check key from the complaint itself and returns it in the reply.                                                                                                        |
 | `customer.phone`              | yes  | Saudi mobile in any common form (`05…`, `+9665…`, `9665…`).                                                                                                                                                                                               |
 | `customer.name`               | no   | Customer's name.                                                                                                                                                                                                                                          |
 | `customer.yijiCustomerId`     | no   | Your user id — lets an approved coupon reach the right wallet. Strongly recommended.                                                                                                                                                                      |
-| `orderNumber`                 | no   | The order the complaint is about.                                                                                                                                                                                                                         |
+| `orderNumber`                 | yes  | The order the complaint is about.                                                                                                                                                                                                                         |
 | `restaurantId`                | yes  | Your restaurant id. Must map to a CRM branch (see 422 below).                                                                                                                                                                                             |
 | `restaurantName`, `brandName` | no   | Help match a branch whose id is not yet in the CRM's store master.                                                                                                                                                                                        |
 | `subject`                     | no   | Defaults to the complaint type.                                                                                                                                                                                                                           |
-| `description`                 | no   | Up to 5000 chars.                                                                                                                                                                                                                                         |
+| `description`                 | yes  | What happened, up to 5000 chars.                                                                                                                                                                                                                          |
 | `complaintType`               | yes  | One of: Accuracy, Cleanness, Driver attitude, Foreign object found, Hospitality, Instore preparation late order, Late order, Missing condiments, Missing item, Order cold, Order Late in store, Product, Roach found, Technical issue (case-insensitive). |
-| `serviceType`                 | no   | Delivery, Dinning (dine-in), Drive Thru, Pickup, TakeOut.                                                                                                                                                                                                 |
+| `serviceType`                 | yes  | Delivery, Dinning (dine-in), Drive Thru, Pickup, TakeOut.                                                                                                                                                                                                 |
 | `attachments`                 | no   | Up to 10 `https://` URLs. Listed on the ticket as links; the CRM does not download them.                                                                                                                                                                  |
-| `occurredAt`                  | no   | ISO 8601 date-time of the incident.                                                                                                                                                                                                                       |
+| `occurredAt`                  | yes  | ISO 8601 date-time of the incident. Part of the duplicate check: send the same value on a retry.                                                                                                                                                          |
 | `orderValue`                  | no   | The order's value in SAR (>= 0). Used only by the CRM's compensation rules (below).                                                                                                                                                                       |
 | `delayMinutes`                | no   | How late the order was, in whole minutes (>= 0). Used only by the CRM's compensation rules.                                                                                                                                                               |
 | `coupon`                      | no   | One coupon for this ticket (optional). The ticket is created whether or not the coupon is valid (see below).                                                                                                                                              |
@@ -237,7 +247,7 @@ Body: one coupon object. `201` with `{ ticketId, ticketNumber, externalId, coupo
 
 ## Idempotency and retries
 
-- Same ticket `externalId` again → **200** with the ticket already created; nothing new is written.
+- The same complaint again (every fingerprinted field identical) → **200** with the ticket already created; nothing new is written. Any field different → a new ticket (**201**).
   If that request also carries a coupon the ticket does not have yet, the coupon is added.
 - Same coupon `externalId` again on the same ticket → **200** with the existing coupon.
 - The first request wins: a replay with different content does **not** update the stored record.
