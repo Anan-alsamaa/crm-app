@@ -17,6 +17,13 @@ import {
  */
 import { normalizePhone } from './phone.js';
 import {
+  groupRoleOf,
+  toGroupSuborder,
+  type OrderGroup,
+  type OrderGroupSuborder,
+  type RawGroupOrderFields,
+} from './order-group.js';
+import {
   reportYijiUsage,
   yijiOperationFor,
   yijiUsageOutcome,
@@ -436,6 +443,9 @@ interface RawYijiOrder {
   totalPoints?: number | null;
   totalCoupons?: number | null;
   discount?: number | null;
+  /* Group (food-court) orders - see order-group.ts. */
+  restaurantGroupId?: number | null;
+  restaurantGroupOrderId?: number | string | null;
   deliveryAddress?: { fullAddress?: string | null } | null;
   orderItems?: Array<{
     id?: number;
@@ -613,6 +623,10 @@ function mapYijiOrder(raw: RawYijiOrder): YijiOrder {
     totalPointAmount: raw.totalPoints ?? undefined,
     totalCouponAmount: raw.totalCoupons ?? undefined,
     totalDiscount: raw.discount ?? undefined,
+    ...(() => {
+      const g = groupRoleOf(raw);
+      return g ? { groupRole: g.role, groupMasterId: g.masterId } : {};
+    })(),
   };
 }
 
@@ -1397,6 +1411,52 @@ export class HttpYijiClient implements YijiClient {
     };
   }
 
+  /**
+   * The group (food-court) order this order belongs to - see `order-group.ts`.
+   * Null for an ordinary order, a missing one, or a "group" Yiji lists without
+   * suborders. One read for an ordinary order; for a real group order, also the
+   * master, its suborder list and each suborder (for the names).
+   */
+  async getOrderGroup(orderId: string): Promise<OrderGroup | null> {
+    const raw = await this.fetch<RawGroupOrderFields>(
+      `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
+    );
+    const where = groupRoleOf(raw);
+    if (!raw || !where) return null;
+    const master =
+      where.role === 'master'
+        ? raw
+        : await this.fetch<RawGroupOrderFields>(
+            `/api/Order/GetOrderAsync/${encodeURIComponent(where.masterId)}`,
+          );
+    const subsRaw = await this.fetch<RawGroupOrderFields[]>(
+      `/api/Order/GetFoodCourtSubOrders/${encodeURIComponent(where.masterId)}`,
+    );
+    const suborders = (Array.isArray(subsRaw) ? subsRaw : [])
+      .map(toGroupSuborder)
+      .filter((s): s is OrderGroupSuborder => s !== null && s.orderId !== where.masterId);
+    if (suborders.length < 2) return null;
+    /* The food-court list carries no brand or branch NAME (measured 2026-11-11);
+       each suborder's own record does. One read per suborder, group orders only.
+       A failed read keeps the ids - the breakdown never depends on a name. */
+    for (const sub of suborders) {
+      if (sub.brandName && sub.restaurantName) continue;
+      const own = await this.fetch<RawGroupOrderFields>(
+        `/api/Order/GetOrderAsync/${encodeURIComponent(sub.orderId)}`,
+      ).catch(() => null);
+      sub.brandName = sub.brandName ?? (own?.brandName?.trim() || null);
+      sub.restaurantName = sub.restaurantName ?? (own?.restaurantName?.trim() || null);
+    }
+    return {
+      masterId: where.masterId,
+      enteredId: String(orderId).trim(),
+      restaurantGroupId:
+        typeof master?.restaurantGroupId === 'number' ? master.restaurantGroupId : null,
+      customerPhone: normalizePhone(master?.customerPhoneNumber ?? null) || null,
+      suborders,
+    };
+  }
+
   async getOrder(_vendorId: string, orderId: string): Promise<YijiOrder | null> {
     const raw = await this.fetch<RawYijiOrder>(
       `/api/Order/GetOrderAsync/${encodeURIComponent(orderId)}`,
@@ -1983,6 +2043,16 @@ export function createYijiCouponOrdersReader(
   }
   const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
   return (day) => client.listCouponOrders(day);
+}
+
+export type YijiOrderGroupReader = (orderId: string) => Promise<OrderGroup | null>;
+
+export function createYijiOrderGroupReader(env: YijiClientEnv = {}): YijiOrderGroupReader | null {
+  if (!env.adminApiUrl?.trim() || !env.adminEmail?.trim() || !env.adminPassword?.trim()) {
+    return null;
+  }
+  const client = new HttpYijiClient(httpOptions(env, env.apiUrl || env.adminApiUrl));
+  return (orderId) => client.getOrderGroup(orderId);
 }
 
 export function createYijiUserReader(env: YijiClientEnv = {}): YijiUserReader | null {

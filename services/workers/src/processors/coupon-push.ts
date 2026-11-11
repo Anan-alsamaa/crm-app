@@ -8,6 +8,7 @@ import type {
   YijiCustomerFinder,
   YijiUserCouponFinder,
   YijiOrderReader,
+  YijiOrderGroupReader,
 } from '@yiji/shared-types';
 import {
   couponWindow,
@@ -37,6 +38,7 @@ import {
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { describeError } from '../lib/errors.js';
 import { brandIdForOrder } from './customer-push.js';
+import { coveredGroupReason, resolveCouponGroup } from './coupon-group.js';
 
 /**
  * Tell Yiji about a coupon a supervisor approved.
@@ -267,6 +269,12 @@ export interface CouponPushDeps {
    */
   readOrder?: YijiOrderReader;
   /**
+   * Reads the group (food-court) order behind an order number (owner,
+   * 2026-11-11) - see coupon-group.ts. Absent = every order is treated as an
+   * ordinary one, as before.
+   */
+  readOrderGroup?: YijiOrderGroupReader;
+  /**
    * Finds the Yiji customer behind a phone number, for a coupon with NO order.
    *
    * Absent means the order-less path is simply unavailable and such a coupon
@@ -347,6 +355,9 @@ export interface CouponApprovalRow {
    * the customer is found on Yiji.
    */
   customer_phone?: string | null;
+  /** The coupon this one replaced, and when it was raised - group orders. */
+  replaces?: string | null;
+  date_created?: string | null;
   contact: {
     /** Needed to write the Yiji id back when the order reveals it. */
     id: string;
@@ -1619,6 +1630,10 @@ export async function processCouponPushJob(
         'yiji_coupon_user_id',
         'yiji_push_error',
         'delivery_excluded',
+        /* Group orders: the coupon this one replaces is not a second coupon,
+           and the older of two coupons on one group goes first. */
+        'replaces',
+        'date_created',
       ],
     } as never),
   )) as unknown as CouponApprovalRow;
@@ -1746,6 +1761,29 @@ export async function processCouponPushJob(
    * account - or the coupon is held/refused with the reason on the request.
    */
   const orderId = couponOrderId(row); // reference only - see above
+  /*
+   * GROUP ORDERS (owner, 2026-11-11): one coupon per group order, linked to
+   * the MASTER, the suborders saved as its breakdown - see coupon-group.ts.
+   * Decided before anything is created on Yiji, so a group order that is
+   * already compensated never gets a second coupon.
+   */
+  const group = await resolveCouponGroup({
+    row,
+    id,
+    orderId,
+    directus,
+    logger,
+    readOrderGroup: deps.readOrderGroup ?? null,
+  });
+  if (group.coveredBy && group.groupOrderId) {
+    const detail = coveredGroupReason(group.groupOrderId, group.coveredBy);
+    await recordFailure(directus, id, detail);
+    logger.warn(
+      { id, code: row.coupon_code, masterId: group.groupOrderId, coveredBy: group.coveredBy },
+      'coupon not sent: its group order already has a coupon',
+    );
+    return 'refused';
+  }
   /*
    * NO ORDER IS NO LONGER THE END OF THE ROAD.
    *
@@ -2101,7 +2139,8 @@ export async function processCouponPushJob(
            * (`userId`) - this endpoint does not hand the coupon to the order's
            * owner. Only a real order number is sent: "N/A" or "0_79" is not one.
            */
-          ...((num(couponOrderId(row)) ?? 0) > 0 ? { orderId: num(couponOrderId(row)) } : {}),
+          /* A group order's coupon is linked to its MASTER (owner, 2026-11-11). */
+          ...((num(group.linkOrderId) ?? 0) > 0 ? { orderId: num(group.linkOrderId) } : {}),
           couponCode: row.coupon_code ?? '',
           couponName: customerFacingCouponName(
             redirectCouponsTo?.trim() ||
@@ -2204,6 +2243,10 @@ export async function processCouponPushJob(
       // Cleared on success: a stale reason beside a delivered coupon reads as
       // an unresolved problem and sends someone looking for one.
       yiji_push_error: null,
+      /* A group order: the master it is linked to and the suborder breakdown. */
+      ...(group.groupOrderId
+        ? { group_order_id: group.groupOrderId, order_breakdown: group.breakdown }
+        : {}),
     } as never),
   );
   logger.info(

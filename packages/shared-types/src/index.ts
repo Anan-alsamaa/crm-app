@@ -22,6 +22,7 @@ export * from './restaurants.js';
 export * from './store-notifications.js';
 export * from './coupon-approvals.js';
 export * from './coupon-replace.js';
+export * from './order-group.js';
 export * from './compensation-rules.js';
 export * from './signup-watch.js';
 export * from './socket.js';

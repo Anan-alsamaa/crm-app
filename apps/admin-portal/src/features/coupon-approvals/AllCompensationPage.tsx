@@ -26,7 +26,12 @@ import {
   toast,
 } from '@yiji/ui';
 import { exportFileName } from '@yiji/shared-config';
-import { COUPON_RAISED_FROM, couponDecision, couponRaisedFromLabel } from '@yiji/shared-types';
+import {
+  COUPON_RAISED_FROM,
+  couponDecision,
+  couponRaisedFromLabel,
+  type OrderBreakdown,
+} from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { displayContactName, normalizePhone } from '@yiji/shared-types';
 import { usePinnedWidth } from '../../lib/pinned-width.js';
@@ -100,6 +105,9 @@ interface Row {
   discount_category: string | null;
   /** Where it was raised (late_orders | ticket | yiji_api), 2026-11-09. */
   raised_from?: string | null;
+  /** Group (food-court) orders, 2026-11-11: the master and the equal breakdown. */
+  group_order_id?: string | null;
+  order_breakdown?: OrderBreakdown | null;
   brand_id: string | null;
   restaurant_id: string | null;
   item_name: string | null;
@@ -178,6 +186,8 @@ export function useAllCoupons() {
               'item_sku',
               'delivery_excluded_reason',
               'raised_from',
+              'group_order_id',
+              'order_breakdown',
               // See the note on `order_id` above: without this the Order column
               // is empty for every coupon raised from a late order.
               'order_id',
@@ -302,6 +312,7 @@ const COMPENSATION_COLUMN_KEYS = [
   'brand',
   'store',
   'order',
+  'groupOrder',
   'raisedFrom',
   'item',
   'issuing',
@@ -609,6 +620,14 @@ export function AllCompensationPage() {
       /* The ticket's order first — `couponOrderId` prefers it, and the two are
          never both set — then the row's own. */
       get: (r) => r.ticket?.order_id ?? r.order_id ?? '',
+    },
+    {
+      /* GROUP ORDERS (owner, 2026-11-11): one coupon, on the master; each
+         restaurant's EQUAL share, as stored (never rounded - shown to 4
+         decimals at most so 10 / 3 stays readable). */
+      key: 'groupOrder',
+      label: t('compensationAll.groupOrder', { defaultValue: 'Group order breakdown' }),
+      get: (r) => groupBreakdownText(r.order_breakdown, r.group_order_id),
     },
     {
       /* Where it was raised (owner, 2026-11-09): Late Orders page, Ticket, Yiji API. */
@@ -1368,4 +1387,23 @@ export function AllCompensationPage() {
       </div>
     </div>
   );
+}
+
+/** "Group order #1370742: #1370743 Okashi 16 · #1370744 Taker 16" - empty for an ordinary order. */
+export function groupBreakdownText(
+  b: OrderBreakdown | null | undefined,
+  masterId?: string | null,
+): string {
+  const master = b?.master_order_id ?? masterId ?? null;
+  if (!master) return '';
+  const lines = (b?.lines ?? []).map((l) =>
+    [
+      `#${l.order_id}`,
+      l.brand_name ?? l.restaurant_name ?? '',
+      Number(l.share).toLocaleString('en-US', { maximumFractionDigits: 4 }),
+    ]
+      .filter(Boolean)
+      .join(' '),
+  );
+  return [`#${master}`, lines.join(' · ')].filter(Boolean).join(': ');
 }

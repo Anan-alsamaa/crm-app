@@ -1039,6 +1039,23 @@ export const collections: CollectionSpec[] = [
         index: true,
         note: 'Where this coupon was raised: late_orders (Late Orders page), ticket (a ticket or chat), yiji_api (Yiji ticket API rule). A replacement keeps its original value.',
       },
+      /*
+       * GROUP ORDERS (owner, 2026-11-11): one coupon per group order, linked to
+       * the MASTER; the suborders are its breakdown in equal, unrounded shares.
+       * Written by the coupon worker from Yiji (see `order-group.ts`). Needs
+       * apply:fields on staging and prod BEFORE the workers that write them.
+       */
+      {
+        field: 'group_order_id',
+        type: 'string',
+        index: true,
+        note: 'For a group (food-court) order: the MASTER order the coupon is linked to on Yiji. Empty for an ordinary order.',
+      },
+      {
+        field: 'order_breakdown',
+        type: 'json',
+        note: 'For a group order: { master_order_id, basis (amount | max_discount), amount, lines: [{ order_id, restaurant_id, brand_id, restaurant_name, brand_name, share }] } - equal shares, never rounded.',
+      },
       {
         field: 'replace_reason',
         type: 'text',

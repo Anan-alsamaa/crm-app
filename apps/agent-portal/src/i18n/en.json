@@ -40,6 +40,10 @@
     "withVendor": "linked vendor"
   },
   "commerce": {
+    "groupOrder": "Group order",
+    "groupOrderRestaurants": "Restaurants: {{n}}",
+    "groupSuborder": "Part of a group order",
+    "groupSuborderHint": "A coupon goes on the group order #{{master}}",
     "title": "Commerce",
     "noLink": "No Yiji customer linked — commerce data not available.",
     "unavailable": "Commerce data unavailable.",
@@ -954,6 +958,8 @@
     "allVendors": "All vendors"
   },
   "coupons": {
+    "groupNote": "This is a group order. The coupon goes on group order #{{master}}, and its restaurants get equal shares.",
+    "groupCovered": "Group order #{{master}} already has coupon {{code}}. A group order gets one coupon only.",
     "maintenance": {
       "title": "Coupons are under maintenance",
       "short": "Coupons under maintenance",

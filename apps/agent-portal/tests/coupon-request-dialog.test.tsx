@@ -18,6 +18,14 @@ const mutateAsync = vi.fn();
 /** The one code the mocked lookup reports as already issued. */
 const { TAKEN_CODE } = vi.hoisted(() => ({ TAKEN_CODE: 'OPS-TAKEN01' }));
 
+/* Group orders (owner, 2026-11-11): the check is driven per test. */
+const { groupCheck } = vi.hoisted(() => ({
+  groupCheck: { current: null as null | Record<string, unknown> },
+}));
+vi.mock('../src/features/coupons/group-order-check.js', () => ({
+  useGroupOrderCheck: () => ({ data: groupCheck.current }),
+}));
+
 vi.mock('../src/features/coupons/api.js', () => ({
   useRequestCouponApproval: () => ({ mutateAsync, isPending: false }),
   // Every code is free except the one the duplicate test types.
@@ -757,5 +765,37 @@ describe('the total discount limit', () => {
       coupon_type: 'Public',
       total_discount_limit: 5000,
     });
+  });
+});
+
+describe('CouponRequestDialog on a group order (owner, 2026-11-11)', () => {
+  beforeEach(() => {
+    groupCheck.current = null;
+  });
+
+  it('says the coupon goes on the group order, split equally', () => {
+    groupCheck.current = { masterId: '1370742', enteredId: '1370743', coveredBy: null };
+    renderDialog();
+    expect(screen.getByTestId('coupon-group-note')).toHaveTextContent(
+      /the coupon goes on group order/i,
+    );
+    expect(screen.getByTestId('coupon-group-note')).toHaveTextContent(/equal shares/i);
+  });
+
+  it('blocks a second coupon on a group order that already has one, naming it', () => {
+    groupCheck.current = {
+      masterId: '1370742',
+      enteredId: '1370743',
+      coveredBy: { id: 'x', code: 'OPS-FIRST001', status: 'assigned' },
+    };
+    renderDialog();
+    expect(screen.getByRole('button', { name: /send for approval/i })).toBeDisabled();
+    /* No i18n instance in unit tests, so the {{code}} placeholder stays as is. */
+    expect(screen.getByText(/already has coupon/i)).toBeInTheDocument();
+  });
+
+  it('an ordinary order shows no group note', () => {
+    renderDialog();
+    expect(screen.queryByTestId('coupon-group-note')).not.toBeInTheDocument();
   });
 });
