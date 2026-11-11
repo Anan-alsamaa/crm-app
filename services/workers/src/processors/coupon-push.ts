@@ -274,6 +274,8 @@ export interface CouponPushDeps {
    * ordinary one, as before.
    */
   readOrderGroup?: YijiOrderGroupReader;
+  /** One push per coupon at a time (2026-11-11) - see `processCouponPushJob`. */
+  lock?: CouponPushLock;
   /**
    * Finds the Yiji customer behind a phone number, for a coupon with NO order.
    *
@@ -1068,6 +1070,8 @@ async function recordFailure(
 /** What a push attempt concluded, for the log and the tests. */
 export type PushOutcome =
   | 'delivered'
+  /** Another push of THIS coupon is running right now - it will finish the job. */
+  | 'busy'
   /** Removed from its ticket before it reached Yiji (EMA-80) - never sent. */
   | 'removed'
   /**
@@ -1583,10 +1587,55 @@ async function createWithheldCoupon(args: {
   return 'withheld';
 }
 
+/**
+ * ONE PUSH PER COUPON AT A TIME (2026-11-11).
+ *
+ * The approval click queues a push and the delivery sweep queues its own
+ * (deliberately without a shared job id - see the sweep). Run one after the
+ * other that is harmless: the second re-reads the row and stops on the
+ * receipt. Run AT THE SAME MOMENT both read "not sent yet": on staging
+ * OPS-HNXZRMZC was created and attached by one and attached AGAIN by the
+ * other - two grants of one coupon in the wallet. A short lock per coupon
+ * makes the second step aside; the sweep picks the coupon up again if the
+ * first did not finish it.
+ */
+export interface CouponPushLock {
+  /** True when this caller now holds the lock (SET NX with an expiry). */
+  acquire(key: string, ttlMs: number): Promise<boolean>;
+  release(key: string): Promise<void>;
+}
+export const COUPON_PUSH_LOCK_MS = 120_000;
+
 export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
 ): Promise<PushOutcome> {
+  const lockKey = `coupon-push:${job.data.couponApprovalId}`;
+  if (deps.lock) {
+    let mine = false;
+    try {
+      mine = await deps.lock.acquire(lockKey, COUPON_PUSH_LOCK_MS);
+    } catch (err) {
+      /* Redis unreachable: refuse rather than risk a double grant; the sweep retries. */
+      throw new Error(`coupon push lock unavailable: ${describeError(err)}`);
+    }
+    if (!mine) {
+      deps.logger.info(
+        { id: job.data.couponApprovalId },
+        'another push of this coupon is running - leaving it to that one',
+      );
+      return 'busy';
+    }
+    try {
+      return await pushCouponOnce(job, deps);
+    } finally {
+      await deps.lock.release(lockKey).catch(() => undefined);
+    }
+  }
+  return pushCouponOnce(job, deps);
+}
+
+async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Promise<PushOutcome> {
   const { directus, logger, postCoupon, findCustomer, yijiTenantId, redirectCouponsTo } = deps;
   const id = job.data.couponApprovalId;
 
@@ -2050,6 +2099,16 @@ export async function processCouponPushJob(
           row.coupon_code &&
           (await codeIsOnlyThisRow(directus, id, row.coupon_code))
         ) {
+          /*
+           * THE CUSTOMER MAY ALREADY HOLD IT (2026-11-11, OPS-HNXZRMZC on
+           * staging): two pushes of the same coupon ran at the same moment; the
+           * first created AND attached it, the second hit "already exists" and
+           * attached it again - one coupon, two grants in the wallet. Look in
+           * the wallet FIRST; attach by code only when it is really missing.
+           */
+          if (await recordIfActuallyHeld('created by an earlier attempt; already held')) {
+            return 'delivered';
+          }
           logger.warn(
             { id, code: row.coupon_code },
             'coupon already exists on yiji (an earlier attempt created it) — attaching it by code',

@@ -36,6 +36,7 @@ import {
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
+import { envKey } from '@yiji/shared-config/redis';
 import { processSlaJob, type SlaDeps } from './sla.js';
 import { processNotificationJob, type NotifDeps } from './notifications.js';
 import { processAiJob, type AiDeps } from './ai.js';
@@ -238,6 +239,24 @@ const yijiReadEnv = {
 };
 const couponReader = createYijiCouponReader(yijiReadEnv);
 const couponOrdersReader = createYijiCouponOrdersReader(yijiReadEnv);
+/** A per-coupon push lock on the workers' Redis: SET NX with an expiry. */
+function couponPushLock(redis: NonNullable<ProcessorDeps['redis']>) {
+  const r = redis as unknown as {
+    set(k: string, v: string, px: 'PX', ms: number, nx: 'NX'): Promise<unknown>;
+    get(k: string): Promise<string | null>;
+    del(k: string): Promise<unknown>;
+  };
+  const token = `${process.pid}-${Math.random().toString(36).slice(2)}`;
+  return {
+    acquire: async (key: string, ttlMs: number) =>
+      (await r.set(envKey(key), token, 'PX', ttlMs, 'NX')) === 'OK',
+    /* Only our own lock: one that expired and was taken by another is left alone. */
+    release: async (key: string) => {
+      if ((await r.get(envKey(key))) === token) await r.del(envKey(key));
+    },
+  };
+}
+
 /* Group (food-court) orders: one coupon, on the master (owner, 2026-11-11). */
 const orderGroupReader = createYijiOrderGroupReader(yijiReadEnv);
 
@@ -608,6 +627,9 @@ export const processors: Record<QueueName, Processor> = {
       readOrder: yiji.readCouponOrderContext ?? undefined,
       /* Group orders (owner, 2026-11-11): read only when coupons are delivered. */
       readOrderGroup: (couponDeliveryEnabled ? orderGroupReader : null) ?? undefined,
+      /* One push per coupon at a time (2026-11-11): two at once gave one
+         coupon two grants on staging. Per environment - Redis is shared. */
+      ...(deps.redis ? { lock: couponPushLock(deps.redis) } : {}),
       /* Only consulted for a coupon with NO order, and gated on the same
          delivery switch as the poster: a deployment with coupon delivery off
          must not start resolving customers either. */
