@@ -72,11 +72,6 @@ const StoresPage = lazy(() =>
 const ReportsPage = lazy(() =>
   import('./features/reports/ReportsPage.js').then((m) => ({ default: m.ReportsPage })),
 );
-const CompensationRulesPage = lazy(() =>
-  import('./features/compensation-rules/CompensationRulesPage.js').then((m) => ({
-    default: m.CompensationRulesPage,
-  })),
-);
 const AllCompensationPage = lazy(() =>
   import('./features/coupon-approvals/AllCompensationPage.js').then((m) => ({
     default: m.AllCompensationPage,
@@ -399,13 +394,9 @@ function Shell({ children }: { children: React.ReactNode }) {
           label: t('nav.couponReport', { defaultValue: 'Admin statistics' }),
           icon: ShieldIcon,
         },
-        {
-          // Owner, 2026-10-27: the policy that pre-fills coupons.
-          to: '/compensation-rules',
-          requires: 'manage_compensation_rules' as const,
-          label: t('nav.compensationRules', { defaultValue: 'Compensation rules' }),
-          icon: SettingsIcon,
-        },
+        /* PENDING ON PRODUCTION (owner, 2026-11-11): auto compensation is held,
+           so its rules editor is not offered on this release branch. Main and
+           staging keep it. */
       ],
     },
     {
@@ -952,16 +943,7 @@ export function App() {
             }
           />
           <Route path="/compensation" element={<Navigate to={COMPENSATION_PATH} replace />} />
-          <Route
-            path="/compensation-rules"
-            element={
-              <ProtectedRoute requires="manage_compensation_rules">
-                <Shell>
-                  <CompensationRulesPage />
-                </Shell>
-              </ProtectedRoute>
-            }
-          />
+          {/* /compensation-rules: held on production (owner, 2026-11-11) - see the nav note. */}
           <Route
             path="/coupon-report"
             element={
