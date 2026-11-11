@@ -632,7 +632,7 @@ export function AllCompensationPage() {
     {
       /* Where it was raised (owner, 2026-11-09): Late Orders page, Ticket, Yiji API. */
       key: 'raisedFrom',
-      label: t('coupons.raisedFrom', { defaultValue: 'Raised from' }),
+      label: t('coupons.raisedFrom', { defaultValue: 'Source' }),
       get: (r) => couponRaisedFromLabel(r.raised_from),
     },
     {
@@ -945,7 +945,7 @@ export function AllCompensationPage() {
               },
               {
                 key: 'raisedFrom',
-                label: String(t('coupons.raisedFrom', { defaultValue: 'Raised from' })),
+                label: String(t('coupons.raisedFrom', { defaultValue: 'Source' })),
                 value: raisedFrom,
                 onChange: (v) => {
                   setRaisedFrom(v);

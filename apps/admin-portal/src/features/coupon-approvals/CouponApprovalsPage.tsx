@@ -1248,7 +1248,7 @@ function Row({
               />
               {/* Where it was raised (owner, 2026-11-09). */}
               <Term
-                label={t('coupons.raisedFrom', { defaultValue: 'Raised from' })}
+                label={t('coupons.raisedFrom', { defaultValue: 'Source' })}
                 value={couponRaisedFromLabel(row.raised_from)}
               />
               {/* A real term, approved rather than discovered. The column is a
