@@ -58,12 +58,21 @@ import { ViewSwitch } from '../../components/ViewSwitch.js';
  * page sees exactly the list they always had. The server keeps the owner's
  * switches out of their saves too (app-roles-sync `keepOwnerPrivileges`).
  */
-/* Switches for features that were REMOVED (owner, 2026-11-12: editing an
-   approved coupon). Not offered; their stored values mean nothing. */
-const RETIRED: readonly string[] = ['edit_approved_coupons'];
+/* Switches not offered on this production release branch (main and staging
+   keep the held ones):
+   - RETIRED (owner, 2026-11-12): editing an approved coupon was removed.
+   - HELD (owner, 2026-11-11): auto compensation (its rules editor) and the
+     Marketing portal. */
+const NOT_OFFERED: readonly string[] = [
+  'edit_approved_coupons',
+  'manage_compensation_rules',
+  'use_marketing_portal',
+  'manage_marketing',
+  'approve_marketing',
+];
 const toPrivs = (keys: readonly Privilege[]) =>
   keys
-    .filter((key) => !RETIRED.includes(key))
+    .filter((key) => !NOT_OFFERED.includes(key))
     .map((key) => ({ key, group: PRIVILEGE_GROUP[key] as string }));
 const SHARED_PRIVS = toPrivs(PRIVILEGES);
 /* The owner sees one line per dashboard and per report instead of the old
