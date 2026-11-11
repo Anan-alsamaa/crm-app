@@ -26,6 +26,7 @@ import {
   type CustomerPushJob,
   errorText,
   createYijiCouponOrdersReader,
+  createYijiOrderGroupReader,
   createYijiCouponReader,
   fetchWithYijiUsage,
   yijiBackupTokenFromEnv,
@@ -234,6 +235,8 @@ const yijiReadEnv = {
 };
 const couponReader = createYijiCouponReader(yijiReadEnv);
 const couponOrdersReader = createYijiCouponOrdersReader(yijiReadEnv);
+/* Group (food-court) orders: one coupon, on the master (owner, 2026-11-11). */
+const orderGroupReader = createYijiOrderGroupReader(yijiReadEnv);
 
 /**
  * STAGING ONLY: every customer PUSH to one handset.
@@ -580,6 +583,8 @@ export const processors: Record<QueueName, Processor> = {
        */
       postCoupon: (couponDeliveryEnabled ? yiji.adminPost : null) ?? undefined,
       readOrder: yiji.readCouponOrderContext ?? undefined,
+      /* Group orders (owner, 2026-11-11): read only when coupons are delivered. */
+      readOrderGroup: (couponDeliveryEnabled ? orderGroupReader : null) ?? undefined,
       /* Only consulted for a coupon with NO order, and gated on the same
          delivery switch as the poster: a deployment with coupon delivery off
          must not start resolving customers either. */

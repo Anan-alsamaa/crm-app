@@ -1136,6 +1136,9 @@ function CreateTicketForm({
                 open={couponOpen}
                 onClose={() => setCouponOpen(false)}
                 ticketId=""
+                /* Group orders (owner, 2026-11-11): the order the ticket is for. */
+                orderId={latestOrder?.orderId ?? null}
+                vendorId={yijiVendorId || null}
                 contactId={contactId}
                 customerPhone={contact.data?.phone ?? null}
                 description={watch('description') || null}

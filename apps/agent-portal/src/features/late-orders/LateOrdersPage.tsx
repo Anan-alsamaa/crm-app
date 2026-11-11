@@ -2954,6 +2954,7 @@ export function LateOrdersPage() {
               raisedFrom="late_orders"
               ticketId={coupon.ticketId}
               orderId={coupon.row.orderId}
+              vendorId={soleVendorId ?? null}
               contactId={coupon.contactId}
               /* NORMALISED, not Yiji's wire format. Yiji sends `+9665XXXXXXXX`;
              every phone this CRM stores and displays is `05XXXXXXXX` (owner's

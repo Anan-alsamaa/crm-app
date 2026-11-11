@@ -267,6 +267,10 @@
     "actions": "إجراءات سريعة"
   },
   "commerce": {
+    "groupOrder": "طلب جماعي",
+    "groupOrderRestaurants": "عدد المطاعم: {{n}}",
+    "groupSuborder": "جزء من طلب جماعي",
+    "groupSuborderHint": "الكوبون يُضاف على الطلب الجماعي رقم #{{master}}",
     "deliveryTypes": {
       "delivery": "توصيل",
       "pickup": "استلام",
@@ -333,6 +337,7 @@
     "orderViews": "عروض الطلب"
   },
   "compensationAll": {
+    "groupOrder": "تفصيل الطلب الجماعي",
     "notDecided": "قيد الانتظار",
     "noNote": "بدون ملاحظة",
     "title": "التعويضات",

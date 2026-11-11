@@ -791,6 +791,10 @@
     "next": "Next"
   },
   "commerce": {
+    "groupOrder": "Group order",
+    "groupOrderRestaurants": "Restaurants: {{n}}",
+    "groupSuborder": "Part of a group order",
+    "groupSuborderHint": "A coupon goes on the group order #{{master}}",
     "deliveryTypes": {
       "delivery": "Delivery",
       "pickup": "Pickup",
@@ -1457,6 +1461,7 @@
     "failed": "failed"
   },
   "compensationAll": {
+    "groupOrder": "Group order breakdown",
     "notDecided": "Pending",
     "noNote": "No note",
     "kpiApproved": "Approved",
