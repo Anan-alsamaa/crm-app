@@ -226,14 +226,15 @@ describe('valuesOf', () => {
 describe('privilege gating', () => {
   const app = readSrc('src/App.tsx');
 
-  it('the route is guarded by manage_compensation_rules', () => {
-    expect(app).toMatch(
-      /path="\/compensation-rules"\s*element=\{\s*<ProtectedRoute requires="manage_compensation_rules">/,
-    );
+  /* PRODUCTION RELEASE BRANCH (owner, 2026-11-11): auto compensation is held,
+     so the editor is neither routed nor in the menu here. Main and staging
+     keep both (and test them there). */
+  it('is held on this release: no route and no menu entry', () => {
+    expect(app).not.toMatch(/path="\/compensation-rules"/);
+    expect(app).not.toMatch(/to: '\/compensation-rules'/);
   });
 
-  it('the nav entry is shown only to a holder', () => {
-    expect(app).toMatch(/to: '\/compensation-rules',\s*requires: 'manage_compensation_rules'/);
+  it('the privilege still gates a nav entry when it returns', () => {
     const item = { requires: 'manage_compensation_rules' as const };
     expect(navItemAllowed(item, { can: () => false, isOwner: false })).toBe(false);
     expect(
