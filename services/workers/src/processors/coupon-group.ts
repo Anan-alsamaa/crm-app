@@ -109,7 +109,12 @@ export async function resolveCouponGroup(args: {
             ...(row.replaces ? [{ id: { _neq: row.replaces } }] : []),
             { status: { _in: ['approved', 'assigned'] } },
             { replaced_by: { _null: true } },
-            { delivery_excluded: { _neq: true } },
+            /* Not withheld. An EMPTY flag counts as not withheld: "_neq: true"
+               is SQL "<> true", which silently drops NULL rows (found in the
+               staging live check, 2026-11-11). */
+            {
+              _or: [{ delivery_excluded: { _null: true } }, { delivery_excluded: { _eq: false } }],
+            },
             {
               _or: [
                 { removal_status: { _null: true } },
