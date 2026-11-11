@@ -522,6 +522,23 @@ async function spentOrExpired(row, userId, YH) {
     return { spent: `expired ${String(row.valid_to).slice(0, 10)}` };
   return null;
 }
+/**
+ * REMOVED ON YIJI, OUTSIDE THE CRM (2026-11-11). A coupon WeCare or Yiji took
+ * off on Yiji's side is real production behaviour (owner, 2026-10-08): it is
+ * REPORTED, never a release failure - COUPON-VANISHED already says so. This
+ * reads the coupon itself: Yiji status 0 is active; 1 is deleted (Yiji's
+ * deleted list); 5 was seen on OPS-866URD26, switched off by WeCare on purpose.
+ * Any non-zero status is "not active on Yiji". Null = active or unreadable,
+ * so the caller's own verdict stands.
+ */
+async function inactiveOnYiji(row, YH) {
+  if (!row.yiji_coupon_id) return null;
+  const r = await fetch(`${Y}/api/Coupon/GetCoupon/id/${row.yiji_coupon_id}`, { headers: YH });
+  if (!r.ok) return null;
+  const c = await r.json().catch(() => null);
+  if (!c || c.code !== row.coupon_code || c.status == null || Number(c.status) === 0) return null;
+  return Number(c.status) === 1 ? 'deleted on Yiji' : `switched off on Yiji (status ${c.status})`;
+}
 async function pipelineCheck(id, name, filter, fetchCoupon) {
   await check(id, name, async () => {
     if (!yijiToken) return 'skip';
@@ -784,7 +801,14 @@ await check(
       const held = (h.ok ? await h.json() : []).find((x) => x.couponCode === row.coupon_code);
       if (held) continue;
       const spent = await spentOrExpired(row, acct.id, YH);
-      if (spent?.spent) notes.push(`${row.coupon_code} ${spent.spent}`);
+      if (spent?.spent) {
+        notes.push(`${row.coupon_code} ${spent.spent}`);
+        continue;
+      }
+      /* Removed on Yiji's side is not a wrong delivery (2026-11-11: OPS-GSX4SHNH
+         was deleted on Yiji after delivery and failed release v1.2.30). */
+      const gone = await inactiveOnYiji(row, YH);
+      if (gone) notes.push(`${row.coupon_code} ${gone} - outside the CRM, left as is`);
       else wrong.push(`${row.coupon_code}: not in ${want}'s account`);
     }
     return {
