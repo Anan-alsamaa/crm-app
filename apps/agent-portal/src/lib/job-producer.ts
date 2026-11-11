@@ -117,6 +117,16 @@ export const jobProducer = {
     return post<EnqueueResult>('/jobs/coupon-replace', body);
   },
 
+  /** Edit an approved coupon IN PLACE (owner, 2026-11-11): same coupon, same code. */
+  editCoupon(body: {
+    couponApprovalId: string;
+    editRequestId: string;
+    terms: Record<string, unknown>;
+    reason: string;
+  }): Promise<EnqueueResult> {
+    return post<EnqueueResult>('/jobs/coupon-edit', body);
+  },
+
   async leastLoadedAgentInTeam(teamId: string): Promise<string | null> {
     const r = await call<{ ok: boolean; agentId: string | null }>(
       `/teams/${encodeURIComponent(teamId)}/least-loaded`,

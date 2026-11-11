@@ -24,6 +24,7 @@ import {
   CouponPushJob,
   CouponRemoveJob,
   CouponReplaceJob,
+  CouponEditJob,
   ImportJob,
   normalizePhone,
   phoneCustomerId,
@@ -962,6 +963,28 @@ async function main(): Promise<void> {
    * token. The worker re-reads both rows with its own service token, refuses a
    * coupon already USED, and swaps them - nothing is decided here.
    */
+  /*
+   * EDIT AN APPROVED COUPON IN PLACE (owner, 2026-11-11): the same coupon, the
+   * same code, new terms - on Yiji and on its row. Same privilege as before;
+   * WHO comes from the verified token. The worker re-checks everything.
+   */
+  app.post('/jobs/coupon-edit', async (req, reply) => {
+    const identity = await requirePrivilege(req, reply, 'edit_approved_coupons');
+    if (!identity) return reply;
+    const parsed = CouponEditJob.omit({ editedBy: true }).safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ ok: false, error: 'invalid coupon edit payload' });
+    const jobId = producer.enqueueCouponEdit
+      ? await producer.enqueueCouponEdit({ ...parsed.data, editedBy: identity.id })
+      : null;
+    if (jobId === null)
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    logger.info(
+      { jobId, couponApprovalId: parsed.data.couponApprovalId, by: identity.id },
+      'coupon edit (in place) enqueued',
+    );
+    return reply.send({ ok: true, jobId });
+  });
   app.post('/jobs/coupon-replace', async (req, reply) => {
     const identity = await requirePrivilege(req, reply, 'edit_approved_coupons');
     if (!identity) return reply;

@@ -1,6 +1,6 @@
 import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { readItems, readUsers } from '@directus/sdk';
+import { readItems, readUsers, updateItem } from '@directus/sdk';
 import { envKey } from '@yiji/shared-config/redis';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import {
@@ -56,6 +56,8 @@ export interface CrmCouponRow {
   yiji_coupon_user_id?: string | number | null;
   yiji_coupon_id?: string | number | null;
   yiji_pushed_at?: string | null;
+  /** Stamped when Yiji shows the coupon used (2026-11-11). */
+  yiji_used_order?: string | null;
 }
 
 export interface MisuseFinding {
@@ -174,6 +176,7 @@ export async function runCouponMisuseCheck(deps: CouponMisuseDeps): Promise<Coup
             'yiji_coupon_user_id',
             'yiji_coupon_id',
             'yiji_pushed_at',
+            'yiji_used_order',
           ],
           limit: -1,
         } as never,
@@ -196,6 +199,41 @@ export async function runCouponMisuseCheck(deps: CouponMisuseDeps): Promise<Coup
     logger.warn({ err: errorText(err) }, 'coupon misuse check: Yiji orders could not be read');
     return { status: 'failed', orders: 0, findings: 0 };
   }
+
+  /*
+   * USED COUPONS ARE STAMPED (owner, 2026-11-11: "for a coupon already used by
+   * the customer the edit button shouldn't exist"). The orders just read name
+   * the grant each one spent; a CRM coupon seen here gets `yiji_used_order`, and
+   * the ticket screen stops offering Edit. No extra Yiji call - this is the data
+   * the check already has. The edit worker still asks Yiji itself before any
+   * change, so a use newer than this run is caught too.
+   */
+  const crmByGrant = new Map(
+    rows
+      .filter((r) => r.yiji_coupon_user_id && !r.yiji_used_order)
+      .map((r) => [String(r.yiji_coupon_user_id), r] as const),
+  );
+  let stamped = 0;
+  for (const o of orders) {
+    const r = crmByGrant.get(o.couponGrantId);
+    if (!r) continue;
+    try {
+      await directus.request(
+        updateItem('coupon_approvals' as never, r.id, {
+          yiji_used_order: o.orderId,
+          yiji_used_at: o.placedAt ? new Date(o.placedAt).toISOString() : now.toISOString(),
+        } as never),
+      );
+      crmByGrant.delete(o.couponGrantId);
+      stamped += 1;
+    } catch (err) {
+      logger.warn(
+        { id: r.id, err: errorText(err) },
+        'coupon misuse check: used coupon not stamped',
+      );
+    }
+  }
+  if (stamped) logger.info({ stamped }, 'coupon misuse check: used coupons stamped');
 
   /* Which coupon is each id? Known from the CRM's own records, then the Redis
      cache, then ONE read per new id (capped per run; the rest wait). */

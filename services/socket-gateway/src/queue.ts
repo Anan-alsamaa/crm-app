@@ -15,7 +15,9 @@ import {
   type CouponRemoveJob,
   COUPON_REMOVE_JOB_NAME,
   type CouponReplaceJob,
+  type CouponEditJob,
   COUPON_REPLACE_JOB_NAME,
+  COUPON_EDIT_JOB_NAME,
   ROUTING_RECLAIM_WAIT_MS,
 } from '@yiji/shared-types';
 
@@ -60,6 +62,8 @@ export interface SideEffectProducer {
    * test stubs need not provide it.
    */
   enqueueCouponReplace?(job: CouponReplaceJob): Promise<string | null>;
+  /** Edit an approved coupon IN PLACE (owner, 2026-11-11). */
+  enqueueCouponEdit?(job: CouponEditJob): Promise<string | null>;
   /**
    * Tell a customer's phone an agent replied while they were away. Enqueued
    * only when no customer socket is in the conversation — somebody watching
@@ -237,6 +241,16 @@ class BullProducer implements SideEffectProducer {
     /* NO custom jobId, for the same reason as the removal: the worker re-reads
        both rows and resumes or stops on what it finds there. */
     const added = await this.coupons.add(COUPON_REPLACE_JOB_NAME, job, {
+      ...DEFAULT_JOB_OPTIONS,
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    return added.id ?? null;
+  }
+  async enqueueCouponEdit(job: CouponEditJob): Promise<string | null> {
+    /* No custom jobId: the worker re-reads the row; the screen reads its own
+       outcome by editRequestId. */
+    const added = await this.coupons.add(COUPON_EDIT_JOB_NAME, job, {
       ...DEFAULT_JOB_OPTIONS,
       removeOnComplete: true,
       removeOnFail: true,

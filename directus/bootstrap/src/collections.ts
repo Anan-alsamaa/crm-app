@@ -1070,6 +1070,41 @@ export const collections: CollectionSpec[] = [
         type: 'json',
         note: 'For a group order: { master_order_id, basis (amount | max_discount), amount, lines: [{ order_id, restaurant_id, brand_id, restaurant_name, brand_name, share }] } - equal shares, never rounded.',
       },
+      /*
+       * EDIT IN PLACE + USED COUPONS (owner, 2026-11-11). An edit changes the
+       * SAME coupon (same code) on Yiji and on this row; the outcome is kept
+       * here for the editor's screen. `yiji_used_*` is stamped from Yiji's
+       * coupon orders - a used coupon offers no Edit. Needs apply:fields on
+       * staging and prod BEFORE the portals and workers that use them.
+       */
+      { field: 'edit_state', type: 'string', note: 'Last in-place edit: done | refused.' },
+      {
+        field: 'edit_detail',
+        type: 'text',
+        note: 'What the last edit changed, or why it was refused.',
+      },
+      {
+        field: 'edit_request_id',
+        type: 'string',
+        note: "The editor screen's id for the last edit, so it reads its own outcome.",
+      },
+      { field: 'edited_at', type: 'dateTime', note: 'When the coupon was last edited in place.' },
+      {
+        field: 'edited_by',
+        type: 'uuid',
+        note: 'Who last edited the coupon in place (directus_users id).',
+      },
+      {
+        field: 'yiji_used_order',
+        type: 'string',
+        index: true,
+        note: 'The Yiji order the customer used this coupon on. Set = used: no Edit.',
+      },
+      {
+        field: 'yiji_used_at',
+        type: 'dateTime',
+        note: 'When the CRM saw the coupon used on Yiji.',
+      },
       {
         field: 'replace_reason',
         type: 'text',

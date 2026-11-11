@@ -138,7 +138,7 @@ export interface CouponRequestDialogProps {
   onSave?: (draft: CouponRequestDraft, extra?: { changeReason: string }) => Promise<void> | void;
   /**
    * EDIT AN APPROVED COUPON (owner, 2026-10-27): the same form, seeded from the
-   * approved coupon, in REPLACE mode - a new coupon with a new code replaces it
+   * approved coupon, in EDIT mode - the same coupon (same code) takes the new terms (2026-11-11)
    * (also in the customer's Yiji app), and a reason is required. Pass with
    * `initial` and `onSave`.
    */
@@ -727,7 +727,7 @@ function CouponRequestForm({
         replaceMode
           ? t('coupons.replaceHint', {
               defaultValue:
-                'Saving applies at once: a new coupon with a new code replaces {{code}}, and if it is already in the customer’s Yiji app it is taken out first. A coupon the customer already used cannot be edited.',
+                'Saving applies at once: {{code}} keeps its code and the customer sees the new values on the same coupon in their Yiji app. A coupon the customer already used cannot be edited.',
               code: replaceOf?.code ?? '—',
             })
           : onSave
@@ -766,7 +766,7 @@ function CouponRequestForm({
             onClick={submit}
           >
             {replaceMode
-              ? t('coupons.replaceSave', { defaultValue: 'Save and replace' })
+              ? t('coupons.replaceSave', { defaultValue: 'Save changes' })
               : onSave
                 ? t('actions.save', { ns: 'common', defaultValue: 'Save changes' })
                 : onCollect
@@ -831,7 +831,8 @@ function CouponRequestForm({
           <FormField label={t('coupons.code', { defaultValue: 'Coupon code' })}>
             <p className="text-sm text-muted-foreground">
               {t('coupons.replaceNewCode', {
-                defaultValue: 'A new code is generated when you save.',
+                defaultValue:
+                  'The code stays the same: the customer keeps this coupon with the new values.',
               })}
             </p>
           </FormField>
