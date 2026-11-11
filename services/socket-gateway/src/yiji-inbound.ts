@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import {
@@ -314,6 +314,14 @@ const externalId = z
   .transform((v) => String(v).trim())
   .pipe(z.string().regex(EXTERNAL_ID, EXTERNAL_ID_MESSAGE));
 
+/** A required, non-empty text field (trimmed). */
+const requiredText = (max: number) =>
+  z
+    .string({ required_error: 'Required.' })
+    .trim()
+    .min(1, 'Required.')
+    .max(max, `At most ${max} characters.`);
+
 const optionalText = (max: number) =>
   z
     .string()
@@ -397,7 +405,13 @@ export const CouponBody = z.object({
 export type CouponBody = z.infer<typeof CouponBody>;
 
 export const TicketBody = z.object({
-  externalId,
+  /*
+   * IGNORED (owner, 2026-11-11): Yiji no longer sends it and keeps no record
+   * of its complaints. The CRM builds the duplicate-check key itself - see
+   * `ticketFingerprint`. Still accepted (never validated) so an old client that
+   * sends it is not refused.
+   */
+  externalId: z.unknown().optional(),
   customer: z.object({
     phone: z
       .string({ required_error: 'Required.' })
@@ -409,16 +423,17 @@ export const TicketBody = z.object({
     name: optionalText(120),
     yijiCustomerId: idText(64).nullish(),
   }),
-  orderNumber: idText(64).nullish(),
+  /* REQUIRED (owner, 2026-11-11): the ticket, the coupon and the duplicate check need them. */
+  orderNumber: idText(64),
   restaurantId: idText(64),
   /** Optional: helps match a branch whose Yiji id is not in the store master yet. */
   restaurantName: optionalText(200),
   brandName: optionalText(200),
   brandId: idText(64).nullish(),
   subject: optionalText(200),
-  description: optionalText(5000),
+  description: requiredText(5000),
   complaintType: z.string({ required_error: 'Required.' }).trim().min(1, 'Required.'),
-  serviceType: optionalText(40),
+  serviceType: requiredText(40),
   /** Optional, for the compensation rules: the order's value in SAR. */
   orderValue: z.number().nonnegative('Cannot be negative.').max(1_000_000).nullish(),
   /** Optional, for the compensation rules: how late the order was, in minutes. */
@@ -440,17 +455,62 @@ export const TicketBody = z.object({
     .max(10, 'At most 10 attachments.')
     .nullish(),
   occurredAt: z
-    .string()
+    .string({ required_error: 'Required.' })
     .trim()
     .refine(
       (v) => /^\d{4}-\d{2}-\d{2}/.test(v) && !Number.isNaN(Date.parse(v)),
       'Use an ISO 8601 date-time, e.g. 2026-10-27T14:30:00+03:00.',
-    )
-    .nullish(),
+    ),
   /* Validated on its own (CouponBody) so a malformed coupon never blocks the ticket. */
   coupon: z.unknown().optional(),
 });
 export type TicketBody = z.infer<typeof TicketBody>;
+
+/**
+ * THE DUPLICATE CHECK, BUILT BY THE CRM (owner, 2026-11-11).
+ *
+ * Yiji sends no id and stores nothing. The key is a FINGERPRINT of the whole
+ * complaint - who, which branch, which order, what, when (to the second), the
+ * customer's words and the facts the rules use. Only a request identical in
+ * EVERY one of those is the same complaint: a retry after a timeout, or the
+ * customer pressing Submit twice, gets the ticket already created back (200),
+ * however long after. Anything that differs in any field is a new ticket - so
+ * no rule can ever merge two different complaints (the risk of a key built
+ * from a few chosen fields: repeating restaurant order numbers, a new message
+ * on the same order, a complaint after the ticket was closed).
+ *
+ * Stored in `tickets.external_id` as `auto:<sha256 hex>`; the existing unique
+ * index and replay path do the rest, races included.
+ */
+export function ticketFingerprint(b: {
+  phone: string;
+  restaurantId: string;
+  orderNumber: string;
+  complaintType: string;
+  serviceType: string;
+  occurredAt: string;
+  description: string;
+  orderValue?: number | null;
+  delayMinutes?: number | null;
+  attachments?: readonly string[] | null;
+}): string {
+  const text = (v: string) => v.trim().replace(/\s+/g, ' ');
+  const at = new Date(b.occurredAt);
+  const canonical = JSON.stringify([
+    text(b.phone),
+    text(b.restaurantId),
+    text(b.orderNumber).replace(/^0+(?=\d)/, ''),
+    text(b.complaintType).toLowerCase(),
+    text(b.serviceType).toLowerCase(),
+    /* The same instant however it is written (+03:00 or Z). */
+    Number.isNaN(at.getTime()) ? text(b.occurredAt) : at.toISOString(),
+    text(b.description),
+    b.orderValue ?? null,
+    b.delayMinutes ?? null,
+    [...(b.attachments ?? [])].map(text).sort(),
+  ]);
+  return `auto:${createHash('sha256').update(canonical).digest('hex')}`;
+}
 
 /** Field-level messages for a failed parse, keyed by dotted path. */
 export function zodFieldErrors(err: z.ZodError, prefix = ''): Record<string, string> {
@@ -1097,6 +1157,19 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
        usual. The CRM's compensation rules decide (below). */
     const couponIgnored = b.coupon != null;
     if (Object.keys(fields).length > 0) throw invalid(fields);
+    /* The CRM's own duplicate-check key - Yiji sends none (owner, 2026-11-11). */
+    const ticketKey = ticketFingerprint({
+      phone,
+      restaurantId: b.restaurantId,
+      orderNumber: b.orderNumber,
+      complaintType: complaintType!,
+      serviceType: serviceType ?? b.serviceType,
+      occurredAt: b.occurredAt,
+      description: b.description,
+      orderValue: b.orderValue ?? null,
+      delayMinutes: b.delayMinutes ?? null,
+      attachments: b.attachments ?? null,
+    });
 
     const vendorId = await vendor();
 
@@ -1112,7 +1185,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     };
 
     /* IDEMPOTENT REPLAY: the ticket is already here. Return it. */
-    const existing = await store.findTicket(vendorId, b.externalId);
+    const existing = await store.findTicket(vendorId, ticketKey);
     if (existing) return replay(vendorId, existing, ruleInputs);
 
     /* THE BRANCH, before anything is written. */
@@ -1157,7 +1230,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     const row: NewTicketRow = {
       id: newId(),
       vendor: vendorId,
-      external_id: b.externalId,
+      external_id: ticketKey,
       subject: b.subject ?? complaintType!,
       description,
       status: 'pending',
@@ -1181,13 +1254,13 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     } catch (err) {
       const e = asStoreError(err);
       /* A racing request with the same external id won: answer with its ticket. */
-      const raced = await store.findTicket(vendorId, b.externalId).catch(() => null);
+      const raced = await store.findTicket(vendorId, ticketKey).catch(() => null);
       if (raced && raced.id !== row.id) return replay(vendorId, raced, ruleInputs);
       if (raced) {
         /* Ours landed and only the answer was lost. */
       } else {
         logger.warn(
-          { externalId: b.externalId, err: e.message, kind: e.kind },
+          { externalId: ticketKey, err: e.message, kind: e.kind },
           'yiji inbound: ticket not stored',
         );
         throw unavailable();
@@ -1205,7 +1278,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     if (store.branchNotifyRules) {
       branchRules = await store.branchNotifyRules().catch((err: unknown) => {
         logger.warn(
-          { externalId: b.externalId, err: asStoreError(err).message },
+          { externalId: ticketKey, err: asStoreError(err).message },
           'yiji inbound: branch notification rules not readable - no branch told',
         );
         return null;
@@ -1228,7 +1301,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
         .queueStoreNotification({ ...notify.draft, vendor: vendorId })
         .catch((err: unknown) =>
           logger.warn(
-            { externalId: b.externalId, err: asStoreError(err).message },
+            { externalId: ticketKey, err: asStoreError(err).message },
             'yiji inbound: branch notification not queued',
           ),
         );
@@ -1248,9 +1321,9 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
       resolvedAt: null,
     };
 
-    await history(ticket.id, `Created by Yiji (externalId ${b.externalId}).`, {
+    await history(ticket.id, `Created by Yiji (externalId ${ticketKey}).`, {
       yiji_inbound: {
-        externalId: b.externalId,
+        externalId: ticketKey,
         orderNumber: b.orderNumber ?? null,
         restaurantId: b.restaurantId,
         attachments,
@@ -1267,7 +1340,7 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
        written and never able to undo it. */
     const coupon = await applyRule(vendorId, ticket, ruleInputs);
     logger.info(
-      { externalId: b.externalId, ticketId: ticket.id, coupon: coupon?.id ?? null },
+      { externalId: ticketKey, ticketId: ticket.id, coupon: coupon?.id ?? null },
       'yiji inbound: ticket created',
     );
     /* The reply is the ticket only: a rule coupon is the CRM's business
