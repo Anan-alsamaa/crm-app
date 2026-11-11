@@ -958,6 +958,8 @@
     "allVendors": "All vendors"
   },
   "coupons": {
+    "editDone": "Coupon {{code}} edited — the customer sees the new values on the same coupon.",
+    "editWorking": "Edit sent — still updating the coupon on Yiji. The ticket updates when it is done.",
     "groupNote": "This is a group order. The coupon goes on group order #{{master}}, and its restaurants get equal shares.",
     "groupCovered": "Group order #{{master}} already has coupon {{code}}. A group order gets one coupon only.",
     "maintenance": {
@@ -1017,8 +1019,8 @@
     "amountLabel": "Amount",
     "maxShort": "Max discount",
     "usesShort": "Uses",
-    "replaceHint": "Saving applies at once: a new coupon with a new code replaces {{code}}, and if it is already in the customer’s Yiji app it is taken out first. A coupon the customer already used cannot be edited.",
-    "replaceNewCode": "A new code is generated when you save.",
+    "replaceHint": "Saving applies at once: {{code}} keeps its code and the customer sees the new values on the same coupon in their Yiji app. A coupon the customer already used cannot be edited.",
+    "replaceNewCode": "The code stays the same: the customer keeps this coupon with the new values.",
     "replaceReason": "Why is this approved coupon being changed?",
     "replaceReasonTitle": "Reason for the change",
     "replaceWorking": "Edit sent — still swapping the coupon in the customer’s app. The ticket updates when it is done.",
@@ -1027,7 +1029,7 @@
     "replaceExpired": "This coupon expired on {{date}}. Editing it creates a fresh, valid coupon — check the new dates.",
     "replaceFailed": "Could not edit this coupon",
     "replaceRefused": "The coupon was not changed",
-    "replaceSave": "Save and replace",
+    "replaceSave": "Save changes",
     "replaceTitle": "Edit this approved coupon",
     "replacedBy": "Replaced by {{code}}",
     "replaces": "Replaces {{code}}",

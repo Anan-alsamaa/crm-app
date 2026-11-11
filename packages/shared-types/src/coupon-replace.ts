@@ -90,9 +90,12 @@ export function couponEditBlock(row: {
   status?: string | null;
   removal_status?: string | null;
   replaced_by?: RelationRef;
+  /** Stamped from Yiji's coupon orders (2026-11-11): a used coupon offers no Edit. */
+  yiji_used_order?: string | null;
 }): CouponEditBlock | null {
   if (couponDecision(row.status) !== 'approved') return 'not-approved';
   if (refId(row.replaced_by)) return 'replaced';
+  if (row.yiji_used_order) return 'used';
   switch (row.removal_status) {
     case 'removed':
     case 'not_on_yiji':

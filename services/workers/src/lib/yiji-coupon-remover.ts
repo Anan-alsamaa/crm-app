@@ -51,6 +51,14 @@ export interface YijiCouponRemover {
   usedOnOrder(userId: string, grantId: string): Promise<string | null>;
   /** Remove the grant. Throws YijiRefusedError on a settled "no". */
   removeGrant(grantId: string): Promise<void>;
+  /** Yiji's whole coupon record (`GetCoupon`), or null when it is not there. */
+  readCoupon(couponId: string): Promise<Record<string, unknown> | null>;
+  /**
+   * EDIT IN PLACE (owner, 2026-11-11): `UpdateCoupon` with the whole record -
+   * same coupon, same code, new values. Admin token only (the CRM account is
+   * 403, measured 2026-11-11). Throws YijiRefusedError on a settled "no".
+   */
+  updateCoupon(coupon: Record<string, unknown>): Promise<void>;
 }
 
 export interface YijiCouponRemoverEnv {
@@ -72,6 +80,10 @@ export interface YijiCouponRemoverEnv {
 }
 
 const REMOVE_PATH = '/api/CouponUser/RemoveUserCoupon/';
+const GET_COUPON_PATH = '/api/Coupon/GetCoupon/id/';
+const UPDATE_COUPON_PATH = '/api/Coupon/UpdateCoupon';
+/** Why UpdateCoupon uses the admin token directly (403 for the CRM account, 2026-11-11). */
+const UPDATE_ADMIN_ONLY = 'UpdateCoupon: the CRM account has no permission (admin token)';
 /** Why RemoveUserCoupon uses the admin token directly - shown on Admin KPI. */
 const REMOVE_ADMIN_ONLY = 'RemoveUserCoupon: the CRM account has no permission (admin token)';
 
@@ -173,16 +185,19 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
    */
   async function call(
     url: string,
-    method: 'GET' | 'DELETE',
+    method: 'GET' | 'DELETE' | 'PATCH',
     adminOnly: string | null = null,
+    jsonBody: string | null = null,
   ): Promise<Response> {
     const init = (token: string): RequestInit => ({
       method,
       headers: {
         authorization: `Bearer ${token}`,
         accept: 'application/json',
+        ...(jsonBody !== null ? { 'content-type': 'application/json' } : {}),
         ...(env.tenantId ? { tenantid: env.tenantId } : {}),
       },
+      ...(jsonBody !== null ? { body: jsonBody } : {}),
     });
     /* A call the CRM account is NOT permitted to make goes straight to the
        admin token (owner, 2026-10-22) - asking the CRM account first only
@@ -303,6 +318,38 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
       const result = (body as { result?: unknown } | null)?.result;
       if (typeof result === 'number' && result !== 1) {
         throw new YijiRefusedError('RemoveUserCoupon refused (result)', res.status, body);
+      }
+    },
+    async readCoupon(couponId) {
+      return readJson<Record<string, unknown>>(
+        `${admin}${GET_COUPON_PATH}${encodeURIComponent(couponId)}`,
+      );
+    },
+    async updateCoupon(coupon) {
+      const res = await call(
+        `${admin}${UPDATE_COUPON_PATH}`,
+        'PATCH',
+        UPDATE_ADMIN_ONLY,
+        JSON.stringify(coupon),
+      );
+      const raw = await res.text().catch(() => '');
+      let body: unknown = null;
+      try {
+        body = raw ? JSON.parse(raw) : null;
+      } catch {
+        body = null;
+      }
+      if (res.status >= 400 && res.status < 500) {
+        throw new YijiRefusedError(
+          `UpdateCoupon refused (${res.status})`,
+          res.status,
+          body ?? { status: res.status, text: raw.slice(0, 300) },
+        );
+      }
+      if (!res.ok) throw new YijiUnavailableError(`UpdateCoupon upstream ${res.status}`);
+      const result = (body as { result?: unknown } | null)?.result;
+      if (typeof result === 'number' && result !== 1) {
+        throw new YijiRefusedError('UpdateCoupon refused (result)', res.status, body);
       }
     },
   };

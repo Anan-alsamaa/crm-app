@@ -410,3 +410,21 @@ export const CouponReplaceJob = z.object({
   reason: z.string().trim().min(1).max(1000),
 });
 export type CouponReplaceJob = z.infer<typeof CouponReplaceJob>;
+
+/**
+ * EDIT AN APPROVED COUPON IN PLACE (owner, 2026-11-11) - replaces the
+ * remove-and-reissue `replace`. The SAME coupon (same code) gets the new terms
+ * on Yiji and on its own CRM row: one coupon, counted once everywhere. The
+ * worker refuses a coupon already used. `editRequestId` lets the editor's
+ * screen tell its own outcome from an earlier edit's.
+ */
+export const COUPON_EDIT_JOB_NAME = 'edit';
+export const CouponEditJob = z.object({
+  couponApprovalId: z.string().min(1),
+  editRequestId: z.string().min(8).max(64),
+  /** The edited terms - checked again by the worker (replacementTermsProblem). */
+  terms: z.record(z.unknown()),
+  editedBy: z.string().min(1),
+  reason: z.string().trim().min(1).max(1000),
+});
+export type CouponEditJob = z.infer<typeof CouponEditJob>;

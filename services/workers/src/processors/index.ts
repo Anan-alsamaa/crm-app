@@ -25,6 +25,8 @@ import {
   COUPON_REMOVE_JOB_NAME,
   type CouponReplaceJob,
   COUPON_REPLACE_JOB_NAME,
+  COUPON_EDIT_JOB_NAME,
+  type CouponEditJob,
   type CustomerPushJob,
   errorText,
   createYijiCouponOrdersReader,
@@ -37,6 +39,7 @@ import {
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { envKey } from '@yiji/shared-config/redis';
+import { processCouponEditJob } from './coupon-edit.js';
 import { processSlaJob, type SlaDeps } from './sla.js';
 import { processNotificationJob, type NotifDeps } from './notifications.js';
 import { processAiJob, type AiDeps } from './ai.js';
@@ -575,6 +578,16 @@ export const processors: Record<QueueName, Processor> = {
     /* Owner, 2026-10-27: an APPROVED coupon edited = replaced. Same queue, by
        job NAME; reuses the removal's credentials (admin token for
        RemoveUserCoupon) and queues the replacement's push itself. */
+    /* Edit an approved coupon IN PLACE (owner, 2026-11-11): same coupon, same code. */
+    if (job.name === COUPON_EDIT_JOB_NAME) {
+      await processCouponEditJob(job as Job<CouponEditJob>, {
+        directus: deps.directus,
+        logger: deps.logger,
+        remover: couponRemover,
+        ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
+      });
+      return;
+    }
     if (job.name === COUPON_REPLACE_JOB_NAME) {
       await processCouponReplaceJob(job as Job<CouponReplaceJob>, {
         directus: deps.directus,

@@ -10,8 +10,7 @@ import {
   type CouponReplacementTerms,
   type CouponRequestDraft,
 } from '@yiji/shared-types';
-import { useAuth } from '../../lib/auth/AuthContext.js';
-import { useReplaceTicketCoupon, type CouponRequestRow } from '../coupons/api.js';
+import { useEditTicketCoupon, type CouponRequestRow } from '../coupons/api.js';
 import { CouponRequestDialog } from '../coupons/CouponRequestDialog.js';
 import { storedCouponType, storedTotalLimit } from '../coupons/coupon-request-fields.js';
 import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
@@ -35,6 +34,7 @@ export function canOfferCouponEdit(c: CouponRequestRow, allowed: boolean): boole
       status: c.status,
       removal_status: c.removal_status ?? null,
       replaced_by: c.replaced_by ?? null,
+      yiji_used_order: c.yiji_used_order ?? null,
     }) === null
   );
 }
@@ -97,12 +97,11 @@ export function CouponReplacementPill({ c }: { c: CouponRequestRow }): JSX.Eleme
 
 export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow }): JSX.Element {
   const { t } = useTranslation();
-  const { user } = useAuth();
-  const replace = useReplaceTicketCoupon();
+  const replace = useEditTicketCoupon();
   const couponsPaused = useCouponsUnderMaintenance();
   const [open, setOpen] = useState(false);
   const expired = couponIsExpired(coupon.valid_to, new Date());
-  /* An expired coupon is replaced by a VALID one: fresh dates to start from. */
+  /* An expired coupon gets VALID dates to start from (the same coupon, edited). */
   const dates = expired
     ? defaultCouponDates(new Date())
     : { valid_from: coupon.valid_from ?? '', valid_to: coupon.valid_to ?? '' };
@@ -132,8 +131,8 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
           requestedBy={coupon.requested_by?.id ?? null}
           initial={{
             title: coupon.title ?? '',
-            // Placeholder only: a NEW code is generated on save.
-            code: coupon.coupon_code || 'REPLACE',
+            // The SAME code: an edit changes this coupon in place (2026-11-11).
+            code: coupon.coupon_code || '',
             issuing_side: coupon.issuing_side ?? '',
             delivery_type: coupon.delivery_type ?? 'All',
             coupon_type: coupon.coupon_type ?? 'Private',
@@ -158,23 +157,16 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
           onSave={async (d, extra) => {
             try {
               const r = await replace.mutateAsync({
-                /* The form's "send on the app" answer rides with the edit. */
-                old: {
-                  ...coupon,
-                  delivery_excluded: d.delivery_excluded,
-                  delivery_excluded_reason: d.delivery_excluded_reason ?? null,
-                },
+                couponId: coupon.id,
                 terms: draftToTerms(d),
                 reason: extra?.changeReason ?? '',
-                editorId: user?.id ?? null,
               });
               if (r.state === 'done') {
                 toast.success(
-                  t('coupons.replaceDone', {
+                  t('coupons.editDone', {
                     defaultValue:
-                      'Coupon edited — {{code}} replaces {{old}} and is on its way to the customer.',
-                    code: r.code,
-                    old: coupon.coupon_code ?? '—',
+                      'Coupon {{code}} edited — the customer sees the new values on the same coupon.',
+                    code: coupon.coupon_code ?? '—',
                   }),
                 );
               } else if (r.state === 'refused') {
@@ -184,9 +176,9 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
                 );
               } else {
                 toast.success(
-                  t('coupons.replaceWorking', {
+                  t('coupons.editWorking', {
                     defaultValue:
-                      'Edit sent — still swapping the coupon in the customer’s app. The ticket updates when it is done.',
+                      'Edit sent — still updating the coupon on Yiji. The ticket updates when it is done.',
                   }),
                 );
               }

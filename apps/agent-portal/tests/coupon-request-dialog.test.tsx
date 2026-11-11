@@ -678,9 +678,14 @@ describe('CouponRequestDialog - editing an approved coupon', () => {
       editingId: 'old-1',
       replaceOf: { code: TAKEN_CODE, expiredOn: null },
     });
-    expect(screen.getByText('A new code is generated when you save.')).toBeInTheDocument();
+    /* Edit in place (2026-11-11): the SAME code is kept. */
+    expect(
+      screen.getByText(
+        'The code stays the same: the customer keeps this coupon with the new values.',
+      ),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /new code/i })).not.toBeInTheDocument();
-    const save = screen.getByRole('button', { name: 'Save and replace' });
+    const save = screen.getByRole('button', { name: 'Save changes' });
     expect(save).toBeDisabled();
     await userEvent.type(
       screen.getByLabelText('Why is this approved coupon being changed?'),

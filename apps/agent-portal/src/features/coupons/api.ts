@@ -35,6 +35,10 @@ import {
  */
 export interface CouponRequestRow {
   id: string;
+  /** The Yiji order the customer used it on - set = used, no Edit (2026-11-11). */
+  yiji_used_order?: string | null;
+  /** When it was last edited in place. */
+  edited_at?: string | null;
   coupon_code: string | null;
   coupon_value: number | null;
   coupon_percent: number | null;
@@ -537,6 +541,9 @@ export const TICKET_COUPON_REPLACE_FIELDS = [
   'delivery_excluded_reason',
   'raised_from',
   'replace_reason',
+  /* Edit in place + used coupons (owner, 2026-11-11). */
+  'yiji_used_order',
+  'edited_at',
   { replaces: ['id', 'coupon_code'] },
   { replaced_by: ['id', 'coupon_code'] },
 ] as const;
@@ -549,6 +556,69 @@ export const TICKET_COUPON_REPLACE_FIELDS = [
  * it out of the customer's Yiji app and only then send the new one. Waits
  * (bounded) on the two rows for the outcome - no Yiji call from the browser.
  */
+/**
+ * EDIT AN APPROVED COUPON IN PLACE (owner, 2026-11-11). The SAME coupon - same
+ * code - takes the new terms on Yiji and on its row; nothing is re-issued, so
+ * Yiji's monthly report counts it once. The gateway checks
+ * `edit_approved_coupons`; the workers refuse a used coupon and prove the
+ * change by reading it back. This waits (bounded) for THIS edit's outcome.
+ */
+export function useEditTicketCoupon() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      couponId: string;
+      terms: CouponReplacementTerms;
+      reason: string;
+    }): Promise<{ state: CouponReplaceState; note: string | null }> => {
+      await assertCouponsOpen();
+      const editRequestId =
+        globalThis.crypto?.randomUUID?.() ?? `e${Date.now()}${Math.random().toString(36).slice(2)}`;
+      await jobProducer.editCoupon({
+        couponApprovalId: input.couponId,
+        editRequestId,
+        terms: input.terms as unknown as Record<string, unknown>,
+        reason: input.reason,
+      });
+      const deadline = Date.now() + 45_000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const rows = (await directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              filter: { id: { _eq: input.couponId } },
+              fields: ['edit_request_id', 'edit_state', 'edit_detail'],
+              limit: 1,
+            } as never,
+          ),
+        )) as unknown as Array<{
+          edit_request_id?: string | null;
+          edit_state?: string | null;
+          edit_detail?: string | null;
+        }>;
+        const r = rows?.[0];
+        if (
+          r?.edit_request_id === editRequestId &&
+          (r.edit_state === 'done' || r.edit_state === 'refused')
+        ) {
+          return {
+            state: r.edit_state === 'done' ? 'done' : 'refused',
+            note: r.edit_detail ?? null,
+          };
+        }
+      }
+      return { state: 'working', note: null };
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: ['ticket-coupons'] });
+      void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
+      void qc.invalidateQueries({ queryKey: ['tickets'] });
+      void qc.invalidateQueries({ queryKey: ['ticket'] });
+    },
+  });
+}
+
 export function useReplaceTicketCoupon() {
   const qc = useQueryClient();
   return useMutation({
