@@ -399,13 +399,53 @@ async function editOnce(
     return 'edited';
   };
 
-  /* 4. Not on Yiji (not sent yet, or withheld): only the row changes. */
-  if (!row.yiji_coupon_id) return finish(false);
+  /* 4. Not on Yiji at all (not sent yet, or withheld with no record there):
+        only the row changes and the push sends the new values. A coupon with
+        a GRANT but no stored coupon id IS on Yiji - 486 such on prod, from
+        before the coupon id was stored (found 2026-11-12) - and goes through
+        the full Yiji path below, never the row-only one. */
+  const onYiji =
+    !!(row.yiji_coupon_id || row.yiji_coupon_user_id) ||
+    String(row.status ?? '').toLowerCase() === 'assigned';
+  if (!onYiji) return finish(false);
 
   const remover = deps.remover;
   if (!remover)
     return refuse('Not changed: editing a coupon on Yiji is not set up on this server.');
-  const yijiId = String(row.yiji_coupon_id);
+  let yijiCouponId = row.yiji_coupon_id ? String(row.yiji_coupon_id) : null;
+  if (!yijiCouponId) {
+    const grant = row.yiji_coupon_user_id ? String(row.yiji_coupon_user_id) : null;
+    if (!grant) {
+      return refuse(
+        'Not changed: the coupon is marked delivered but the CRM has no Yiji record of it.',
+      );
+    }
+    const userId = await resolveCouponCustomer(remover, row as never, redirect);
+    if (!userId) {
+      return refuse(
+        'Not changed: the customer’s Yiji account could not be found to check the coupon.',
+      );
+    }
+    const usedOn = await remover.usedOnOrder(userId, grant);
+    if (usedOn) {
+      return refuse(
+        `Not changed: the customer already used ${row.coupon_code ?? 'this coupon'} on order ${usedOn} - a used coupon cannot change.`,
+        { yiji_used_order: usedOn, yiji_used_at: now() },
+      );
+    }
+    yijiCouponId = await remover.couponIdOfGrant(userId, grant);
+    if (!yijiCouponId) {
+      return refuse(
+        `Not changed: ${row.coupon_code ?? 'this coupon'} is no longer in the customer’s Yiji wallet (removed on Yiji).`,
+      );
+    }
+    /* Kept, so the next edit, the recovery and the audits find it directly. */
+    await directus.request(
+      updateItem('coupon_approvals' as never, id, { yiji_coupon_id: yijiCouponId } as never),
+    );
+    row.yiji_coupon_id = yijiCouponId;
+  }
+  const yijiId = yijiCouponId;
   const wantedOld = yijiTermsOf(row, before, redirect);
   const wantedNew = yijiTermsOf(row, edited, redirect);
 

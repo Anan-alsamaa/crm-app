@@ -67,6 +67,13 @@ export interface YijiCouponRemover {
    * Throws YijiRefusedError on a settled "no".
    */
   setCouponStatus(couponId: string, status: YijiCouponSwitch): Promise<void>;
+  /**
+   * The Yiji COUPON behind a grant still in the customer's wallet
+   * (GetCouponByUser carries `couponId` per grant), or null when the grant
+   * is not there (used or removed). For the 486 prod coupons delivered before
+   * the coupon id was stored (2026-11-12).
+   */
+  couponIdOfGrant(userId: string, grantId: string): Promise<string | null>;
 }
 
 /** Yiji coupon status: 0 active, 1 deleted, 5 switched off (by ops, or by an edit). */
@@ -357,6 +364,16 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
       if (typeof result === 'number' && result !== 1) {
         throw new YijiRefusedError('RemoveUserCoupon refused (result)', res.status, body);
       }
+    },
+    async couponIdOfGrant(userId, grantId) {
+      const rows = await readJson<
+        Array<{ id?: unknown; couponId?: unknown; coupon?: { id?: unknown } }>
+      >(
+        `${admin}/api/CouponUser/GetCouponByUser/${encodeURIComponent(userId)}?PageNumber=1&PageSize=500`,
+      );
+      const hit = (Array.isArray(rows) ? rows : []).find((x) => String(x?.id) === String(grantId));
+      const id = hit?.couponId ?? hit?.coupon?.id;
+      return id === null || id === undefined || String(id).trim() === '' ? null : String(id);
     },
     async readCoupon(couponId) {
       return readJson<Record<string, unknown>>(
