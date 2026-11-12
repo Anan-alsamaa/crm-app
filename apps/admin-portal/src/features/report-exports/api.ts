@@ -320,6 +320,12 @@ export interface AgentReportData {
    */
   complaintFieldsAvailable: boolean;
   /**
+   * False when this person's role may not read coupons (owner, 2026-11-12):
+   * the Compensation column is then HIDDEN - never shown half-right - and
+   * everything else in the report still shows.
+   */
+  compensationAvailable: boolean;
+  /**
    * Tickets LOGGED in this window whose complaint date falls outside it.
    *
    * The report is filtered by when a complaint HAPPENED, which is the right
@@ -828,8 +834,8 @@ async function loadAgentReport(
          * BEST-EFFORT (owner, 2026-11-12): a role that may not read coupons
          * once got NO report at all - the refusal failed the whole page as a
          * "connection issue" and every retry re-ran every read. Refused, it
-         * now costs the late-order inference only: the ticket's own
-         * Compensation column still shows. `view_all_tickets` grants exactly
+         * the Compensation column is HIDDEN (owner: never half-right) and
+         * every other column shows. `view_all_tickets` grants exactly
          * BREAKDOWN_COUPON_FIELDS (app-roles-sync; a test keeps them equal).
          */
         needs.breakdown
@@ -844,16 +850,16 @@ async function loadAgentReport(
                       limit: -1,
                     } as never,
                   ),
-                ) as Promise<RawCoupon[]>,
+                ) as Promise<RawCoupon[] | null>,
               (err: unknown) => {
                 console.warn(
-                  '[report] coupons unreadable; late-order compensation from tickets only:',
+                  '[report] coupons unreadable for this role; the Compensation column is hidden:',
                   err,
                 );
-                return [] as RawCoupon[];
+                return null;
               },
             )
-          : Promise.resolve([] as RawCoupon[]),
+          : Promise.resolve([] as RawCoupon[] | null),
         // Auto-assignment outcomes + handoffs — see where they are tallied.
         needs.agentKpi
           ? attempt(
@@ -1134,7 +1140,8 @@ async function loadAgentReport(
        */
       const compensatedTickets = new Set<string>();
       const compensatedOrders = new Set<string>();
-      for (const c of coupons) {
+      const compensationAvailable = coupons !== null;
+      for (const c of coupons ?? []) {
         if ((c.status ?? '').toLowerCase() === 'rejected') continue;
         if (c.ticket) compensatedTickets.add(String(c.ticket));
         const order = c.order_id?.trim();
@@ -1215,7 +1222,7 @@ async function loadAgentReport(
            */
           complaintStatus: normaliseTicketStatus(t.status),
           agent: agentOf(t.assigned_agent),
-          compensation: compensationOf(t),
+          compensation: compensationAvailable ? compensationOf(t) : '',
           // Blank until the first edit — a creation is not a modification, and
           // a column of creation timestamps would drown the real signal.
           lastModifiedBy: lastEditBy.get(t.id)?.name ?? '',
@@ -1503,6 +1510,7 @@ async function loadAgentReport(
         tickets: ticketRows,
         complaints: complaintRows,
         complaintFieldsAvailable,
+        compensationAvailable,
         loggedOutsideWindow,
         agents,
         conversations: conversationsReport,

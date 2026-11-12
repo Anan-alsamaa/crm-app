@@ -55,4 +55,18 @@ describe('ticket breakdown reads only what view_all_tickets grants', () => {
     const before = REPORT.slice(Math.max(0, at - 600), at);
     expect(before).toMatch(/attempt\(/);
   });
+
+  it('refused, the Compensation column is HIDDEN and the rest shows (owner, 2026-11-12)', () => {
+    const after = REPORT.slice(REPORT.indexOf('fields: [...BREAKDOWN_COUPON_FIELDS]'));
+    // The refusal is told apart from "no coupons": null, not an empty list.
+    expect(after.slice(0, 800)).toMatch(/return null;/);
+    expect(REPORT).toMatch(/const compensationAvailable = coupons !== null;/);
+    expect(REPORT).toMatch(/compensationAvailable,\n/);
+    const PAGE = read(
+      '../../../apps/admin-portal/src/features/report-exports/AgentReportsPage.tsx',
+    );
+    expect(PAGE).toMatch(/compensationAvailable \|\| k !== 'compensation'/);
+    expect(PAGE).toMatch(/compensationAvailable=\{data\.compensationAvailable !== false\}/);
+    expect(PAGE).toMatch(/\{compensationAvailable && \(\s*<FilterSelect/);
+  });
 });
