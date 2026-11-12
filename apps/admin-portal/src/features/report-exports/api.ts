@@ -535,6 +535,15 @@ export function useAgentReportData(
   });
 }
 
+/** What the breakdown reads from coupons - granted by view_all_tickets, nothing more. */
+export const BREAKDOWN_COUPON_FIELDS = [
+  'id',
+  'ticket',
+  'order_id',
+  'status',
+  'compensation',
+] as const;
+
 type RawCoupon = {
   id: string;
   ticket: string | null;
@@ -816,17 +825,35 @@ async function loadAgentReport(
          * raised yesterday, and a window on the coupon would drop exactly the
          * rows this is here to find. It is a small collection.
          */
+        /*
+         * BEST-EFFORT (owner, 2026-11-12): a role that may not read coupons
+         * once got NO report at all - the refusal failed the whole page as a
+         * "connection issue" and every retry re-ran every read. Refused, it
+         * now costs the late-order inference only: the ticket's own
+         * Compensation column still shows. `view_all_tickets` grants exactly
+         * BREAKDOWN_COUPON_FIELDS (app-roles-sync; a test keeps them equal).
+         */
         needs.breakdown
-          ? (directus.request(
-              readItems(
-                'coupon_approvals' as never,
-                {
-                  fields: ['id', 'ticket', 'order_id', 'status', 'compensation'],
-                  ...(vendor ? { filter: { vendor: { _eq: vendor } } } : {}),
-                  limit: -1,
-                } as never,
-              ),
-            ) as Promise<RawCoupon[]>)
+          ? attempt(
+              () =>
+                directus.request(
+                  readItems(
+                    'coupon_approvals' as never,
+                    {
+                      fields: [...BREAKDOWN_COUPON_FIELDS],
+                      ...(vendor ? { filter: { vendor: { _eq: vendor } } } : {}),
+                      limit: -1,
+                    } as never,
+                  ),
+                ) as Promise<RawCoupon[]>,
+              (err: unknown) => {
+                console.warn(
+                  '[report] coupons unreadable; late-order compensation from tickets only:',
+                  err,
+                );
+                return [] as RawCoupon[];
+              },
+            )
           : Promise.resolve([] as RawCoupon[]),
         // Auto-assignment outcomes + handoffs — see where they are tallied.
         needs.agentKpi
