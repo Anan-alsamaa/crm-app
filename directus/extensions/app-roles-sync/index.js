@@ -437,15 +437,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('ticket_events', 'read'),
       g('tickets_files', 'read'),
       ...readOnly('late_order_decisions'),
-      /*
-       * THE TICKET BREAKDOWN'S Compensation column (owner, 2026-11-12): a late
-       * order's coupon lives on coupon_approvals, not on the ticket, so the
-       * report reads which tickets/orders have a coupon. Without this read an
-       * Area Manager's breakdown failed whole ("connection issue") - 16
-       * refusals in one minute on prod. ONLY these five fields: no amounts,
-       * codes or phones. Must cover BREAKDOWN_COUPON_FIELDS in the report.
-       */
-      g('coupon_approvals', 'read', {}, ['id', 'ticket', 'order_id', 'status', 'compensation']),
+      /* NO coupon read here (owner, 2026-11-12): "apply the ticket role, dont
+         give the coupon role". Coupon data comes only with a coupon privilege;
+         the ticket breakdown hides it for a role without one. */
     ],
     create_tickets: [
       g('tickets', 'create'),
