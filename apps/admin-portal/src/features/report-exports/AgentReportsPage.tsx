@@ -857,10 +857,17 @@ function ComplaintsReport({
   tr,
   days,
   range,
+  compensationAvailable = true,
 }: {
   rows: ComplaintReportRow[];
   tr: Translate;
   days: number;
+  /**
+   * False when this role may not read coupons (owner, 2026-11-12): the
+   * Compensation column, its filter and its total are HIDDEN and the rest of
+   * the report shows - never "nothing at all", never a half-right column.
+   */
+  compensationAvailable?: boolean;
   /**
    * The FETCHED window, not a filter.
    *
@@ -905,8 +912,11 @@ function ComplaintsReport({
    * nobody should see is not one to leave switchable.
    */
   const REPORT_COLUMN_KEYS = useMemo(
-    () => COMPLAINT_COLUMN_KEYS.filter((k) => k !== 'couponCode'),
-    [],
+    () =>
+      COMPLAINT_COLUMN_KEYS.filter(
+        (k) => k !== 'couponCode' && (compensationAvailable || k !== 'compensation'),
+      ),
+    [compensationAvailable],
   );
   const [cols, setCols] = useState<Set<ComplaintColumnKey>>(() => new Set(REPORT_COLUMN_KEYS));
   const [showCols, setShowCols] = useState(false);
@@ -1141,7 +1151,10 @@ function ComplaintsReport({
   /** The column currently being dragged in the picker, if any. */
   const [dragKey, setDragKey] = useState<ComplaintColumnKey | null>(null);
   /** Columns that are ON, in the order the user arranged them. */
-  const chosenColumns = useMemo(() => order.filter((k) => cols.has(k)), [order, cols]);
+  const chosenColumns = useMemo(
+    () => order.filter((k) => cols.has(k) && REPORT_COLUMN_KEYS.includes(k)),
+    [order, cols, REPORT_COLUMN_KEYS],
+  );
 
   const moveCol = (key: ComplaintColumnKey, delta: number) =>
     setOrder((prev) => {
@@ -1306,15 +1319,17 @@ function ComplaintsReport({
           tone="blue"
           icon={<TicketIcon size={18} />}
         />
-        <ReportKpi
-          label={t('compensation.yes', { ns: 'common', defaultValue: 'Compensated' })}
-          value={String(totals.compensated)}
-          hint={
-            visible.length > 0 ? fmtPct((totals.compensated / visible.length) * 100) : undefined
-          }
-          tone="violet"
-          icon={<SparkleIcon size={18} />}
-        />
+        {compensationAvailable && (
+          <ReportKpi
+            label={t('compensation.yes', { ns: 'common', defaultValue: 'Compensated' })}
+            value={String(totals.compensated)}
+            hint={
+              visible.length > 0 ? fmtPct((totals.compensated / visible.length) * 100) : undefined
+            }
+            tone="violet"
+            icon={<SparkleIcon size={18} />}
+          />
+        )}
         <ReportKpi
           label={t('complaintReport.kpiBranches', { defaultValue: 'Branches' })}
           value={String(totals.branches)}
@@ -1452,12 +1467,14 @@ function ComplaintsReport({
             values={options.complaintSource}
             value={draft.source}
           />
-          <FilterSelect
-            label={t('complaintReport.col.compensation', { defaultValue: 'Compensation' })}
-            field="compensation"
-            values={options.compensation}
-            value={draft.compensation}
-          />
+          {compensationAvailable && (
+            <FilterSelect
+              label={t('complaintReport.col.compensation', { defaultValue: 'Compensation' })}
+              field="compensation"
+              values={options.compensation}
+              value={draft.compensation}
+            />
+          )}
           <div className="ms-auto flex items-end gap-2">
             {/* Something to clear = any criterion applied or typed. The
                 report's date window lives in the range hook, not here, so
@@ -1577,6 +1594,7 @@ function ComplaintsReport({
               </div>
               <ul className="flex-1 space-y-0.5 overflow-auto p-3">
                 {order.map((k, i) => {
+                  if (!REPORT_COLUMN_KEYS.includes(k)) return null;
                   const label = t(COMPLAINT_COLUMN_LABELS[k].key, {
                     defaultValue: COMPLAINT_COLUMN_LABELS[k].def,
                   });
@@ -3229,6 +3247,7 @@ export function AgentReportsPage({ report: which }: { report: ReportKind }) {
                     />
                     <ComplaintsReport
                       rows={data.complaints}
+                      compensationAvailable={data.compensationAvailable !== false}
                       tr={tr}
                       days={days}
                       range={{ from, to, setFrom, setTo, setRange, reset: resetRange }}
