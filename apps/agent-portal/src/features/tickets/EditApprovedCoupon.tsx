@@ -39,6 +39,13 @@ export function canOfferCouponEdit(c: CouponRequestRow, allowed: boolean): boole
   );
 }
 
+/** A stored amount as a number: Directus sends DECIMAL columns as text. */
+export function amountOf(v: unknown): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** The dialog's validated draft as replacement terms. */
 export function draftToTerms(d: CouponRequestDraft): CouponReplacementTerms {
   const pct = isPercentageCategory(d.discount_category);
@@ -139,10 +146,13 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
             discount_category: coupon.discount_category ?? 'Amount',
             valid_from: dates.valid_from.slice(0, 10),
             valid_to: dates.valid_to.slice(0, 10),
-            coupon_value: coupon.coupon_value,
-            coupon_percent: coupon.coupon_percent,
-            max_discount: coupon.max_discount ?? 0,
-            usage_limit: coupon.usage_limit ?? 1,
+            /* Directus returns DECIMAL columns as text ("3.00000"): the form's
+               number fields refused them and Save stayed blocked ("Expected
+               number, received string") - found testing on staging, 2026-11-12. */
+            coupon_value: amountOf(coupon.coupon_value),
+            coupon_percent: amountOf(coupon.coupon_percent),
+            max_discount: amountOf(coupon.max_discount) ?? 0,
+            usage_limit: amountOf(coupon.usage_limit) ?? 1,
             total_discount_limit:
               coupon.total_discount_limit != null && coupon.total_discount_limit !== ''
                 ? Number(coupon.total_discount_limit)

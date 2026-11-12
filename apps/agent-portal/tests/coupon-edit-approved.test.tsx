@@ -8,7 +8,7 @@ vi.mock('../src/features/coupons/maintenance.js', async (orig) => ({
   useCouponsMaintenanceState: () => ({ paused: false, known: true }),
   assertCouponsOpen: async () => {},
 }));
-import { renderHook, render, screen } from '@testing-library/react';
+import { act, renderHook, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -50,11 +50,20 @@ vi.mock('@directus/sdk', () => ({
   }),
   updateItems: () => ({ kind: 'updates' }),
 }));
-const producer = vi.hoisted(() => ({ replaceCoupon: vi.fn(), removeCoupon: vi.fn() }));
+const producer = vi.hoisted(() => ({
+  replaceCoupon: vi.fn(),
+  removeCoupon: vi.fn(),
+  editCoupon: vi.fn(),
+}));
 vi.mock('../src/lib/job-producer.js', () => ({ jobProducer: producer }));
 
-import { useReplaceTicketCoupon, type CouponRequestRow } from '../src/features/coupons/api.js';
 import {
+  useEditTicketCoupon,
+  useReplaceTicketCoupon,
+  type CouponRequestRow,
+} from '../src/features/coupons/api.js';
+import {
+  amountOf,
   canOfferCouponEdit,
   CouponReplacementPill,
   draftToTerms,
@@ -326,4 +335,57 @@ describe('saving an edit', () => {
     expect(abandon.id).toBe(created.data?.id);
     expect(abandon.data).toMatchObject({ status: 'rejected' });
   });
+});
+
+/* EDIT IN PLACE (owner, 2026-11-11) and the decimal bug found on staging
+   (2026-11-12): Directus sends DECIMAL columns as text, which kept Save blocked. */
+describe('edit in place', () => {
+  it('reads stored amounts as numbers, whether Directus sends text or numbers', () => {
+    expect(amountOf('3.00000')).toBe(3);
+    expect(amountOf(25)).toBe(25);
+    expect(amountOf('12.5')).toBe(12.5);
+    expect(amountOf(null)).toBeNull();
+    expect(amountOf('')).toBeNull();
+    expect(amountOf('abc')).toBeNull();
+  });
+
+  it('offers no Edit on a coupon the customer already used', () => {
+    expect(
+      canOfferCouponEdit({ ...COUPON, yiji_used_order: '1374000' } as CouponRequestRow, true),
+    ).toBe(false);
+  });
+
+  it('sends ONE edit job (no new coupon row) and reads the outcome of THIS edit', async () => {
+    producer.editCoupon.mockReset();
+    producer.editCoupon.mockResolvedValue({ ok: true, jobId: 'j1' });
+    let sent: { editRequestId?: string } = {};
+    producer.editCoupon.mockImplementation(async (b: { editRequestId: string }) => {
+      sent = b;
+      return { ok: true, jobId: 'j1' };
+    });
+    sdk.request.mockImplementation(async (q: { kind: string }) => {
+      if (q.kind === 'read')
+        return [{ edit_request_id: sent.editRequestId, edit_state: 'done', edit_detail: 'Edited' }];
+      return {};
+    });
+    const { result } = renderHook(() => useEditTicketCoupon(), { wrapper: wrapper() });
+    let out: { state: string; note: string | null } | undefined;
+    await act(async () => {
+      out = await result.current.mutateAsync({
+        couponId: 'ca-1',
+        terms: { coupon_value: 4 } as never,
+        reason: 'Customer called back',
+      });
+    });
+    expect(producer.editCoupon).toHaveBeenCalledTimes(1);
+    expect(producer.editCoupon.mock.calls[0]![0]).toMatchObject({
+      couponApprovalId: 'ca-1',
+      terms: { coupon_value: 4 },
+      reason: 'Customer called back',
+    });
+    expect(sdk.request.mock.calls.some(([q]) => (q as { kind: string }).kind === 'create')).toBe(
+      false,
+    );
+    expect(out).toEqual({ state: 'done', note: 'Edited' });
+  }, 15_000);
 });
