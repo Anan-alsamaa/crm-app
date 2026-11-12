@@ -852,6 +852,17 @@ function linkParam(name: string): string | undefined {
   return new URLSearchParams(window.location.search).get(name) || undefined;
 }
 
+/**
+ * Coupon information in the breakdown (owner, 2026-11-12): shown only to a
+ * role that may read coupons - a role's own permissions decide, the ticket
+ * permission never brings coupon data with it.
+ */
+const COUPON_DATA_COLUMNS: readonly ComplaintColumnKey[] = [
+  'compensation',
+  'couponValue',
+  'couponPercent',
+];
+
 function ComplaintsReport({
   rows,
   tr,
@@ -914,7 +925,7 @@ function ComplaintsReport({
   const REPORT_COLUMN_KEYS = useMemo(
     () =>
       COMPLAINT_COLUMN_KEYS.filter(
-        (k) => k !== 'couponCode' && (compensationAvailable || k !== 'compensation'),
+        (k) => k !== 'couponCode' && (compensationAvailable || !COUPON_DATA_COLUMNS.includes(k)),
       ),
     [compensationAvailable],
   );

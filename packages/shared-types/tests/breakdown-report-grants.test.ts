@@ -3,70 +3,50 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 /**
- * THE TICKET BREAKDOWN MUST OPEN FOR EVERYONE WHO SEES IT IN THE MENU (owner,
- * 2026-11-12). The page is offered to `view_all_tickets`. It also read coupons
- * - which Area Manager roles were never granted - so a new General Area
- * Manager got "connection issue" and a long wait instead of the report.
+ * THE TICKET BREAKDOWN FOLLOWS EACH ROLE'S OWN PERMISSIONS (owner, 2026-11-12).
  *
- * This keeps the two files in step: every coupon field the report reads must
- * be granted by `view_all_tickets` in app-roles-sync, and the read itself must
- * stay best-effort (a refusal never empties the page). Add a field to the
- * report without granting it and this fails in CI, not in front of a manager.
+ * The page is offered to `view_all_tickets`. A new General Area Manager got
+ * "connection issue" because the report also read coupons, which his role may
+ * not - one refused read failed the whole page. The owner's rule: "apply the
+ * ticket role, dont give the coupon role". So:
+ *  - `view_all_tickets` grants NO coupon read (no quiet widening);
+ *  - the report's coupon read is best-effort and a refusal is told apart
+ *    from "no coupons" (null);
+ *  - without it, every coupon column (Compensation, Coupon value, Coupon %),
+ *    the Compensation filter and the Compensated card are hidden, and the
+ *    rest of the report shows.
  */
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 const SYNC = read('../../../directus/extensions/app-roles-sync/index.js');
 const REPORT = read('../../../apps/admin-portal/src/features/report-exports/api.ts');
+const PAGE = read('../../../apps/admin-portal/src/features/report-exports/AgentReportsPage.tsx');
 
-const listAfter = (src: string, marker: string): string[] => {
-  const at = src.indexOf(marker);
-  expect(at).toBeGreaterThan(0);
-  const open = src.indexOf('[', at + marker.length - 1);
-  const close = src.indexOf(']', open);
-  return [...src.slice(open + 1, close).matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
-};
-
-describe('ticket breakdown reads only what view_all_tickets grants', () => {
+describe('ticket breakdown: the ticket permission never brings coupon data', () => {
   const block = SYNC.slice(
     SYNC.indexOf('    view_all_tickets: ['),
     SYNC.indexOf('    create_tickets: ['),
   );
 
-  it('view_all_tickets grants a field-limited coupon read', () => {
-    expect(block).toMatch(/g\('coupon_approvals', 'read', \{\}, \[/);
+  it('view_all_tickets grants no coupon read', () => {
+    expect(block.length).toBeGreaterThan(20);
+    expect(block).not.toMatch(/g\('coupon_approvals'/);
   });
 
-  it('every coupon field the report reads is granted', () => {
-    const granted = listAfter(block, "g('coupon_approvals', 'read', {}, [");
-    const used = listAfter(REPORT, 'export const BREAKDOWN_COUPON_FIELDS = [');
-    expect(used.length).toBeGreaterThan(0);
-    for (const f of used) expect(granted).toContain(f);
-  });
-
-  it('no money, code or phone is granted with it', () => {
-    const granted = listAfter(block, "g('coupon_approvals', 'read', {}, [");
-    for (const f of ['coupon_value', 'coupon_code', 'customer_phone', 'max_discount']) {
-      expect(granted).not.toContain(f);
-    }
-  });
-
-  it('the coupon read is best-effort: a refusal never fails the whole report', () => {
+  it('the coupon read is best-effort, and a refusal is null (not "no coupons")', () => {
     const at = REPORT.indexOf('fields: [...BREAKDOWN_COUPON_FIELDS]');
     expect(at).toBeGreaterThan(0);
-    const before = REPORT.slice(Math.max(0, at - 600), at);
-    expect(before).toMatch(/attempt\(/);
+    expect(REPORT.slice(Math.max(0, at - 600), at)).toMatch(/attempt\(/);
+    expect(REPORT.slice(at, at + 800)).toMatch(/return null;/);
+    expect(REPORT).toMatch(/const compensationAvailable = coupons !== null;/);
   });
 
-  it('refused, the Compensation column is HIDDEN and the rest shows (owner, 2026-11-12)', () => {
-    const after = REPORT.slice(REPORT.indexOf('fields: [...BREAKDOWN_COUPON_FIELDS]'));
-    // The refusal is told apart from "no coupons": null, not an empty list.
-    expect(after.slice(0, 800)).toMatch(/return null;/);
-    expect(REPORT).toMatch(/const compensationAvailable = coupons !== null;/);
-    expect(REPORT).toMatch(/compensationAvailable,\n/);
-    const PAGE = read(
-      '../../../apps/admin-portal/src/features/report-exports/AgentReportsPage.tsx',
+  it('without coupon access every coupon column, the filter and the card are hidden', () => {
+    expect(PAGE).toMatch(
+      /COUPON_DATA_COLUMNS: readonly ComplaintColumnKey\[\] = \[\s*'compensation',\s*'couponValue',\s*'couponPercent',\s*\]/,
     );
-    expect(PAGE).toMatch(/compensationAvailable \|\| k !== 'compensation'/);
+    expect(PAGE).toMatch(/compensationAvailable \|\| !COUPON_DATA_COLUMNS\.includes\(k\)/);
     expect(PAGE).toMatch(/compensationAvailable=\{data\.compensationAvailable !== false\}/);
     expect(PAGE).toMatch(/\{compensationAvailable && \(\s*<FilterSelect/);
+    expect(PAGE).toMatch(/\{compensationAvailable && \(\s*<ReportKpi/);
   });
 });
