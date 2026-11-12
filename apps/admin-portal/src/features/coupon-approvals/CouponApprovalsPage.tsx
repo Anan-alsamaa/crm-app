@@ -32,10 +32,6 @@ import {
   normalizePhone,
   type StoreIndex,
   normalizeOrderId,
-  couponEditBlock,
-  couponIsExpired,
-  defaultCouponDates,
-  replacementTermsProblem,
   couponRaisedFromLabel,
   type CouponReplacementTerms,
 } from '@yiji/shared-types';
@@ -54,11 +50,7 @@ import {
 } from './api.js';
 import { correctionOf, useCorrectionStamps, type CorrectionStamp } from './correction-stamps.js';
 import { PolicyPills } from './PolicyPills.js';
-import {
-  useCouponReplacements,
-  useReplaceCoupon,
-  type CouponReplacementLink,
-} from './replacements.js';
+import { useCouponReplacements, type CouponReplacementLink } from './replacements.js';
 
 /**
  * The supervisor's queue: every coupon an agent wants to give away, decided one
@@ -422,240 +414,8 @@ export function termsFromEdits(row: CouponApprovalRow, e: TermEdits): CouponRepl
   };
 }
 
-/**
- * EDIT AN APPROVED COUPON (owner, 2026-10-27) - the amend form, reused, in
- * REPLACE mode: Save creates a new coupon with these terms and a fresh code,
- * and the workers take the old one out of the customer's Yiji app before the
- * new one is sent. Applies at once (no second approval). A coupon the customer
- * already used is refused by the workers, and nothing changes.
- */
-function ReplaceCouponForm({ row, onClose }: { row: CouponApprovalRow; onClose: () => void }) {
-  const { t } = useTranslation();
-  const { user } = useAuth();
-  const replace = useReplaceCoupon();
-  const expired = couponIsExpired(row.valid_to, new Date());
-  const [edits, setEdits] = useState<TermEdits>(() => {
-    const seeded = seedEdits(row);
-    // An expired coupon is replaced by a VALID one: fresh dates to start from.
-    if (!expired) return seeded;
-    const d = defaultCouponDates(new Date());
-    return { ...seeded, valid_from: d.valid_from, valid_to: d.valid_to };
-  });
-  const [reason, setReason] = useState('');
-  const setEdit = (k: keyof TermEdits, v: string) =>
-    setEdits((e) => withAutoLimit(e, { ...e, [k]: v }, k));
-  const terms = termsFromEdits(row, edits);
-  const problem = replacementTermsProblem(terms);
-  const pctNow = isPercentageCategory(edits.discount_category);
-
-  const save = () =>
-    replace.mutate(
-      { old: row, terms, reason, editorId: user?.id ?? null },
-      {
-        onSuccess: (r) => {
-          if (r.state === 'done') {
-            toast.success(
-              t('couponApprovals.replaceDone', {
-                defaultValue:
-                  'Coupon edited — {{code}} replaces {{old}} and is on its way to the customer.',
-                code: r.code,
-                old: row.coupon_code ?? '—',
-              }),
-            );
-            onClose();
-          } else if (r.state === 'refused') {
-            toast.error(
-              t('couponApprovals.replaceRefused', { defaultValue: 'The coupon was not changed' }),
-              { description: r.note ?? undefined, durationMs: 0 },
-            );
-            onClose();
-          } else {
-            toast.success(
-              t('couponApprovals.replaceWorking', {
-                defaultValue:
-                  'Edit sent — still swapping the coupon in the customer’s app. This card updates when it is done.',
-              }),
-            );
-            onClose();
-          }
-        },
-        onError: (err) =>
-          toast.error(
-            t('couponApprovals.replaceFailed', { defaultValue: 'Could not edit this coupon' }),
-            { description: err instanceof Error ? err.message : undefined },
-          ),
-      },
-    );
-
-  return (
-    <div className="mt-4 space-y-3 border-t border-foreground/[0.07] pt-3.5">
-      <p className="text-xs font-semibold text-foreground">
-        {t('couponApprovals.replaceTitle', { defaultValue: 'Edit this approved coupon' })}
-      </p>
-      <p className="text-2xs leading-relaxed text-muted-foreground">
-        {t('couponApprovals.replaceHint', {
-          defaultValue:
-            'Saving applies at once: a new coupon with a new code replaces this one, and if this one is already in the customer’s Yiji app it is taken out first. A coupon the customer already used cannot be edited. This one is kept as history.',
-        })}
-      </p>
-      {expired && (
-        <p role="note" className={NOTICE}>
-          <InfoIcon size={14} className="mt-0.5 shrink-0 text-foreground/70" aria-hidden />
-          {t('couponApprovals.replaceExpired', {
-            defaultValue:
-              'This coupon expired on {{date}}. Editing it creates a fresh, valid coupon — check the new dates.',
-            date: (row.valid_to ?? '').slice(0, 10),
-          })}
-        </p>
-      )}
-      <div className="grid w-full gap-3 rounded-xl bg-secondary/40 p-3.5 ring-1 ring-inset ring-foreground/[0.05] sm:grid-cols-2 lg:grid-cols-3">
-        <EditField
-          label={t('coupons.code', { defaultValue: 'Coupon code' })}
-          value={t('couponApprovals.replaceNewCode', { defaultValue: 'A new code is generated' })}
-          onChange={() => undefined}
-          disabled
-        />
-        <EditField
-          label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
-          value={edits.title}
-          onChange={(v) => setEdit('title', v)}
-        />
-        <EditField
-          label={t('lists.issuingSide', { defaultValue: 'Issuing side' })}
-          value={edits.issuing_side}
-          onChange={(v) => setEdit('issuing_side', v)}
-        />
-        <EditField
-          label={t('lists.deliveryType', { defaultValue: 'Delivery types' })}
-          value={edits.delivery_type}
-          onChange={(v) => setEdit('delivery_type', v)}
-          hint={t('couponApprovals.deliveryEditHint', {
-            defaultValue: 'Comma-separated, or "All".',
-          })}
-        />
-        <EditField
-          label={t('lists.couponType', { defaultValue: 'Coupon type' })}
-          value={edits.coupon_type}
-          onChange={(v) => setEdit('coupon_type', v)}
-        />
-        <EditField
-          label={t('lists.discountCategory', { defaultValue: 'Discount category' })}
-          value={edits.discount_category}
-          onChange={(v) => setEdit('discount_category', v)}
-          hint={t('couponApprovals.categoryEditHint', {
-            defaultValue: '"Amount" or "Percentage" — decides what the value means.',
-          })}
-        />
-        <EditField
-          label={
-            pctNow
-              ? t('coupons.couponPercent', { defaultValue: 'Coupon percentage %' })
-              : t('coupons.couponValue', { defaultValue: 'Coupon value (SAR)' })
-          }
-          type="number"
-          value={edits.amount}
-          onChange={(v) => setEdit('amount', v)}
-        />
-        <EditField
-          label={t('performance.from', { defaultValue: 'From' })}
-          type="date"
-          value={edits.valid_from}
-          onChange={(v) => setEdit('valid_from', v)}
-        />
-        <EditField
-          label={t('performance.to', { defaultValue: 'To' })}
-          type="date"
-          value={edits.valid_to}
-          onChange={(v) => setEdit('valid_to', v)}
-        />
-        {pctNow && (
-          <EditField
-            label={t('coupons.maxDiscount', { defaultValue: 'Maximum discount' })}
-            type="number"
-            value={edits.max_discount}
-            onChange={(v) => setEdit('max_discount', v)}
-          />
-        )}
-        <EditField
-          label={t('coupons.usageLimit', { defaultValue: 'Number of uses' })}
-          type="number"
-          value={edits.usage_limit}
-          onChange={(v) => setEdit('usage_limit', v)}
-        />
-        <EditField
-          label={t('coupons.totalLimit.label', { defaultValue: 'Total discount limit (SAR)' })}
-          type="number"
-          value={edits.total_discount_limit}
-          onChange={(v) => setEdit('total_discount_limit', v)}
-        />
-        <EditField
-          label={t('coupons.itemShort', { defaultValue: 'Item' })}
-          value={edits.item_name}
-          onChange={(v) => setEdit('item_name', v)}
-        />
-        <div className="sm:col-span-2 lg:col-span-3">
-          <EditField
-            label={t('couponApprovals.description', { defaultValue: 'Description' })}
-            value={edits.reason}
-            onChange={(v) => setEdit('reason', v)}
-          />
-        </div>
-        <div className="sm:col-span-2 lg:col-span-3">
-          <label
-            htmlFor={`replace-reason-${row.id}`}
-            className="text-2xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
-          >
-            {t('couponApprovals.editReason', { defaultValue: 'Reason for the change' })}
-          </label>
-          <Input
-            id={`replace-reason-${row.id}`}
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder={t('couponApprovals.replaceReasonPlaceholder', {
-              defaultValue: 'Why is this approved coupon being changed?',
-            })}
-            className="mt-1 h-9 w-full"
-          />
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          size="sm"
-          loading={replace.isPending}
-          disabled={replace.isPending || !!problem || !reason.trim()}
-          title={
-            problem ??
-            (reason.trim()
-              ? undefined
-              : t('couponApprovals.editReasonRequired', {
-                  defaultValue: 'Give a reason for the change first.',
-                }))
-          }
-          onClick={save}
-        >
-          {replace.isPending
-            ? t('couponApprovals.replaceApplying', { defaultValue: 'Applying…' })
-            : t('couponApprovals.replaceSave', { defaultValue: 'Save and replace' })}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={replace.isPending}
-          onClick={onClose}
-        >
-          {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
-        </Button>
-        {problem && (
-          <span role="alert" className="text-2xs text-destructive">
-            {problem}
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
+/* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): an approved coupon
+   is never changed after it is assigned. */
 
 /**
  * THE BRANCH, IN NAMES (owner spec §18, 2026-09-29).
@@ -722,21 +482,9 @@ function Row({
    */
   const { can: hasPrivilege } = useAuth();
   const canDecide = hasPrivilege('approve_coupons');
-  /* EDIT AN APPROVED COUPON (owner, 2026-10-27): its own privilege - WeCare
-     Supervisor / WeCare Admin / Administrator by default. */
-  const canEditApproved = hasPrivilege('edit_approved_coupons');
-  const [replacing, setReplacing] = useState(false);
   const replacedBy = replacement?.replacedBy ?? null;
   const replaces = replacement?.replaces ?? null;
   const isReplaced = Boolean(replacedBy);
-  /* Why it cannot be edited (null = it can). Read from what the card already
-     holds - "was it used?" is asked by the workers, on Save, never here. */
-  const editBlock = couponEditBlock({
-    status: row.status,
-    removal_status: row.removal_status ?? null,
-    replaced_by: replacedBy?.id ?? null,
-  });
-  const canReplace = canEditApproved && editBlock === null;
   /* The store master, for turning Yiji's restaurant id into a name. Cached by
      React Query and shared with every other card, so a queue of twenty is one
      fetch. */
@@ -1044,21 +792,6 @@ function Row({
         </div>
         {/* Above the overlay AND clickable: deciding must not be a side effect
             of trying to expand, nor the other way round. */}
-        {approvedNotPending && canReplace && !expanded && (
-          <div className="relative flex shrink-0 items-center gap-1.5">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setExpanded(true);
-                setReplacing(true);
-              }}
-            >
-              {t('couponApprovals.editCoupon', { defaultValue: 'Edit coupon' })}
-            </Button>
-          </div>
-        )}
         {pending && canDecide && !rejecting && !expanded && (
           <div className="relative flex shrink-0 items-center gap-1.5">
             <Button
@@ -1596,24 +1329,6 @@ function Row({
                 code: replaces.code ?? '—',
               })}
               {replacement?.reason ? ` — ${replacement.reason}` : ''}
-            </p>
-          )}
-          {approvedNotPending &&
-            canReplace &&
-            (replacing ? (
-              <ReplaceCouponForm row={row} onClose={() => setReplacing(false)} />
-            ) : (
-              <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-foreground/[0.07] pt-3.5">
-                <Button type="button" size="sm" variant="ghost" onClick={() => setReplacing(true)}>
-                  {t('couponApprovals.editCoupon', { defaultValue: 'Edit coupon' })}
-                </Button>
-              </div>
-            ))}
-          {approvedNotPending && canEditApproved && editBlock === 'used' && (
-            <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              {t('couponApprovals.cannotEditUsed', {
-                defaultValue: 'The customer already used this coupon, so it cannot be edited.',
-              })}
             </p>
           )}
 

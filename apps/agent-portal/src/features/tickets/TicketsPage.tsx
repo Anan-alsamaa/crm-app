@@ -110,11 +110,7 @@ import {
   wantsCouponRemoval,
 } from './TicketCompensation.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
-import {
-  canOfferCouponEdit,
-  CouponReplacementPill,
-  EditApprovedCouponButton,
-} from './EditApprovedCoupon.js';
+import { CouponReplacementPill } from './EditApprovedCoupon.js';
 import { CouponMaintenancePill } from '../coupons/CouponMaintenance.js';
 import { useCouponsUnderMaintenance } from '../coupons/maintenance.js';
 import { useVendorDirectory, VendorBadge } from '../../lib/vendors.js';
@@ -2419,10 +2415,6 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
 function TicketCoupons({ ticketId }: { ticketId: string }) {
   const { t } = useTranslation();
   const coupons = useTicketCoupons(ticketId);
-  /* Owner, 2026-10-27: edit an APPROVED coupon (replaces it, also in the
-     customer's Yiji app) - WeCare Supervisor / Admin / Administrator. */
-  const { can } = useAuth();
-  const canEditApproved = can('edit_approved_coupons');
   const rows = coupons.data ?? [];
   if (rows.length === 0) return null;
 
@@ -2545,11 +2537,6 @@ function TicketCoupons({ ticketId }: { ticketId: string }) {
               <p dir="auto" className="mt-2 text-xs text-muted-foreground">
                 {[c.removed_reason, c.removal_detail].filter(Boolean).join(' — ')}
               </p>
-            )}
-            {canOfferCouponEdit(c, canEditApproved) && (
-              <div className="mt-2 flex justify-end">
-                <EditApprovedCouponButton coupon={c} />
-              </div>
             )}
           </li>
         ))}

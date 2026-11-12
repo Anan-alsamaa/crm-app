@@ -270,7 +270,8 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   manage_ticket_compensation: holds('approve_coupons'),
   // Owner, 2026-10-27: exactly these three roles until the owner ticks it
   // for another.
-  edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
+  /* RETIRED (owner, 2026-11-12): editing an approved coupon was removed. */
+  edit_approved_coupons: never,
   // Owner, 2026-10-27: the Administrator and WeCare Admin until ticked for another.
   manage_compensation_rules: nameIn('administrator', 'wecare admin'),
   // The Dashboard page showed its Agent tab to whoever could open the page

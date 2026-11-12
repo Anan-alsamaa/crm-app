@@ -23,8 +23,6 @@ import pino from 'pino';
 import {
   CouponPushJob,
   CouponRemoveJob,
-  CouponReplaceJob,
-  CouponEditJob,
   ImportJob,
   normalizePhone,
   phoneCustomerId,
@@ -968,45 +966,18 @@ async function main(): Promise<void> {
    * same code, new terms - on Yiji and on its row. Same privilege as before;
    * WHO comes from the verified token. The worker re-checks everything.
    */
-  app.post('/jobs/coupon-edit', async (req, reply) => {
-    const identity = await requirePrivilege(req, reply, 'edit_approved_coupons');
-    if (!identity) return reply;
-    const parsed = CouponEditJob.omit({ editedBy: true }).safeParse(req.body);
-    if (!parsed.success)
-      return reply.code(400).send({ ok: false, error: 'invalid coupon edit payload' });
-    const jobId = producer.enqueueCouponEdit
-      ? await producer.enqueueCouponEdit({ ...parsed.data, editedBy: identity.id })
-      : null;
-    if (jobId === null)
-      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
-    logger.info(
-      { jobId, couponApprovalId: parsed.data.couponApprovalId, by: identity.id },
-      'coupon edit (in place) enqueued',
-    );
-    return reply.send({ ok: true, jobId });
-  });
-  app.post('/jobs/coupon-replace', async (req, reply) => {
-    const identity = await requirePrivilege(req, reply, 'edit_approved_coupons');
-    if (!identity) return reply;
-    const parsed = CouponReplaceJob.omit({ editedBy: true }).safeParse(req.body);
-    if (!parsed.success || parsed.data.couponApprovalId === parsed.data.replacementId)
-      return reply.code(400).send({ ok: false, error: 'invalid coupon edit payload' });
-    const jobId = producer.enqueueCouponReplace
-      ? await producer.enqueueCouponReplace({ ...parsed.data, editedBy: identity.id })
-      : null;
-    if (jobId === null)
-      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
-    logger.info(
-      {
-        jobId,
-        couponApprovalId: parsed.data.couponApprovalId,
-        replacementId: parsed.data.replacementId,
-        by: identity.id,
-      },
-      'coupon edit (replacement) enqueued',
-    );
-    return reply.send({ ok: true, jobId });
-  });
+  /* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): an approved
+     coupon is never changed after it is assigned. Refused for everyone -
+     nothing is queued, nothing on Yiji changes. */
+  app.post('/jobs/coupon-edit', async (_req, reply) =>
+    reply.code(410).send({ ok: false, error: 'editing an approved coupon was removed' }),
+  );
+  /* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): an approved
+     coupon is never changed after it is assigned. Refused for everyone -
+     nothing is queued, nothing on Yiji changes. */
+  app.post('/jobs/coupon-replace', async (_req, reply) =>
+    reply.code(410).send({ ok: false, error: 'editing an approved coupon was removed' }),
+  );
   // Agent-triggered: "I just assigned this conversation/ticket — tell the
   // assignee." Any staff member may call this, so the body carries NO recipient,
   // title or body (that would be a spam/phishing vector). The client may only

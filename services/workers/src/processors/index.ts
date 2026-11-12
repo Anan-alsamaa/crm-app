@@ -23,10 +23,8 @@ import {
   type CouponPushJob,
   type CouponRemoveJob,
   COUPON_REMOVE_JOB_NAME,
-  type CouponReplaceJob,
   COUPON_REPLACE_JOB_NAME,
   COUPON_EDIT_JOB_NAME,
-  type CouponEditJob,
   type CustomerPushJob,
   errorText,
   createYijiCouponOrdersReader,
@@ -39,7 +37,6 @@ import {
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
 import { envKey } from '@yiji/shared-config/redis';
-import { processCouponEditJob } from './coupon-edit.js';
 import { processSlaJob, type SlaDeps } from './sla.js';
 import { processNotificationJob, type NotifDeps } from './notifications.js';
 import { processAiJob, type AiDeps } from './ai.js';
@@ -54,7 +51,6 @@ import { processReportJob, type ReportsDeps } from './reports.js';
 import { processCouponPushJob } from './coupon-push.js';
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
-import { processCouponReplaceJob } from './coupon-replace.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
 import { purgeYijiUsage, YIJI_USAGE_RETENTION_JOB } from './yiji-usage.js';
 import {
@@ -578,31 +574,13 @@ export const processors: Record<QueueName, Processor> = {
     /* Owner, 2026-10-27: an APPROVED coupon edited = replaced. Same queue, by
        job NAME; reuses the removal's credentials (admin token for
        RemoveUserCoupon) and queues the replacement's push itself. */
-    /* Edit an approved coupon IN PLACE (owner, 2026-11-11): same coupon, same code. */
-    if (job.name === COUPON_EDIT_JOB_NAME) {
-      await processCouponEditJob(job as Job<CouponEditJob>, {
-        directus: deps.directus,
-        logger: deps.logger,
-        remover: couponRemover,
-        ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
-      });
-      return;
-    }
-    if (job.name === COUPON_REPLACE_JOB_NAME) {
-      await processCouponReplaceJob(job as Job<CouponReplaceJob>, {
-        directus: deps.directus,
-        logger: deps.logger,
-        remover: couponRemover,
-        ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
-        /* NO custom jobId (BullMQ ignores an add whose id still exists - see
-           the sweep); the push re-reads the row and its receipt instead. */
-        enqueuePush: (couponApprovalId) =>
-          deps.queues[QUEUES.coupons].add(
-            'push',
-            { couponApprovalId },
-            { removeOnComplete: true, removeOnFail: true },
-          ),
-      });
+    /* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): a queued edit or
+       replace job left from before is dropped - it never touches Yiji. */
+    if (job.name === COUPON_EDIT_JOB_NAME || job.name === COUPON_REPLACE_JOB_NAME) {
+      deps.logger.warn(
+        { name: job.name, id: (job.data as { couponApprovalId?: string })?.couponApprovalId },
+        'coupon edit job dropped - editing an approved coupon was removed',
+      );
       return;
     }
     /*

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
@@ -126,100 +125,14 @@ beforeEach(() => {
   commerceCalls.length = 0;
 });
 
-describe('Edit coupon on an approved card', () => {
-  it('is offered to a holder of edit_approved_coupons', () => {
-    renderPage([approved]);
-    expect(screen.getByRole('button', { name: 'Edit coupon' })).toBeInTheDocument();
-  });
-
-  it('is not offered without the privilege', () => {
-    grants.edit = false;
+/* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): an approved coupon
+   is never changed after it is assigned - not even by a holder of the old
+   privilege, and never by the Yiji-unsafe remove-and-reissue. */
+describe('editing an approved coupon was removed', () => {
+  it('no Edit coupon on an approved card, even with the old privilege', () => {
+    grants.edit = true;
     renderPage([approved]);
     expect(screen.queryByRole('button', { name: 'Edit coupon' })).not.toBeInTheDocument();
-  });
-
-  it('is not offered on a pending request, a replaced coupon or one already used', () => {
-    renderPage([
-      { ...approved, id: 'p', status: 'pending', ticket: { id: 't2', subject: 'Pending one' } },
-      { ...approved, id: 'u', removal_status: 'used', ticket: { id: 't3', subject: 'Used one' } },
-    ]);
-    expect(screen.queryByRole('button', { name: 'Edit coupon' })).not.toBeInTheDocument();
-  });
-
-  it('a replaced coupon says so and offers no edit', () => {
-    replacements.links = new Map([
-      [
-        'ca1',
-        {
-          id: 'ca1',
-          status: 'assigned',
-          replaces: null,
-          replacedBy: { id: 'ca2', code: 'OPS-NEW22222' },
-          reason: 'typo',
-          superseded: true,
-        },
-      ],
-    ]);
-    renderPage([approved]);
-    expect(screen.getByText('Replaced by OPS-NEW22222')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Edit coupon' })).not.toBeInTheDocument();
-  });
-
-  it('an admin-typed limit is kept when the value changes afterwards', async () => {
-    const user = userEvent.setup();
-    renderPage([approved]);
-    await user.click(screen.getByRole('button', { name: 'Edit coupon' }));
-    const limit = screen.getByLabelText('Total discount limit (SAR)') as HTMLInputElement;
-    await user.clear(limit);
-    await user.type(limit, '70');
-    const value = screen.getByLabelText('Coupon value (SAR)');
-    await user.clear(value);
-    await user.type(value, '30');
-    expect(limit.value).toBe('70');
-  });
-
-  it('Save needs a reason, then hands over the whole edited coupon - and never calls Yiji', async () => {
-    const user = userEvent.setup();
-    renderPage([approved]);
-    await user.click(screen.getByRole('button', { name: 'Edit coupon' }));
-    const save = screen.getByRole('button', { name: 'Save and replace' });
-    expect(save).toBeDisabled();
-
-    const value = screen.getByLabelText('Coupon value (SAR)');
-    await user.clear(value);
-    await user.type(value, '40');
-    await user.type(
-      screen.getByPlaceholderText('Why is this approved coupon being changed?'),
-      'Wrong amount',
-    );
-    /* Private: the limit FOLLOWS the value (owner, 2026-11-08: uses x maximum
-       discount) - 25 was the calculation, so it becomes 40 by itself. */
-    const limit = screen.getByLabelText('Total discount limit (SAR)') as HTMLInputElement;
-    expect(limit.value).toBe('40');
-    expect(save).toBeEnabled();
-    await user.click(save);
-
-    expect(replacements.mutate).toHaveBeenCalledTimes(1);
-    const [input] = replacements.mutate.mock.calls[0]!;
-    expect(input).toMatchObject({
-      reason: 'Wrong amount',
-      editorId: 'sup-1',
-      old: { id: 'ca1' },
-      terms: {
-        coupon_value: 40,
-        max_discount: 40,
-        coupon_percent: null,
-        total_discount_limit: 40,
-        issuing_side: 'Operations',
-      },
-    });
-    expect(commerceCalls).toEqual([]);
-  });
-
-  it('an EXPIRED coupon says editing creates a fresh one', async () => {
-    const user = userEvent.setup();
-    renderPage([{ ...approved, valid_to: '2026-01-01' }]);
-    await user.click(screen.getByRole('button', { name: 'Edit coupon' }));
-    expect(screen.getByText(/expired on 2026-01-01/)).toBeInTheDocument();
+    expect(replacements.mutate).not.toHaveBeenCalled();
   });
 });
