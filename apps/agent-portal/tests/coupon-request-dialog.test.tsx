@@ -711,12 +711,15 @@ describe('CouponRequestDialog - editing an approved coupon', () => {
       editBlock: (d: { coupon_value?: number | null }) =>
         d.coupon_value === 25 ? 'Nothing changed yet - change a value to save.' : null,
     });
-    await userEvent.type(
-      screen.getByLabelText('Why is this approved coupon being changed?'),
-      'Customer called back',
-    );
+    /* Whole value in one event: typed key by key, CI's slower runner had only
+       "C" in the reason when Save was pressed (red on 2026-11-12, twice). */
+    fireEvent.change(screen.getByLabelText('Why is this approved coupon being changed?'), {
+      target: { value: 'Customer called back' },
+    });
     const save = screen.getByRole('button', { name: 'Save changes' });
-    expect(screen.getByText('Nothing changed yet - change a value to save.')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByText('Nothing changed yet - change a value to save.')).toBeInTheDocument(),
+    );
     expect(save).toBeDisabled();
     /* ONE change event, not keystrokes: typing "30" passes through "3",
        which already differs from 25, and on CI's slower runner Save could be
