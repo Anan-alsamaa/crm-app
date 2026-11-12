@@ -12,6 +12,7 @@ import {
   couponTermsVersion,
   editedCouponTerms,
   replacementTermsProblem,
+  YIJI_REACH_LIMIT,
   type CouponEditJob,
   type CouponReplacementTerms,
   type EditableCouponTerm,
@@ -232,7 +233,13 @@ export async function processCouponEditJob(
     /* Another change to this coupon (a send, a removal, another edit) is
        running: wait for it (BullMQ retries); on the last try, say so. */
     if (!lastAttempt) throw new Error('another change to this coupon is running');
-    await settle(deps, id, job.data.editRequestId, 'refused', BUSY);
+    /* A row mid-edit (frozen) keeps its mark - it is what the recovery looks
+       for; overwriting it would leave the coupon switched off on Yiji for
+       good (review 2026-11-12). */
+    if (!(await isFrozen(deps, id))) {
+      await settle(deps, id, job.data.editRequestId, 'refused', BUSY);
+    }
+    deps.logger.warn({ id }, 'coupon edit gave up: another change held the coupon');
     return 'refused';
   }
   try {
@@ -240,6 +247,17 @@ export async function processCouponEditJob(
   } finally {
     await deps.lock.release(key).catch(() => undefined);
   }
+}
+
+/** Is an edit of this coupon mid-way (switched off on Yiji)? */
+export async function isFrozen(
+  deps: Pick<CouponEditDeps, 'directus'>,
+  id: string,
+): Promise<boolean> {
+  const r = (await deps.directus
+    .request(readItem('coupon_approvals' as never, id, { fields: ['edit_state'] } as never))
+    .catch(() => null)) as { edit_state?: string | null } | null;
+  return r?.edit_state === EDIT_FROZEN;
 }
 
 const BUSY = 'Not changed: another change to this coupon was still running. Try again in a minute.';
@@ -290,9 +308,14 @@ async function editOnce(
   if (!resuming) {
     /* 1. What may be edited at all. */
     if (row.edit_state === EDIT_FROZEN) {
-      return refuse(
-        'Not changed: another edit of this coupon is still finishing. Try again shortly.',
+      /* NOT written to the row: the frozen mark belongs to the edit still
+         finishing (and to the recovery). This editor's screen times out to
+         "still working" instead. */
+      logger.warn(
+        { id, editRequestId, other: row.edit_request_id },
+        'coupon edit refused: another edit is finishing',
       );
+      return 'refused';
     }
     if (couponDecision(row.status) !== 'approved') {
       return refuse('Not changed: only an approved coupon can be edited.');
@@ -321,6 +344,10 @@ async function editOnce(
       );
     }
   }
+
+  /* Removed, replaced or used WHILE this edit was interrupted (review
+     2026-11-12): never write new terms onto it - put Yiji back and stop. */
+  const resumeBlock = resuming ? couponEditBlock(row as never) : null;
 
   /* 3. The new terms pass the same checks as a new request. */
   const before = couponTermsOf(row as never);
@@ -399,13 +426,35 @@ async function editOnce(
     /* 5. Yiji must show the coupon as the CRM knows it - or, on a resume, as
           the CRM is about to know it. */
     const current = await remover.readCoupon(yijiId);
+    const resumeStatus = num(current?.status);
+    /* (4) Deleted (1) or expired (6) on Yiji during the edit: never brought
+       back to life - left exactly as Yiji has it. */
+    if (resuming && (resumeStatus === 1 || resumeStatus === 6)) {
+      return refuse(
+        resumeStatus === 1
+          ? 'Not changed: the coupon was deleted on Yiji during the edit; it was left deleted.'
+          : 'Not changed: the coupon expired on Yiji during the edit; it was left as it is.',
+      );
+    }
+    if (resumeBlock && current && current.code === row.coupon_code) {
+      if (!savedInCrm) await putBack(current);
+      return refuse(
+        `Not changed: the coupon was ${resumeBlock === 'used' ? 'used' : 'removed or replaced'} while the edit was interrupted; Yiji was put back as it was.`,
+      );
+    }
     if (!current || current.code !== row.coupon_code) {
       return refuse(
         `Not changed: Yiji coupon ${yijiId} is not ${row.coupon_code ?? 'this coupon'} (deleted or changed on Yiji).`,
       );
     }
     const status = num(current.status);
-    if (legacyPool && 'reachLimit' in current) wantedOld.reachLimit = current.reachLimit;
+    /* A pre-rule coupon's pool: Yiji's own number, read BEFORE anything
+       changed; on a resume Yiji may already hold the new pool, so the known
+       pre-rule default is used (all 24 such coupons on prod: 10000). */
+    if (legacyPool) {
+      wantedOld.reachLimit =
+        !resuming && 'reachLimit' in current ? current.reachLimit : YIJI_REACH_LIMIT;
+    }
     if (!resuming) {
       if (status !== YIJI_COUPON_ON) {
         return refuse(
@@ -631,10 +680,11 @@ export async function recoverStuckCouponEdits(
         const yijiId = String(row.yiji_coupon_id);
         const wanted = yijiTermsOf(row, couponTermsOf(row as never), deps.redirectCouponsTo);
         const current = await remover.readCoupon(yijiId);
-        if (current && couponNumber(row.total_discount_limit) === null && 'reachLimit' in current) {
-          wanted.reachLimit = current.reachLimit; // the pre-rule pool, as Yiji has it
+        if (couponNumber(row.total_discount_limit) === null) {
+          wanted.reachLimit = YIJI_REACH_LIMIT; // the pre-rule pool (all such coupons: 10000)
         }
-        if (current && current.code === row.coupon_code) {
+        const st = num(current?.status);
+        if (current && current.code === row.coupon_code && st !== 1 && st !== 6) {
           if (yijiMismatch(current, wanted).length) {
             await remover.updateCoupon(updateBody(current, wanted));
           }
