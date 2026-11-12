@@ -60,24 +60,17 @@ const OLD = {
   delivery_excluded_reason: null,
 };
 
-describe('edit_approved_coupons - WeCare Supervisor, WeCare Admin, Administrator', () => {
-  it('defaults on for exactly those three roles', () => {
-    expect(effectivePrivileges({}, 'WeCare Supervisor').edit_approved_coupons).toBe(true);
-    expect(effectivePrivileges({}, 'WeCare Admin').edit_approved_coupons).toBe(true);
-    expect(effectivePrivileges(null, 'Administrator').edit_approved_coupons).toBe(true);
-    expect(
-      effectivePrivileges({ approve_coupons: true }, 'WeCare Agent').edit_approved_coupons,
-    ).toBe(false);
-    expect(effectivePrivileges({ approve_coupons: true }, 'CEO').edit_approved_coupons).toBe(false);
-  });
-  it('a stored switch wins either way', () => {
-    expect(
-      effectivePrivileges({ edit_approved_coupons: false }, 'WeCare Supervisor')
-        .edit_approved_coupons,
-    ).toBe(false);
-    expect(
-      effectivePrivileges({ edit_approved_coupons: true }, 'WeCare Agent').edit_approved_coupons,
-    ).toBe(true);
+describe('edit_approved_coupons - RETIRED (owner, 2026-11-12)', () => {
+  it('is off for every role, the Administrator included', () => {
+    for (const role of [
+      'WeCare Supervisor',
+      'WeCare Admin',
+      'Administrator',
+      'WeCare Agent',
+      'CEO',
+    ]) {
+      expect(effectivePrivileges({}, role).edit_approved_coupons).toBe(false);
+    }
   });
 });
 

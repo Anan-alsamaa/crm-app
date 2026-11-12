@@ -15,31 +15,26 @@ const read = (rel: string) => {
 const INDEX = read('src/index.ts');
 const QUEUE = read('src/queue.ts');
 
-const route = (() => {
-  const start = INDEX.indexOf("app.post('/jobs/coupon-replace'");
+/* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): both entry points
+   refuse everyone and queue nothing. */
+const routeOf = (path: string) => {
+  const start = INDEX.indexOf(`app.post('${path}'`);
   expect(start).toBeGreaterThan(0);
-  return INDEX.slice(start, INDEX.indexOf('\n  });', start));
-})();
+  return INDEX.slice(start, INDEX.indexOf('\n  );', start) + 5);
+};
 
-describe('/jobs/coupon-replace', () => {
-  it('is gated on edit_approved_coupons', () => {
-    expect(route).toMatch(/requirePrivilege\(req, reply, 'edit_approved_coupons'\)/);
-  });
-
-  it('takes editedBy from the verified identity, not the body', () => {
-    expect(route).toMatch(/omit\(\{ editedBy: true \}\)/);
-    expect(route).toMatch(/editedBy: identity\.id/);
-  });
-
-  it('refuses a coupon that names itself as its own replacement', () => {
-    expect(route).toMatch(/couponApprovalId === parsed\.data\.replacementId/);
-  });
-
-  it('queues the worker job by NAME, without a custom jobId (BullMQ swallows re-adds)', () => {
-    const fn = QUEUE.slice(QUEUE.indexOf('async enqueueCouponReplace(job'));
-    const body = fn.slice(0, fn.indexOf('\n  }'));
-    expect(body).toMatch(/this\.coupons\.add\(COUPON_REPLACE_JOB_NAME/);
-    expect(body).not.toMatch(/^\s*jobId:/m);
+describe('editing an approved coupon was removed', () => {
+  for (const path of ['/jobs/coupon-replace', '/jobs/coupon-edit']) {
+    it(`${path} answers 410 to everyone and queues nothing`, () => {
+      const r = routeOf(path);
+      expect(r).toMatch(/reply\.code\(410\)/);
+      expect(r).not.toMatch(/enqueue/);
+      expect(r).not.toMatch(/requirePrivilege/);
+    });
+  }
+  it('the gateway no longer queues edit or replace jobs anywhere', () => {
+    expect(INDEX).not.toMatch(/enqueueCouponReplace\(|enqueueCouponEdit\(/);
+    expect(QUEUE).toMatch(/async enqueueCouponReplace/); // the queue method may stay, unused
   });
 });
 
