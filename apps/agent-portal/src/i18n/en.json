@@ -1019,7 +1019,7 @@
     "amountLabel": "Amount",
     "maxShort": "Max discount",
     "usesShort": "Uses",
-    "replaceHint": "Saving applies at once: {{code}} keeps its code and the customer sees the new values on the same coupon in their Yiji app. A coupon the customer already used cannot be edited.",
+    "replaceHint": "Saving applies at once: {{code}} keeps its code and the customer sees the new values on the same coupon in their Yiji app. For a few seconds while it changes the coupon is switched off, so it can never be used half-edited. A coupon the customer already used cannot be edited.",
     "replaceNewCode": "The code stays the same: the customer keeps this coupon with the new values.",
     "replaceReason": "Why is this approved coupon being changed?",
     "replaceReasonTitle": "Reason for the change",
@@ -1054,7 +1054,8 @@
     "general": {
       "ack": "General coupon: anyone who has the code can add it to their own Yiji account. The total discount limit below is the most it can give in total, across everyone. I understand.",
       "ackNeeded": "Confirm the General coupon warning to send it."
-    }
+    },
+    "editNothingChanged": "Nothing changed yet - change a value to save."
   },
   "busy": {
     "on": "Busy",
