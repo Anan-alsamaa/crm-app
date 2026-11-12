@@ -718,15 +718,17 @@ describe('CouponRequestDialog - editing an approved coupon', () => {
     const save = screen.getByRole('button', { name: 'Save changes' });
     expect(screen.getByText('Nothing changed yet - change a value to save.')).toBeInTheDocument();
     expect(save).toBeDisabled();
-    const val = screen.getByLabelText(/coupon value/i);
-    await userEvent.clear(val);
-    await userEvent.type(val, '30');
-    await waitFor(() => expect(save).toBeEnabled(), { timeout: 5_000 });
+    /* ONE change event, not keystrokes: typing "30" passes through "3",
+       which already differs from 25, and on CI's slower runner Save could be
+       pressed mid-typing (red on 2026-11-12). */
+    fireEvent.change(screen.getByLabelText(/coupon value/i), { target: { value: '30' } });
+    await waitFor(() => expect(save).toBeEnabled(), { timeout: 10_000 });
+    expect(screen.queryByText('Nothing changed yet - change a value to save.')).toBeNull();
     await userEvent.click(save);
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ coupon_value: 30 }), {
-      changeReason: 'Customer called back',
-    });
-  }, 20_000);
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1), { timeout: 10_000 });
+    expect(onSave.mock.calls[0]![0]).toMatchObject({ coupon_value: 30 });
+    expect(onSave.mock.calls[0]![1]).toEqual({ changeReason: 'Customer called back' });
+  }, 30_000);
 
   it('says when the coupon being edited has expired', () => {
     renderDialog({
