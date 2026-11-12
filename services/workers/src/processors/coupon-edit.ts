@@ -436,7 +436,7 @@ async function editOnce(
     yijiCouponId = await remover.couponIdOfGrant(userId, grant);
     if (!yijiCouponId) {
       return refuse(
-        `Not changed: ${row.coupon_code ?? 'this coupon'} is no longer in the customer’s Yiji wallet (removed on Yiji).`,
+        `Not changed: ${row.coupon_code ?? 'this coupon'} is no longer in the customer’s Yiji wallet - it expired, was used or was removed on Yiji.`,
       );
     }
     /* Kept, so the next edit, the recovery and the audits find it directly. */
