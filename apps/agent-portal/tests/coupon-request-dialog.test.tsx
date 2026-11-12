@@ -691,7 +691,10 @@ describe('CouponRequestDialog - editing an approved coupon', () => {
       screen.getByLabelText('Why is this approved coupon being changed?'),
       'Wrong amount',
     );
-    expect(save).toBeEnabled();
+    /* WAIT for it: the form re-validates after the keystrokes, and under CI's
+       parallel load that settles a moment later (red on 2026-11-12, green
+       locally) - an immediate check races the render. */
+    await waitFor(() => expect(save).toBeEnabled());
     await userEvent.click(save);
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ coupon_value: 25 }), {
       changeReason: 'Wrong amount',
