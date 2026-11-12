@@ -1,0 +1,12 @@
+{
+  "name": "directus-extension-coupon-terms-guard",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Once a coupon is on Yiji, only the workers may change its terms - so the CRM and Yiji can never disagree.",
+  "directus:extension": {
+    "type": "hook",
+    "path": "index.js",
+    "source": "index.js",
+    "host": "^11.0.0"
+  }
+}

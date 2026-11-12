@@ -231,8 +231,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_compensation_reports: holds('approve_coupons'),
     delete_compensation: never,
     manage_ticket_compensation: holds('approve_coupons'),
-    /* RETIRED (owner, 2026-11-12): editing an approved coupon was removed. */
-    edit_approved_coupons: never,
+    /* Owner, 2026-11-12: back, made safe (edit in place). */
+    edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
     manage_compensation_rules: nameIn('administrator', 'wecare admin'),
     view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
     view_agent_reports: holds('view_all_chats'),

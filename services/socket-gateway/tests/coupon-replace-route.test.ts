@@ -15,26 +15,33 @@ const read = (rel: string) => {
 const INDEX = read('src/index.ts');
 const QUEUE = read('src/queue.ts');
 
-/* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): both entry points
-   refuse everyone and queue nothing. */
 const routeOf = (path: string) => {
   const start = INDEX.indexOf(`app.post('${path}'`);
   expect(start).toBeGreaterThan(0);
-  return INDEX.slice(start, INDEX.indexOf('\n  );', start) + 5);
+  const next = INDEX.indexOf('app.post(', start + 10);
+  return INDEX.slice(start, next > 0 ? next : undefined);
 };
 
-describe('editing an approved coupon was removed', () => {
-  for (const path of ['/jobs/coupon-replace', '/jobs/coupon-edit']) {
-    it(`${path} answers 410 to everyone and queues nothing`, () => {
-      const r = routeOf(path);
-      expect(r).toMatch(/reply\.code\(410\)/);
-      expect(r).not.toMatch(/enqueue/);
-      expect(r).not.toMatch(/requirePrivilege/);
-    });
-  }
-  it('the gateway no longer queues edit or replace jobs anywhere', () => {
-    expect(INDEX).not.toMatch(/enqueueCouponReplace\(|enqueueCouponEdit\(/);
+/* REPLACING (remove + issue a new code) was removed for good (owner,
+   2026-11-12): refused for everyone, nothing queued. */
+describe('replacing a coupon stays removed', () => {
+  it('/jobs/coupon-replace answers 410 to everyone and queues nothing', () => {
+    const r = routeOf('/jobs/coupon-replace');
+    expect(r).toMatch(/reply\.code\(410\)/);
+    expect(r.slice(0, r.indexOf('\n  );'))).not.toMatch(/enqueue/);
+    expect(INDEX).not.toMatch(/enqueueCouponReplace\(/);
     expect(QUEUE).toMatch(/async enqueueCouponReplace/); // the queue method may stay, unused
+  });
+});
+
+/* EDIT IN PLACE is back, made safe (owner, 2026-11-12). */
+describe('editing an approved coupon in place', () => {
+  it('is gated on its own privilege and takes WHO from the token, never the body', () => {
+    const r = routeOf('/jobs/coupon-edit');
+    expect(r).toMatch(/requirePrivilege\(req, reply, 'edit_approved_coupons'\)/);
+    expect(r).toMatch(/CouponEditJob\.omit\(\{ editedBy: true \}\)/);
+    expect(r).toMatch(/editedBy: identity\.id/);
+    expect(r).toMatch(/enqueueCouponEdit\(/);
   });
 });
 

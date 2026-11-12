@@ -60,11 +60,10 @@ import { ViewSwitch } from '../../components/ViewSwitch.js';
  */
 /* Switches not offered on this production release branch (main and staging
    keep the held ones):
-   - RETIRED (owner, 2026-11-12): editing an approved coupon was removed.
    - HELD (owner, 2026-11-11): auto compensation (its rules editor) and the
-     Marketing portal. */
+     Marketing portal.
+   (Editing an approved coupon came back, made safe, 2026-11-12 - offered.) */
 const NOT_OFFERED: readonly string[] = [
-  'edit_approved_coupons',
   'manage_compensation_rules',
   'use_marketing_portal',
   'manage_marketing',

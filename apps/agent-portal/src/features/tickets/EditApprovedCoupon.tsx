@@ -5,7 +5,11 @@ import {
   couponDecision,
   couponEditBlock,
   couponIsExpired,
+  couponTermsChanges,
+  couponTermsOf,
+  couponTermsVersion,
   defaultCouponDates,
+  editedCouponTerms,
   isPercentageCategory,
   type CouponReplacementTerms,
   type CouponRequestDraft,
@@ -30,6 +34,8 @@ export function canOfferCouponEdit(c: CouponRequestRow, allowed: boolean): boole
   return (
     allowed &&
     c.replaces !== undefined &&
+    /* An edit of it is still running (switched off on Yiji). */
+    c.edit_state !== 'frozen' &&
     couponEditBlock({
       status: c.status,
       removal_status: c.removal_status ?? null,
@@ -108,6 +114,13 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
   const couponsPaused = useCouponsUnderMaintenance();
   const [open, setOpen] = useState(false);
   const expired = couponIsExpired(coupon.valid_to, new Date());
+  /* ONE cleaned reading of the stored coupon (owner, 2026-11-12): the form's
+     starting values, its "nothing changed" check and the version the worker
+     checks all come from it - text amounts ("3.00000") and older coupons
+     without a stored limit can no longer block Save or look like a change. */
+  const stored = coupon as unknown as Record<string, unknown>;
+  const was = couponTermsOf(stored);
+  const basedOn = couponTermsVersion(stored);
   /* An expired coupon gets VALID dates to start from (the same coupon, edited). */
   const dates = expired
     ? defaultCouponDates(new Date())
@@ -149,14 +162,11 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
             /* Directus returns DECIMAL columns as text ("3.00000"): the form's
                number fields refused them and Save stayed blocked ("Expected
                number, received string") - found testing on staging, 2026-11-12. */
-            coupon_value: amountOf(coupon.coupon_value),
-            coupon_percent: amountOf(coupon.coupon_percent),
-            max_discount: amountOf(coupon.max_discount) ?? 0,
-            usage_limit: amountOf(coupon.usage_limit) ?? 1,
-            total_discount_limit:
-              coupon.total_discount_limit != null && coupon.total_discount_limit !== ''
-                ? Number(coupon.total_discount_limit)
-                : null,
+            coupon_value: was.coupon_value ?? null,
+            coupon_percent: was.coupon_percent ?? null,
+            max_discount: was.max_discount ?? 0,
+            usage_limit: was.usage_limit || 1,
+            total_discount_limit: was.total_discount_limit ?? null,
             compensation_reason: coupon.reason ?? '',
             item_name: coupon.item_name,
             item_sku: coupon.item_sku,
@@ -164,12 +174,21 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
             delivery_excluded: coupon.delivery_excluded === true,
             delivery_excluded_reason: coupon.delivery_excluded_reason ?? '',
           }}
+          editBlock={(d) =>
+            couponTermsChanges(stored, editedCouponTerms(stored, draftToTerms(d)) as never)
+              .length === 0
+              ? t('coupons.editNothingChanged', {
+                  defaultValue: 'Nothing changed yet - change a value to save.',
+                })
+              : null
+          }
           onSave={async (d, extra) => {
             try {
               const r = await replace.mutateAsync({
                 couponId: coupon.id,
-                terms: draftToTerms(d),
+                terms: editedCouponTerms(stored, draftToTerms(d)),
                 reason: extra?.changeReason ?? '',
+                basedOn,
               });
               if (r.state === 'done') {
                 toast.success(

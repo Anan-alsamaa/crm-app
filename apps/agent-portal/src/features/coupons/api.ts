@@ -39,6 +39,8 @@ export interface CouponRequestRow {
   yiji_used_order?: string | null;
   /** When it was last edited in place. */
   edited_at?: string | null;
+  /** The last in-place edit: frozen (running) | done | refused. */
+  edit_state?: string | null;
   coupon_code: string | null;
   coupon_value: number | null;
   coupon_percent: number | null;
@@ -544,6 +546,7 @@ export const TICKET_COUPON_REPLACE_FIELDS = [
   /* Edit in place + used coupons (owner, 2026-11-11). */
   'yiji_used_order',
   'edited_at',
+  'edit_state',
   { replaces: ['id', 'coupon_code'] },
   { replaced_by: ['id', 'coupon_code'] },
 ] as const;
@@ -570,6 +573,7 @@ export function useEditTicketCoupon() {
       couponId: string;
       terms: CouponReplacementTerms;
       reason: string;
+      basedOn: string;
     }): Promise<{ state: CouponReplaceState; note: string | null }> => {
       await assertCouponsOpen();
       const editRequestId =
@@ -579,8 +583,11 @@ export function useEditTicketCoupon() {
         editRequestId,
         terms: input.terms as unknown as Record<string, unknown>,
         reason: input.reason,
+        basedOn: input.basedOn,
       });
-      const deadline = Date.now() + 45_000;
+      /* The worker switches the coupon off on Yiji, checks it, updates it,
+         reads it back and switches it on - about ten calls. */
+      const deadline = Date.now() + 75_000;
       while (Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, 1500));
         const rows = (await directus.request(

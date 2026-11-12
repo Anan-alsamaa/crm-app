@@ -23,6 +23,7 @@ import pino from 'pino';
 import {
   CouponPushJob,
   CouponRemoveJob,
+  CouponEditJob,
   ImportJob,
   normalizePhone,
   phoneCustomerId,
@@ -966,15 +967,29 @@ async function main(): Promise<void> {
    * same code, new terms - on Yiji and on its row. Same privilege as before;
    * WHO comes from the verified token. The worker re-checks everything.
    */
-  /* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): an approved
-     coupon is never changed after it is assigned. Refused for everyone -
-     nothing is queued, nothing on Yiji changes. */
-  app.post('/jobs/coupon-edit', async (_req, reply) =>
-    reply.code(410).send({ ok: false, error: 'editing an approved coupon was removed' }),
-  );
-  /* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): an approved
-     coupon is never changed after it is assigned. Refused for everyone -
-     nothing is queued, nothing on Yiji changes. */
+  /* EDIT AN APPROVED COUPON IN PLACE (owner, 2026-11-11; made safe
+     2026-11-12). Gated on its own privilege; WHO comes from the verified
+     token, never the body. The worker re-checks everything, switches the
+     coupon off on Yiji while it changes and reads it back. */
+  app.post('/jobs/coupon-edit', async (req, reply) => {
+    const identity = await requirePrivilege(req, reply, 'edit_approved_coupons');
+    if (!identity) return reply;
+    const parsed = CouponEditJob.omit({ editedBy: true }).safeParse(req.body);
+    if (!parsed.success)
+      return reply.code(400).send({ ok: false, error: 'invalid coupon edit payload' });
+    const jobId = producer.enqueueCouponEdit
+      ? await producer.enqueueCouponEdit({ ...parsed.data, editedBy: identity.id })
+      : null;
+    if (jobId === null)
+      return reply.code(503).send({ ok: false, error: 'queue disabled (no Redis)' });
+    logger.info(
+      { jobId, couponApprovalId: parsed.data.couponApprovalId, by: identity.id },
+      'coupon edit (in place) enqueued',
+    );
+    return reply.send({ ok: true, jobId });
+  });
+  /* REPLACING a coupon (remove + issue a new code) was REMOVED for good
+     (owner, 2026-11-12: Yiji's report counted two). Refused for everyone. */
   app.post('/jobs/coupon-replace', async (_req, reply) =>
     reply.code(410).send({ ok: false, error: 'editing an approved coupon was removed' }),
   );
