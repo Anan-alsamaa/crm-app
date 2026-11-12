@@ -25,6 +25,7 @@ import {
   COUPON_REMOVE_JOB_NAME,
   COUPON_REPLACE_JOB_NAME,
   COUPON_EDIT_JOB_NAME,
+  type CouponEditJob,
   type CustomerPushJob,
   errorText,
   createYijiCouponOrdersReader,
@@ -48,7 +49,13 @@ import {
 } from './automation.js';
 import { processImportJob, type ImportsDeps } from './imports.js';
 import { processReportJob, type ReportsDeps } from './reports.js';
-import { processCouponPushJob } from './coupon-push.js';
+import { couponLockKey, processCouponPushJob, type CouponPushLock } from './coupon-push.js';
+import {
+  COUPON_EDIT_LOCK_MS,
+  COUPON_EDIT_RECOVER_JOB,
+  processCouponEditJob,
+  recoverStuckCouponEdits,
+} from './coupon-edit.js';
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
@@ -245,13 +252,21 @@ function couponPushLock(redis: NonNullable<ProcessorDeps['redis']>) {
     get(k: string): Promise<string | null>;
     del(k: string): Promise<unknown>;
   };
-  const token = `${process.pid}-${Math.random().toString(36).slice(2)}`;
+  /* A token per ACQUIRE (not per process): two jobs in one task never
+     release each other's lock. */
+  const held = new Map<string, string>();
   return {
-    acquire: async (key: string, ttlMs: number) =>
-      (await r.set(envKey(key), token, 'PX', ttlMs, 'NX')) === 'OK',
+    acquire: async (key: string, ttlMs: number) => {
+      const token = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const ok = (await r.set(envKey(key), token, 'PX', ttlMs, 'NX')) === 'OK';
+      if (ok) held.set(key, token);
+      return ok;
+    },
     /* Only our own lock: one that expired and was taken by another is left alone. */
     release: async (key: string) => {
-      if ((await r.get(envKey(key))) === token) await r.del(envKey(key));
+      const token = held.get(key);
+      held.delete(key);
+      if (token && (await r.get(envKey(key))) === token) await r.del(envKey(key));
     },
   };
 }
@@ -562,11 +577,47 @@ export const processors: Record<QueueName, Processor> = {
   },
   [QUEUES.coupons]: async (job, deps) => {
     /* EMA-80: the same queue carries removals, by job NAME. */
+    const lock: CouponPushLock | undefined = deps.redis ? couponPushLock(deps.redis) : undefined;
     if (job.name === COUPON_REMOVE_JOB_NAME) {
-      await processCouponRemoveJob(job as Job<CouponRemoveJob>, {
+      /* One change per coupon at a time (owner, 2026-11-12): a removal waits
+         for a send or an edit of the same coupon (BullMQ retries). */
+      const key = couponLockKey((job.data as CouponRemoveJob).couponApprovalId);
+      if (lock && !(await lock.acquire(key, COUPON_EDIT_LOCK_MS))) {
+        throw new Error('another change to this coupon is running');
+      }
+      try {
+        await processCouponRemoveJob(job as Job<CouponRemoveJob>, {
+          directus: deps.directus,
+          logger: deps.logger,
+          remover: couponRemover,
+          ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
+        });
+      } finally {
+        if (lock) await lock.release(key).catch(() => undefined);
+      }
+      return;
+    }
+    /* Edit an approved coupon IN PLACE (owner, 2026-11-11; made safe
+       2026-11-12): switched off on Yiji while it changes, read back, then
+       back on. See coupon-edit.ts. */
+    if (job.name === COUPON_EDIT_JOB_NAME) {
+      await processCouponEditJob(job as Job<CouponEditJob>, {
         directus: deps.directus,
         logger: deps.logger,
         remover: couponRemover,
+        ...(lock ? { lock } : {}),
+        ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
+      });
+      return;
+    }
+    /* An edit whose job died for good: put Yiji back to the CRM's terms and
+       switch the coupon back on (every 5 minutes). */
+    if (job.name === COUPON_EDIT_RECOVER_JOB) {
+      await recoverStuckCouponEdits({
+        directus: deps.directus,
+        logger: deps.logger,
+        remover: couponRemover,
+        ...(lock ? { lock } : {}),
         ...(redirectCouponsTo ? { redirectCouponsTo } : {}),
       });
       return;
@@ -574,12 +625,12 @@ export const processors: Record<QueueName, Processor> = {
     /* Owner, 2026-10-27: an APPROVED coupon edited = replaced. Same queue, by
        job NAME; reuses the removal's credentials (admin token for
        RemoveUserCoupon) and queues the replacement's push itself. */
-    /* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): a queued edit or
-       replace job left from before is dropped - it never touches Yiji. */
-    if (job.name === COUPON_EDIT_JOB_NAME || job.name === COUPON_REPLACE_JOB_NAME) {
+    /* The remove-and-reissue REPLACE was removed for good (owner, 2026-11-12:
+       Yiji's report would count two coupons): a queued one is dropped. */
+    if (job.name === COUPON_REPLACE_JOB_NAME) {
       deps.logger.warn(
-        { name: job.name, id: (job.data as { couponApprovalId?: string })?.couponApprovalId },
-        'coupon edit job dropped - editing an approved coupon was removed',
+        { id: (job.data as { couponApprovalId?: string })?.couponApprovalId },
+        'coupon replace job dropped - replacing a coupon was removed',
       );
       return;
     }
@@ -620,7 +671,7 @@ export const processors: Record<QueueName, Processor> = {
       readOrderGroup: (couponDeliveryEnabled ? orderGroupReader : null) ?? undefined,
       /* One push per coupon at a time (2026-11-11): two at once gave one
          coupon two grants on staging. Per environment - Redis is shared. */
-      ...(deps.redis ? { lock: couponPushLock(deps.redis) } : {}),
+      ...(lock ? { lock } : {}),
       /* Only consulted for a coupon with NO order, and gated on the same
          delivery switch as the poster: a deployment with coupon delivery off
          must not start resolving customers either. */
@@ -773,3 +824,4 @@ export {
   DEFAULT_YIJI_USAGE_RETENTION_MS,
 } from './yiji-usage.js';
 export { syncScheduledReports } from './reports.js';
+export { scheduleCouponEditRecovery } from './coupon-edit.js';

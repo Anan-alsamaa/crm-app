@@ -35,6 +35,7 @@ import {
   scheduleYijiVolumeAlert,
   DEFAULT_YIJI_VOLUME_ALERT_MS,
   scheduleCouponMisuseCheck,
+  scheduleCouponEditRecovery,
   DEFAULT_COUPON_MISUSE_CHECK_MS,
   scheduleCouponCustomerCheck,
   DEFAULT_COUPON_CUSTOMER_CHECK_MS,
@@ -289,6 +290,14 @@ async function main(): Promise<void> {
     logger.info({ everyMs: couponMisuseCheckMs }, 'coupon misuse check scheduled (0 = off)');
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'coupon misuse check could not be scheduled');
+  }
+
+  /* An edit of an approved coupon that died mid-way leaves the coupon switched
+     off on Yiji: put back and switched on every 5 minutes (owner, 2026-11-12). */
+  try {
+    await scheduleCouponEditRecovery(queues[QUEUES.coupons]);
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'coupon edit recovery could not be scheduled');
   }
 
   /* Pending coupons: does the phone have a Yiji account? Looked up ONCE per

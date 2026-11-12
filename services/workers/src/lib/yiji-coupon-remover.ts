@@ -59,7 +59,20 @@ export interface YijiCouponRemover {
    * 403, measured 2026-11-11). Throws YijiRefusedError on a settled "no".
    */
   updateCoupon(coupon: Record<string, unknown>): Promise<void>;
+  /**
+   * Switch the coupon OFF (5) or back ON (0) on Yiji - `UpdateStatusCoupon`,
+   * admin token only. Switched off it leaves every wallet; its grants and
+   * values stay (measured on OPS-HNXZRMZC, 2026-11-12). An edit holds the
+   * coupon off while it changes it, so it is never spent half-edited.
+   * Throws YijiRefusedError on a settled "no".
+   */
+  setCouponStatus(couponId: string, status: YijiCouponSwitch): Promise<void>;
 }
+
+/** Yiji coupon status: 0 active, 1 deleted, 5 switched off (by ops, or by an edit). */
+export const YIJI_COUPON_ON = 0;
+export const YIJI_COUPON_OFF = 5;
+export type YijiCouponSwitch = typeof YIJI_COUPON_ON | typeof YIJI_COUPON_OFF;
 
 export interface YijiCouponRemoverEnv {
   adminApiUrl?: string;
@@ -82,6 +95,8 @@ export interface YijiCouponRemoverEnv {
 const REMOVE_PATH = '/api/CouponUser/RemoveUserCoupon/';
 const GET_COUPON_PATH = '/api/Coupon/GetCoupon/id/';
 const UPDATE_COUPON_PATH = '/api/Coupon/UpdateCoupon';
+const STATUS_COUPON_PATH = '/api/Coupon/UpdateStatusCoupon';
+const STATUS_ADMIN_ONLY = 'UpdateStatusCoupon: the CRM account has no permission (admin token)';
 /** Why UpdateCoupon uses the admin token directly (403 for the CRM account, 2026-11-11). */
 const UPDATE_ADMIN_ONLY = 'UpdateCoupon: the CRM account has no permission (admin token)';
 /** Why RemoveUserCoupon uses the admin token directly - shown on Admin KPI. */
@@ -185,7 +200,7 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
    */
   async function call(
     url: string,
-    method: 'GET' | 'DELETE' | 'PATCH',
+    method: 'GET' | 'DELETE' | 'PATCH' | 'PUT',
     adminOnly: string | null = null,
     jsonBody: string | null = null,
   ): Promise<Response> {
@@ -249,6 +264,29 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
       .map((r) => (r as { id?: unknown })?.id)
       .filter((v) => v !== null && v !== undefined && String(v).trim() !== '')
       .map((v) => String(v));
+
+  /** A write's answer: a 4xx, or a 200 whose `result` is not 1, is a settled "no". */
+  async function settledWrite(name: string, res: Response): Promise<void> {
+    const raw = await res.text().catch(() => '');
+    let body: unknown = null;
+    try {
+      body = raw ? JSON.parse(raw) : null;
+    } catch {
+      body = null;
+    }
+    if (res.status >= 400 && res.status < 500) {
+      throw new YijiRefusedError(
+        `${name} refused (${res.status})`,
+        res.status,
+        body ?? { status: res.status, text: raw.slice(0, 300) },
+      );
+    }
+    if (!res.ok) throw new YijiUnavailableError(`${name} upstream ${res.status}`);
+    const result = (body as { result?: unknown } | null)?.result;
+    if (typeof result === 'number' && result !== 1) {
+      throw new YijiRefusedError(`${name} refused (result)`, res.status, body);
+    }
+  }
 
   return {
     async findCustomer(phone) {
@@ -326,31 +364,30 @@ export function createYijiCouponRemover(env: YijiCouponRemoverEnv): YijiCouponRe
       );
     },
     async updateCoupon(coupon) {
-      const res = await call(
-        `${admin}${UPDATE_COUPON_PATH}`,
-        'PATCH',
-        UPDATE_ADMIN_ONLY,
-        JSON.stringify(coupon),
+      await settledWrite(
+        'UpdateCoupon',
+        await call(
+          `${admin}${UPDATE_COUPON_PATH}`,
+          'PATCH',
+          UPDATE_ADMIN_ONLY,
+          JSON.stringify(coupon),
+        ),
       );
-      const raw = await res.text().catch(() => '');
-      let body: unknown = null;
-      try {
-        body = raw ? JSON.parse(raw) : null;
-      } catch {
-        body = null;
+    },
+    async setCouponStatus(couponId, status) {
+      const id = Number(couponId);
+      if (!Number.isInteger(id) || id <= 0) {
+        throw new YijiRefusedError(`UpdateStatusCoupon: bad coupon id ${couponId}`, 400, null);
       }
-      if (res.status >= 400 && res.status < 500) {
-        throw new YijiRefusedError(
-          `UpdateCoupon refused (${res.status})`,
-          res.status,
-          body ?? { status: res.status, text: raw.slice(0, 300) },
-        );
-      }
-      if (!res.ok) throw new YijiUnavailableError(`UpdateCoupon upstream ${res.status}`);
-      const result = (body as { result?: unknown } | null)?.result;
-      if (typeof result === 'number' && result !== 1) {
-        throw new YijiRefusedError('UpdateCoupon refused (result)', res.status, body);
-      }
+      await settledWrite(
+        'UpdateStatusCoupon',
+        await call(
+          `${admin}${STATUS_COUPON_PATH}`,
+          'PUT',
+          STATUS_ADMIN_ONLY,
+          JSON.stringify({ ids: [id], status }),
+        ),
+      );
     },
   };
 }

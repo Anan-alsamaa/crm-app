@@ -58,9 +58,9 @@ import { ViewSwitch } from '../../components/ViewSwitch.js';
  * page sees exactly the list they always had. The server keeps the owner's
  * switches out of their saves too (app-roles-sync `keepOwnerPrivileges`).
  */
-/* Switches for features that were REMOVED (owner, 2026-11-12: editing an
-   approved coupon). Not offered; their stored values mean nothing. */
-const RETIRED: readonly string[] = ['edit_approved_coupons'];
+/* Switches for features that were REMOVED. Not offered; their stored values
+   mean nothing. (Editing an approved coupon came back, made safe, 2026-11-12.) */
+const RETIRED: readonly string[] = [];
 const toPrivs = (keys: readonly Privilege[]) =>
   keys
     .filter((key) => !RETIRED.includes(key))

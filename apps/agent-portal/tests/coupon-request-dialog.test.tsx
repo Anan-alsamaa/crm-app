@@ -701,6 +701,33 @@ describe('CouponRequestDialog - editing an approved coupon', () => {
     });
   });
 
+  it('keeps Save off and says why while nothing has changed (owner, 2026-11-12)', async () => {
+    const onSave = vi.fn();
+    renderDialog({
+      initial,
+      onSave,
+      editingId: 'old-1',
+      replaceOf: { code: TAKEN_CODE, expiredOn: null },
+      editBlock: (d: { coupon_value?: number | null }) =>
+        d.coupon_value === 25 ? 'Nothing changed yet - change a value to save.' : null,
+    });
+    await userEvent.type(
+      screen.getByLabelText('Why is this approved coupon being changed?'),
+      'Customer called back',
+    );
+    const save = screen.getByRole('button', { name: 'Save changes' });
+    expect(screen.getByText('Nothing changed yet - change a value to save.')).toBeInTheDocument();
+    expect(save).toBeDisabled();
+    const val = screen.getByLabelText(/coupon value/i);
+    await userEvent.clear(val);
+    await userEvent.type(val, '30');
+    await waitFor(() => expect(save).toBeEnabled(), { timeout: 5_000 });
+    await userEvent.click(save);
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ coupon_value: 30 }), {
+      changeReason: 'Customer called back',
+    });
+  }, 20_000);
+
   it('says when the coupon being edited has expired', () => {
     renderDialog({
       initial,

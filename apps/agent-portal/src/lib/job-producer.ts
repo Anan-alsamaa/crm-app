@@ -123,6 +123,8 @@ export const jobProducer = {
     editRequestId: string;
     terms: Record<string, unknown>;
     reason: string;
+    /** The coupon's terms as the editor opened them (couponTermsVersion). */
+    basedOn: string;
   }): Promise<EnqueueResult> {
     return post<EnqueueResult>('/jobs/coupon-edit', body);
   },

@@ -426,5 +426,11 @@ export const CouponEditJob = z.object({
   terms: z.record(z.unknown()),
   editedBy: z.string().min(1),
   reason: z.string().trim().min(1).max(1000),
+  /**
+   * The coupon's terms as the editor OPENED them (`couponTermsVersion`). The
+   * worker refuses the edit when the coupon changed since - one edit never
+   * silently overwrites another (owner, 2026-11-12).
+   */
+  basedOn: z.string().min(2).max(4000),
 });
 export type CouponEditJob = z.infer<typeof CouponEditJob>;

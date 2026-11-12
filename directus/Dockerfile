@@ -1,4 +1,4 @@
-# Sara CRM — Directus with the five extensions BAKED IN.
+# Sara CRM — Directus with the six extensions BAKED IN.
 #
 #   docker build -f directus/Dockerfile -t crm/directus:<tag> .
 #   (build context is the REPO ROOT, not directus/)
@@ -46,6 +46,7 @@ USER root
 # `directus:extension` block. Flattening them would break discovery.
 COPY directus/extensions/app-roles-sync/          /directus/extensions/app-roles-sync/
 COPY directus/extensions/cast-custom-field-value/ /directus/extensions/cast-custom-field-value/
+COPY directus/extensions/coupon-terms-guard/      /directus/extensions/coupon-terms-guard/
 COPY directus/extensions/lock-project-owner/      /directus/extensions/lock-project-owner/
 COPY directus/extensions/notify-on-change/        /directus/extensions/notify-on-change/
 COPY directus/extensions/super-header-interface/  /directus/extensions/super-header-interface/
