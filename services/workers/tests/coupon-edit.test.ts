@@ -87,6 +87,8 @@ function setup(
     lockBusy?: boolean;
     switchFailsOnce?: boolean;
     offRefused?: boolean;
+    /** couponIdOfGrant answer (default: 89126). */
+    walletCouponId?: string | null;
   } = {},
 ) {
   const row: Record<string, unknown> = { ...ROW, ...(opts.row ?? {}) };
@@ -123,6 +125,9 @@ function setup(
       calls.push('used?');
       return used.length ? used.shift()! : null;
     }),
+    couponIdOfGrant: vi.fn(async () =>
+      opts.walletCouponId === undefined ? '89126' : opts.walletCouponId,
+    ),
     readCoupon: vi.fn(async () => ({ ...yiji })),
     updateCoupon: vi.fn(async (b: Record<string, unknown>) => {
       calls.push(`update(status ${String(b.status)})`);
@@ -401,6 +406,41 @@ describe('review 2026-11-12: an interrupted edit is never orphaned', () => {
     });
     expect(t.yiji.status).toBe(6);
     expect(t.calls).toEqual([]);
+  });
+});
+
+describe('older coupons: a grant but no stored coupon id (486 on prod)', () => {
+  const grantOnly = { yiji_coupon_id: null, yiji_coupon_user_id: '32078', status: 'assigned' };
+
+  it('is edited ON YIJI: the coupon id comes from the wallet, is stored, full switch-off path', async () => {
+    const t = setup({ row: grantOnly });
+    expect(await t.run()).toBe('edited');
+    expect(t.remover.couponIdOfGrant).toHaveBeenCalledWith('user-1', '32078');
+    expect(t.calls).toEqual(['used?', 'OFF', 'used?', 'update(status 5)', 'used?', 'ON']);
+    expect(t.yiji).toMatchObject({ discount: 5, status: 0 });
+    expect(t.row).toMatchObject({ yiji_coupon_id: '89126', coupon_value: 5, edit_state: 'done' });
+  });
+
+  it('already USED: refused before anything on Yiji changes, the order recorded', async () => {
+    const t = setup({ row: grantOnly, used: ['1371234'] });
+    expect(await t.run()).toBe('refused');
+    expect(t.row).toMatchObject({ yiji_used_order: '1371234', coupon_value: 3 });
+    expect(t.calls).toEqual(['used?']);
+    expect(t.remover.updateCoupon).not.toHaveBeenCalled();
+  });
+
+  it('no longer in the wallet (removed on Yiji): refused, nothing changed', async () => {
+    const t = setup({ row: grantOnly, walletCouponId: null });
+    expect(await t.run()).toBe('refused');
+    expect(String(t.row.edit_detail)).toMatch(/no longer in the customer’s Yiji wallet/);
+    expect(t.row.coupon_value).toBe(3);
+  });
+
+  it('never takes the row-only path just because the coupon id is missing', async () => {
+    const t = setup({ row: { ...grantOnly, yiji_coupon_user_id: null } });
+    expect(await t.run()).toBe('refused');
+    expect(String(t.row.edit_detail)).toMatch(/no Yiji record/);
+    expect(t.row.coupon_value).toBe(3);
   });
 });
 
