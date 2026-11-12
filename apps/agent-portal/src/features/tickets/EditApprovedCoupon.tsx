@@ -108,23 +108,78 @@ export function CouponReplacementPill({ c }: { c: CouponRequestRow }): JSX.Eleme
   return null;
 }
 
+export const NOTHING_CHANGED = 'Nothing changed yet - change a value to save.';
+
+/**
+ * Everything the edit dialog needs from ONE stored coupon, as a pure function
+ * (testable for every stored shape). ONE cleaned reading of the stored coupon
+ * (owner, 2026-11-12): the form's starting values, its "nothing changed" check
+ * and the version the worker checks all come from it - text amounts
+ * ("3.00000") and older coupons without a stored limit can no longer block
+ * Save or look like a change.
+ */
+export function editDialogProps(
+  coupon: CouponRequestRow,
+  opts: { nothingChanged?: string; today?: Date } = {},
+): {
+  initial: Partial<CouponRequestDraft>;
+  editBlock: (d: CouponRequestDraft) => string | null;
+  toTerms: (d: CouponRequestDraft) => CouponReplacementTerms;
+  basedOn: string;
+} {
+  const today = opts.today ?? new Date();
+  const stored = coupon as unknown as Record<string, unknown>;
+  const was = couponTermsOf(stored);
+  const expired = couponIsExpired(coupon.valid_to, today);
+  /* An expired coupon gets VALID dates to start from (the same coupon, edited). */
+  const dates = expired
+    ? defaultCouponDates(today)
+    : { valid_from: coupon.valid_from ?? '', valid_to: coupon.valid_to ?? '' };
+  const toTerms = (d: CouponRequestDraft) => editedCouponTerms(stored, draftToTerms(d));
+  return {
+    initial: {
+      title: coupon.title ?? '',
+      // The SAME code: an edit changes this coupon in place (2026-11-11).
+      code: coupon.coupon_code || '',
+      issuing_side: coupon.issuing_side ?? '',
+      delivery_type: coupon.delivery_type ?? 'All',
+      coupon_type: coupon.coupon_type ?? 'Private',
+      discount_category: coupon.discount_category ?? 'Amount',
+      valid_from: dates.valid_from.slice(0, 10),
+      valid_to: dates.valid_to.slice(0, 10),
+      /* Directus returns DECIMAL columns as text ("3.00000"): the form's
+         number fields refused them and Save stayed blocked ("Expected
+         number, received string") - found testing on staging, 2026-11-12. */
+      coupon_value: was.coupon_value ?? null,
+      coupon_percent: was.coupon_percent ?? null,
+      max_discount: was.max_discount ?? 0,
+      usage_limit: was.usage_limit || 1,
+      total_discount_limit: was.total_discount_limit ?? null,
+      compensation_reason: coupon.reason ?? '',
+      item_name: coupon.item_name,
+      item_sku: coupon.item_sku,
+      no_other_discounts: coupon.no_other_discounts ?? false,
+      delivery_excluded: coupon.delivery_excluded === true,
+      delivery_excluded_reason: coupon.delivery_excluded_reason ?? '',
+    },
+    editBlock: (d) =>
+      couponTermsChanges(stored, toTerms(d) as never).length === 0
+        ? (opts.nothingChanged ?? NOTHING_CHANGED)
+        : null,
+    toTerms,
+    basedOn: couponTermsVersion(stored),
+  };
+}
+
 export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow }): JSX.Element {
   const { t } = useTranslation();
   const replace = useEditTicketCoupon();
   const couponsPaused = useCouponsUnderMaintenance();
   const [open, setOpen] = useState(false);
   const expired = couponIsExpired(coupon.valid_to, new Date());
-  /* ONE cleaned reading of the stored coupon (owner, 2026-11-12): the form's
-     starting values, its "nothing changed" check and the version the worker
-     checks all come from it - text amounts ("3.00000") and older coupons
-     without a stored limit can no longer block Save or look like a change. */
-  const stored = coupon as unknown as Record<string, unknown>;
-  const was = couponTermsOf(stored);
-  const basedOn = couponTermsVersion(stored);
-  /* An expired coupon gets VALID dates to start from (the same coupon, edited). */
-  const dates = expired
-    ? defaultCouponDates(new Date())
-    : { valid_from: coupon.valid_from ?? '', valid_to: coupon.valid_to ?? '' };
+  const { initial, editBlock, toTerms, basedOn } = editDialogProps(coupon, {
+    nothingChanged: t('coupons.editNothingChanged', { defaultValue: NOTHING_CHANGED }),
+  });
 
   /* Coupons under maintenance (owner, 2026-11-04): an edit sends a new coupon. */
   if (couponsPaused) return <CouponMaintenancePill />;
@@ -149,44 +204,13 @@ export function EditApprovedCouponButton({ coupon }: { coupon: CouponRequestRow 
           brandId={coupon.brand_id ?? null}
           restaurantId={coupon.restaurant_id ?? null}
           requestedBy={coupon.requested_by?.id ?? null}
-          initial={{
-            title: coupon.title ?? '',
-            // The SAME code: an edit changes this coupon in place (2026-11-11).
-            code: coupon.coupon_code || '',
-            issuing_side: coupon.issuing_side ?? '',
-            delivery_type: coupon.delivery_type ?? 'All',
-            coupon_type: coupon.coupon_type ?? 'Private',
-            discount_category: coupon.discount_category ?? 'Amount',
-            valid_from: dates.valid_from.slice(0, 10),
-            valid_to: dates.valid_to.slice(0, 10),
-            /* Directus returns DECIMAL columns as text ("3.00000"): the form's
-               number fields refused them and Save stayed blocked ("Expected
-               number, received string") - found testing on staging, 2026-11-12. */
-            coupon_value: was.coupon_value ?? null,
-            coupon_percent: was.coupon_percent ?? null,
-            max_discount: was.max_discount ?? 0,
-            usage_limit: was.usage_limit || 1,
-            total_discount_limit: was.total_discount_limit ?? null,
-            compensation_reason: coupon.reason ?? '',
-            item_name: coupon.item_name,
-            item_sku: coupon.item_sku,
-            no_other_discounts: coupon.no_other_discounts ?? false,
-            delivery_excluded: coupon.delivery_excluded === true,
-            delivery_excluded_reason: coupon.delivery_excluded_reason ?? '',
-          }}
-          editBlock={(d) =>
-            couponTermsChanges(stored, editedCouponTerms(stored, draftToTerms(d)) as never)
-              .length === 0
-              ? t('coupons.editNothingChanged', {
-                  defaultValue: 'Nothing changed yet - change a value to save.',
-                })
-              : null
-          }
+          initial={initial}
+          editBlock={editBlock}
           onSave={async (d, extra) => {
             try {
               const r = await replace.mutateAsync({
                 couponId: coupon.id,
-                terms: editedCouponTerms(stored, draftToTerms(d)),
+                terms: toTerms(d),
                 reason: extra?.changeReason ?? '',
                 basedOn,
               });
