@@ -351,6 +351,59 @@ describe('coupons from before the total-limit rule (no limit stored, Yiji pool 1
   });
 });
 
+describe('review 2026-11-12: an interrupted edit is never orphaned', () => {
+  const frozenBy = (rid: string) => ({
+    edit_state: EDIT_FROZEN,
+    edit_request_id: rid,
+    edit_detail: 'Editing: x',
+  });
+
+  it('a second edit does not wipe the frozen mark of the first edit', async () => {
+    const t = setup({ row: frozenBy('req-other') });
+    expect(await t.run()).toBe('refused');
+    expect(t.row).toMatchObject({ edit_state: EDIT_FROZEN, edit_request_id: 'req-other' });
+    expect(t.calls).toEqual([]);
+  });
+
+  it('busy on the last try leaves a frozen mark for the recovery', async () => {
+    const t = setup({ lockBusy: true, row: frozenBy('req-12345678') });
+    expect(await t.run(NEW_TERMS, { attemptsMade: 4 })).toBe('refused');
+    expect(t.row).toMatchObject({ edit_state: EDIT_FROZEN, edit_request_id: 'req-12345678' });
+  });
+
+  it('removed while the edit was interrupted: Yiji put back and on, no new terms written', async () => {
+    const t = setup({
+      row: { ...frozenBy('req-12345678'), removal_status: 'removed' },
+      yijiOverride: { status: 5 },
+    });
+    expect(await t.run()).toBe('refused');
+    expect(t.row.edit_detail).toMatch(/removed or replaced while the edit was interrupted/);
+    expect(t.row.coupon_value).toBe(3);
+    expect(t.yiji).toMatchObject({ status: 0, discount: 3 });
+  });
+
+  it('deleted on Yiji during the edit: left deleted, never switched back on', async () => {
+    const t = setup({ row: frozenBy('req-12345678'), yijiOverride: { status: 1 } });
+    expect(await t.run()).toBe('refused');
+    expect(t.yiji.status).toBe(1);
+    expect(t.calls).toEqual([]);
+  });
+
+  it('the recovery leaves an expired coupon (status 6) as Yiji has it', async () => {
+    const t = setup({
+      row: { ...frozenBy('req-dead'), edited_at: new Date(Date.now() - 3_600_000).toISOString() },
+      yijiOverride: { status: 6 },
+    });
+    await recoverStuckCouponEdits({
+      directus: t.directus as never,
+      logger,
+      remover: t.remover as never,
+    });
+    expect(t.yiji.status).toBe(6);
+    expect(t.calls).toEqual([]);
+  });
+});
+
 describe('not on Yiji yet', () => {
   it('only the row changes - the push sends the new values', async () => {
     const t = setup({

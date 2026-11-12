@@ -53,6 +53,7 @@ import { couponLockKey, processCouponPushJob, type CouponPushLock } from './coup
 import {
   COUPON_EDIT_LOCK_MS,
   COUPON_EDIT_RECOVER_JOB,
+  isFrozen,
   processCouponEditJob,
   recoverStuckCouponEdits,
 } from './coupon-edit.js';
@@ -586,6 +587,11 @@ export const processors: Record<QueueName, Processor> = {
         throw new Error('another change to this coupon is running');
       }
       try {
+        /* An edit of this coupon is mid-way (switched off on Yiji): the removal
+           waits for it to finish or be recovered (review 2026-11-12). */
+        if (await isFrozen(deps, (job.data as CouponRemoveJob).couponApprovalId)) {
+          throw new Error('an edit of this coupon is still finishing');
+        }
         await processCouponRemoveJob(job as Job<CouponRemoveJob>, {
           directus: deps.directus,
           logger: deps.logger,
