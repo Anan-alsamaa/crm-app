@@ -84,6 +84,8 @@ const OPERATIONS: Array<[RegExp, string]> = [
   ],
   [/\/api\/Coupon\/AddCoupon\b/i, 'coupon.create'],
   [/\/api\/Coupon\/GetCoupon\b/i, 'coupon.read'],
+  [/\/api\/Coupon\/UpdateCoupon\b/i, 'coupon.update'],
+  [/\/api\/Coupon\/UpdateStatusCoupon\b/i, 'coupon.switch'],
   [/\/GetfilteredCustomers\b/i, 'customer.lookup'],
   [/\/GetUserById\b/i, 'user.lookup'],
   [/\/NotificationData\/Send/i, 'push.notify'],

@@ -349,6 +349,15 @@ describe('edit in place', () => {
     expect(amountOf('abc')).toBeNull();
   });
 
+  it('offers no Edit while an edit of it is still running (switched off on Yiji)', () => {
+    expect(canOfferCouponEdit({ ...COUPON, edit_state: 'frozen' } as CouponRequestRow, true)).toBe(
+      false,
+    );
+    expect(canOfferCouponEdit({ ...COUPON, edit_state: 'done' } as CouponRequestRow, true)).toBe(
+      true,
+    );
+  });
+
   it('offers no Edit on a coupon the customer already used', () => {
     expect(
       canOfferCouponEdit({ ...COUPON, yiji_used_order: '1374000' } as CouponRequestRow, true),
@@ -375,6 +384,7 @@ describe('edit in place', () => {
         couponId: 'ca-1',
         terms: { coupon_value: 4 } as never,
         reason: 'Customer called back',
+        basedOn: '["v1"]',
       });
     });
     expect(producer.editCoupon).toHaveBeenCalledTimes(1);
@@ -382,6 +392,7 @@ describe('edit in place', () => {
       couponApprovalId: 'ca-1',
       terms: { coupon_value: 4 },
       reason: 'Customer called back',
+      basedOn: '["v1"]',
     });
     expect(sdk.request.mock.calls.some(([q]) => (q as { kind: string }).kind === 'create')).toBe(
       false,

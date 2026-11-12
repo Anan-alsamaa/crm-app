@@ -314,8 +314,8 @@ describe('a coupon is never granted twice', () => {
         lock,
       },
     );
-    expect(lock.acquire).toHaveBeenCalledWith('coupon-push:ca-group', expect.any(Number));
-    expect(lock.release).toHaveBeenCalledWith('coupon-push:ca-group');
+    expect(lock.acquire).toHaveBeenCalledWith('coupon-change:ca-group', expect.any(Number));
+    expect(lock.release).toHaveBeenCalledWith('coupon-change:ca-group');
   });
 
   it('"already exists" and the customer already holds it: recorded, NOT attached again', async () => {

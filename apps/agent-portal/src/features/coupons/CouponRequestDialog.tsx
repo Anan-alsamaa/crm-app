@@ -146,6 +146,11 @@ export interface CouponRequestDialogProps {
   /** True while the replacement is being applied (the Save button spins). */
   saving?: boolean;
   /**
+   * Edit mode: why these terms cannot be saved yet (e.g. "Nothing changed"),
+   * or null. Shown like any other blocking reason and keeps Save off.
+   */
+  editBlock?: (draft: CouponRequestDraft) => string | null;
+  /**
    * A COLLECTED coupon to show when the dialog opens (owner, 2026-10-27): on
    * the Add-ticket form, the compensation rule's PRE-FILLED suggestion - or the
    * agent's adjustment of it - so "Adjust" opens on exactly what will be sent.
@@ -399,6 +404,7 @@ function CouponRequestForm({
   editingId,
   replaceOf,
   saving,
+  editBlock,
   prefill,
   policy,
 }: CouponRequestDialogProps) {
@@ -548,7 +554,14 @@ function CouponRequestForm({
     );
   }, [open, reasonTouched, description]);
 
-  const parsed = CouponRequestDraftChecked.safeParse(draft);
+  /* A PRIVATE coupon's total limit is never typed here: it is uses x maximum
+     discount, calculated on save (storedTotalLimit). A stored number carried
+     in from an edited coupon must not judge the new terms - raising the value
+     of a 25 SAR coupon to 30 was refused as "limit below one use" by a box
+     the editor cannot even see (owner, 2026-11-12). */
+  const parsed = CouponRequestDraftChecked.safeParse(
+    isGeneralCouponType(draft.coupon_type) ? draft : { ...draft, total_discount_limit: null },
+  );
   /* The total-limit warning, in the agent's language. Shown once they have
      typed in the box (an empty box on a fresh form is not yet a mistake) or
      whenever the number is below the coupon value. */
@@ -592,6 +605,7 @@ function CouponRequestForm({
     excludeId: editingId ?? null,
   }).data;
   const groupCovered = !onSave && !!groupCheck?.coveredBy;
+  const editBlocked = parsed.success && editBlock ? editBlock(parsed.data) : null;
   /** The first thing wrong, named — not "check the highlighted fields". */
   const blockedReason = groupCovered
     ? t('coupons.groupCovered', {
@@ -606,10 +620,10 @@ function CouponRequestForm({
         ? t('coupons.general.ackNeeded', {
             defaultValue: 'Confirm the General coupon warning to send it.',
           })
-        : '';
+        : (editBlocked ?? '');
 
   const submit = () => {
-    if (!parsed.success) return;
+    if (!parsed.success || editBlocked) return;
     const d = parsed.data;
     if (onSave) {
       /* EDIT MODE. The same validation as a new request — a correction must not
@@ -727,7 +741,7 @@ function CouponRequestForm({
         replaceMode
           ? t('coupons.replaceHint', {
               defaultValue:
-                'Saving applies at once: {{code}} keeps its code and the customer sees the new values on the same coupon in their Yiji app. A coupon the customer already used cannot be edited.',
+                'Saving applies at once: {{code}} keeps its code and the customer sees the new values on the same coupon in their Yiji app. For a few seconds while it changes the coupon is switched off, so it can never be used half-edited. A coupon the customer already used cannot be edited.',
               code: replaceOf?.code ?? '—',
             })
           : onSave
@@ -758,6 +772,7 @@ function CouponRequestForm({
             disabled={
               groupCovered ||
               !parsed.success ||
+              !!editBlocked ||
               (general && !generalAck) ||
               (codeTaken && !replaceMode) ||
               (replaceMode && !changeReason.trim()) ||

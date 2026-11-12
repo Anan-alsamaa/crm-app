@@ -1605,12 +1605,18 @@ export interface CouponPushLock {
   release(key: string): Promise<void>;
 }
 export const COUPON_PUSH_LOCK_MS = 120_000;
+/**
+ * ONE lock per coupon for EVERY change to it - send, edit, remove (owner,
+ * 2026-11-12: one change at a time, by principle). Two changes to one coupon
+ * can never run at the same moment, whichever kinds they are.
+ */
+export const couponLockKey = (couponApprovalId: string) => `coupon-change:${couponApprovalId}`;
 
 export async function processCouponPushJob(
   job: Job<CouponPushJob>,
   deps: CouponPushDeps,
 ): Promise<PushOutcome> {
-  const lockKey = `coupon-push:${job.data.couponApprovalId}`;
+  const lockKey = couponLockKey(job.data.couponApprovalId);
   if (deps.lock) {
     let mine = false;
     try {
