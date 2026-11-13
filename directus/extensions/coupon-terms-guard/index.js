@@ -50,12 +50,26 @@ class ForbiddenishError extends Error {
 }
 Object.defineProperty(ForbiddenishError.prototype, Symbol.for('directus-error'), { value: true });
 
+/**
+ * A date column as YYYY-MM-DD. The database driver hands a `date` back as a JS
+ * Date at local midnight, a payload has a string - both must read the same
+ * (staging, 2026-11-14: a stored Date read as "no date" and refused a valid edit).
+ */
+export function isoDay(v) {
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${v.getFullYear()}-${pad(v.getMonth() + 1)}-${pad(v.getDate())}`;
+  }
+  return String(v).slice(0, 10);
+}
+
 /** Same value, however it is spelled: "3.00000" = 3, "" = null, a date by day. */
 export function sameTerm(field, a, b) {
   const blank = (v) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
   if (blank(a) || blank(b)) return blank(a) && blank(b);
   if (field === 'valid_from' || field === 'valid_to') {
-    return String(a).slice(0, 10) === String(b).slice(0, 10);
+    return isoDay(a) === isoDay(b);
   }
   if (typeof a === 'boolean' || typeof b === 'boolean') {
     return (a === true || a === 'true' || a === 1) === (b === true || b === 'true' || b === 1);
@@ -89,7 +103,7 @@ const blankish = (v) => v === null || v === undefined || (typeof v === 'string' 
 const num = (v) => (blankish(v) ? NaN : Number(v));
 const isPct = (c) => String(c ?? '').trim().toLowerCase().startsWith('percent');
 const isGeneral = (t) => ['general', 'public'].includes(String(t ?? '').trim().toLowerCase());
-const day = (v) => (blankish(v) ? '' : String(v).slice(0, 10));
+const day = (v) => (blankish(v) ? '' : isoDay(v));
 
 export function couponIncomplete(row) {
   const out = [];
