@@ -190,3 +190,15 @@ describe('coupon completeness', () => {
     await expect(create({ coupon_value: 1 }, [], null)).resolves.toBeTruthy();
   });
 });
+
+/* Staging, 2026-11-14: the database returns a `date` as a JS Date. */
+describe('dates as the database returns them', () => {
+  it('a stored Date counts as a date, and as the same day as its string', () => {
+    const stored = new Date(2026, 11, 3);
+    expect(
+      couponIncomplete({ ...COMPLETE, valid_from: new Date(2026, 10, 13), valid_to: stored }),
+    ).toEqual([]);
+    expect(sameTerm('valid_to', stored, '2026-12-03')).toBe(true);
+    expect(sameTerm('valid_to', stored, '2026-12-04')).toBe(false);
+  });
+});
