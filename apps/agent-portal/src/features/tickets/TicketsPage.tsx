@@ -2269,8 +2269,11 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           <ComplaintResolution
             values={draft}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
-            // Editing the coupon here RAISES a request (owner, 2026-10-06).
+            /* Compensation only: a coupon is raised through the full coupon
+               form, never typed here (owner, 2026-11-14 - a bare amount typed
+               here reached the queue with no type, category, dates or limit). */
             hideCoupon={!can('request_coupons') || couponsPaused}
+            couponFields={false}
             compensationSlot={
               manage ? (
                 <TicketCompensationField
@@ -2369,19 +2372,21 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           <TicketCoupons ticketId={ticket.id} />
         </div>
       )}
-      {manage && !editing && (
+      {(manage || can('request_coupons')) && !editing && (
         <div className="mt-3 flex justify-end">
           {couponsPaused ? (
             /* Coupons under maintenance (owner, 2026-11-04). */
             <CouponMaintenancePill />
           ) : (
             <Button type="button" size="sm" variant="ghost" onClick={() => setAssignOpen(true)}>
-              {t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })}
+              {manage
+                ? t('complaint.assignCoupon', { defaultValue: 'Assign a coupon' })
+                : t('complaint.requestCoupon', { defaultValue: 'Request a coupon' })}
             </Button>
           )}
         </div>
       )}
-      {manage && (
+      {(manage || can('request_coupons')) && (
         <AssignTicketCouponDialog
           open={assignOpen}
           onClose={() => setAssignOpen(false)}
@@ -2389,6 +2394,12 @@ function TicketComplaintPanel({ ticket }: { ticket: TicketRow }) {
           branch={branch}
           requestedBy={user?.id ?? null}
           onCreated={() => {
+            /* An agent's request waits for a supervisor: the ticket is not
+               Compensated until it is approved. */
+            if (!manage) {
+              void qc.invalidateQueries({ queryKey: ['ticket-coupons', ticket.id] });
+              return;
+            }
             /* The request EXISTS now, so the ticket is Compensated (EMA-80). */
             setBlockedCompensated(false);
             setDraft((d) => ({ ...d, compensation: COMPENSATED }));

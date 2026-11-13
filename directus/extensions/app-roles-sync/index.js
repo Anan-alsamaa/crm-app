@@ -110,6 +110,30 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
   const SELF_RECIPIENT = { recipient: { _eq: '$CURRENT_USER' } };
   const OWN_TICKET = { assigned_agent: { _eq: '$CURRENT_USER' } };
 
+  /* What an agent may change on their own PENDING coupon request - the same
+     list as the agent portal's PendingCouponPatch. */
+  const PENDING_COUPON_EDIT_FIELDS = [
+    'title',
+    'coupon_code',
+    'issuing_side',
+    'delivery_type',
+    'coupon_type',
+    'discount_category',
+    'valid_from',
+    'valid_to',
+    'coupon_value',
+    'coupon_percent',
+    'max_discount',
+    'usage_limit',
+    'total_discount_limit',
+    'reason',
+    'item_name',
+    'item_sku',
+    'no_other_discounts',
+    'delivery_excluded',
+    'delivery_excluded_reason',
+  ];
+
   const TICKET_FIELDS_AGENT_WRITABLE = [
     'subject',
     'description',
@@ -610,7 +634,21 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_late_orders_report: [...readOnly('late_order_decisions')],
     export_late_orders: [],
     view_order_details: [],
-    request_coupons: [g('coupon_approvals', 'create'), g('coupon_approvals', 'read')],
+    /* Owner, 2026-11-14: "if it is in the pending state, then the agent can also
+       edit it". Their OWN request, while it is PENDING, the coupon terms only -
+       never the status, the decision, the customer or the order. Once approved
+       only Edit coupon (edit_approved_coupons) changes it. Completeness of every
+       save is enforced by coupon-terms-guard. */
+    request_coupons: [
+      g('coupon_approvals', 'create'),
+      g('coupon_approvals', 'read'),
+      g(
+        'coupon_approvals',
+        'update',
+        { _and: [{ status: { _eq: 'pending' } }, { requested_by: { _eq: '$CURRENT_USER' } }] },
+        PENDING_COUPON_EDIT_FIELDS,
+      ),
+    ],
     view_coupon_spend: [],
     view_compensation_reports: [g('coupon_approvals', 'read')],
     delete_compensation: [g('coupon_approvals', 'delete')],

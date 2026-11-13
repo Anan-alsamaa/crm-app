@@ -73,6 +73,55 @@ export function sameTerm(field, a, b) {
   return String(a).trim() === String(b).trim();
 }
 
+/**
+ * EVERY COUPON IS COMPLETE (owner, 2026-11-14): "No coupon creation should be
+ * allowed without entering all the required fields". A request saved from the
+ * ticket Edit form on 13 Nov carried only an amount - no type, category, dates,
+ * uses or limit. The forms check this; THIS is the backstop behind every door
+ * (any screen, the API, the Directus app): a create, a change of terms, or an
+ * approval is refused unless the coupon AS IT WOULD BE STORED is complete.
+ * Rejecting an incomplete request stays allowed.
+ *
+ * Mirrors packages/shared-types coupon-request.ts (couponTypeProblem,
+ * couponTermsProblems, couponLimitProblem, CouponRequestDraftChecked).
+ */
+const blankish = (v) => v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+const num = (v) => (blankish(v) ? NaN : Number(v));
+const isPct = (c) => String(c ?? '').trim().toLowerCase().startsWith('percent');
+const isGeneral = (t) => ['general', 'public'].includes(String(t ?? '').trim().toLowerCase());
+const day = (v) => (blankish(v) ? '' : String(v).slice(0, 10));
+
+export function couponIncomplete(row) {
+  const out = [];
+  const type = String(row.coupon_type ?? '').trim().toLowerCase();
+  if (!['private', 'general', 'public'].includes(type)) out.push('coupon type (Private or General)');
+  if (blankish(row.discount_category)) out.push('discount category');
+  const pct = isPct(row.discount_category);
+  const value = num(row.coupon_value);
+  const percent = num(row.coupon_percent);
+  const cap = num(row.max_discount);
+  if (pct) {
+    if (!(percent > 0 && percent <= 100)) out.push('percentage');
+    if (!(cap > 0)) out.push('maximum discount');
+  } else if (!blankish(row.discount_category) && !(value > 0)) out.push('coupon value');
+  const from = day(row.valid_from);
+  const to = day(row.valid_to);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) out.push('valid from date');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) out.push('valid to date');
+  else if (from && to < from) out.push('valid to date (it is before the start date)');
+  const uses = num(row.usage_limit);
+  if (!(Number.isInteger(uses) && uses >= 1)) out.push('number of uses');
+  const perUse = pct ? cap : value;
+  const stored = num(row.total_discount_limit);
+  const limit = stored > 0 ? stored : isGeneral(row.coupon_type) ? NaN : uses > 0 && perUse > 0 ? uses * perUse : NaN;
+  if (!(limit > 0)) out.push('total discount limit');
+  else if (perUse > 0 && limit < perUse) out.push('total discount limit (below one use)');
+  return out;
+}
+
+const incompleteMessage = (code, missing) =>
+  `Coupon ${code ? code + ' ' : ''}is not complete - missing or wrong: ${missing.join(', ')}. Every coupon needs its type, category, amount, dates, number of uses and total limit.`;
+
 export default ({ filter }, { database }) => {
   const roleNames = new Map();
   async function roleName(id) {
@@ -84,27 +133,45 @@ export default ({ filter }, { database }) => {
     return roleNames.get(id);
   }
 
+  filter('coupon_approvals.items.create', async (payload, _meta, context) => {
+    if (!payload || typeof payload !== 'object') return payload;
+    if (!context?.accountability) return payload;
+    if ((await roleName(context.accountability.role)) === WRITER_ROLE) return payload;
+    const missing = couponIncomplete(payload);
+    if (missing.length) throw new ForbiddenishError(incompleteMessage(payload.coupon_code, missing));
+    return payload;
+  });
+
   filter('coupon_approvals.items.update', async (payload, meta, context) => {
     if (!payload || typeof payload !== 'object') return payload;
     const touched = COUPON_TERM_FIELDS.filter((f) => f in payload);
-    if (touched.length === 0) return payload;
+    const approving = payload.status === 'approved';
+    if (touched.length === 0 && !approving) return payload;
     const acc = context?.accountability;
     /* No accountability = Directus itself (migrations, flows run as system). */
     if (!acc) return payload;
     if ((await roleName(acc.role)) === WRITER_ROLE) return payload;
 
-    const keys = Array.isArray(meta?.keys) ? meta.keys : [];
-    if (keys.length === 0) return payload;
-    const rows = await database('coupon_approvals')
-      .whereIn('id', keys)
-      .whereNotNull('yiji_coupon_id')
-      .select(['id', 'coupon_code', ...touched]);
-    for (const row of rows) {
+    const ids = Array.isArray(meta?.keys) ? meta.keys : [];
+    if (ids.length === 0) return payload;
+    const current = await database('coupon_approvals')
+      .whereIn('id', ids)
+      .select(['id', 'status', 'yiji_coupon_id', ...COUPON_TERM_FIELDS]);
+    for (const row of current) {
       const changed = touched.filter((f) => !sameTerm(f, row[f], payload[f]));
-      if (changed.length) {
+      /* 1. On Yiji: terms change only through the workers' edit. */
+      if (row.yiji_coupon_id != null && changed.length) {
         throw new ForbiddenishError(
           `Coupon ${row.coupon_code ?? row.id} is already on Yiji: its terms (${changed.join(', ')}) change only through "Edit coupon" on its ticket, so Yiji and the CRM stay the same.`,
         );
+      }
+      /* 2. Complete, judged on the coupon AS IT WILL BE after this save (the
+         stored row with this payload on top - an edit of one value keeps every
+         other). Only when a term really changes or it is being approved: a
+         re-save of the same values is not a new coupon. */
+      if (changed.length || (approving && row.status !== 'approved')) {
+        const missing = couponIncomplete({ ...row, ...payload });
+        if (missing.length) throw new ForbiddenishError(incompleteMessage(row.coupon_code, missing));
       }
     }
     return payload;

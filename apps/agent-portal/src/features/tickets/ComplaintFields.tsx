@@ -791,6 +791,7 @@ export function ComplaintResolution({
   values,
   onChange,
   hideCoupon = false,
+  couponFields = true,
   compensationSlot,
 }: {
   values: ComplaintValues;
@@ -809,6 +810,13 @@ export function ComplaintResolution({
    * same question, and nothing reconciles them if the answers differ.
    */
   hideCoupon?: boolean;
+  /**
+   * Show the Coupon code / value / % boxes beside Compensation. False on the
+   * ticket Edit form (owner, 2026-11-14): typing an amount there raised a
+   * request with no type, category, dates, uses or limit. A coupon is raised
+   * only through the full coupon form ("Request a coupon" / "Assign a coupon").
+   */
+  couponFields?: boolean;
 }) {
   const { t } = useTranslation();
   const lists = useOptionLists();
@@ -845,52 +853,56 @@ export function ComplaintResolution({
               placeholder={t('complaint.search', { defaultValue: 'Type to search…' })}
             />
           </FormField>
-          <FormField label={t('complaint.couponCode', { defaultValue: 'Coupon code' })}>
-            <Input
-              value={values.coupon_code}
-              autoComplete="off"
-              onChange={(e) => onChange({ coupon_code: e.target.value })}
-            />
-          </FormField>
-          <FormField
-            label={t('complaint.couponValue', { defaultValue: 'Coupon value (SAR)' })}
-            error={
-              badValue
-                ? t('complaint.badValue', { defaultValue: 'Enter an amount of 0 or more.' })
-                : undefined
-            }
-          >
-            <Input
-              type="number"
-              min={0}
-              step="0.01"
-              inputMode="decimal"
-              invalid={badValue}
-              value={values.coupon_value}
-              onChange={(e) => onChange({ coupon_value: e.target.value })}
-            />
-          </FormField>
-          <FormField
-            label={t('complaint.couponPercent', { defaultValue: 'Coupon %' })}
-            error={
-              badPercent
-                ? t('complaint.badPercent', {
-                    defaultValue: 'Enter a percentage between 0 and 100.',
-                  })
-                : undefined
-            }
-          >
-            <Input
-              type="number"
-              min={0}
-              max={100}
-              step="1"
-              inputMode="decimal"
-              invalid={badPercent}
-              value={values.coupon_percent}
-              onChange={(e) => onChange({ coupon_percent: e.target.value })}
-            />
-          </FormField>
+          {couponFields && (
+            <>
+              <FormField label={t('complaint.couponCode', { defaultValue: 'Coupon code' })}>
+                <Input
+                  value={values.coupon_code}
+                  autoComplete="off"
+                  onChange={(e) => onChange({ coupon_code: e.target.value })}
+                />
+              </FormField>
+              <FormField
+                label={t('complaint.couponValue', { defaultValue: 'Coupon value (SAR)' })}
+                error={
+                  badValue
+                    ? t('complaint.badValue', { defaultValue: 'Enter an amount of 0 or more.' })
+                    : undefined
+                }
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  invalid={badValue}
+                  value={values.coupon_value}
+                  onChange={(e) => onChange({ coupon_value: e.target.value })}
+                />
+              </FormField>
+              <FormField
+                label={t('complaint.couponPercent', { defaultValue: 'Coupon %' })}
+                error={
+                  badPercent
+                    ? t('complaint.badPercent', {
+                        defaultValue: 'Enter a percentage between 0 and 100.',
+                      })
+                    : undefined
+                }
+              >
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step="1"
+                  inputMode="decimal"
+                  invalid={badPercent}
+                  value={values.coupon_percent}
+                  onChange={(e) => onChange({ coupon_percent: e.target.value })}
+                />
+              </FormField>
+            </>
+          )}
         </div>
       )}
     </div>
