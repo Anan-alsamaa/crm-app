@@ -485,14 +485,22 @@ describe('the coupon list says what happened to a removal', () => {
   });
 });
 
-describe('ticket details → Edit, for every other role (unchanged)', () => {
-  it('keeps the old Compensation field and coupon inputs, with no Assign button', async () => {
-    auth.privileges = { manage_ticket_compensation: false };
+describe('ticket details → Edit, for every other role', () => {
+  /* Owner, 2026-11-14: a coupon is raised only through the full coupon form.
+     The Edit form's Coupon code / value / % boxes sent a bare amount with no
+     type, category, dates, uses or limit (13 Nov). */
+  it('keeps the Compensation field but no coupon boxes; the agent gets "Request a coupon"', async () => {
+    auth.privileges = { manage_ticket_compensation: false, request_coupons: true };
     coupons.rows = [coupon()];
-    await openEdit();
-    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
-    expect(screen.getByText('Coupon code')).toBeInTheDocument();
+    renderPage();
+    expect(await screen.findByRole('button', { name: 'Request a coupon' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Assign a coupon' })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Compensation').length).toBeGreaterThan(0);
+    expect(screen.queryByText('Coupon code')).not.toBeInTheDocument();
+    expect(screen.queryByText('Coupon value (SAR)')).not.toBeInTheDocument();
+    expect(screen.queryByText('Coupon %')).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(coupons.remove).not.toHaveBeenCalled();
