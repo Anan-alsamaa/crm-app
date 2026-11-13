@@ -800,6 +800,7 @@
     "compensated": "Compensated",
     "notCompensated": "Not Compensated",
     "assignCoupon": "Assign a coupon",
+    "requestCoupon": "Request a coupon",
     "compensatedNeedsCoupon": "A ticket is Compensated only when a coupon is linked to it. Use “Assign a coupon” to raise one for this ticket.",
     "couponAlreadyUsed": "The customer already used this coupon on an order, so it cannot be removed. The ticket stays Compensated.",
     "removeCouponWarning": "Saving removes {{coupons}} from this ticket. If it is already in the customer’s Yiji app it is taken out of it, so the customer no longer sees it. A coupon the customer already used cannot be removed.",
