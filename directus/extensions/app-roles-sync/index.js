@@ -289,6 +289,28 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     'view_late_orders_report',
   ];
   const isOwnerPrivilege = (k) => Object.prototype.hasOwnProperty.call(OWNER_PRIVILEGE_DEFAULTS, k);
+  /**
+   * MIRROR of ADMINISTRATOR_ONLY_PRIVILEGES in packages/shared-types (owner,
+   * 2026-11-15): the major shared switches only the Administrator may set.
+   * A non-Administrator's save never changes them - whatever it sends for
+   * these keys is dropped and the stored values are carried over - after a
+   * WeCare Admin switched "view all chats" on for every agent on 2026-10-08.
+   */
+  const ADMINISTRATOR_ONLY_PRIVILEGES = [
+    'view_all_chats',
+    'view_all_tickets',
+    'edit_all_tickets',
+    'delete_tickets',
+    'approve_coupons',
+    'manage_roles',
+    'manage_users',
+    'import_data',
+    'manage_backup',
+    'use_directus_app',
+  ];
+  const isAdministratorOnlyPrivilege = (k) => ADMINISTRATOR_ONLY_PRIVILEGES.includes(k);
+  /** A key only the Administrator may set: the owner's fine-grained ones and the major shared ones. */
+  const isProtectedPrivilege = (k) => isOwnerPrivilege(k) || isAdministratorOnlyPrivilege(k);
 
   function effectivePrivileges(stored, roleName) {
     const p = { ...(stored ?? {}) };
@@ -1270,7 +1292,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
    * role would otherwise erase every switch the owner had set on it.
    *
    * So for a non-owner: whatever they sent for these keys is dropped, and on an
-   * update the stored values are carried over untouched.
+   * update the stored values are carried over untouched. Since 2026-11-15 the
+   * same holds for ADMINISTRATOR_ONLY_PRIVILEGES (the major shared switches).
    */
   async function keepOwnerPrivileges(payload, context, keys = []) {
     const acc = context?.accountability;
@@ -1282,12 +1305,12 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     }
     const next = {};
     for (const [k, v] of Object.entries(payload.privileges)) {
-      if (!isOwnerPrivilege(k)) next[k] = v;
+      if (!isProtectedPrivilege(k)) next[k] = v;
     }
     if (keys.length === 1) {
       const row = await loadRow(keys[0]);
       for (const [k, v] of Object.entries(row?.privileges ?? {})) {
-        if (isOwnerPrivilege(k) && typeof v === 'boolean') next[k] = v;
+        if (isProtectedPrivilege(k) && typeof v === 'boolean') next[k] = v;
       }
     }
     payload.privileges = next;
@@ -1313,8 +1336,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     }
     if (payload && payload.privileges) {
       for (const [k, on] of Object.entries(payload.privileges)) {
-        // Owner keys here are the stored ones carried over, not a grant.
-        if (isOwnerPrivilege(k)) continue;
+        // Protected keys here are the stored ones carried over, not a grant.
+        if (isProtectedPrivilege(k)) continue;
         if (on && !held[k]) {
           throw new ForbiddenishError(`You cannot grant '${k}' — your own role does not hold it.`);
         }
