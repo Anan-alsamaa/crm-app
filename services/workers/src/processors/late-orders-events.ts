@@ -57,7 +57,7 @@ const SNAPSHOT_TTL_SEC = 15 * 60;
 export async function applyLateOrdersEvent(
   deps: LateOrdersEventsDeps,
   job: LateOrdersEventJob,
-): Promise<{ changed: boolean }> {
+): Promise<{ changed: boolean; rows: number }> {
   const { redis } = deps;
   const now = deps.now?.() ?? new Date();
   const key = envKey(liveOrdersKey(job.vendorKey));
@@ -79,7 +79,21 @@ export async function applyLateOrdersEvent(
     'EX',
     LIVE_ORDERS_EVENTS_MODE_SEC,
   );
-  return rebuildLiveSnapshot(deps, job.vendorKey, now);
+  const out = await rebuildLiveSnapshot(deps, job.vendorKey, now);
+  deps.logger.info(
+    {
+      vendorKey: job.vendorKey,
+      eventId: job.event.id,
+      type: job.event.type,
+      orderId,
+      status: next.status,
+      isOpen: next.isOpen,
+      changed: out.changed,
+      rows: out.rows,
+    },
+    'late-orders event applied',
+  );
+  return out;
 }
 
 /** Is this vendor fed by events right now? */
@@ -143,7 +157,7 @@ export async function rebuildLiveSnapshot(
   deps: LateOrdersEventsDeps,
   vendorKey: string,
   now: Date = deps.now?.() ?? new Date(),
-): Promise<{ changed: boolean }> {
+): Promise<{ changed: boolean; rows: number }> {
   const { redis, logger } = deps;
   const key = envKey(liveOrdersKey(vendorKey));
   let all: LiveOrder[] = [];
@@ -154,7 +168,7 @@ export async function rebuildLiveSnapshot(
       { err: describeError(err), vendorKey },
       'late-orders events: live table unreadable',
     );
-    return { changed: false };
+    return { changed: false, rows: 0 };
   }
   const nowMs = now.getTime();
   const expired = all.filter((o) => liveOrderExpired(o, nowMs)).map((o) => o.orderId);
@@ -190,5 +204,11 @@ export async function rebuildLiveSnapshot(
       /* The snapshot is written; screens catch up on their own poll. */
     }
   }
-  return { changed };
+  if (expired.length > 0 || all.length > 0) {
+    logger.debug(
+      { vendorKey, live: all.length, expired: expired.length, rows: rows.length, thresholdMinutes },
+      'late-orders live snapshot rebuilt',
+    );
+  }
+  return { changed, rows: rows.length };
 }

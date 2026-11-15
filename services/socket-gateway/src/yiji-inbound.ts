@@ -1672,6 +1672,10 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
             });
           }
         }
+        logger.info(
+          { accepted, duplicates, ignored, vendorKey: events.vendorKey },
+          'yiji events accepted',
+        );
         return reply.code(202).send({ ok: true, accepted, duplicates, ignored });
       });
     },
