@@ -53,6 +53,8 @@ function makeDirectus(over: Record<string, unknown> = {}) {
   } as unknown as GatewayDirectus & Record<string, ReturnType<typeof vi.fn>>;
 }
 
+/* Captured so the routing tests below can read what the ladder was told. */
+const enqueueRouting = vi.fn(async () => undefined);
 let http: HttpServer;
 let io: SocketServer;
 const sockets: ClientSocket[] = [];
@@ -68,7 +70,7 @@ async function start(directus: GatewayDirectus): Promise<number> {
     producer: {
       conversationCreated: vi.fn(async () => undefined),
       messageReceived: vi.fn(async () => undefined),
-      enqueueRouting: vi.fn(async () => undefined),
+      enqueueRouting,
       close: vi.fn(async () => undefined),
     },
     logger: silentLogger,
@@ -114,12 +116,71 @@ const settle = () => new Promise((r) => setTimeout(r, 150));
 
 beforeEach(() => {
   resetWelcomeCache();
+  enqueueRouting.mockClear();
   seq = 0;
 });
 afterEach(async () => {
   for (const s of sockets.splice(0)) s.disconnect();
   io?.close();
   await new Promise<void>((r) => (http ? http.close(() => r()) : r()));
+});
+
+/**
+ * THE ROUTING LADDER BELONGS TO THE FIRST MESSAGE OF A SESSION (owner,
+ * 2026-11-16). The gateway tells the worker which customer message that was:
+ * the one that created the chat, or the one `persistMessage` reports as a new
+ * session (a solved chat reopened, or a return after hours of silence). Every
+ * other customer message enqueues with the flag off, and the worker leaves an
+ * owned chat alone.
+ */
+describe('what the routing ladder is told', () => {
+  const routingCalls = () =>
+    enqueueRouting.mock.calls.map((c) => c[0] as { stage: string; sessionStarted?: boolean });
+
+  it('marks the message that CREATED the chat as a session start, and the next one not', async () => {
+    const directus = makeDirectus();
+    const { client, messages } = await customer(await start(directus));
+    client.emit('message:send', { content: 'hello', clientMsgId: 'a' });
+    await until(() => messages.length >= 2);
+    client.emit('message:send', { content: 'anyone?', clientMsgId: 'b' });
+    await until(() => messages.length >= 3);
+    await settle();
+    const calls = routingCalls().filter((c) => c.stage === 'assign');
+    expect(calls).toHaveLength(2);
+    expect(calls[0]).toMatchObject({ sessionStarted: true });
+    expect(calls[1]).toMatchObject({ sessionStarted: false });
+  });
+
+  it('marks a message persistMessage reports as a new session', async () => {
+    const directus = makeDirectus({
+      findLiveConversation: vi.fn(async () => ({ id: 'conv-1', initiatedBy: null })),
+      persistMessage: vi.fn(async (input: { senderType: string }) => ({
+        id: `msg-${++seq}`,
+        createdAt: new Date().toISOString(),
+        ...(input.senderType === 'customer' ? { sessionStarted: true, newSession: true } : {}),
+      })),
+    });
+    const { client, messages } = await customer(await start(directus));
+    client.emit('message:send', { content: 'hi again', clientMsgId: 'a' });
+    await until(() => messages.length >= 2);
+    await settle();
+    expect(routingCalls().filter((c) => c.stage === 'assign')[0]).toMatchObject({
+      sessionStarted: true,
+    });
+  });
+
+  it('a message into a resumed live thread in the same session is NOT a session start', async () => {
+    const directus = makeDirectus({
+      findLiveConversation: vi.fn(async () => ({ id: 'conv-1', initiatedBy: null })),
+    });
+    const { client, messages } = await customer(await start(directus));
+    client.emit('message:send', { content: 'back again', clientMsgId: 'a' });
+    await until(() => messages.length >= 1);
+    await settle();
+    expect(routingCalls().filter((c) => c.stage === 'assign')[0]).toMatchObject({
+      sessionStarted: false,
+    });
+  });
 });
 
 describe('the automatic welcome', () => {

@@ -85,8 +85,28 @@ export type ReportJob = z.infer<typeof ReportJob>;
  *                whole pool, which is the honest fallback rather than letting it
  *                sit with someone who is clearly unavailable
  *
+
  * `attemptedAgentIds` is carried so escalation never re-offers the conversation
  * to an agent who has already had their turn.
+ *
+ * THE LADDER BELONGS TO THE FIRST MESSAGE OF A SESSION - AND TO NOTHING ELSE
+ * (owner, 2026-11-16: "this is what the mechanism was, is, and should remain").
+ * Once an agent holds the chat, the customer's later messages never re-arm it:
+ * a customer sending ten short lines while the agent reads and types must not
+ * hand the chat to a colleague. From 14 Sep to 16 Nov it did exactly that -
+ * every customer message into an owned chat started a fresh 60 s timer, and
+ * on production one chat was reassigned 71 times in an evening while the
+ * agent was answering it (the agent, who has no team, lost read access each
+ * time and saw the customer panel vanish).
+ *
+ * A SESSION starts when the chat is created, when the customer writes into a
+ * chat that was marked solved, or when the customer comes back to an open chat
+ * after ROUTING_SESSION_GAP_MS of silence ("the next day, or after 2-3 hours"
+ * - the same customer with a new issue). The gateway decides that at the
+ * moment it stores the message and says so with `sessionStarted`; the worker
+ * then runs the first-message ladder again, the current owner getting first
+ * refusal if they are online. A chat nobody owns yet is routed on any message:
+ * nobody has handled it.
  */
 export const RoutingJob = z.object({
   conversationId: z.string(),
@@ -119,6 +139,12 @@ export const RoutingJob = z.object({
    * agreement between the gateway and the workers.
    */
   outboundCountAtSchedule: z.number().int().nonnegative().default(0),
+  /**
+   * `assign` only: this customer message STARTED A SESSION (new chat, a solved
+   * chat reopened, or a return after ROUTING_SESSION_GAP_MS). The ladder runs
+   * for an owned chat only when this is true; see the note above.
+   */
+  sessionStarted: z.boolean().optional(),
 });
 export type RoutingJob = z.infer<typeof RoutingJob>;
 
@@ -126,6 +152,16 @@ export type RoutingJob = z.infer<typeof RoutingJob>;
 export const ROUTING_FIRST_WAIT_MS = 60_000;
 /** Still no reply → release to every agent. */
 export const ROUTING_SECOND_WAIT_MS = 30_000;
+
+/**
+ * A customer writing into an OPEN chat after this much silence is starting a
+ * NEW SESSION (owner, 2026-11-16: "if the same customer comes back with any
+ * other issue, or maybe the next day, or maybe after 2-3 hours"). The first-
+ * message ladder runs again and the automatic welcome is owed again. The
+ * reports use their own, longer gap to split sessions (`SESSION_GAP_MS`,
+ * 6 h); this one is about who must answer now.
+ */
+export const ROUTING_SESSION_GAP_MS = 3 * 60 * 60 * 1000;
 
 /**
  * How long an owner may be gone before their live chat is handed on.

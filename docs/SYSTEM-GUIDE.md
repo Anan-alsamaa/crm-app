@@ -147,6 +147,8 @@ Client → server: **`message:send`** `{conversationId?, content, attachments?: 
 
 An unassigned chat is claimed automatically by the first agent who replies.
 
+**The ladder belongs to the first message of a session, and to nothing else** (owner, 2026-11-16). Once an agent holds the chat, the customer's later messages never re-arm it. A session starts when the chat is created, when the customer writes into a solved chat, or when the customer comes back to an open chat after **3 h** of silence (`ROUTING_SESSION_GAP_MS`). The gateway marks that message `sessionStarted`; the worker then runs the first-message rungs again, the current owner getting first refusal if online. A chat nobody owns yet is routed on any message. (From 14 Sep to 16 Nov every customer message re-armed the ladder, which handed chats away from agents mid-reply.)
+
 ### A5. The agent replies
 
 Agent portal → **`message:send`** `{conversationId, content, clientMsgId, origin?}` where `origin = {source:'quick_reply'|'ai_suggestion'|'ai_enhance', quickReplyId?, text}`.
@@ -173,7 +175,7 @@ POST https://notificationsystems.yiji-app.com/api/NotificationData/SendCrmNotifi
 - **Manual**: agent PATCHes the conversation `{status:'solved', solved_at}` in Directus, then emits `conversation:updated` → gateway sends `conversation:closed` → the widget shows the **CSAT** survey.
 - **Idle close: OFF** (owner, 2026-10-16). A chat closes only when an agent closes it. The sweep is still in the gateway and runs only with `CHAT_IDLE_CLOSE=on` on its task definition.
 - **CSAT**: `csat:submit {conversationId, score 1-5, comment?}` → `csat_responses` row (one per conversation).
-- The customer writing again **reopens the same conversation** as a new session (A3 step 2).
+- The customer writing again **reopens the same conversation** as a new session (A3 step 2). A return to an **open** chat after 3 h of silence is a new session too: first-response promise, welcome and routing ladder all start again.
 
 ### A8. Socket event reference
 

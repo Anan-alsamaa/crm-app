@@ -1331,6 +1331,13 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
        * once. Awaited so the welcome lands after THIS message and before the
        * customer's next one is handled further down the queue.
        */
+      /*
+       * DID THIS MESSAGE START A SESSION? Decided before `welcomePending` is
+       * cleared below, because the routing ladder further down needs the same
+       * answer: a chat this socket just created, a solved chat the customer
+       * reopened, or a return after hours of silence (`persistMessage`).
+       */
+      const sessionStarted = data.welcomePending === true || saved.newSession === true;
       if (data.kind === 'customer') {
         const greet = data.welcomePending === true || saved.sessionStarted === true;
         data.welcomePending = false;
@@ -1404,9 +1411,9 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
 
       // Auto-assignment: only a CUSTOMER message starts the ladder. An agent
       // typing is the opposite signal — the conversation is already being
-      // handled. The stage-0 job is idempotent per conversation, so a customer
-      // sending three messages in a row starts one ladder, not three racing
-      // ones; and the worker stands down if someone already owns it.
+      // handled. The worker stands down when somebody already owns the chat
+      // UNLESS this message started a session (owner, 2026-11-16: the ladder
+      // belongs to the first message of a session, never to the ones after).
       if (senderType === 'customer') {
         void producer
           .enqueueRouting({
@@ -1414,6 +1421,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
             stage: 'assign',
             attemptedAgentIds: [],
             outboundCountAtSchedule: 0,
+            sessionStarted,
           })
           .catch((err: unknown) => logger.warn({ err }, 'auto-assign enqueue failed'));
         /* AI auto-reply draft (shadow, owner 2026-10-13). The worker asks the
