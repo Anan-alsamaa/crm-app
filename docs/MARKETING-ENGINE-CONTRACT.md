@@ -120,16 +120,16 @@ passed the full gate on 2026-11-15 evening; they are tagged only on the owner's 
    pnpm --filter @yiji/directus-bootstrap run apply:fields -- \n     --only=marketing_coupons,marketing_campaigns,marketing_coupon_recipients,marketing_activity
    ```
 
-2. **Services release** `release/svc-1.2.50` = `release/svc-1.2.48` + the twelve marketing
+2. **Services release** `release/svc-1.2.51` = `release/svc-1.2.48` + the twelve marketing
    commits (cherry-picked; the only conflict, `scripts/check-permission-drift.mjs`, resolved to
    main's version): the Directus `app-roles-sync` marketing grants, the AI gateway
    `/commerce/marketing/*` routes (points + engine proxy), the workers marketing sender (behind
-   `MARKETING_COUPON_SEND`, default off). Tag `v1.2.50`.
-3. **Portals release** `release/portals-1.2.51` = `release/portals-1.2.49` (which already held
+   `MARKETING_COUPON_SEND`, default off). Tag `v1.2.51` (v1.2.50 is the routing fix of 16 Nov).
+3. **Portals release** `release/portals-1.2.52` = `release/portals-1.2.49` (which already held
    marketing parts 1-5a) + the promotions portal, the engine-choice fix, the deploy change (that
    branch never built or uploaded the marketing portal before) and the Roles page offering
    `use_marketing_portal` / `manage_marketing` / `approve_marketing` (`NOT_OFFERED` keeps only
-   the compensation-rules editor). Tag `v1.2.51`; the agent portal parks for Update now as
+   the compensation-rules editor). Tag `v1.2.52`; the agent portal parks for Update now as
    always, the admin and marketing portals go live at once.
 4. The Administrator grants the three switches to the marketing roles.
 
