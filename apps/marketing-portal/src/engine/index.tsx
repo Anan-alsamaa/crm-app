@@ -45,10 +45,17 @@ async function readEngineChoice(): Promise<EngineChoice> {
 }
 
 export function useEngineChoice(): { choice: EngineChoice; known: boolean } {
+  /* ONLY ONCE SOMEBODY IS SIGNED IN (staging, 2026-11-15): the provider mounts
+     on the login page too, and a read without a session is a 403 that would
+     be cached as "sample" for a minute after the Administrator signs in - the
+     live switch would look dead. The key carries the user, so a sign-in reads
+     the setting afresh. */
+  const { user } = useAuth();
   const q = useQuery({
-    queryKey: ['marketing-engine-choice'],
+    queryKey: ['marketing-engine-choice', user?.id ?? null],
     queryFn: readEngineChoice,
     staleTime: 60_000,
+    enabled: !!user,
   });
   return { choice: q.data ?? 'sample', known: q.data !== undefined };
 }
