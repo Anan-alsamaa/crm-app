@@ -28,6 +28,7 @@ import {
   REPORT_ACCESS_PRIVILEGES,
   effectivePrivileges,
   isOwnerPrivilege,
+  isAdministratorOnlyPrivilege,
   type Privilege,
 } from '../../lib/privileges.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
@@ -73,7 +74,9 @@ const toPrivs = (keys: readonly Privilege[]) =>
   keys
     .filter((key) => !NOT_OFFERED.includes(key))
     .map((key) => ({ key, group: PRIVILEGE_GROUP[key] as string }));
-const SHARED_PRIVS = toPrivs(PRIVILEGES);
+/* Everyone else: the shared list WITHOUT the major switches - those are the
+   Administrator's alone (owner, 2026-11-15; see ADMINISTRATOR_ONLY_PRIVILEGES). */
+const SHARED_PRIVS = toPrivs(PRIVILEGES.filter((k) => !isAdministratorOnlyPrivilege(k)));
 /* The owner sees one line per dashboard and per report instead of the old
    "View dashboards & reports" (owner, 2026-10-12); `view_dashboard` becomes
    plumbing, set on save from those lines (see `ownerSaveShape`). */

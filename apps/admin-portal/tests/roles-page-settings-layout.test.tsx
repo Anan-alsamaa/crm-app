@@ -132,6 +132,9 @@ describe('RolesPage settings layout', () => {
   });
 
   it('says when there is something to save, and saves what the switches show', async () => {
+    /* As the Administrator: "See every agent's chats" is one of the major
+       switches only the Administrator is offered (owner, 2026-11-15). */
+    auth.isOwner = true;
     sdk.request.mockImplementation((req: { kind: string; collection?: string }) => {
       if (req.kind === 'update') return Promise.resolve({ id: 'sup' });
       if (req.collection === 'app_roles') return Promise.resolve(roles);
@@ -165,5 +168,29 @@ describe('RolesPage settings layout', () => {
     expect(await screen.findByText(/Built-in roles are defined in code/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Save role' })).toBeNull();
     expect(screen.queryAllByRole('checkbox')).toHaveLength(0);
+  });
+});
+
+/**
+ * THE MAJOR SWITCHES ARE THE ADMINISTRATOR'S ALONE (owner, 2026-11-15): a
+ * WeCare Admin opening a role no longer sees "See every agent's chats" (nor the
+ * other Administrator-only switches); the owner still does.
+ */
+describe('Administrator-only switches', () => {
+  it('are not offered to a WeCare Admin', async () => {
+    auth.isOwner = false;
+    renderPage();
+    await openRole('Supervisor');
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByText('Work the chat inbox')).toBeInTheDocument();
+    expect(within(panel).queryByText("See every agent's chats")).toBeNull();
+  });
+  it('are offered to the Administrator', async () => {
+    auth.isOwner = true;
+    renderPage();
+    await openRole('Supervisor');
+    const panel = screen.getByRole('tabpanel');
+    expect(within(panel).getByText("See every agent's chats")).toBeInTheDocument();
+    auth.isOwner = false;
   });
 });
