@@ -256,6 +256,61 @@ Cache it for a few minutes; it is one small read.
 - **Every coupon v2 issues from a rule must be reported to the CRM** (the ticket API), so the CRM's
   compensation reports and the daily audit stay complete.
 
+## POST /events - order events (for Yiji v2, 2026-11-15)
+
+Late orders stay in the CRM, fed by **events instead of a poll**: the platform tells the CRM every
+order status change as it happens; the CRM keeps its own live table of open orders, times each one
+itself and builds the Late orders board from it. Signed like every other call. One event, or
+`{ "events": [ … ] }` with up to 100.
+
+```json
+{
+  "id": "evt_01JCY8…",
+  "type": "order.status_changed",
+  "at": "2026-11-15T13:05:00+03:00",
+  "order": {
+    "orderId": "1400001",
+    "status": "in_delivery",
+    "isOpen": true,
+    "orderType": "delivery",
+    "placedAt": "2026-11-15T12:30:00+03:00",
+    "restaurantId": "501",
+    "restaurantName": "Riyadh - Masief Plaza",
+    "brandId": "1",
+    "brandName": "La Casa Pasta",
+    "customer": { "id": "40840c0b-…", "name": "Sara", "phone": "+966501234567" },
+    "total": 88,
+    "isGroupMaster": false,
+    "parentOrderId": null
+  }
+}
+```
+
+| Field                             | Req. | Notes                                                                                                                                                      |
+| --------------------------------- | ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                              | yes  | Your event id, unique. **The idempotency key**: a retry sends the same id and is counted as a duplicate, never applied twice.                              |
+| `type`                            | yes  | `order.created`, `order.status_changed`. Other types are accepted and ignored (`ignored` in the reply), so you can send more later without a change here.  |
+| `at`                              | yes  | When it happened. ISO 8601 **with an offset or Z** - never a bare local time (Yiji v1 stamped Riyadh time without a zone; three hours out in the CRM).     |
+| `order.orderId`                   | yes  |                                                                                                                                                            |
+| `order.status`                    | yes  | Your status word (`placed`, `in_kitchen`, `ready_to_pickup`, `arrived`, `in_delivery`, `delivered`, `cancelled`, …). The CRM keeps the FIRST time of each. |
+| `order.isOpen`                    | yes  | `false` once the order is finished (delivered, closed, cancelled): the clock stops at this event's `at`. A later open event cannot restart it.             |
+| `order.orderType`                 | yes  | `delivery`, `pickup`, `dine_in`, `carhop`, `takeout`, `other`. The board shows delivery.                                                                   |
+| `order.placedAt`                  | yes  | When the customer placed it; the clock starts here.                                                                                                        |
+| `restaurantId` / `restaurantName` | no   | Your restaurant id (the one the CRM's branch master maps) and its name.                                                                                    |
+| `brandId` / `brandName`           | no   |                                                                                                                                                            |
+| `customer.id/name/phone`          | no   | Your customer id lets a coupon from the board reach the right wallet.                                                                                      |
+| `total`                           | no   | SAR.                                                                                                                                                       |
+| `isGroupMaster` / `parentOrderId` | no   | A food-court group: the master is the board row; a sub-order carries `parentOrderId` and is never a row of its own.                                        |
+
+**Reply: `202`** `{ "ok": true, "accepted": 2, "duplicates": 0, "ignored": 0 }` once the body is
+parsed - the work is done by the CRM's workers, never in the request. `400` names an invalid field;
+`401` a bad signature; `503` means the CRM cannot take events right now: **retry later with the same
+ids** (back off: 1 min, 5 min, 15 min…). Send events in order per order where you can; an older
+event arriving late never moves a status back.
+
+The safety net: while events flow the CRM still reads your late-orders list every few minutes and
+adds anything the events missed.
+
 ## POST /tickets/{externalId}/coupons
 
 Body: one coupon object. `201` with `{ ticketId, ticketNumber, externalId, coupon }`.

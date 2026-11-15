@@ -36,6 +36,7 @@ export * from './automated-message.js';
 export * from './message-source.js';
 export * from './late-delivery.js';
 export * from './late-orders-live.js';
+export * from './order-events.js';
 export * from './privileges.js';
 export * from './releases.js';
 

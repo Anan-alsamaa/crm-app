@@ -44,9 +44,16 @@ class FakeRedis implements PollRedis {
     for (const f of fields) this.hashes.get(key)?.delete(f);
     return fields.length;
   }
-  hset(key: string, field: string, value: string) {
+  async hset(key: string, field: string, value: string) {
     if (!this.hashes.has(key)) this.hashes.set(key, new Map());
     this.hashes.get(key)!.set(field, value);
+    return 1;
+  }
+  async hget(key: string, field: string) {
+    return this.hashes.get(key)?.get(field) ?? null;
+  }
+  async expire() {
+    return 1;
   }
 }
 

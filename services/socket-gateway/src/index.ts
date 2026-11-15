@@ -16,7 +16,7 @@ import Fastify, {
   type FastifyRequest,
 } from 'fastify';
 import type { Redis, Cluster } from 'ioredis';
-import { createRedis } from '@yiji/shared-config/redis';
+import { createRedis, envKey } from '@yiji/shared-config/redis';
 import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
@@ -744,6 +744,31 @@ async function main(): Promise<void> {
       teamId: config.YIJI_INBOUND_TEAM_ID || null,
       logger,
     }),
+    /* ORDER EVENTS (owner, 2026-11-15): deduped by event id in Redis (a week),
+       handed to the workers' late-orders queue. Without Redis the route
+       answers 503 and v2 retries later. */
+    ...(pubClient
+      ? {
+          events: {
+            vendorKey: `yiji:${DEFAULT_VENDOR_ID}`,
+            seen: async (eventId: string) => {
+              const client = pubClient!;
+              const r = await client.set(
+                envKey(`yiji-events:seen:${eventId}`),
+                '1',
+                'EX',
+                7 * 24 * 60 * 60,
+                'NX',
+              );
+              return r !== 'OK';
+            },
+            enqueue: (job) =>
+              producer.enqueueLateOrdersEvent
+                ? producer.enqueueLateOrdersEvent(job)
+                : Promise.resolve(null),
+          },
+        }
+      : {}),
   });
 
   // Admin-triggered job enqueue (admin portal → gateway). "Import CSV" and

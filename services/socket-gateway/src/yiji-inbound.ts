@@ -28,6 +28,10 @@ import {
   ruleSpecificity,
   isPercentageCategory,
   isGeneralCouponType,
+  parseOrderEventsBody,
+  orderEventsOf,
+  isHandledOrderEvent,
+  type LateOrdersEventJob,
   toStoreSnapshot,
   branchNotifyTypesFor,
   storeNotificationDraft,
@@ -1483,6 +1487,20 @@ export interface YijiInboundRouteDeps {
   /** Per-caller (IP) token bucket. */
   rate?: { capacity: number; perSec: number };
   nowMs?: () => number;
+  /**
+   * ORDER EVENTS (owner, 2026-11-15): `POST /events`. Absent = the route
+   * answers 503 (no Redis to dedupe with, no queue to hand the workers).
+   */
+  events?: YijiEventsDeps;
+}
+
+export interface YijiEventsDeps {
+  /** The late-orders vendor key the events belong to (`yiji:<vendor id>`). */
+  vendorKey: string;
+  /** True when this event id was already accepted (a retry): nothing is queued twice. */
+  seen(eventId: string): Promise<boolean>;
+  /** Hand the event to the workers; null = the queue is disabled. */
+  enqueue(job: LateOrdersEventJob): Promise<string | null>;
 }
 
 /**
@@ -1597,6 +1615,64 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
       scope.get('/compensation-rules', async (req, reply) => {
         if (!(await guard(req, reply))) return reply;
         return answer(reply, () => deps.service.readCompensationRules());
+      });
+
+      /*
+       * ORDER EVENTS (owner, 2026-11-15): the platform tells the CRM every
+       * order status change; the workers keep the live orders table and the
+       * late-orders board from it. One event or a batch; each event id is
+       * accepted once (a retry answers 202 with it counted as a duplicate);
+       * types the CRM does not act on are accepted and ignored, so v2 can
+       * send more without a change here. Always 202 once parsed: the work
+       * happens in the workers, never in this request.
+       */
+      scope.post('/events', async (req, reply) => {
+        if (!(await guard(req, reply))) return reply;
+        const events = deps.events;
+        if (!events) {
+          return reply.code(503).send({
+            error: 'not_configured',
+            message: 'Order events are not set up on this server.',
+          });
+        }
+        const parsed = parseOrderEventsBody(req.body);
+        if (!parsed.success) {
+          return reply.code(400).send({
+            error: 'invalid_request',
+            message: 'The event is invalid.',
+            fields: zodFieldErrors(parsed.error),
+          });
+        }
+        let accepted = 0;
+        let duplicates = 0;
+        let ignored = 0;
+        for (const event of orderEventsOf(parsed.data)) {
+          if (!isHandledOrderEvent(event.type)) {
+            ignored += 1;
+            continue;
+          }
+          try {
+            if (await events.seen(event.id)) {
+              duplicates += 1;
+              continue;
+            }
+            const id = await events.enqueue({ vendorKey: events.vendorKey, event });
+            if (id === null) {
+              return reply.code(503).send({
+                error: 'unavailable',
+                message: 'The CRM cannot take events right now. Retry with the same event ids.',
+              });
+            }
+            accepted += 1;
+          } catch (err) {
+            logger.error({ err: (err as Error)?.message }, 'yiji events: could not accept');
+            return reply.code(503).send({
+              error: 'unavailable',
+              message: 'The CRM cannot take events right now. Retry with the same event ids.',
+            });
+          }
+        }
+        return reply.code(202).send({ ok: true, accepted, duplicates, ignored });
       });
     },
     { prefix: YIJI_INBOUND_PREFIX },
