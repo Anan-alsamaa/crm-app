@@ -5,9 +5,11 @@ import {
   couponOrderId,
   COUPON_APPROVED_STATUSES,
   type CouponApprovalStatus,
+  type CouponReplacementTerms,
 } from '@yiji/shared-types';
 import { jobProducer } from '../../lib/job-producer.js';
 import { directus } from '../../lib/directus.js';
+import { assertCouponsOpen } from './maintenance.js';
 
 /**
  * The supervisor's side of coupon approval.
@@ -96,6 +98,17 @@ export interface CouponApprovalRow {
    */
   removal_status?: string | null;
   /**
+   * EDIT IN PLACE (owner, 2026-11-15: edited from THIS page). `yiji_used_order`
+   * = the customer already used it (no Edit); `edit_state` frozen = an edit is
+   * running (switched off on Yiji), done / refused = the last edit's outcome,
+   * `edit_detail` in the workers' words. Optional like the customer check.
+   */
+  yiji_used_order?: string | null;
+  edited_at?: string | null;
+  edit_state?: 'frozen' | 'done' | 'refused' | string | null;
+  edit_detail?: string | null;
+  edit_request_id?: string | null;
+  /**
    * THE COMPENSATION RULE this coupon came from (owner, 2026-10-27), and
    * whether the agent changed its suggested terms. Optional: absent until the
    * fields are applied on the environment.
@@ -149,8 +162,21 @@ export const COUPON_CUSTOMER_CHECK_FIELDS = [
   'yiji_customer_checked_at',
 ] as const;
 
-/** Optional too (EMA-80, manual apply:fields): read with the check fields. */
-export const COUPON_OPTIONAL_FIELDS = [...COUPON_CUSTOMER_CHECK_FIELDS, 'removal_status'] as const;
+/** The edit-in-place columns (2026-11-12, manual apply:fields). */
+export const COUPON_EDIT_FIELDS = [
+  'yiji_used_order',
+  'edited_at',
+  'edit_state',
+  'edit_detail',
+  'edit_request_id',
+] as const;
+
+/** Optional too (EMA-80 + edit in place, manual apply:fields): read with the check fields. */
+export const COUPON_OPTIONAL_FIELDS = [
+  ...COUPON_CUSTOMER_CHECK_FIELDS,
+  'removal_status',
+  ...COUPON_EDIT_FIELDS,
+] as const;
 
 /**
  * The compensation-rule columns (2026-10-27, manual apply:fields) - newest of
@@ -484,5 +510,86 @@ export function useRetryCouponDelivery() {
       });
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['coupon-approvals'] }),
+  });
+}
+
+/** The outcome of ONE edit in place, as the workers stamp it on the row. */
+export type CouponEditState = 'working' | 'done' | 'refused';
+
+/**
+ * EDIT AN APPROVED COUPON IN PLACE, from the Coupon approvals page (owner,
+ * 2026-11-15: here, not on the ticket). The SAME coupon - same code - takes
+ * the new terms on Yiji and on its row; nothing is re-issued, so Yiji's
+ * monthly report counts it once. The gateway checks `edit_approved_coupons`;
+ * the workers refuse a used coupon, refuse an edit based on stale terms, and
+ * prove the change by reading Yiji back. This waits (bounded) for THIS edit's
+ * outcome - no Yiji call from the browser.
+ */
+export function useEditApprovedCoupon() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      id: string;
+      terms: CouponReplacementTerms;
+      reason: string;
+      basedOn: string;
+    }): Promise<{ state: CouponEditState; note: string | null }> => {
+      await assertCouponsOpen();
+      const editRequestId =
+        globalThis.crypto?.randomUUID?.() ?? `e${Date.now()}${Math.random().toString(36).slice(2)}`;
+      await jobProducer.editCoupon({
+        couponApprovalId: input.id,
+        editRequestId,
+        terms: input.terms as unknown as Record<string, unknown>,
+        reason: input.reason,
+        basedOn: input.basedOn,
+      });
+      /* The worker switches the coupon off on Yiji, checks it, updates it,
+         reads it back and switches it on - about ten calls. */
+      const deadline = Date.now() + 75_000;
+      while (Date.now() < deadline) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const rows = (await directus.request(
+          readItems(
+            'coupon_approvals' as never,
+            {
+              filter: { id: { _eq: input.id } },
+              fields: ['edit_request_id', 'edit_state', 'edit_detail'],
+              limit: 1,
+            } as never,
+          ),
+        )) as unknown as Array<{
+          edit_request_id?: string | null;
+          edit_state?: string | null;
+          edit_detail?: string | null;
+        }>;
+        const r = rows?.[0];
+        if (
+          r?.edit_request_id === editRequestId &&
+          (r.edit_state === 'done' || r.edit_state === 'refused')
+        ) {
+          return {
+            state: r.edit_state === 'done' ? 'done' : 'refused',
+            note: r.edit_detail ?? null,
+          };
+        }
+      }
+      return { state: 'working', note: null };
+    },
+    onSettled: () => {
+      for (const key of [
+        'coupon-approvals',
+        'coupon-replacements',
+        'all-compensation',
+        'coupon-approval-facts',
+        'coupon-spend',
+        'admin-kpi',
+        'agent-reports',
+        'complaint-metrics',
+        'dashboard-metrics',
+      ]) {
+        void qc.invalidateQueries({ queryKey: [key] });
+      }
+    },
   });
 }

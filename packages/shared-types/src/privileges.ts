@@ -568,7 +568,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   view_order_details: 'agent',
   request_coupons: 'agent',
   manage_ticket_compensation: 'agent',
-  // Offered on the ticket's coupon list AND the admin Coupon approvals card;
+  // Offered on the admin Coupon approvals card only (owner, 2026-11-15);
   // listed with the coupon queue it changes.
   edit_approved_coupons: 'admin',
   manage_compensation_rules: 'admin',

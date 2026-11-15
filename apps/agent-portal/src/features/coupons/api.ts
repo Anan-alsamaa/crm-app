@@ -1,15 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createItem, readItems, updateItem, updateItems } from '@directus/sdk';
+import { createItem, readItems, updateItems } from '@directus/sdk';
 import {
-  couponPrefix,
-  generateCouponCode,
-  startCouponReplacement,
-  waitForCouponReplacement,
   type CouponApprovalStatus,
   type CouponRaisedFrom,
   type CouponFields,
-  type CouponReplacementTerms,
-  type CouponReplaceState,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 import { vendorField } from '../../lib/record-vendor.js';
@@ -551,158 +545,8 @@ export const TICKET_COUPON_REPLACE_FIELDS = [
   { replaced_by: ['id', 'coupon_code'] },
 ] as const;
 
-/**
- * EDIT AN APPROVED COUPON from its ticket (owner, 2026-10-27).
- *
- * The replacement is created with THIS user's token; the gateway checks
- * `edit_approved_coupons`; the workers check the old coupon was not used, take
- * it out of the customer's Yiji app and only then send the new one. Waits
- * (bounded) on the two rows for the outcome - no Yiji call from the browser.
- */
-/**
- * EDIT AN APPROVED COUPON IN PLACE (owner, 2026-11-11). The SAME coupon - same
- * code - takes the new terms on Yiji and on its row; nothing is re-issued, so
- * Yiji's monthly report counts it once. The gateway checks
- * `edit_approved_coupons`; the workers refuse a used coupon and prove the
- * change by reading it back. This waits (bounded) for THIS edit's outcome.
- */
-export function useEditTicketCoupon() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      couponId: string;
-      terms: CouponReplacementTerms;
-      reason: string;
-      basedOn: string;
-    }): Promise<{ state: CouponReplaceState; note: string | null }> => {
-      await assertCouponsOpen();
-      const editRequestId =
-        globalThis.crypto?.randomUUID?.() ?? `e${Date.now()}${Math.random().toString(36).slice(2)}`;
-      await jobProducer.editCoupon({
-        couponApprovalId: input.couponId,
-        editRequestId,
-        terms: input.terms as unknown as Record<string, unknown>,
-        reason: input.reason,
-        basedOn: input.basedOn,
-      });
-      /* The worker switches the coupon off on Yiji, checks it, updates it,
-         reads it back and switches it on - about ten calls. */
-      const deadline = Date.now() + 75_000;
-      while (Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, 1500));
-        const rows = (await directus.request(
-          readItems(
-            'coupon_approvals' as never,
-            {
-              filter: { id: { _eq: input.couponId } },
-              fields: ['edit_request_id', 'edit_state', 'edit_detail'],
-              limit: 1,
-            } as never,
-          ),
-        )) as unknown as Array<{
-          edit_request_id?: string | null;
-          edit_state?: string | null;
-          edit_detail?: string | null;
-        }>;
-        const r = rows?.[0];
-        if (
-          r?.edit_request_id === editRequestId &&
-          (r.edit_state === 'done' || r.edit_state === 'refused')
-        ) {
-          return {
-            state: r.edit_state === 'done' ? 'done' : 'refused',
-            note: r.edit_detail ?? null,
-          };
-        }
-      }
-      return { state: 'working', note: null };
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['ticket-coupons'] });
-      void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
-      void qc.invalidateQueries({ queryKey: ['tickets'] });
-      void qc.invalidateQueries({ queryKey: ['ticket'] });
-    },
-  });
-}
-
-export function useReplaceTicketCoupon() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: {
-      old: CouponRequestRow;
-      terms: CouponReplacementTerms;
-      reason: string;
-      editorId: string | null;
-    }): Promise<{ code: string; state: CouponReplaceState; note: string | null }> => {
-      await assertCouponsOpen();
-      const { replacementId, code } = await startCouponReplacement(
-        {
-          /* Both homes of a code, like the request form's duplicate check. */
-          codeTaken: async (c) => {
-            const [a, b] = await Promise.all([
-              directus.request(
-                readItems(
-                  'coupon_approvals' as never,
-                  { filter: { coupon_code: { _eq: c } }, fields: ['id'], limit: 1 } as never,
-                ),
-              ) as Promise<unknown[]>,
-              directus.request(
-                readItems(
-                  'tickets' as never,
-                  { filter: { coupon_code: { _eq: c } }, fields: ['id'], limit: 1 } as never,
-                ),
-              ) as Promise<unknown[]>,
-            ]);
-            return a.length > 0 || b.length > 0;
-          },
-          create: (row) => directus.request(createItem('coupon_approvals' as never, row as never)),
-          enqueue: (body) => jobProducer.replaceCoupon(body),
-          abandon: (id, note) =>
-            directus.request(
-              updateItem('coupon_approvals' as never, id, {
-                status: 'rejected',
-                decision_note: note,
-              } as never),
-            ),
-          newId: () => newCouponRequestId(),
-          newCode: (side) => generateCouponCode(Math.random, couponPrefix(side)),
-        },
-        input,
-      );
-      void qc.invalidateQueries({ queryKey: ['ticket-coupons'] });
-      const settled = await waitForCouponReplacement(async () => {
-        const rows = (await directus.request(
-          readItems(
-            'coupon_approvals' as never,
-            {
-              filter: { id: { _in: [input.old.id, replacementId] } },
-              fields: ['id', 'status', 'decision_note', 'removal_status', 'replaced_by'],
-              limit: 2,
-            } as never,
-          ),
-        )) as unknown as Array<{
-          id: string;
-          status: string | null;
-          decision_note: string | null;
-          removal_status: string | null;
-          replaced_by: string | null;
-        }>;
-        return {
-          replacement: rows.find((r) => String(r.id) === replacementId) ?? null,
-          old: rows.find((r) => String(r.id) === input.old.id) ?? null,
-        };
-      });
-      return { code, ...settled };
-    },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['ticket-coupons'] });
-      void qc.invalidateQueries({ queryKey: ['my-coupon-requests'] });
-      void qc.invalidateQueries({ queryKey: ['tickets'] });
-      void qc.invalidateQueries({ queryKey: ['ticket'] });
-    },
-  });
-}
+/* Editing an approved coupon moved to the admin portal's Coupon approvals
+   page (owner, 2026-11-15): this portal no longer edits or replaces one. */
 
 /**
  * TAKE A TICKET'S COUPONS BACK (owner, 2026-10-21, EMA-80).

@@ -161,6 +161,23 @@ export const jobProducer = {
     return post<EnqueueResult>('/jobs/coupon-replace', body);
   },
 
+  /**
+   * Edit an approved coupon IN PLACE from the Coupon approvals page (owner,
+   * 2026-11-15: this page, not the ticket). Same coupon, same code; the gateway
+   * checks `edit_approved_coupons` and the workers switch the coupon off on
+   * Yiji while it changes, read it back and only then update the row.
+   */
+  editCoupon(body: {
+    couponApprovalId: string;
+    editRequestId: string;
+    terms: Record<string, unknown>;
+    reason: string;
+    /** The coupon's terms as the editor opened them (couponTermsVersion). */
+    basedOn: string;
+  }): Promise<EnqueueResult> {
+    return post<EnqueueResult>('/jobs/coupon-edit', body);
+  },
+
   /*
    * RELEASES — a deploy publishes a build; the administrator releases it.
    *

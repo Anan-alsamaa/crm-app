@@ -48,8 +48,13 @@ const api = vi.hoisted(() => ({
   useDecideCoupon: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useSaveCouponTerms: vi.fn(),
   useRetryCouponDelivery: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useEditApprovedCoupon: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
+vi.mock('../src/features/coupon-approvals/maintenance.js', () => ({
+  useCouponsUnderMaintenance: () => false,
+  assertCouponsOpen: async () => {},
+}));
 
 import { CouponApprovalsPage } from '../src/features/coupon-approvals/CouponApprovalsPage.js';
 

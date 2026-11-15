@@ -468,7 +468,7 @@ export function RolesPage() {
     }),
     edit_approved_coupons: t('roles.p.editApprovedCoupons', {
       defaultValue:
-        "Edit an approved coupon (applies at once: a new coupon replaces it, also in the customer's Yiji app; a used coupon cannot be edited)",
+        'Edit an approved coupon from the Coupon approvals page (the same coupon changes on Yiji and here; a used coupon cannot be edited)',
     }),
     manage_compensation_rules: t('roles.p.manageCompensationRules', {
       defaultValue:
