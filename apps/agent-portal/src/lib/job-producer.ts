@@ -104,30 +104,8 @@ export const jobProducer = {
     return post<EnqueueResult>('/jobs/coupon-remove', { couponApprovalId, reason });
   },
 
-  /**
-   * Owner, 2026-10-27: an APPROVED coupon was edited - its replacement row is
-   * already created. The gateway checks `edit_approved_coupons` and stamps who
-   * asked; the workers check it was not used and swap the two.
-   */
-  replaceCoupon(body: {
-    couponApprovalId: string;
-    replacementId: string;
-    reason: string;
-  }): Promise<EnqueueResult> {
-    return post<EnqueueResult>('/jobs/coupon-replace', body);
-  },
-
-  /** Edit an approved coupon IN PLACE (owner, 2026-11-11): same coupon, same code. */
-  editCoupon(body: {
-    couponApprovalId: string;
-    editRequestId: string;
-    terms: Record<string, unknown>;
-    reason: string;
-    /** The coupon's terms as the editor opened them (couponTermsVersion). */
-    basedOn: string;
-  }): Promise<EnqueueResult> {
-    return post<EnqueueResult>('/jobs/coupon-edit', body);
-  },
+  /* Editing an approved coupon moved to the admin portal's Coupon approvals
+     page (owner, 2026-11-15); this portal no longer enqueues edits. */
 
   async leastLoadedAgentInTeam(teamId: string): Promise<string | null> {
     const r = await call<{ ok: boolean; agentId: string | null }>(

@@ -34,6 +34,10 @@ import {
   normalizeOrderId,
   couponRaisedFromLabel,
   type CouponReplacementTerms,
+  couponEditBlock,
+  couponTermsChanges,
+  couponTermsVersion,
+  editedCouponTerms,
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { FIELD_LABEL, FILTER_CARD, PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
@@ -44,10 +48,12 @@ import { useStoreIndex } from '../restaurants/api.js';
 import {
   useCouponApprovals,
   useDecideCoupon,
+  useEditApprovedCoupon,
   useRetryCouponDelivery,
   useSaveCouponTerms,
   type CouponApprovalRow,
 } from './api.js';
+import { useCouponsUnderMaintenance } from './maintenance.js';
 import { correctionOf, useCorrectionStamps, type CorrectionStamp } from './correction-stamps.js';
 import { PolicyPills } from './PolicyPills.js';
 import { useCouponReplacements, type CouponReplacementLink } from './replacements.js';
@@ -414,8 +420,32 @@ export function termsFromEdits(row: CouponApprovalRow, e: TermEdits): CouponRepl
   };
 }
 
-/* EDIT AN APPROVED COUPON was REMOVED (owner, 2026-11-12): an approved coupon
-   is never changed after it is assigned. */
+/**
+ * EDIT AN APPROVED COUPON, from THIS page (owner, 2026-11-15: "we want it in
+ * the Coupon approvals page in the admin portal", not on the ticket). Offered
+ * to whoever holds `edit_approved_coupons` (WeCare Supervisor / WeCare Admin /
+ * Administrator by default), only on an approval that can still be edited
+ * from what the card already knows - approved, not removed, not replaced, not
+ * known to be used, and no edit of it still running (switched off on Yiji).
+ * "Was it used?" is asked by the workers for this one coupon after Save, never
+ * by this page.
+ */
+export function canOfferCouponEdit(
+  row: CouponApprovalRow,
+  replacedBy: { id: string } | null,
+  allowed: boolean,
+): boolean {
+  return (
+    allowed &&
+    row.edit_state !== 'frozen' &&
+    couponEditBlock({
+      status: row.status,
+      removal_status: row.removal_status ?? null,
+      replaced_by: replacedBy?.id ?? null,
+      yiji_used_order: row.yiji_used_order ?? null,
+    }) === null
+  );
+}
 
 /**
  * THE BRANCH, IN NAMES (owner spec §18, 2026-09-29).
@@ -485,6 +515,11 @@ function Row({
   const replacedBy = replacement?.replacedBy ?? null;
   const replaces = replacement?.replaces ?? null;
   const isReplaced = Boolean(replacedBy);
+  /* Edit an APPROVED coupon in place, from this card (owner, 2026-11-15). */
+  const canEditApproved = hasPrivilege('edit_approved_coupons');
+  const editOffered = canOfferCouponEdit(row, replacedBy, canEditApproved);
+  const couponsPaused = useCouponsUnderMaintenance();
+  const editApproved = useEditApprovedCoupon();
   /* The store master, for turning Yiji's restaurant id into a name. Cached by
      React Query and shared with every other card, so a queue of twenty is one
      fetch. */
@@ -831,6 +866,27 @@ function Row({
               }}
             >
               {t('couponApprovals.reject', { defaultValue: 'Reject' })}
+            </Button>
+          </div>
+        )}
+        {/* EDIT A DELIVERED COUPON, from the queue (owner, 2026-11-15): one
+            click opens the card on its form. The same button sits in the
+            open card; never both at once. */}
+        {editOffered && !editing && !expanded && !couponsPaused && (
+          <div className="relative flex shrink-0 items-center gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={busy || editApproved.isPending}
+              onClick={() => {
+                setExpanded(true);
+                setEditing(true);
+                setEditReason('');
+                setEdits(seedEdits(row));
+              }}
+            >
+              {t('couponApprovals.editCoupon', { defaultValue: 'Edit coupon' })}
             </Button>
           </div>
         )}
@@ -1332,7 +1388,64 @@ function Row({
             </p>
           )}
 
-          {pending && (
+          {/* EDIT IN PLACE, the state of it (owner, 2026-11-15): an edit still
+              running has the coupon switched off on Yiji; a refused one says
+              why in the workers' words; a done one says when. */}
+          {approvedNotPending && !isReplaced && row.edit_state === 'frozen' && (
+            <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              <Pill tone="warning" size="sm" dot>
+                {t('couponApprovals.editFrozen', {
+                  defaultValue: 'Being edited — switched off on Yiji while it changes',
+                })}
+              </Pill>
+            </p>
+          )}
+          {approvedNotPending && !isReplaced && row.edit_state === 'refused' && row.edit_detail && (
+            <p className="mt-2 rounded-lg bg-warning-tint px-3 py-2 text-xs leading-relaxed text-foreground ring-1 ring-inset ring-warning/25">
+              {t('couponApprovals.editRefusedNote', {
+                defaultValue: 'Last edit not applied: {{why}}',
+                why: row.edit_detail,
+              })}
+            </p>
+          )}
+          {approvedNotPending && !isReplaced && row.edit_state === 'done' && row.edited_at && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {t('couponApprovals.editedAt', {
+                defaultValue: 'Edited {{when}}',
+                when: formatDateTime(row.edited_at),
+              })}
+            </p>
+          )}
+          {editOffered &&
+            !editing &&
+            (couponsPaused ? (
+              <p className="mt-3 text-xs text-muted-foreground">
+                <Pill tone="muted" size="sm" dot>
+                  {t('couponApprovals.editPaused', {
+                    defaultValue: 'Coupons under maintenance — no edits until the switch is off',
+                  })}
+                </Pill>
+              </p>
+            ) : (
+              <div className="mt-3 flex justify-end">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy || editApproved.isPending}
+                  onClick={() => {
+                    setExpanded(true);
+                    setEditing(true);
+                    setEditReason('');
+                    setEdits(seedEdits(row));
+                  }}
+                >
+                  {t('couponApprovals.editCoupon', { defaultValue: 'Edit coupon' })}
+                </Button>
+              </div>
+            ))}
+
+          {(pending || editing) && (
             // The decision strip sits on its own hairline band — the card's footer,
             // so the actions read as one place rather than a loose button cluster.
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-foreground/[0.07] pt-3.5">
@@ -1386,21 +1499,25 @@ function Row({
                             : undefined
                         }
                       />
-                      <EditField
-                        label={
-                          isRestaurantOrderNumber(edits.delivery_type || row.delivery_type)
-                            ? t('couponApprovals.restaurantOrder', {
-                                defaultValue: 'Restaurant order no.',
-                              })
-                            : t('couponApprovals.yijiOrder', { defaultValue: 'Yiji order' })
-                        }
-                        value={edits.order_id}
-                        onChange={(v) => setEdit('order_id', v)}
-                        hint={t('couponApprovals.orderEditHint', {
-                          defaultValue:
-                            'For reference — the coupon always goes to the customer’s phone.',
-                        })}
-                      />
+                      {/* The order is a reference on the REQUEST; an edit of a
+                          delivered coupon changes its terms only. */}
+                      {pending && (
+                        <EditField
+                          label={
+                            isRestaurantOrderNumber(edits.delivery_type || row.delivery_type)
+                              ? t('couponApprovals.restaurantOrder', {
+                                  defaultValue: 'Restaurant order no.',
+                                })
+                              : t('couponApprovals.yijiOrder', { defaultValue: 'Yiji order' })
+                          }
+                          value={edits.order_id}
+                          onChange={(v) => setEdit('order_id', v)}
+                          hint={t('couponApprovals.orderEditHint', {
+                            defaultValue:
+                              'For reference — the coupon always goes to the customer’s phone.',
+                          })}
+                        />
+                      )}
                       <EditField
                         label={t('coupons.titleField', { defaultValue: 'Coupon title' })}
                         value={edits.title}
@@ -1514,17 +1631,29 @@ function Row({
                           id={`edit-reason-${row.id}`}
                           value={editReason}
                           onChange={(e) => setEditReason(e.target.value)}
-                          placeholder={t('couponApprovals.editReasonPlaceholder', {
-                            defaultValue: 'Why are these terms different from what was asked for?',
-                          })}
+                          placeholder={
+                            pending
+                              ? t('couponApprovals.editReasonPlaceholder', {
+                                  defaultValue:
+                                    'Why are these terms different from what was asked for?',
+                                })
+                              : t('couponApprovals.editInPlaceReasonPlaceholder', {
+                                  defaultValue: 'Why is this approved coupon being changed?',
+                                })
+                          }
                           className="mt-1 h-9 w-full"
                         />
                       </div>
                       <p className="text-2xs leading-relaxed text-muted-foreground sm:col-span-2 lg:col-span-3">
-                        {t('couponApprovals.editHint', {
-                          defaultValue:
-                            'Save keeps these terms and leaves the request waiting. Approving now grants them instead of what was asked for, and is recorded as an amendment.',
-                        })}
+                        {pending
+                          ? t('couponApprovals.editHint', {
+                              defaultValue:
+                                'Save keeps these terms and leaves the request waiting. Approving now grants them instead of what was asked for, and is recorded as an amendment.',
+                            })
+                          : t('couponApprovals.editInPlaceHint', {
+                              defaultValue:
+                                'Save changes this coupon itself — same code — on Yiji and here. It is switched off in the customer’s app while it changes, then switched back on. A coupon the customer already used cannot be edited.',
+                            })}
                       </p>
                     </div>
                   )}
@@ -1547,6 +1676,7 @@ function Row({
                         disabled={
                           busy ||
                           saveTerms.isPending ||
+                          editApproved.isPending ||
                           termsProblems.length > 0 ||
                           !editReason.trim()
                         }
@@ -1562,6 +1692,72 @@ function Row({
                         // action that commits, so it carries the primary weight
                         // Approve has outside the editor.
                         onClick={() => {
+                          if (!pending) {
+                            /* AN APPROVED COUPON, edited in place (owner,
+                               2026-11-15): the WHOLE coupon goes to the
+                               workers, judged against the stored row - an
+                               edit of one value keeps every other - with the
+                               version the editor opened, so a later save never
+                               silently overwrites an earlier one. */
+                            const stored = row as unknown as Record<string, unknown>;
+                            const terms = editedCouponTerms(stored, termsFromEdits(row, edits));
+                            if (
+                              couponTermsChanges(
+                                stored,
+                                terms as unknown as Record<string, unknown>,
+                              ).length === 0
+                            ) {
+                              toast.success(
+                                t('couponApprovals.nothingChanged', {
+                                  defaultValue: 'Nothing changed.',
+                                }),
+                              );
+                              return;
+                            }
+                            void editApproved
+                              .mutateAsync({
+                                id: row.id,
+                                terms,
+                                reason: editReason.trim(),
+                                basedOn: couponTermsVersion(stored),
+                              })
+                              .then((r) => {
+                                if (r.state === 'done') {
+                                  toast.success(
+                                    t('couponApprovals.editDone', {
+                                      defaultValue:
+                                        'Coupon {{code}} edited — the customer sees the new values on the same coupon.',
+                                      code: row.coupon_code ?? '—',
+                                    }),
+                                  );
+                                } else if (r.state === 'refused') {
+                                  toast.error(
+                                    t('couponApprovals.editRefused', {
+                                      defaultValue: 'The coupon was not changed',
+                                    }),
+                                    { description: r.note ?? undefined, durationMs: 0 },
+                                  );
+                                } else {
+                                  toast.success(
+                                    t('couponApprovals.editWorking', {
+                                      defaultValue:
+                                        'Edit sent — still updating the coupon on Yiji. This card updates when it is done.',
+                                    }),
+                                  );
+                                }
+                                setEditing(false);
+                                setEditReason('');
+                              })
+                              .catch((err: unknown) => {
+                                toast.error(
+                                  t('couponApprovals.editFailed', {
+                                    defaultValue: 'Could not edit this coupon',
+                                  }),
+                                  { description: err instanceof Error ? err.message : undefined },
+                                );
+                              });
+                            return;
+                          }
                           const patch = diffEdits(row, edits);
                           if (Object.keys(patch).length === 0) {
                             toast.success(
@@ -1600,13 +1796,15 @@ function Row({
                           );
                         }}
                       >
-                        {t('actions.save', { ns: 'common', defaultValue: 'Save' })}
+                        {editApproved.isPending
+                          ? t('couponApprovals.editSending', { defaultValue: 'Saving…' })
+                          : t('actions.save', { ns: 'common', defaultValue: 'Save' })}
                       </Button>
                       <Button
                         type="button"
                         size="sm"
                         variant="ghost"
-                        disabled={busy || saveTerms.isPending}
+                        disabled={busy || saveTerms.isPending || editApproved.isPending}
                         onClick={() => {
                           // Discard, not just close: re-seeding from the row
                           // means reopening the editor shows what was ASKED
@@ -1618,11 +1816,13 @@ function Row({
                       >
                         {t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
                       </Button>
-                      <span className="ms-auto text-end text-2xs text-muted-foreground">
-                        {t('couponApprovals.editingHint', {
-                          defaultValue: 'Save or cancel this change before deciding.',
-                        })}
-                      </span>
+                      {pending && (
+                        <span className="ms-auto text-end text-2xs text-muted-foreground">
+                          {t('couponApprovals.editingHint', {
+                            defaultValue: 'Save or cancel this change before deciding.',
+                          })}
+                        </span>
+                      )}
                     </>
                   ) : (
                     <>

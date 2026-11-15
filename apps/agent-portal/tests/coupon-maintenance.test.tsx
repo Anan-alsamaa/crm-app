@@ -20,21 +20,16 @@ vi.mock('react-i18next', () => ({
 }));
 const sdk = vi.hoisted(() => ({ request: vi.fn() }));
 vi.mock('../src/lib/directus.js', () => ({ directus: { request: sdk.request } }));
-const producer = vi.hoisted(() => ({ replaceCoupon: vi.fn(), removeCoupon: vi.fn() }));
+const producer = vi.hoisted(() => ({ removeCoupon: vi.fn() }));
 vi.mock('../src/lib/job-producer.js', () => ({ jobProducer: producer }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
   useAuth: () => ({ user: { id: 'agent-1' } }),
 }));
 
 import { parseCouponsMaintenance } from '@yiji/shared-types';
-import {
-  useRequestCouponApproval,
-  useReplaceTicketCoupon,
-  type CouponRequestRow,
-} from '../src/features/coupons/api.js';
+import { useRequestCouponApproval } from '../src/features/coupons/api.js';
 import { CouponRequestDialog } from '../src/features/coupons/CouponRequestDialog.js';
 import { CouponMaintenancePill } from '../src/features/coupons/CouponMaintenance.js';
-import { EditApprovedCouponButton } from '../src/features/tickets/EditApprovedCoupon.js';
 
 const wrap = ({ children }: { children: ReactNode }) => (
   <QueryClientProvider
@@ -50,7 +45,6 @@ beforeEach(() => {
   setting.value = 'true';
   sdk.request.mockReset();
   sdk.request.mockImplementation(async () => [{ value: setting.value }]);
-  producer.replaceCoupon.mockReset();
 });
 
 describe('the switch is fail-safe', () => {
@@ -135,32 +129,5 @@ describe('coupons under maintenance', () => {
     ).rejects.toThrow(/under maintenance/);
     /* Only the switch was read - nothing was written. */
     expect(sdk.request).toHaveBeenCalledTimes(1);
-  });
-
-  it('an edit of an approved coupon is refused before anything is written', async () => {
-    const { result } = renderHook(() => useReplaceTicketCoupon(), { wrapper: wrap });
-    await expect(
-      result.current.mutateAsync({
-        old: { id: 'old-1' } as CouponRequestRow,
-        terms: {} as never,
-        reason: 'x',
-        editorId: null,
-      }),
-    ).rejects.toThrow(/under maintenance/);
-    expect(sdk.request).toHaveBeenCalledTimes(1);
-    expect(producer.replaceCoupon).not.toHaveBeenCalled();
-  });
-
-  it('Edit coupon on a ticket is the notice, not a button', () => {
-    render(
-      <EditApprovedCouponButton
-        coupon={
-          { id: 'old-1', valid_from: '2026-11-01', valid_to: '2026-12-01' } as CouponRequestRow
-        }
-      />,
-      { wrapper: wrap },
-    );
-    expect(screen.queryByRole('button', { name: 'Edit coupon' })).not.toBeInTheDocument();
-    expect(screen.getByText('Coupons under maintenance')).toBeInTheDocument();
   });
 });

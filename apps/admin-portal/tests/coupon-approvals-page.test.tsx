@@ -40,8 +40,14 @@ const api = vi.hoisted(() => ({
   useDecideCoupon: vi.fn(),
   useSaveCouponTerms: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRetryCouponDelivery: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
+  useEditApprovedCoupon: vi.fn(() => ({ mutateAsync: vi.fn(), isPending: false })),
 }));
 vi.mock('../src/features/coupon-approvals/api.js', () => api);
+/* Coupons not under maintenance here (the switch is its own test). */
+vi.mock('../src/features/coupon-approvals/maintenance.js', () => ({
+  useCouponsUnderMaintenance: () => false,
+  assertCouponsOpen: async () => {},
+}));
 /* Edit-after-approval links (owner, 2026-10-27): none in these tests. */
 vi.mock('../src/features/coupon-approvals/replacements.js', () => ({
   useCouponReplacements: () => ({ data: new Map() }),
