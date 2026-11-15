@@ -222,7 +222,9 @@ Code rolls back. Data does not. So:
   **Before tagging, if the release adds or changes a field, run:**
 
   ```bash
-  export DIRECTUS_URL=... DIRECTUS_ADMIN_EMAIL=... DIRECTUS_ADMIN_PASSWORD=...
+  # DIRECTUS_INTERNAL_URL is the name the bootstrap reads (directus/bootstrap/src/env.ts);
+  # DIRECTUS_URL is ignored and the run would hit localhost:8055.
+  export DIRECTUS_INTERNAL_URL=https://crm-api.anan.sa DIRECTUS_ADMIN_EMAIL=... DIRECTUS_ADMIN_PASSWORD=...
   pnpm --filter @yiji/directus-bootstrap run apply:fields
   ```
 

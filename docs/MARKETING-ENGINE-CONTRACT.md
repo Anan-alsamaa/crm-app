@@ -107,17 +107,30 @@ The production site exists and the deploy ships to it on every portals release:
 | CORS                                   | prod Directus rev 182 and AI gateway rev 179 name both prod origins                          |
 
 What production still lacks until the next releases (everything below is OFF for every role by
-default, so shipping it changes nothing for anyone):
+default, so shipping it changes nothing for anyone). Both release branches were PREPARED and
+passed the full gate on 2026-11-15 evening; they are tagged only on the owner's word:
 
-1. **Services release** (from `release/svc-1.2.48`): the Directus `app-roles-sync` marketing
-   grants, the AI gateway `/commerce/marketing/*` routes (points + engine proxy), the workers
-   marketing sender (behind `MARKETING_COUPON_SEND`, default off).
-2. **Schema**: `pnpm --filter @yiji/directus-bootstrap run apply:fields` against production
-   BEFORE the services images (collections `marketing_coupons`, `marketing_campaigns`,
-   `marketing_coupon_recipients`, `marketing_activity`). Fields-only; never a full `apply`.
-3. **Portals release** (from `release/portals-1.2.49`): the marketing portal itself, and the
-   admin Roles page offering `use_marketing_portal` / `manage_marketing` / `approve_marketing`
-   (today its `NOT_OFFERED` list hides them on production).
+1. **Schema first**: against production, BEFORE the services images (collections
+   `marketing_coupons`, `marketing_campaigns`, `marketing_coupon_recipients`,
+   `marketing_activity`; prod has none of them today, staging has all four). Fields-only;
+   never a full `apply`:
+
+   ```bash
+   export DIRECTUS_INTERNAL_URL=https://crm-api.anan.sa DIRECTUS_ADMIN_EMAIL=... DIRECTUS_ADMIN_PASSWORD=...
+   pnpm --filter @yiji/directus-bootstrap run apply:fields -- \n     --only=marketing_coupons,marketing_campaigns,marketing_coupon_recipients,marketing_activity
+   ```
+
+2. **Services release** `release/svc-1.2.50` = `release/svc-1.2.48` + the twelve marketing
+   commits (cherry-picked; the only conflict, `scripts/check-permission-drift.mjs`, resolved to
+   main's version): the Directus `app-roles-sync` marketing grants, the AI gateway
+   `/commerce/marketing/*` routes (points + engine proxy), the workers marketing sender (behind
+   `MARKETING_COUPON_SEND`, default off). Tag `v1.2.50`.
+3. **Portals release** `release/portals-1.2.51` = `release/portals-1.2.49` (which already held
+   marketing parts 1-5a) + the promotions portal, the engine-choice fix, the deploy change (that
+   branch never built or uploaded the marketing portal before) and the Roles page offering
+   `use_marketing_portal` / `manage_marketing` / `approve_marketing` (`NOT_OFFERED` keeps only
+   the compensation-rules editor). Tag `v1.2.51`; the agent portal parks for Update now as
+   always, the admin and marketing portals go live at once.
 4. The Administrator grants the three switches to the marketing roles.
 
 Then the four "Going live" steps above (two gateway variables, the `marketing_engine` setting).
