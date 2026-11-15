@@ -191,3 +191,54 @@ describe('roleNamesHolding', () => {
     ]);
   });
 });
+
+/**
+ * THE MAJOR SWITCHES ARE THE ADMINISTRATOR'S ALONE (owner, 2026-11-15), after
+ * a WeCare Admin switched "view all chats" on for every agent on 2026-10-08.
+ */
+describe('Administrator-only switches: the extension agrees with shared-types', () => {
+  const extensionList = (): string[] => {
+    const start = SYNC.indexOf('const ADMINISTRATOR_ONLY_PRIVILEGES = [');
+    const end = SYNC.indexOf('];', start);
+    expect(start).toBeGreaterThan(0);
+    return SYNC.slice(start + 'const ADMINISTRATOR_ONLY_PRIVILEGES = ['.length, end)
+      .split(',')
+      .map((s) => s.trim().replace(/'/g, ''))
+      .filter(Boolean);
+  };
+  it('names the same keys, in the shared list (never the owner-only one)', async () => {
+    const { ADMINISTRATOR_ONLY_PRIVILEGES, PRIVILEGES: SHARED } =
+      await import('../src/privileges.js');
+    expect(extensionList().sort()).toEqual([...ADMINISTRATOR_ONLY_PRIVILEGES].sort());
+    for (const k of ADMINISTRATOR_ONLY_PRIVILEGES) expect(SHARED).toContain(k);
+  });
+  it('covers who sees or edits everyone’s work, money, people, roles and the data doors', async () => {
+    const { ADMINISTRATOR_ONLY_PRIVILEGES } = await import('../src/privileges.js');
+    for (const k of [
+      'view_all_chats',
+      'view_all_tickets',
+      'edit_all_tickets',
+      'approve_coupons',
+      'manage_roles',
+      'manage_users',
+      'import_data',
+    ]) {
+      expect(ADMINISTRATOR_ONLY_PRIVILEGES).toContain(k);
+    }
+  });
+  it('a non-Administrator save never changes them: dropped from the payload, stored values carried over', () => {
+    /* The guard's own rule, lifted from the extension so the test fails if it
+       stops using the protected list. */
+    const keep = SYNC.slice(
+      SYNC.indexOf('async function keepOwnerPrivileges'),
+      SYNC.indexOf('async function enforceCeiling'),
+    );
+    expect(keep).toMatch(/if \(!isProtectedPrivilege\(k\)\) next\[k\] = v;/);
+    expect(keep).toMatch(
+      /if \(isProtectedPrivilege\(k\) && typeof v === 'boolean'\) next\[k\] = v;/,
+    );
+    expect(SYNC).toMatch(
+      /const isProtectedPrivilege = \(k\) => isOwnerPrivilege\(k\) \|\| isAdministratorOnlyPrivilege\(k\);/,
+    );
+  });
+});

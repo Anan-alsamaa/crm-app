@@ -206,6 +206,43 @@ export function isOwnerPrivilege(key: string): key is OwnerPrivilege {
   return (OWNER_PRIVILEGES as readonly string[]).includes(key);
 }
 
+/**
+ * THE MAJOR SWITCHES ARE THE ADMINISTRATOR'S ALONE (owner, 2026-11-15).
+ *
+ * On 2026-10-08 a WeCare Admin switched "view all chats" on for the WeCare
+ * Agent role, and from then on every agent saw every open chat - the exact
+ * diffusion the assignment ladder exists to prevent (a chat assigned to one
+ * person was answered by another; "both received it"). The owner: "from now
+ * on all such major roles to be assigned by me ... hide these important roles
+ * from the WeCare Admin user."
+ *
+ * So these shared switches - who sees or edits EVERYONE's work, who moves
+ * money, who manages people and roles, and the data doors - are shown and
+ * saved by the Administrator only. For anyone else the Roles page does not
+ * offer them, and the server (app-roles-sync `keepOwnerPrivileges`) carries
+ * the stored values over untouched whatever a save sends. They stay ordinary
+ * shared privileges otherwise: a role holds them or not, and `can()` reads
+ * them as before. (The money and people switches that are already
+ * owner-only - edit_approved_coupons, delete_compensation,
+ * manage_compensation_rules, delete_users - need no entry here.)
+ */
+export const ADMINISTRATOR_ONLY_PRIVILEGES: readonly Privilege[] = [
+  'view_all_chats',
+  'view_all_tickets',
+  'edit_all_tickets',
+  'delete_tickets',
+  'approve_coupons',
+  'manage_roles',
+  'manage_users',
+  'import_data',
+  'manage_backup',
+  'use_directus_app',
+];
+
+export function isAdministratorOnlyPrivilege(key: string): boolean {
+  return (ADMINISTRATOR_ONLY_PRIVILEGES as readonly string[]).includes(key);
+}
+
 const nameIn =
   (...names: string[]) =>
   (_p: Record<string, boolean>, role: string) =>
