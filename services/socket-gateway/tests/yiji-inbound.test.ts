@@ -727,3 +727,15 @@ describe('POST /webhooks/yiji/tickets - late preparation notifies the branch', (
     expect(store.tickets.size).toBe(1);
   });
 });
+
+describe('GET /webhooks/yiji/compensation-rules (the feed for Yiji v2, 2026-11-15)', () => {
+  it('is signed like every other route: 401 unsigned, 200 signed, never cached', async () => {
+    const app = build(new FakeStore());
+    const bare = await app.inject({ method: 'GET', url: '/webhooks/yiji/compensation-rules' });
+    expect(bare.statusCode).toBe(401);
+    const res = await app.inject(signed('GET', '/webhooks/yiji/compensation-rules'));
+    expect(res.statusCode).toBe(200);
+    expect(res.headers['cache-control']).toBe('no-store');
+    expect(res.json()).toMatchObject({ rules: [], customerLimit: null });
+  });
+});

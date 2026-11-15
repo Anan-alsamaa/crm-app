@@ -429,3 +429,86 @@ describe('the optional per-customer limit', () => {
     expect(store.coupons.size).toBe(1);
   });
 });
+
+/**
+ * THE RULES FEED (owner, 2026-11-15): automatic compensation runs in Yiji v2,
+ * which reads the rules from here instead of keeping a copy.
+ */
+describe('GET /compensation-rules - the feed Yiji v2 reads', () => {
+  it('lists the active rules, most specific first, in the ticket API vocabulary', async () => {
+    store.rules = [
+      rule({ id: 'any', name: 'Any late order', priority: 5, coupon_value: 10 }),
+      rule({
+        id: 'delivery-30',
+        name: 'Late delivery over 30 min',
+        priority: 1,
+        service_type: 'Delivery',
+        min_delay_minutes: 30,
+        discount_category: 'Percentage',
+        coupon_percent: 20,
+        max_discount: 25,
+        validity_days: 14,
+        usage_limit: 2,
+        delivery_type: 'Delivery, Pickup',
+        coupon_type: 'General',
+        no_other_discounts: true,
+      }),
+      rule({ id: 'off', name: 'Retired', active: false }),
+    ];
+    store.limit = { maxPerCustomer: 2, windowDays: 30 };
+    const out = await svc.readCompensationRules();
+    expect(out.status).toBe(200);
+    const body = out.body as {
+      rules: Array<Record<string, unknown>>;
+      customerLimit: unknown;
+      readAt: string;
+    };
+    expect(body.rules.map((r) => r.id)).toEqual(['delivery-30', 'any']);
+    expect(body.customerLimit).toEqual({ maxCoupons: 2, perDays: 30 });
+    expect(body.rules[0]).toMatchObject({
+      name: 'Late delivery over 30 min',
+      priority: 1,
+      match: {
+        complaintType: 'Late order',
+        serviceType: 'Delivery',
+        minDelayMinutes: 30,
+        minOrderValue: null,
+        maxOrderValue: null,
+      },
+      coupon: {
+        type: 'percentage',
+        value: null,
+        percent: 20,
+        maxDiscount: 25,
+        validityDays: 14,
+        usageLimit: 2,
+        deliveryTypes: ['Delivery', 'Pickup'],
+        audience: 'general',
+        issuingSide: 'Customer Care',
+        noOtherDiscounts: true,
+      },
+    });
+    /* An amount's ceiling is the amount; defaults are spelled out, never left
+       for v2 to guess. */
+    expect(body.rules[1]).toMatchObject({
+      match: { serviceType: null, minDelayMinutes: null },
+      coupon: {
+        type: 'amount',
+        value: 10,
+        maxDiscount: 10,
+        validityDays: null,
+        usageLimit: 1,
+        deliveryTypes: ['All'],
+        audience: 'private',
+      },
+    });
+  });
+
+  it('no rules, no limit: an empty list, never an error', async () => {
+    store.rules = [];
+    store.limit = null;
+    const out = await svc.readCompensationRules();
+    expect(out.status).toBe(200);
+    expect(out.body).toMatchObject({ rules: [], customerLimit: null });
+  });
+});
