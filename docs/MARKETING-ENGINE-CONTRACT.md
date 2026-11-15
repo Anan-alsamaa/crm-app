@@ -93,3 +93,31 @@ decidedBy`); once `live`, `offer`, `audience`, `distribution.code`, `rules` and
 2. The CRM gateway gets `MARKETING_ENGINE_URL` + `MARKETING_ENGINE_KEY` (staging first).
 3. The Administrator sets the global setting `marketing_engine` = `live` in the CRM.
 4. The portal's "Sample data" badge disappears; the numbers are Yiji's. No release needed.
+
+## Production (the CRM side, prepared 2026-11-15)
+
+The production site exists and the deploy ships to it on every portals release:
+
+| Item                                   | Value                                                                                        |
+| -------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Bucket                                 | `crm-prod-marketing-portal` (us-east-2, private, CloudFront only)                            |
+| Distribution                           | `E346RTMV30EWF` = `https://d1ow5z55ugh88b.cloudfront.net`                                    |
+| Hostname (DNS pending with Anan IT)    | `crm-marketing.anan.sa` CNAME -> `d1ow5z55ugh88b.cloudfront.net` (cert `*.anan.sa` in place) |
+| Staging hostname (DNS pending as well) | `crm-marketing-staging.anan.sa` CNAME -> `d7f4ox67mxj6s.cloudfront.net`                      |
+| CORS                                   | prod Directus rev 182 and AI gateway rev 179 name both prod origins                          |
+
+What production still lacks until the next releases (everything below is OFF for every role by
+default, so shipping it changes nothing for anyone):
+
+1. **Services release** (from `release/svc-1.2.48`): the Directus `app-roles-sync` marketing
+   grants, the AI gateway `/commerce/marketing/*` routes (points + engine proxy), the workers
+   marketing sender (behind `MARKETING_COUPON_SEND`, default off).
+2. **Schema**: `pnpm --filter @yiji/directus-bootstrap run apply:fields` against production
+   BEFORE the services images (collections `marketing_coupons`, `marketing_campaigns`,
+   `marketing_coupon_recipients`, `marketing_activity`). Fields-only; never a full `apply`.
+3. **Portals release** (from `release/portals-1.2.49`): the marketing portal itself, and the
+   admin Roles page offering `use_marketing_portal` / `manage_marketing` / `approve_marketing`
+   (today its `NOT_OFFERED` list hides them on production).
+4. The Administrator grants the three switches to the marketing roles.
+
+Then the four "Going live" steps above (two gateway variables, the `marketing_engine` setting).

@@ -35,7 +35,7 @@ ONLY="${2:-}"
 
 case "$ENV_NAME" in
   staging|prod) ;;
-  *) echo "usage: $0 <staging|prod> [agent|admin|widget]" >&2; exit 2 ;;
+  *) echo "usage: $0 <staging|prod> [agent|admin|marketing|widget]" >&2; exit 2 ;;
 esac
 
 # CloudFront distribution per bucket. Kept beside the bucket names so a deploy
@@ -44,11 +44,13 @@ case "$ENV_NAME" in
   staging)
     AGENT_DIST=E24IIVRFOW7GH4
     ADMIN_DIST=E1VN06BCLZ6Q4F
+    MARKETING_DIST=E1842C39CA35BK
     WIDGET_DIST=E2QVORODPLQHNB
     ;;
   prod)
     AGENT_DIST=E3UK8T8DHFGMNW
     ADMIN_DIST=E37XKA7D2IPZLC
+    MARKETING_DIST=E346RTMV30EWF
     WIDGET_DIST=E15DCMX8ZCU62R
     ;;
 esac
@@ -57,7 +59,7 @@ CONFIG="$(mktemp -t portal-config.XXXXXX.js)"
 trap 'rm -f "$CONFIG"' EXIT
 scripts/gen-portal-config.sh "$ENV_NAME" "$CONFIG" >/dev/null
 
-for app in agent admin; do
+for app in agent admin marketing; do
   [ "$ONLY" = "widget" ] && continue
   [ -n "$ONLY" ] && [ "$ONLY" != "$app" ] && continue
 

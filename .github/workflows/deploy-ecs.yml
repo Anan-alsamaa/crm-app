@@ -260,13 +260,11 @@ jobs:
         run: |
           for app in agent admin marketing; do
             BUCKET="crm-${ENVIRONMENT}-${app}-portal"
-            # THE MARKETING PORTAL IS STAGING-ONLY FOR NOW (owner, 2026-11-02):
-            # its production bucket and site are not created yet. Remove this
-            # skip in the same change that creates them.
-            if [ "$app" = "marketing" ] && [ "$ENVIRONMENT" = "prod" ]; then
-              echo "::notice::marketing portal not deployed to prod yet (no prod bucket)"
-              continue
-            fi
+            # The marketing portal ships to prod like the admin portal: live at
+            # once, never parked (owner, 2026-11-15; bucket + distribution
+            # created the same day, see docs/AWS-RESOURCES.md). Every page it
+            # offers is behind its own privileges, OFF for every role until the
+            # Administrator grants them, so an upload changes nothing for anyone.
             # Does THIS surface wait for the owner? Only the agent portal, and
             # only on prod.
             if [ "$ENVIRONMENT" = "prod" ] && [ "$app" = "agent" ]; then

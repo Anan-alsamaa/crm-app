@@ -46,6 +46,8 @@ BUCKETS=(
   crm-staging-admin-portal
   crm-prod-agent-portal
   crm-prod-admin-portal
+  crm-staging-marketing-portal
+  crm-prod-marketing-portal
 )
 
 say() { printf '\n\033[1m==> %s\033[0m\n' "$*"; }

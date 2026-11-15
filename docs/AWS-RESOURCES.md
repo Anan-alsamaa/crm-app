@@ -68,6 +68,8 @@ service can run.
 | `crm-staging-admin-portal`         | admin SPA, staging               | CloudFront only    |
 | `crm-prod-agent-portal`            | agent SPA, production            | CloudFront only    |
 | `crm-prod-admin-portal`            | admin SPA, production            | CloudFront only    |
+| `crm-staging-marketing-portal`     | marketing SPA, staging           | CloudFront only    |
+| `crm-prod-marketing-portal`        | marketing SPA, production        | CloudFront only    |
 
 All six: public access blocked, AES256 encryption. The two upload buckets also
 have **versioning** enabled, so a deleted or overwritten attachment stays
@@ -86,12 +88,14 @@ Origin Access Control `ES4AZAK3K2AK1` lets each distribution read its own
 bucket while the bucket stays private. Each bucket policy names exactly one
 distribution.
 
-| Distribution  | ID               | Default domain                  |
-| ------------- | ---------------- | ------------------------------- |
-| staging agent | `E24IIVRFOW7GH4` | `d57v6u4ytjrj7.cloudfront.net`  |
-| staging admin | `E1VN06BCLZ6Q4F` | `d1evkiaehtmzr0.cloudfront.net` |
-| prod agent    | `E3UK8T8DHFGMNW` | `d1feea9xuruu0v.cloudfront.net` |
-| prod admin    | `E37XKA7D2IPZLC` | `d3sw1ca3dpsao0.cloudfront.net` |
+| Distribution      | ID               | Default domain                                                                                   |
+| ----------------- | ---------------- | ------------------------------------------------------------------------------------------------ |
+| staging agent     | `E24IIVRFOW7GH4` | `d57v6u4ytjrj7.cloudfront.net`                                                                   |
+| staging admin     | `E1VN06BCLZ6Q4F` | `d1evkiaehtmzr0.cloudfront.net`                                                                  |
+| prod agent        | `E3UK8T8DHFGMNW` | `d1feea9xuruu0v.cloudfront.net`                                                                  |
+| prod admin        | `E37XKA7D2IPZLC` | `d3sw1ca3dpsao0.cloudfront.net`                                                                  |
+| staging marketing | `E1842C39CA35BK` | `d7f4ox67mxj6s.cloudfront.net` (alias `crm-marketing-staging.anan.sa`, DNS pending)              |
+| prod marketing    | `E346RTMV30EWF`  | `d1ow5z55ugh88b.cloudfront.net` (alias `crm-marketing.anan.sa`, DNS pending; created 2026-11-15) |
 
 Each serves `index.html` as the root object, redirects HTTP to HTTPS, compresses
 responses, and maps **403/404 to `/index.html` with a 200** — without that, a

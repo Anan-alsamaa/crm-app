@@ -44,9 +44,11 @@ const PROD = {
   API_URL: 'https://d2ljjkmk6p5y4b.cloudfront.net',
   ADMIN_URL: 'https://d3sw1ca3dpsao0.cloudfront.net',
   AGENT_URL: 'https://d1feea9xuruu0v.cloudfront.net',
+  // Marketing portal (2026-11-15): bucket crm-prod-marketing-portal, distribution E346RTMV30EWF.
+  MARKETING_URL: 'https://d1ow5z55ugh88b.cloudfront.net',
   WIDGET_URL: 'https://d6ww6tccn45er.cloudfront.net',
 };
-PROD.PORTAL_ORIGINS = `${PROD.ADMIN_URL},${PROD.AGENT_URL}`;
+PROD.PORTAL_ORIGINS = `${PROD.ADMIN_URL},${PROD.AGENT_URL},${PROD.MARKETING_URL}`;
 
 const aws = (args) =>
   execFileSync('aws', [...args, '--region', REGION, '--output', 'json'], {
@@ -65,7 +67,12 @@ function loadEnvFile(path) {
 }
 
 const secrets = loadEnvFile(`${ROOT}/.env.prod.aws`);
-for (const required of ['YIJI_JWT_SECRET', 'SVC_GATEWAY_TOKEN', 'DIRECTUS_KEY', 'DIRECTUS_SECRET']) {
+for (const required of [
+  'YIJI_JWT_SECRET',
+  'SVC_GATEWAY_TOKEN',
+  'DIRECTUS_KEY',
+  'DIRECTUS_SECRET',
+]) {
   if (!secrets[required]) throw new Error(`.env.prod.aws is missing ${required}`);
 }
 
@@ -229,12 +236,16 @@ for (const svc of SERVICES) {
   if (APPLY) {
     const file = `${ROOT}/.taskdef-prod-${svc}.json`;
     writeFileSync(file, JSON.stringify(staging, null, 2));
-    const out = JSON.parse(aws(['ecs', 'register-task-definition', '--cli-input-json', `file://${file}`]));
+    const out = JSON.parse(
+      aws(['ecs', 'register-task-definition', '--cli-input-json', `file://${file}`]),
+    );
     console.log(`    registered revision ${out.taskDefinition.revision}`);
     results.push(`crm-prod-${svc}:${out.taskDefinition.revision}`);
   }
 }
 
 console.log(
-  APPLY ? `\nRegistered: ${results.join(', ')}` : '\nDRY RUN — nothing registered. Re-run with --apply.',
+  APPLY
+    ? `\nRegistered: ${results.join(', ')}`
+    : '\nDRY RUN — nothing registered. Re-run with --apply.',
 );

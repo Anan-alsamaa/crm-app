@@ -57,11 +57,13 @@ const ORIGINS =
         widget: 'https://crm.anan.sa',
         agent: 'https://crm-agent.anan.sa',
         admin: 'https://crm-admin.anan.sa',
+        marketing: 'https://crm-marketing.anan.sa',
       }
     : {
         widget: 'https://crm-staging.anan.sa',
         agent: 'https://crm-agent-staging.anan.sa',
         admin: 'https://crm-admin-staging.anan.sa',
+        marketing: 'https://crm-marketing-staging.anan.sa',
       };
 
 const results = [];
@@ -155,6 +157,19 @@ await check('EMA-10', 'agent "+" start-chat passes the browser preflight', () =>
 );
 await check('EMA-36', 'admin "Update now" release endpoint passes the browser preflight', () =>
   preflight('/jobs/releases/apply', ORIGINS.admin, 'authorization,content-type'),
+);
+// The marketing portal has its own origin (2026-11-15): Directus and the AI
+// gateway must each name it, or every page there fails with "Failed to fetch"
+// while curl says everything is fine.
+await check('EMA-95', 'marketing portal origin passes the Directus preflight', () =>
+  preflight('/items/marketing_activity', ORIGINS.marketing, 'authorization,content-type'),
+);
+await check('EMA-95', 'marketing portal origin passes the AI-gateway preflight', () =>
+  preflight(
+    '/commerce/marketing/engine/campaigns',
+    ORIGINS.marketing,
+    'authorization,content-type',
+  ),
 );
 
 // ── schema the code depends on (a missing field 403s the WHOLE query) ───────
