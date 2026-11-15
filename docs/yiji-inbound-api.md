@@ -203,6 +203,59 @@ any other coupon.
 }
 ```
 
+## GET /compensation-rules (for Yiji v2's automatic compensation, 2026-11-15)
+
+The CRM's compensation rules, as operations keep them (Admin portal → Compensation rules). Yiji v2
+runs automatic compensation and **reads the rules here** instead of holding a copy, so a rule change
+never needs a change on v2. Signed like every other call (`GET`: the signed string is `"<ts>."`).
+Cache it for a few minutes; it is one small read.
+
+```json
+{
+  "readAt": "2026-11-15T10:00:00.000Z",
+  "rules": [
+    {
+      "id": "…uuid…",
+      "name": "Late delivery over 30 min",
+      "priority": 10,
+      "specificity": 2,
+      "match": {
+        "complaintType": "Late order",
+        "serviceType": "Delivery",
+        "minDelayMinutes": 30,
+        "minOrderValue": null,
+        "maxOrderValue": null
+      },
+      "coupon": {
+        "type": "amount",
+        "value": 15,
+        "percent": null,
+        "maxDiscount": 15,
+        "validityDays": null,
+        "usageLimit": 1,
+        "deliveryTypes": ["All"],
+        "audience": "private",
+        "issuingSide": "Customer Care",
+        "noOtherDiscounts": false
+      },
+      "note": null
+    }
+  ],
+  "customerLimit": { "maxCoupons": 2, "perDays": 30 }
+}
+```
+
+- `rules` are the **active** rules, most specific first, then highest `priority` - the order to try
+  them in; the first match wins. `match.serviceType` null = any; a `minDelayMinutes` /
+  `minOrderValue` / `maxOrderValue` that is set means the value must be **known** and satisfy it.
+- `coupon.type` `amount` (SAR off, `maxDiscount` = `value`) or `percentage` (`percent` with a
+  `maxDiscount` ceiling in SAR). `validityDays` null = one month from the issue date, whole days
+  inclusive. `audience` private = one customer's wallet.
+- `customerLimit` null = no limit; otherwise at most `maxCoupons` rule coupons per customer per
+  `perDays` days.
+- **Every coupon v2 issues from a rule must be reported to the CRM** (the ticket API), so the CRM's
+  compensation reports and the daily audit stay complete.
+
 ## POST /tickets/{externalId}/coupons
 
 Body: one coupon object. `201` with `{ ticketId, ticketNumber, externalId, coupon }`.

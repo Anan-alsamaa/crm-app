@@ -25,6 +25,9 @@ import {
   ruleCouponDraft,
   ruleLimitReached,
   ruleLimitSince,
+  ruleSpecificity,
+  isPercentageCategory,
+  isGeneralCouponType,
   toStoreSnapshot,
   branchNotifyTypesFor,
   storeNotificationDraft,
@@ -1393,7 +1396,76 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     };
   }
 
-  return { createTicket, addCoupon, readTicket };
+  /**
+   * GET /compensation-rules (owner, 2026-11-15): automatic compensation runs
+   * in Yiji v2, and the RULES stay in the CRM where operations edit them. v2
+   * reads this feed (cached a few minutes on its side) instead of keeping a
+   * copy, so a rule change never needs a change on v2. The vocabulary is the
+   * ticket API's: the same complaint and service types, and a coupon object
+   * shaped like the one the ticket API used to accept.
+   */
+  async function readCompensationRules(): Promise<InboundResult> {
+    const rules = store.compensationRules ? await store.compensationRules() : [];
+    const limit = store.ruleCouponLimit ? await store.ruleCouponLimit() : null;
+    return {
+      status: 200,
+      body: {
+        readAt: now().toISOString(),
+        /* Most specific first, then the highest priority - the order the CRM
+           itself applies them in (pickCompensationRule). */
+        rules: rules
+          .filter((r) => r.active !== false)
+          .map(compensationRuleBody)
+          .sort((a, b) => b.specificity - a.specificity || b.priority - a.priority),
+        /* The optional "at most N rule coupons per customer per period". */
+        customerLimit: limit
+          ? { maxCoupons: limit.maxPerCustomer, perDays: limit.windowDays }
+          : null,
+      },
+    };
+  }
+
+  return { createTicket, addCoupon, readTicket, readCompensationRules };
+}
+
+/** One rule as the feed shows it: conditions, then the coupon it issues. */
+export function compensationRuleBody(r: CompensationRule): Record<string, unknown> & {
+  specificity: number;
+  priority: number;
+} {
+  const pct = isPercentageCategory(r.discount_category);
+  const value = pct ? null : (r.coupon_value ?? null);
+  const delivery = String(r.delivery_type ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return {
+    id: r.id,
+    name: r.name,
+    priority: r.priority ?? 0,
+    specificity: ruleSpecificity(r),
+    match: {
+      complaintType: r.complaint_type,
+      serviceType: r.service_type ?? null,
+      minDelayMinutes: r.min_delay_minutes ?? null,
+      minOrderValue: r.min_order_value ?? null,
+      maxOrderValue: r.max_order_value ?? null,
+    },
+    coupon: {
+      type: pct ? 'percentage' : 'amount',
+      value,
+      percent: pct ? (r.coupon_percent ?? null) : null,
+      maxDiscount: pct ? (r.max_discount ?? null) : value,
+      /* Whole days, inclusive, from the day it is issued. Null = one month. */
+      validityDays: r.validity_days ?? null,
+      usageLimit: r.usage_limit ?? 1,
+      deliveryTypes: delivery.length ? delivery : ['All'],
+      audience: isGeneralCouponType(r.coupon_type) ? 'general' : 'private',
+      issuingSide: r.issuing_side ?? 'Customer Care',
+      noOtherDiscounts: r.no_other_discounts === true,
+    },
+    note: r.note ?? null,
+  };
 }
 
 export type YijiInboundService = ReturnType<typeof createYijiInboundService>;
@@ -1517,6 +1589,14 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
       scope.get<{ Params: { externalId: string } }>('/tickets/:externalId', async (req, reply) => {
         if (!(await guard(req, reply))) return reply;
         return answer(reply, () => deps.service.readTicket(req.params.externalId));
+      });
+
+      /* The compensation rules, for Yiji v2's automatic compensation (owner,
+         2026-11-15). Signed like everything else here; the body is empty, so
+         the signed string is "<ts>.". */
+      scope.get('/compensation-rules', async (req, reply) => {
+        if (!(await guard(req, reply))) return reply;
+        return answer(reply, () => deps.service.readCompensationRules());
       });
     },
     { prefix: YIJI_INBOUND_PREFIX },
