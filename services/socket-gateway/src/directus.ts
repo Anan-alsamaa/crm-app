@@ -16,6 +16,7 @@ import {
   isPhoneDerivedCustomerId,
   messageSourceFields,
   phoneCustomerId,
+  ROUTING_SESSION_GAP_MS,
 } from '@yiji/shared-types';
 import type { CustomerClaims } from './auth/customer-jwt.js';
 import type { AttachmentMeta } from './attachments.js';
@@ -909,6 +910,14 @@ export class GatewayDirectus {
      * sees the status flip; only the message that flips it gets `true`.
      */
     sessionStarted?: boolean;
+    /**
+     * True when THIS customer message started a session for ROUTING: the
+     * reopen above, or a return to an open chat after ROUTING_SESSION_GAP_MS
+     * of silence (owner, 2026-11-16). Unlike `sessionStarted` it does not
+     * care who started the thread: a chat an agent opened days ago and the
+     * customer comes back to must still be answered by somebody who is here.
+     */
+    newSession?: boolean;
   }> {
     /* The automatic welcome: agent-STYLE, but no person sent it (owner,
        2026-10-06). It must not stop the first-response clock or clear the
@@ -918,6 +927,7 @@ export class GatewayDirectus {
       sender_user: input.senderUser ?? null,
     });
     let sessionStarted = false;
+    let newSession = false;
     const created = (await this.client.request(
       createItem('messages', {
         conversation: input.conversationId,
@@ -964,13 +974,14 @@ export class GatewayDirectus {
             filter: { id: { _eq: input.conversationId } },
             /* `initiated_by` so a reopened AGENT-started chat is not greeted —
                an agent-initiated chat is never greeted (owner, 2026-10-05). */
-            fields: ['unread_count_agent', 'status', 'initiated_by'],
+            fields: ['unread_count_agent', 'status', 'initiated_by', 'last_message_at'],
             limit: 1,
           }),
         )) as Array<{
           unread_count_agent: number | null;
           status: string | null;
           initiated_by?: string | null;
+          last_message_at?: string | null;
         }>;
         patch.unread_count_agent = (rows[0]?.unread_count_agent ?? 0) + 1;
         // A customer writing into a solved thread is a NEW case — days later it
@@ -1026,6 +1037,26 @@ export class GatewayDirectus {
            */
           patch.session_started_at = now;
           sessionStarted = rows[0]?.initiated_by !== 'agent';
+          newSession = true;
+        } else if (
+          /*
+           * A RETURN AFTER HOURS OF SILENCE IS A NEW SESSION TOO (owner,
+           * 2026-11-16: "if the same customer comes back with any other issue,
+           * or maybe the next day, or maybe after 2-3 hours"). Nobody pressed
+           * solved, so the status cannot say so - the gap does. Same stamps as
+           * the reopen: the first-response promise starts again, the welcome
+           * is owed again, and the routing ladder runs its first-message
+           * rungs again (the owner keeps first refusal if they are here).
+           */
+          rows[0]?.last_message_at &&
+          Date.now() - Date.parse(rows[0].last_message_at) > ROUTING_SESSION_GAP_MS
+        ) {
+          patch.first_responded_at = null;
+          patch.first_response_due_at = null;
+          patch.first_response_breached_at = null;
+          patch.session_started_at = now;
+          sessionStarted = rows[0]?.initiated_by !== 'agent';
+          newSession = true;
         }
       } else if (input.senderType === 'agent' && !automated) {
         patch.unread_count_agent = 0;
@@ -1079,7 +1110,12 @@ export class GatewayDirectus {
         /* the welcome still marks the session for the reports */
       }
     }
-    return { id: created.id, createdAt: now, ...(sessionStarted ? { sessionStarted: true } : {}) };
+    return {
+      id: created.id,
+      createdAt: now,
+      ...(sessionStarted ? { sessionStarted: true } : {}),
+      ...(newSession ? { newSession: true } : {}),
+    };
   }
 
   /**

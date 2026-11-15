@@ -133,6 +133,100 @@ describe('a customer writing into a solved chat', () => {
 });
 
 /**
+ * A RETURN AFTER HOURS OF SILENCE IS A NEW SESSION TOO (owner, 2026-11-16:
+ * "if the same customer comes back with any other issue, or maybe the next
+ * day, or maybe after 2-3 hours"). Nobody pressed solved, so only the gap can
+ * say so. The same stamps as the reopen, and the routing ladder is told
+ * (`newSession`) so the first-message rungs run again.
+ */
+describe('a customer coming back to an OPEN chat', () => {
+  const openSince = (lastMessageAt: string) => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-1', date_created: '2026-11-16T09:00:00.000Z' })
+      .mockResolvedValueOnce([
+        {
+          unread_count_agent: 0,
+          status: 'open',
+          initiated_by: 'customer',
+          last_message_at: lastMessageAt,
+        },
+      ])
+      .mockResolvedValueOnce(undefined);
+  };
+  const hoursAgo = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+
+  it('after more than the session gap: a new session, the promise starts again, routing is told', async () => {
+    openSince(hoursAgo(4));
+    const r = await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'hi, another problem today',
+    } as never);
+    expect(r.newSession).toBe(true);
+    expect(r.sessionStarted).toBe(true); // the welcome is owed again
+    const patch = await bodyOf(2);
+    expect(patch).toMatchObject({
+      first_responded_at: null,
+      first_response_due_at: null,
+      first_response_breached_at: null,
+    });
+    expect(typeof patch.session_started_at).toBe('string');
+    expect(patch).not.toHaveProperty('status'); // it was never closed; nothing to reopen
+  });
+
+  it('within the gap: the same session - no new promise, no new ladder', async () => {
+    openSince(hoursAgo(1));
+    const r = await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'and one more thing',
+    } as never);
+    expect(r.newSession).toBeUndefined();
+    expect(r.sessionStarted).toBeUndefined();
+    const patch = await bodyOf(2);
+    expect(patch).not.toHaveProperty('first_responded_at');
+    expect(patch).not.toHaveProperty('session_started_at');
+  });
+
+  it('a chat an AGENT started is still a new session for routing, but is not greeted', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-1', date_created: '2026-11-16T09:00:00.000Z' })
+      .mockResolvedValueOnce([
+        {
+          unread_count_agent: 0,
+          status: 'open',
+          initiated_by: 'agent',
+          last_message_at: hoursAgo(30),
+        },
+      ])
+      .mockResolvedValueOnce(undefined);
+    const r = await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'hello?',
+    } as never);
+    expect(r.newSession).toBe(true);
+    expect(r.sessionStarted).toBeUndefined();
+  });
+
+  it('the reopen of a solved chat reports newSession as well', async () => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-1', date_created: '2026-11-16T09:00:00.000Z' })
+      .mockResolvedValueOnce([
+        { unread_count_agent: 2, status: 'solved', initiated_by: 'customer' },
+      ])
+      .mockResolvedValueOnce(undefined);
+    const r = await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'hello again',
+    } as never);
+    expect(r.newSession).toBe(true);
+    expect(r.sessionStarted).toBe(true);
+  });
+});
+
+/**
  * The sweep is the other half: it must measure from the session, and it must
  * SELECT the field it measures from.
  */

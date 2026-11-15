@@ -168,17 +168,11 @@ async function nextAgent(
   attempted: string[],
   eligible: string[],
   /**
-   * An agent who should keep this chat if they are still online and eligible —
-   * the CURRENT OWNER, when the ladder is re-armed because the customer wrote
-   * again into a chat somebody already holds.
-   *
-   * Without this the owner is chosen by the same "least loaded" rule as
-   * everybody else, and they are the one agent guaranteed to be carrying THIS
-   * chat — so they sort BEHIND a colleague holding one fewer. Worse, replying
-   * is what pushes them down the idle queue, so the act of answering is what
-   * loses them the conversation: Shatha missed it, Nada took it and replied,
-   * and the next customer message handed it straight back to Shatha (owner,
-   * 2026-09-16).
+   * An agent who should keep this chat if they are still online and eligible -
+   * the CURRENT OWNER, when a customer starts a new session in a chat somebody
+   * already holds (reopened, or back after hours). The "least loaded" rule
+   * would sort them behind a colleague carrying one fewer chat, and they are
+   * the one agent guaranteed to be carrying THIS one (owner, 2026-09-16).
    *
    * Preference, not a guarantee: they must still be online and eligible, and
    * must not be in the skip-list. When they are not, the ladder moves on.
@@ -482,61 +476,74 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
   if (job.stage === 'assign') {
     if (convo.assigned_agent) {
       /*
-       * OWNED — BUT IS THE CUSTOMER STILL WAITING?
+       * OWNED. THE LADDER BELONGS TO THE FIRST MESSAGE OF A SESSION - AND TO
+       * NOTHING ELSE (owner, 2026-11-16: "once an agent handles it, it should
+       * not be applied to each and every message the customer sends").
        *
-       * This used to stand down unconditionally, which left the ladder
-       * protecting only the FIRST message of a conversation. Once an agent had
-       * replied even once, the chat was outside the escalation system for ever:
-       * the customer could write again and wait indefinitely, and nothing moved
-       * it. Reported from production (owner, 2026-09-14) — a customer wrote at
-       * 12:32 into a chat answered at 07:10 and it never escalated, never went
-       * to a second agent, and never reached the pool.
+       * From 14 Sep to 16 Nov this branch re-armed the ladder on EVERY
+       * customer message into an owned chat (60 s to the owner, then the
+       * next agent, then the pool). Measured on production the evening of
+       * 15 Nov, chat 46a5441c: the customer sent ten short lines in two
+       * minutes while the agent was reading and answering; ten timers ran at
+       * once, the chat was "escalated" to its own owner nine times, released
+       * to nobody seven times and handed to a colleague twice - one second
+       * before the owner's reply landed. The owner has no team, so each
+       * hand-off cut his read access and his screen went blank. 71 assignment
+       * writes on that one chat, 1,312 notifications in a day.
        *
-       * THE RULE (owner, 2026-09-14): when a customer sends a message into an
-       * open chat and no agent has replied since, start the ladder from that
-       * message — 60s to the owner, then the next-idlest, then everyone. The
-       * timer cancels the moment any agent replies, so a chat actively being
-       * worked is untouched.
-       *
-       * `countOutboundMessages` counts AGENT messages only, so passing the
-       * current count as the baseline means exactly "has anyone replied since
-       * this moment". The owner goes into `attemptedAgentIds` as the agent
-       * whose turn is being timed: the escalate rung then offers it onward to
-       * somebody new rather than back to them.
+       * So: an owned chat is left alone - unless THIS message started a new
+       * session, which the gateway decides where it stores the message (a
+       * solved chat reopened, or a return after ROUTING_SESSION_GAP_MS of
+       * silence). Then the first-message rungs run again, exactly as for a
+       * new chat, with the current owner getting first refusal while they are
+       * online - the thread is theirs, and a customer who comes back should
+       * meet the person who knows the case. An owner who is not signed in
+       * keeps nothing: the customer is waiting now.
        */
-      const outboundNow = await directus.countOutboundMessages(convo.id);
+      if (!job.sessionStarted) {
+        log(
+          'routing: owned - the ladder belongs to the first message of a session, standing down',
+          {
+            id: convo.id,
+            agent: convo.assigned_agent,
+          },
+        );
+        return;
+      }
+      const owner = convo.assigned_agent;
+      const chosen = await nextAgent(redis, [], eligible, owner);
+      if (!chosen) {
+        log('routing: NO ELIGIBLE AGENTS for a new session - left with its owner', {
+          id: convo.id,
+          agent: owner,
+          team: convo.assigned_team,
+        });
+        return;
+      }
+      const baseline = await directus.countOutboundMessages(convo.id);
+      if (chosen !== owner) {
+        await assignAndNotify(
+          deps,
+          convo.id,
+          chosen,
+          'A customer came back and the agent who handled them is away. Please reply.',
+        );
+      }
+      /* The owner is not told twice: the customer's message already rang the
+         inbox bell for them. The timer is the same 60 s as for a new chat. */
       await schedule(
         {
           conversationId: convo.id,
           stage: 'escalate',
-          /*
-           * THE OWNER IS NOT "ALREADY TRIED" — they are the one being timed.
-           *
-           * `attemptedAgentIds` is a SKIP-LIST: `nextAgent` refuses to offer
-           * the chat to anybody in it. Passing the owner here therefore made
-           * the escalate rung structurally incapable of leaving the chat where
-           * it was, so an agent who picked it up and answered lost it 60
-           * seconds later to somebody else.
-           *
-           * Measured in production: chat 65138bfb, Nada replied at 08:02:25,
-           * the customer wrote again at 08:03:21, and the re-arm handed it to
-           * Shatha at 08:04:21 — the "assigned back to Shatha after Nada had
-           * replied" the owner reported (2026-09-15).
-           *
-           * Empty, so the rung re-offers it to the idlest eligible agent —
-           * which, when the owner is online and carrying this chat, is
-           * normally the owner themselves. They keep it unless they go quiet
-           * for the full 60 seconds, and a reply in that window cancels the
-           * timer outright via the outbound count below.
-           */
-          attemptedAgentIds: [],
-          outboundCountAtSchedule: outboundNow,
+          attemptedAgentIds: [chosen],
+          outboundCountAtSchedule: baseline,
         },
         ROUTING_FIRST_WAIT_MS,
       );
-      log('routing: owner has an unanswered customer — arming the ladder', {
+      log('routing: new session in an owned chat - first-message ladder armed', {
         id: convo.id,
-        agent: convo.assigned_agent,
+        owner,
+        agent: chosen,
       });
       return;
     }
@@ -598,19 +605,10 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
   }
 
   /*
-   * A human reassigned it to somebody outside our ladder — respect that and stop.
-   *
-   * ONLY MEANINGFUL WHEN THE LADDER OFFERED IT TO SOMEBODY. `offeredTo` is the
-   * agent this timer was armed for, and it is undefined on the RE-ARM path,
-   * where the ladder is started by a customer writing into a chat an agent
-   * already owns. Comparing the owner against `undefined` there is always
-   * "different", so this guard stood the ladder down every single time and the
-   * re-arm never escalated at all — a chat held unanswered for three minutes
-   * stayed exactly where it was (owner, 2026-09-15).
-   *
-   * The owner on a re-arm is not an intervention to respect; they are the agent
-   * being timed. So the guard now asks its real question: was this chat moved
-   * away from whoever the ladder last handed it to?
+   * A human reassigned it to somebody outside our ladder - respect that and
+   * stop. `offeredTo` is the agent this timer was armed for (every timer names
+   * one since the re-arm path went, 2026-11-16), so the question is simply:
+   * was this chat moved away from whoever the ladder last handed it to?
    */
   if (offeredTo && convo.assigned_agent && convo.assigned_agent !== offeredTo) {
     log('routing: reassigned by a human, standing down', { id: convo.id });
@@ -619,22 +617,12 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
 
   if (job.stage === 'escalate') {
     /*
-     * THE OWNER GETS FIRST REFUSAL ON THEIR OWN CHAT.
-     *
-     * Only when they are still holding it AND the timer was armed for them:
-     * `offeredTo` is undefined exactly on the re-arm path, where the ladder was
-     * started by a customer writing into a chat that somebody already owns.
-     * Reaching here means nobody replied for the full 60 seconds, so the chat
-     * does move on if they have genuinely gone quiet — `nextAgent` only honours
-     * the preference while they are online and eligible.
-     *
-     * Without it the "least loaded" ordering sorts the owner behind a colleague
-     * carrying one fewer chat, which is always true of the agent holding THIS
-     * one. That is how a chat came back to Shatha seconds after Nada answered
-     * it (owner, 2026-09-16).
+     * Nobody replied for the full 60 seconds. Whoever was holding it is in
+     * the skip-list (`attemptedAgentIds`), so the next-idlest online agent
+     * gets the 30-second rung. The owner's first refusal lives in `assign`,
+     * where a new session in an owned chat is armed for them by name.
      */
-    const owner = !offeredTo ? convo.assigned_agent : null;
-    const agent = await nextAgent(redis, job.attemptedAgentIds, eligible, owner);
+    const agent = await nextAgent(redis, job.attemptedAgentIds, eligible);
     if (!agent) {
       /*
        * Nobody new to hand it to, so it stays where it is and the ladder stops.

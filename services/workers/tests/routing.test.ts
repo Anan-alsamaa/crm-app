@@ -144,87 +144,86 @@ describe('auto-assignment ladder', () => {
       expect(assign).not.toHaveBeenCalled();
     });
 
-    it('ARMS THE LADDER when the owner has an unanswered customer', async () => {
-      /*
-       * The ladder used to protect only the first message of a conversation.
-       * Once an agent replied even once, the chat left the escalation system
-       * permanently — the customer could write again and wait for ever.
-       *
-       * Production, 2026-09-14: a customer wrote at 12:32 into a chat answered
-       * at 07:10. No escalation, no second agent, no release to the pool.
-       */
-      const { d, schedule, assign } = deps({
+    /*
+     * THE LADDER BELONGS TO THE FIRST MESSAGE OF A SESSION (owner, 2026-11-16).
+     *
+     * From 14 Sep to 16 Nov every customer message into an owned chat re-armed
+     * the ladder. Production, 15 Nov evening, chat 46a5441c: ten short customer
+     * lines in two minutes while the agent read and answered; the chat was
+     * "escalated" to its own owner nine times, released seven times and handed
+     * to a colleague twice, one second before the owner's reply. The owner has
+     * no team, so his screen went blank each time. 71 assignment writes on one
+     * chat; 1,312 notifications in a day.
+     */
+    it('leaves an OWNED chat alone when the customer writes again in the same session', async () => {
+      const { d, schedule, assign, notify } = deps({
         online: ['owner', 'next-idlest'],
         roster: ['owner', 'next-idlest'],
         convo: { id: 'c1', assigned_agent: 'owner', assigned_team: null, status: 'open' },
-        outbound: 3, // the owner HAS replied before — three times
+        outbound: 3, // the owner HAS replied before
       });
       await handleRouting(job(), d);
-
-      // The chat stays theirs for now; they get the first 60 seconds.
+      // No timer, no write, no "passed to you" to the agent already holding it.
+      expect(schedule).not.toHaveBeenCalled();
       expect(assign).not.toHaveBeenCalled();
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('runs the first-message ladder again when the customer STARTS A NEW SESSION in an owned chat', async () => {
+      // A solved chat reopened, or a return after hours of silence: the gateway
+      // says so. The owner is online, so they get the first 60 seconds - by
+      // name, so the next rung cannot hand it back to them.
+      const { d, schedule, assign, notify } = deps({
+        online: ['next-idlest', 'owner'],
+        roster: ['next-idlest', 'owner'], // the owner is NOT the least loaded
+        convo: { id: 'c1', assigned_agent: 'owner', assigned_team: null, status: 'open' },
+        outbound: 3,
+      });
+      await handleRouting(job({ sessionStarted: true }), d);
+      expect(assign).not.toHaveBeenCalled(); // already theirs
+      expect(notify).not.toHaveBeenCalled(); // the customer's message rang the bell
       expect(schedule).toHaveBeenCalledWith(
         expect.objectContaining({
           stage: 'escalate',
-          /*
-           * EMPTY, not `['owner']`.
-           *
-           * `attemptedAgentIds` is a SKIP-LIST — `nextAgent` refuses anybody in
-           * it — so naming the owner made the rung structurally unable to leave
-           * the chat where it was. See the regression test below.
-           */
-          attemptedAgentIds: [],
-          // "Has anyone replied SINCE this moment" — agent messages only.
+          attemptedAgentIds: ['owner'],
           outboundCountAtSchedule: 3,
         }),
         ROUTING_FIRST_WAIT_MS,
       );
     });
 
-    it('KEEPS the chat with an owner who is answering, rather than passing it on', async () => {
-      /*
-       * "Once Nada receives the chat and replies, it should remain assigned to
-       * Nada" (owner, 2026-09-15).
-       *
-       * The re-arm put the current owner into `attemptedAgentIds`, which is a
-       * skip-list: `nextAgent` will not offer a chat to anybody named in it. So
-       * the rung could not leave the chat where it was even when the owner was
-       * the idlest agent online and had just answered.
-       *
-       * Measured in production on chat 65138bfb — Nada replied at 08:02:25, the
-       * customer wrote again at 08:03:21, and 60 seconds later the ladder moved
-       * it to Shatha.
-       */
-      const t = deps({
-        online: ['nada', 'shatha'],
-        roster: ['nada', 'shatha'],
-        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
-        outbound: 1,
+    it('hands a new session to the idlest ONLINE agent when the owner is away', async () => {
+      const { d, schedule, assign, notify } = deps({
+        online: ['colleague'],
+        roster: ['colleague', 'owner'],
+        convo: { id: 'c1', assigned_agent: 'owner', assigned_team: null, status: 'open' },
       });
-      // The re-arm the customer's new message schedules.
-      await handleRouting(job(), t.d);
-      const armed = t.schedule.mock.calls[0]?.[0] as { attemptedAgentIds: string[] };
-      expect(armed.attemptedAgentIds).toEqual([]);
+      await handleRouting(job({ sessionStarted: true }), d);
+      expect(assign).toHaveBeenCalledWith('c1', 'colleague');
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ recipientId: 'colleague' }));
+      expect(schedule).toHaveBeenCalledWith(
+        expect.objectContaining({ stage: 'escalate', attemptedAgentIds: ['colleague'] }),
+        ROUTING_FIRST_WAIT_MS,
+      );
+    });
 
-      // That timer expiring must offer it back to Nada — the idlest eligible
-      // agent — not hand it to Shatha.
-      const t2 = deps({
-        online: ['nada', 'shatha'],
-        roster: ['nada', 'shatha'],
-        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
-        outbound: 1,
+    it('a new session in an owned chat still escalates when the owner stays silent', async () => {
+      // The timer armed above expires with no reply: the owner is in the
+      // skip-list, so the chat moves to the next agent for the 30-second rung.
+      const { d, assign } = deps({
+        online: ['owner', 'next-idlest'],
+        roster: ['owner', 'next-idlest'],
+        convo: { id: 'c1', assigned_agent: 'owner', assigned_team: null, status: 'open' },
+        outbound: 3,
       });
       await handleRouting(
-        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 1 }),
-        t2.d,
+        job({ stage: 'escalate', attemptedAgentIds: ['owner'], outboundCountAtSchedule: 3 }),
+        d,
       );
-      const handedTo = t2.assign.mock.calls.map((c) => c[1]);
-      expect(handedTo).not.toContain('shatha');
+      expect(assign).toHaveBeenCalledWith('c1', 'next-idlest');
     });
 
     it('the armed ladder cancels itself the moment the owner replies', async () => {
-      // A chat actively being worked must be untouched: the escalate rung sees
-      // the reply count has moved and stands down.
       const { d, assign } = deps({
         online: ['owner', 'next-idlest'],
         roster: ['owner', 'next-idlest'],
@@ -236,6 +235,12 @@ describe('auto-assignment ladder', () => {
         d,
       );
       expect(assign).not.toHaveBeenCalled();
+    });
+
+    it('still routes a chat NOBODY owns on any customer message - nobody has handled it', async () => {
+      const { d, assign } = deps({ online: ['a1'], roster: ['a1'] });
+      await handleRouting(job(), d);
+      expect(assign).toHaveBeenCalledWith('c1', 'a1');
     });
 
     it('ignores conversations that are already finished', async () => {
@@ -342,76 +347,17 @@ describe('auto-assignment ladder', () => {
    * really do go quiet: reaching the escalate rung at all means nobody replied
    * for the full 60 seconds, and the next rung has them in the skip-list.
    */
-  describe('the re-arm must not take a chat off the agent working it', () => {
-    it('leaves the chat with its owner when the ladder is re-armed', async () => {
-      const { assign, d } = deps({
-        // Shatha carries fewer chats, so she leads the least-loaded ordering —
-        // which is exactly what used to hand her Nada's conversation.
-        roster: ['shatha', 'nada'],
-        online: ['shatha', 'nada'],
-        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
-      });
-
-      // The re-arm: armed for the OWNER, so nobody has been "offered" it yet.
-      await handleRouting(
-        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 5 }),
-        d,
-      );
-
-      expect(assign).toHaveBeenCalledWith('c1', 'nada');
-      expect(assign).not.toHaveBeenCalledWith('c1', 'shatha');
-    });
-
-    it('still moves on when the owner has genuinely gone quiet and dropped offline', async () => {
-      const { assign, d } = deps({
-        roster: ['shatha', 'nada'],
-        online: ['shatha'], // Nada is gone
-        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
-      });
-
-      await handleRouting(
-        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 5 }),
-        d,
-      );
-
-      // The preference is not a guarantee — an absent owner keeps nothing.
-      expect(assign).toHaveBeenCalledWith('c1', 'shatha');
-    });
-
-    it('gives the owner ONE more turn, not a permanent hold', async () => {
-      const { schedule, d } = deps({
-        roster: ['shatha', 'nada'],
-        online: ['shatha', 'nada'],
-        convo: { id: 'c1', assigned_agent: 'nada', assigned_team: null, status: 'open' },
-      });
-
-      await handleRouting(
-        job({ stage: 'escalate', attemptedAgentIds: [], outboundCountAtSchedule: 5 }),
-        d,
-      );
-
-      // Named in the skip-list for the next rung: if Nada stays silent through
-      // the broadcast wait too, the chat does leave her.
-      expect(schedule).toHaveBeenCalledWith(
-        expect.objectContaining({ stage: 'broadcast', attemptedAgentIds: ['nada'] }),
-        expect.anything(),
-      );
-    });
-
+  describe('the escalate rung never re-offers a chat to the agent who already had their turn', () => {
     it('does NOT re-offer to an agent who was already given their 60 seconds', async () => {
-      // The ordinary escalate path: Shatha was offered it and missed. The
-      // preference must not resurrect her — that is what the skip-list is for.
       const { assign, d } = deps({
         roster: ['shatha', 'nada'],
         online: ['shatha', 'nada'],
         convo: { id: 'c1', assigned_agent: 'shatha', assigned_team: null, status: 'open' },
       });
-
       await handleRouting(
         job({ stage: 'escalate', attemptedAgentIds: ['shatha'], outboundCountAtSchedule: 0 }),
         d,
       );
-
       expect(assign).toHaveBeenCalledWith('c1', 'nada');
     });
   });
