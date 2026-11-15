@@ -23,7 +23,7 @@ export function OverviewPage() {
   const { user, can } = useAuth();
   const areas: Area[] = [
     {
-      to: '/coupons',
+      to: '/v1/coupons',
       title: t('overview.coupons', { defaultValue: 'Marketing coupons' }),
       body: t('overview.couponsBody', {
         defaultValue: 'One coupon, set up once, sent after approval.',
@@ -32,7 +32,7 @@ export function OverviewPage() {
       ready: true,
     },
     {
-      to: '/bulk',
+      to: '/v1/bulk',
       title: t('overview.bulk', { defaultValue: 'Bulk coupons' }),
       body: t('overview.bulkBody', {
         defaultValue: 'A coupon for a whole list of customers, checked and paced.',
@@ -41,7 +41,7 @@ export function OverviewPage() {
       ready: true,
     },
     {
-      to: '/campaigns',
+      to: '/v1/campaigns',
       title: t('overview.campaigns', { defaultValue: 'Campaigns' }),
       body: t('overview.campaignsBody', {
         defaultValue: 'Dates, budget and results for a group of coupons and offers.',
@@ -50,14 +50,14 @@ export function OverviewPage() {
       ready: true,
     },
     {
-      to: '/points',
+      to: '/v1/points',
       title: t('overview.points', { defaultValue: 'Points' }),
       body: t('overview.pointsBody', { defaultValue: 'Loyalty points rules and programmes.' }),
       requires: 'manage_marketing',
       ready: true,
     },
     {
-      to: '/approvals',
+      to: '/v1/approvals',
       title: t('overview.approvals', { defaultValue: 'Approvals' }),
       body: t('overview.approvalsBody', {
         defaultValue: 'A manager approves marketing work before it reaches customers.',

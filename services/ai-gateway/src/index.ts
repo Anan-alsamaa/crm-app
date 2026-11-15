@@ -18,6 +18,7 @@ import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
 import { registerMarketingPointsRoutes } from './marketing/points.js';
+import { registerMarketingEngineProxy } from './marketing/engine.js';
 import { CommerceCache } from './commerce/cache.js';
 import { RedisLateOrdersLiveStore } from './commerce/late-orders-live.js';
 import { Registry } from './metrics.js';
@@ -262,6 +263,13 @@ async function main(): Promise<void> {
       password: config.YIJI_ADMIN_PASSWORD,
       tenantId: process.env.YIJI_TENANT_ID,
     },
+  });
+  /* The Marketing portal's live engine = Yiji v2, through this proxy only
+     (owner, 2026-11-15). 503 until MARKETING_ENGINE_URL/KEY are set. */
+  await registerMarketingEngineProxy(app, {
+    directusUrl: config.DIRECTUS_INTERNAL_URL,
+    engineUrl: config.MARKETING_ENGINE_URL,
+    engineKey: config.MARKETING_ENGINE_KEY,
   });
 
   await registerCommerceRoutes(app, {

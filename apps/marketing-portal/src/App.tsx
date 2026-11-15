@@ -28,6 +28,7 @@ import { ProtectedRoute } from './lib/auth/ProtectedRoute.js';
 import { Login } from './pages/Login.js';
 import { ResetPassword, RESET_PASSWORD_PATH } from './pages/ResetPassword.js';
 import { navItemAllowed, type NavItem, type NavSection } from './nav.js';
+import { EngineProvider } from './engine/index.js';
 import type { Privilege } from './lib/privileges.js';
 
 const OverviewPage = lazy(() =>
@@ -51,6 +52,106 @@ const PointsPage = lazy(() =>
 const CouponsPage = lazy(() =>
   import('./features/coupons/CouponsPage.js').then((m) => ({ default: m.CouponsPage })),
 );
+/* THE PROMOTIONS PORTAL (owner, 2026-11-15): the operations draft's seven
+   areas, over the promotion engine (sample data today, Yiji v2 when it ships). */
+const HomePage = lazy(() =>
+  import('./features/promo/HomePage.js').then((m) => ({ default: m.HomePage })),
+);
+const AlertsPage = lazy(() =>
+  import('./features/promo/HomePage.js').then((m) => ({ default: m.AlertsPage })),
+);
+const CouponTypesPage = lazy(() =>
+  import('./features/promo/CouponsPages.js').then((m) => ({ default: m.CouponTypesPage })),
+);
+const AllCouponsPage = lazy(() =>
+  import('./features/promo/CouponsPages.js').then((m) => ({ default: m.AllCouponsPage })),
+);
+const CampaignApprovalsPage = lazy(() =>
+  import('./features/promo/CouponsPages.js').then((m) => ({ default: m.CampaignApprovalsPage })),
+);
+const CampaignWizardPage = lazy(() =>
+  import('./features/promo/CampaignWizard.js').then((m) => ({ default: m.CampaignWizardPage })),
+);
+const CampaignDetailPage = lazy(() =>
+  import('./features/promo/CampaignDetailPage.js').then((m) => ({ default: m.CampaignDetailPage })),
+);
+const StudiesOverviewPage = lazy(() =>
+  import('./features/promo/StudiesPages.js').then((m) => ({ default: m.StudiesOverviewPage })),
+);
+const StudiesDataPage = lazy(() =>
+  import('./features/promo/StudiesPages.js').then((m) => ({ default: m.StudiesDataPage })),
+);
+const StudiesOpportunitiesPage = lazy(() =>
+  import('./features/promo/StudiesPages.js').then((m) => ({ default: m.StudiesOpportunitiesPage })),
+);
+const StudiesCasesPage = lazy(() =>
+  import('./features/promo/StudiesPages.js').then((m) => ({ default: m.StudiesCasesPage })),
+);
+const StudyDetailRoute = lazy(() =>
+  import('./features/promo/StudiesPages.js').then((m) => ({ default: m.StudyDetailRoute })),
+);
+const StudiesGroupsPage = lazy(() =>
+  import('./features/promo/StudiesPages.js').then((m) => ({ default: m.StudiesGroupsPage })),
+);
+const PerformanceOverviewPage = lazy(() =>
+  import('./features/promo/PerformancePages.js').then((m) => ({
+    default: m.PerformanceOverviewPage,
+  })),
+);
+const PerformanceResultsPage = lazy(() =>
+  import('./features/promo/PerformancePages.js').then((m) => ({
+    default: m.PerformanceResultsPage,
+  })),
+);
+const PerformancePlanPage = lazy(() =>
+  import('./features/promo/PerformancePages.js').then((m) => ({ default: m.PerformancePlanPage })),
+);
+const PerformanceEvaluationsPage = lazy(() =>
+  import('./features/promo/PerformancePages.js').then((m) => ({
+    default: m.PerformanceEvaluationsPage,
+  })),
+);
+const GiftCardsOverviewPage = lazy(() =>
+  import('./features/promo/GiftCardsPages.js').then((m) => ({ default: m.GiftCardsOverviewPage })),
+);
+const GiftCardsProductsPage = lazy(() =>
+  import('./features/promo/GiftCardsPages.js').then((m) => ({ default: m.GiftCardsProductsPage })),
+);
+const GiftCardsDesignPage = lazy(() =>
+  import('./features/promo/GiftCardsPages.js').then((m) => ({ default: m.GiftCardsDesignPage })),
+);
+const GiftCardsActivityPage = lazy(() =>
+  import('./features/promo/GiftCardsPages.js').then((m) => ({ default: m.GiftCardsActivityPage })),
+);
+const RewardsOverviewPage = lazy(() =>
+  import('./features/promo/RewardsPages.js').then((m) => ({ default: m.RewardsOverviewPage })),
+);
+const RewardsEarnPage = lazy(() =>
+  import('./features/promo/RewardsPages.js').then((m) => ({ default: m.RewardsEarnPage })),
+);
+const RewardsRedeemPage = lazy(() =>
+  import('./features/promo/RewardsPages.js').then((m) => ({ default: m.RewardsRedeemPage })),
+);
+const RewardsMembersPage = lazy(() =>
+  import('./features/promo/RewardsPages.js').then((m) => ({ default: m.RewardsMembersPage })),
+);
+const SettingsGeneralPage = lazy(() =>
+  import('./features/promo/SettingsPages.js').then((m) => ({ default: m.SettingsGeneralPage })),
+);
+const SettingsStackingPage = lazy(() =>
+  import('./features/promo/SettingsPages.js').then((m) => ({ default: m.SettingsStackingPage })),
+);
+const SettingsBrandsPage = lazy(() =>
+  import('./features/promo/SettingsPages.js').then((m) => ({ default: m.SettingsBrandsPage })),
+);
+const SettingsFieldSpecPage = lazy(() =>
+  import('./features/promo/SettingsPages.js').then((m) => ({ default: m.SettingsFieldSpecPage })),
+);
+const SettingsArchitecturePage = lazy(() =>
+  import('./features/promo/SettingsPages.js').then((m) => ({
+    default: m.SettingsArchitecturePage,
+  })),
+);
 
 /**
  * THE MARKETING PORTAL'S MAP (owner, 2026-11-02): coupons, bulk sends,
@@ -66,9 +167,9 @@ export function marketingSections(t: (k: string, o: { defaultValue: string }) =>
     requires?: Privilege,
   ): NavItem => ({ to, label, icon, requires });
   const sections: NavSection[] = [
-    { items: [item('/overview', t('nav.overview', { defaultValue: 'Overview' }), ChartIcon)] },
+    { items: [item('/home', t('nav.home', { defaultValue: 'Home' }), ChartIcon)] },
     {
-      heading: t('nav.work', { defaultValue: 'Marketing' }),
+      heading: t('nav.promotions', { defaultValue: 'Promotions' }),
       items: [
         item(
           '/coupons',
@@ -77,21 +178,22 @@ export function marketingSections(t: (k: string, o: { defaultValue: string }) =>
           'manage_marketing',
         ),
         item(
-          '/bulk',
-          t('nav.bulk', { defaultValue: 'Bulk coupons' }),
+          '/pre-studies',
+          t('nav.preStudies', { defaultValue: 'Pre-studies' }),
+          SparkleIcon,
+          'manage_marketing',
+        ),
+        item('/performance', t('nav.performance', { defaultValue: 'Performance' }), ChartIcon),
+        item(
+          '/gift-cards',
+          t('nav.giftCards', { defaultValue: 'Gift cards' }),
           UsersIcon,
           'manage_marketing',
         ),
         item(
-          '/campaigns',
-          t('nav.campaigns', { defaultValue: 'Campaigns' }),
+          '/rewards',
+          t('nav.rewards', { defaultValue: 'Rewards' }),
           CalendarIcon,
-          'manage_marketing',
-        ),
-        item(
-          '/points',
-          t('nav.points', { defaultValue: 'Points' }),
-          SparkleIcon,
           'manage_marketing',
         ),
       ],
@@ -100,12 +202,48 @@ export function marketingSections(t: (k: string, o: { defaultValue: string }) =>
       heading: t('nav.control', { defaultValue: 'Control' }),
       items: [
         item(
-          '/approvals',
+          '/coupons/approvals',
           t('nav.approvals', { defaultValue: 'Approvals' }),
           ShieldIcon,
           'approve_marketing',
         ),
-        item('/activity', t('nav.activity', { defaultValue: 'Activity log' }), ClockIcon),
+        item('/settings', t('nav.settings', { defaultValue: 'Settings' }), ClockIcon),
+        item('/v1/activity', t('nav.activity', { defaultValue: 'Activity log' }), ClockIcon),
+      ],
+    },
+    {
+      heading: t('nav.v1', { defaultValue: 'Current Yiji (v1)' }),
+      items: [
+        item(
+          '/v1/coupons',
+          t('nav.v1Coupons', { defaultValue: 'Coupons (v1)' }),
+          TicketIcon,
+          'manage_marketing',
+        ),
+        item(
+          '/v1/bulk',
+          t('nav.bulk', { defaultValue: 'Bulk coupons' }),
+          UsersIcon,
+          'manage_marketing',
+        ),
+        item(
+          '/v1/campaigns',
+          t('nav.campaigns', { defaultValue: 'Campaigns' }),
+          CalendarIcon,
+          'manage_marketing',
+        ),
+        item(
+          '/v1/points',
+          t('nav.points', { defaultValue: 'Points' }),
+          SparkleIcon,
+          'manage_marketing',
+        ),
+        item(
+          '/v1/approvals',
+          t('nav.v1Approvals', { defaultValue: 'Approvals (v1)' }),
+          ShieldIcon,
+          'approve_marketing',
+        ),
       ],
     },
   ];
@@ -332,70 +470,314 @@ function Gate({ children, requires }: { children: ReactNode; requires?: Privileg
 export function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path={RESET_PASSWORD_PATH} element={<ResetPassword />} />
-          <Route
-            path="/overview"
-            element={
-              <Gate>
-                <OverviewPage />
-              </Gate>
-            }
-          />
-          <Route
-            path="/coupons"
-            element={
-              <Gate requires="manage_marketing">
-                <CouponsPage />
-              </Gate>
-            }
-          />
-          <Route
-            path="/bulk"
-            element={
-              <Gate requires="manage_marketing">
-                <BulkPage />
-              </Gate>
-            }
-          />
-          <Route
-            path="/campaigns"
-            element={
-              <Gate requires="manage_marketing">
-                <CampaignsPage />
-              </Gate>
-            }
-          />
-          <Route
-            path="/points"
-            element={
-              <Gate requires="manage_marketing">
-                <PointsPage />
-              </Gate>
-            }
-          />
-          <Route
-            path="/approvals"
-            element={
-              <Gate requires="approve_marketing">
-                <ApprovalsPage />
-              </Gate>
-            }
-          />
-          <Route
-            path="/activity"
-            element={
-              <Gate>
-                <ActivityPage />
-              </Gate>
-            }
-          />
-          <Route path="/" element={<Navigate to="/overview" replace />} />
-          <Route path="*" element={<Navigate to="/overview" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <EngineProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path={RESET_PASSWORD_PATH} element={<ResetPassword />} />
+            <Route
+              path="/overview"
+              element={
+                <Gate>
+                  <OverviewPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/v1/coupons"
+              element={
+                <Gate requires="manage_marketing">
+                  <CouponsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/v1/bulk"
+              element={
+                <Gate requires="manage_marketing">
+                  <BulkPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/v1/campaigns"
+              element={
+                <Gate requires="manage_marketing">
+                  <CampaignsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/v1/points"
+              element={
+                <Gate requires="manage_marketing">
+                  <PointsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/v1/approvals"
+              element={
+                <Gate requires="approve_marketing">
+                  <ApprovalsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/v1/activity"
+              element={
+                <Gate>
+                  <ActivityPage />
+                </Gate>
+              }
+            />
+            {/* The promotions portal */}
+            <Route
+              path="/home"
+              element={
+                <Gate>
+                  <HomePage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/home/alerts"
+              element={
+                <Gate>
+                  <AlertsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/coupons"
+              element={
+                <Gate requires="manage_marketing">
+                  <CouponTypesPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/coupons/all"
+              element={
+                <Gate requires="manage_marketing">
+                  <AllCouponsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/coupons/approvals"
+              element={
+                <Gate requires="approve_marketing">
+                  <CampaignApprovalsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/coupons/new"
+              element={
+                <Gate requires="manage_marketing">
+                  <CampaignWizardPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/coupons/:id"
+              element={
+                <Gate>
+                  <CampaignDetailPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/pre-studies"
+              element={
+                <Gate requires="manage_marketing">
+                  <StudiesOverviewPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/pre-studies/data"
+              element={
+                <Gate requires="manage_marketing">
+                  <StudiesDataPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/pre-studies/opportunities"
+              element={
+                <Gate requires="manage_marketing">
+                  <StudiesOpportunitiesPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/pre-studies/cases"
+              element={
+                <Gate requires="manage_marketing">
+                  <StudiesCasesPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/pre-studies/cases/:id"
+              element={
+                <Gate requires="manage_marketing">
+                  <StudyDetailRoute />
+                </Gate>
+              }
+            />
+            <Route
+              path="/pre-studies/groups"
+              element={
+                <Gate requires="manage_marketing">
+                  <StudiesGroupsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/performance"
+              element={
+                <Gate>
+                  <PerformanceOverviewPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/performance/results"
+              element={
+                <Gate>
+                  <PerformanceResultsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/performance/plan-vs-actual"
+              element={
+                <Gate>
+                  <PerformancePlanPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/performance/evaluations"
+              element={
+                <Gate>
+                  <PerformanceEvaluationsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/gift-cards"
+              element={
+                <Gate requires="manage_marketing">
+                  <GiftCardsOverviewPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/gift-cards/products"
+              element={
+                <Gate requires="manage_marketing">
+                  <GiftCardsProductsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/gift-cards/design"
+              element={
+                <Gate requires="manage_marketing">
+                  <GiftCardsDesignPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/gift-cards/activity"
+              element={
+                <Gate requires="manage_marketing">
+                  <GiftCardsActivityPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/rewards"
+              element={
+                <Gate requires="manage_marketing">
+                  <RewardsOverviewPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/rewards/earn"
+              element={
+                <Gate requires="manage_marketing">
+                  <RewardsEarnPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/rewards/redeem"
+              element={
+                <Gate requires="manage_marketing">
+                  <RewardsRedeemPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/rewards/members"
+              element={
+                <Gate requires="manage_marketing">
+                  <RewardsMembersPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <Gate>
+                  <SettingsGeneralPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/settings/stacking"
+              element={
+                <Gate>
+                  <SettingsStackingPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/settings/brands-menus"
+              element={
+                <Gate>
+                  <SettingsBrandsPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/settings/field-spec"
+              element={
+                <Gate>
+                  <SettingsFieldSpecPage />
+                </Gate>
+              }
+            />
+            <Route
+              path="/settings/architecture"
+              element={
+                <Gate>
+                  <SettingsArchitecturePage />
+                </Gate>
+              }
+            />
+            <Route path="/overview" element={<Navigate to="/home" replace />} />
+            <Route path="/" element={<Navigate to="/home" replace />} />
+            <Route path="*" element={<Navigate to="/home" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </EngineProvider>
     </AuthProvider>
   );
 }

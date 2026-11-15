@@ -30,6 +30,9 @@ const schema = z
      * All three empty => order tracking falls back to the derived timeline.
      */
     YIJI_ADMIN_API_URL: z.string().default(''),
+    /** Yiji v2's promotion engine (the Marketing portal's live engine, 2026-11-15). Unset = 503 engine_not_configured. */
+    MARKETING_ENGINE_URL: z.string().default(''),
+    MARKETING_ENGINE_KEY: z.string().default(''),
     YIJI_ADMIN_EMAIL: z.string().default(''),
     YIJI_ADMIN_PASSWORD: z.string().default(''),
     /** Per-user requests per minute. */

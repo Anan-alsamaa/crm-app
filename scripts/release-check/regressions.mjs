@@ -440,7 +440,13 @@ function compareCoupon(row, c) {
     name: plusPhone(row),
     /* Only an explicit General/Public is General; anything else is Private
        (owner, 2026-11-08 - a missing type used to be left to Yiji's General). */
-    type: ['general', 'public'].includes(String(row.coupon_type ?? '').trim().toLowerCase()) ? 0 : 1,
+    type: ['general', 'public'].includes(
+      String(row.coupon_type ?? '')
+        .trim()
+        .toLowerCase(),
+    )
+      ? 0
+      : 1,
     category: pct ? 0 : 1,
     discount: pct ? 0 : Number(row.coupon_value),
     discountPercentage: pct ? Number(row.coupon_percent) : 0,
@@ -490,9 +496,15 @@ async function yijiHeldBy(row) {
   const list = r.ok ? await r.json() : [];
   const held = (list ?? []).find((x) => x.couponCode === row.coupon_code);
   if (held?.coupon) return { coupon: held.coupon };
-  return (
-    (await spentOrExpired(row, userId, YH)) ?? { error: 'the customer does NOT hold it on Yiji' }
-  );
+  const spent = await spentOrExpired(row, userId, YH);
+  if (spent) return spent;
+  /* SWITCHED OFF ON YIJI (v1.2.48, OPS-FY2ZAKZH, 2026-11-15): a coupon WeCare
+     or Yiji turned off on Yiji's side (status 5) leaves the wallet exactly like
+     a missing one. That is production behaviour outside the CRM - listed for a
+     human, never a release failure (same rule as COUPON-VANISHED). */
+  const gone = await inactiveOnYiji(row, YH);
+  if (gone) return { spent: `${gone} - outside the CRM (grant ${row.yiji_coupon_user_id ?? '?'})` };
+  return { error: 'the customer does NOT hold it on Yiji' };
 }
 /*
  * A COUPON THE CUSTOMER SPENT LEAVES THEIR WALLET (OPS-HL2WJQ2N, 2026-10-08).
@@ -1526,7 +1538,9 @@ await check(
       limit: '-1',
     });
     if (intended.status !== 200) return { status: 'FAIL', detail: `CRM HTTP ${intended.status}` };
-    const meant = new Set((intended.data ?? []).map((c) => String(c.coupon_code ?? '').toUpperCase()));
+    const meant = new Set(
+      (intended.data ?? []).map((c) => String(c.coupon_code ?? '').toUpperCase()),
+    );
     const listed = [];
     // Our code prefixes, plus anything that reads like a test coupon.
     for (const code of ['OPS-', 'CC-', 'ZZ-', 'PROBE', 'TEST']) {
@@ -1542,16 +1556,26 @@ await check(
         // Type 0 = General, status 0 = active (status 1 = removed).
         for (const c of rows)
           if (c.type === 0 && c.status === 0)
-            (meant.has(String(c.code ?? '').toUpperCase()) ? listed : bad).push(`${c.code} #${c.id}`);
+            (meant.has(String(c.code ?? '').toUpperCase()) ? listed : bad).push(
+              `${c.code} #${c.id}`,
+            );
         if (rows.length < 100) break;
       }
     }
     const unique = [...new Set(bad)];
     const ok = [...new Set(listed)];
-    const note = ok.length ? ` (${ok.length} General on purpose: ${ok.slice(0, 10).join(', ')})` : '';
+    const note = ok.length
+      ? ` (${ok.length} General on purpose: ${ok.slice(0, 10).join(', ')})`
+      : '';
     return unique.length === 0
-      ? { status: 'PASS', detail: `no unintended active General coupon with our codes or a test name${note}` }
-      : { status: 'FAIL', detail: `active General NOT issued as General: ${unique.slice(0, 10).join(', ')}${note}` };
+      ? {
+          status: 'PASS',
+          detail: `no unintended active General coupon with our codes or a test name${note}`,
+        }
+      : {
+          status: 'FAIL',
+          detail: `active General NOT issued as General: ${unique.slice(0, 10).join(', ')}${note}`,
+        };
   },
 );
 

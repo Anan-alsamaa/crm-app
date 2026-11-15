@@ -43,19 +43,44 @@ describe('what each marketing role is offered', () => {
       .filter((it) => navItemAllowed(it, { can: (k) => privs[k] === true, isOwner: false }))
       .map((it) => it.to);
 
-  it('a viewer sees the overview and the log only', () => {
-    expect(visible({ use_marketing_portal: true })).toEqual(['/overview', '/activity']);
+  it('a viewer sees home, performance, settings and the log only', () => {
+    expect(visible({ use_marketing_portal: true })).toEqual([
+      '/home',
+      '/performance',
+      '/settings',
+      '/v1/activity',
+    ]);
   });
 
   it('a marketing user prepares work but cannot approve it', () => {
     const v = visible({ use_marketing_portal: true, manage_marketing: true });
-    expect(v).toEqual(['/overview', '/coupons', '/bulk', '/campaigns', '/points', '/activity']);
-    expect(v).not.toContain('/approvals');
+    for (const to of [
+      '/home',
+      '/coupons',
+      '/pre-studies',
+      '/performance',
+      '/gift-cards',
+      '/rewards',
+      '/settings',
+      '/v1/coupons',
+      '/v1/bulk',
+      '/v1/campaigns',
+      '/v1/points',
+      '/v1/activity',
+    ]) {
+      expect(v).toContain(to);
+    }
+    expect(v).not.toContain('/coupons/approvals');
+    expect(v).not.toContain('/v1/approvals');
   });
 
-  it('a marketing manager also has the approval queue', () => {
-    expect(
-      visible({ use_marketing_portal: true, manage_marketing: true, approve_marketing: true }),
-    ).toContain('/approvals');
+  it('a marketing manager also has the approval queues', () => {
+    const v = visible({
+      use_marketing_portal: true,
+      manage_marketing: true,
+      approve_marketing: true,
+    });
+    expect(v).toContain('/coupons/approvals');
+    expect(v).toContain('/v1/approvals');
   });
 });

@@ -34,7 +34,7 @@ function tsxFiles(dir) {
   return out;
 }
 
-const APPS = ['agent-portal', 'admin-portal'];
+const APPS = ['agent-portal', 'admin-portal', 'marketing-portal'];
 const COMMON_AR = 'packages/i18n/src/locales/ar/common.json';
 
 /**
