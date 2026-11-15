@@ -153,7 +153,10 @@ the same policy:
 
 Signed like the CRM's own inbound API (HMAC-SHA256, timestamp, per-environment secret),
 with an event id for idempotency and retries with back-off. Receiver:
-`POST https://crm-api.anan.sa/webhooks/yiji/events` (the `/webhooks/yiji` prefix exists).
+`POST https://crm-api.anan.sa/webhooks/yiji/events` - **built on the CRM side (2026-11-15):
+the exact contract for the `order.*` events is in `docs/yiji-inbound-api.md`, section
+"POST /events"**; the compensation-rules feed (section 3f) is at `GET /webhooks/yiji/compensation-rules`,
+same document. The `coupon.*`, `campaign.*` and `customer.*` events below are still a request.
 
 | Event                                                                                                                   | Payload                                                                                                                        | What the CRM does with it                                                                                               |
 | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |

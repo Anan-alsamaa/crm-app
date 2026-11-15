@@ -11,12 +11,15 @@ import {
   lateOrdersSnapshotKey,
   lateOrdersVendorKey,
   liveLateOrdersQuery,
+  DEFAULT_LATE_ORDERS_RECONCILE_MS,
+  liveOrdersReconciledKey,
   type ConnectorRegistry,
   type LateOrdersDemand,
   type LateOrdersSnapshot,
   type VendorConnector,
 } from '@yiji/shared-types';
 import { describeError } from '../lib/errors.js';
+import { inEventsMode, mergePollRows, rebuildLiveSnapshot } from './late-orders-events.js';
 
 /**
  * THE LIVE LATE-ORDERS POLLER (owner, 2026-10-12: "option 2").
@@ -60,6 +63,10 @@ export interface PollRedis {
   get(key: string): Promise<string | null>;
   hgetall(key: string): Promise<Record<string, string>>;
   hdel(key: string, ...fields: string[]): Promise<unknown>;
+  /* The live orders table (events mode, 2026-11-15). */
+  hget(key: string, field: string): Promise<string | null>;
+  hset(key: string, field: string, value: string): Promise<unknown>;
+  expire(key: string, seconds: number): Promise<unknown>;
 }
 
 export interface LateOrdersChange {
@@ -76,6 +83,8 @@ export interface LateOrdersPollDeps {
   now?: () => Date;
   /** The poll interval, for the lock's lifetime. */
   intervalMs?: number;
+  /** Events mode (2026-11-15): how often the platform is still asked as a safety net. */
+  reconcileMs?: number;
 }
 
 export interface LateOrdersPollResult {
@@ -205,6 +214,41 @@ async function pollVendor(
     /* The key names a platform too; a vendor id that now resolves to another
        platform's connector is not the vendor the screen asked about. */
     if (lateOrdersVendorKey(connector) !== vendorKey) return;
+    /*
+     * EVENTS MODE (owner, 2026-11-15): the platform is telling the CRM every
+     * order change, so the board is rebuilt from the live table (the minutes
+     * tick, orders cross the threshold) and the platform is only asked every
+     * `reconcileMs` as a safety net, its rows merged into the table.
+     */
+    if (await inEventsMode(redis, vendorKey)) {
+      const reconcileMs = deps.reconcileMs ?? DEFAULT_LATE_ORDERS_RECONCILE_MS;
+      const reconciledKey = envKey(liveOrdersReconciledKey(vendorKey));
+      const last = Number((await redis.get(reconciledKey).catch(() => null)) ?? 0);
+      if (reconcileMs > 0 && now.getTime() - last >= reconcileMs && canAskPlatform(connector)) {
+        try {
+          const fetched = await connector.getLateDeliveryOrders(
+            thresholdMinutes,
+            liveLateOrdersQuery(day),
+          );
+          await mergePollRows(redis, vendorKey, fetched, now.getTime());
+          await redis.set(reconciledKey, String(now.getTime()), 'EX', 60 * 60);
+          result.polled.push(vendorKey);
+        } catch (err) {
+          result.failed.push(vendorKey);
+          logger.warn(
+            { vendorKey, err: describeError(err) },
+            'late-orders reconcile failed - the live table stands as the events left it',
+          );
+        }
+      }
+      const { changed } = await rebuildLiveSnapshot(
+        { redis, logger, notify: deps.notify, now: () => now },
+        vendorKey,
+        now,
+      );
+      if (changed) result.changed.push(vendorKey);
+      return;
+    }
     if (!canAskPlatform(connector)) {
       if (!warnedUnconfigured.has(vendorKey)) {
         warnedUnconfigured.add(vendorKey);

@@ -16,6 +16,8 @@ import {
   COUPON_REMOVE_JOB_NAME,
   type CouponReplaceJob,
   type CouponEditJob,
+  type LateOrdersEventJob,
+  LATE_ORDERS_EVENT_JOB,
   COUPON_REPLACE_JOB_NAME,
   COUPON_EDIT_JOB_NAME,
   ROUTING_RECLAIM_WAIT_MS,
@@ -64,6 +66,12 @@ export interface SideEffectProducer {
   enqueueCouponReplace?(job: CouponReplaceJob): Promise<string | null>;
   /** Edit an approved coupon IN PLACE (owner, 2026-11-11). */
   enqueueCouponEdit?(job: CouponEditJob): Promise<string | null>;
+  /**
+   * ONE ORDER EVENT from the platform (owner, 2026-11-15), for the workers'
+   * live orders table. No custom jobId: the receiver already dedupes by event
+   * id in Redis, and a BullMQ id blocks the next add. Optional for test stubs.
+   */
+  enqueueLateOrdersEvent?(job: LateOrdersEventJob): Promise<string | null>;
   /**
    * Tell a customer's phone an agent replied while they were away. Enqueued
    * only when no customer socket is in the conversation — somebody watching
@@ -118,6 +126,10 @@ class NoopProducer implements SideEffectProducer {
     this.logger.warn('customer push skipped (Redis disabled)');
     return null;
   }
+  async enqueueLateOrdersEvent(): Promise<string | null> {
+    this.logger.warn('order event skipped (Redis disabled)');
+    return null;
+  }
   async close(): Promise<void> {}
 }
 
@@ -130,6 +142,7 @@ class BullProducer implements SideEffectProducer {
   private readonly coupons: Queue;
   private readonly customerPush: Queue;
   private readonly ai: Queue;
+  private readonly lateOrders: Queue;
   private readonly connection: Redis | Cluster;
   /* On a cluster a queue's keys must hash to ONE shard or BullMQ's Lua
    * scripts fail with CROSSSLOT — hence the hash tag. undefined on
@@ -165,6 +178,19 @@ class BullProducer implements SideEffectProducer {
       prefix: this.prefix,
     });
     this.ai = new Queue(QUEUES.ai, { connection: this.connection, prefix: this.prefix });
+    this.lateOrders = new Queue(QUEUES.lateOrders, {
+      connection: this.connection,
+      prefix: this.prefix,
+    });
+  }
+  async enqueueLateOrdersEvent(job: LateOrdersEventJob): Promise<string | null> {
+    const added = await this.lateOrders.add(LATE_ORDERS_EVENT_JOB, job, {
+      ...DEFAULT_JOB_OPTIONS,
+      /* Transport, not the record: the live table is the record. */
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    return added.id ?? null;
   }
   async enqueueAiAutoReply(conversationId: string): Promise<void> {
     /* Parked (owner, 2026-10-14): nothing is queued unless this environment
@@ -340,6 +366,7 @@ class BullProducer implements SideEffectProducer {
   async close(): Promise<void> {
     await this.automation.close();
     await this.ai.close();
+    await this.lateOrders.close();
     await this.imports.close();
     await this.reports.close();
     await this.notifications.close();

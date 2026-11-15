@@ -34,6 +34,8 @@ import {
   fetchWithYijiUsage,
   yijiBackupTokenFromEnv,
   type YijiUsageSink,
+  LateOrdersEventJob,
+  LATE_ORDERS_EVENT_JOB,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -93,6 +95,7 @@ import {
   type LateOrdersChange,
   type PollRedis,
 } from './late-orders-poll.js';
+import { applyLateOrdersEvent } from './late-orders-events.js';
 import {
   createTicketRepo,
   createConversationRepo,
@@ -814,8 +817,22 @@ export const processors: Record<QueueName, Processor> = {
    * late-orders-poll.ts. Without Redis there is nothing to store it in, and
    * the gateway keeps asking Yiji itself, exactly as before.
    */
-  [QUEUES.lateOrders]: async (_job, deps) => {
+  [QUEUES.lateOrders]: async (job, deps) => {
     if (!deps.redis) return;
+    /* ONE ORDER EVENT from the platform (owner, 2026-11-15): update the live
+       table and rebuild the board. The poll job keeps its name. */
+    if (job.name === LATE_ORDERS_EVENT_JOB) {
+      const parsed = LateOrdersEventJob.safeParse(job.data);
+      if (!parsed.success) {
+        deps.logger.warn({ jobId: job.id }, 'late-orders event: invalid payload dropped');
+        return;
+      }
+      await applyLateOrdersEvent(
+        { redis: deps.redis, logger: deps.logger, notify: deps.onLateOrdersChanged },
+        parsed.data,
+      );
+      return;
+    }
     await runLateOrdersPoll({
       redis: deps.redis,
       connectors: connectorsFor(deps),
