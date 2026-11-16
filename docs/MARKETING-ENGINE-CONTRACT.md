@@ -1,9 +1,64 @@
-# The promotion engine contract: what Yiji v2 provides to the CRM's marketing portal
+# The marketing engine contract: what the CRM's marketing portal is served
 
-For the Yiji v2 team. Written 2026-11-15 from the CRM's marketing portal, which is built and
-running on sample data to this exact interface; going live is a configuration change once v2
-answers these calls. The source of truth is `packages/shared-types/src/marketing-engine.ts`
-(TypeScript types and zod schemas) - this page is the readable version.
+**2026-11-16 (owner): the CRM owns its marketing backend.** Yiji v2 implements nothing for the
+marketing portal; Yiji (v1 today, v2 later) is only the commerce platform - customers, orders,
+coupons, grants, push - reached through the vendor connectors and the workers. The engine below
+is answered by the CRM's own AI gateway (`services/ai-gateway/src/marketing/crm-engine.ts`,
+routes in `engine-routes.ts`), stored in Directus. The source of truth for the shapes is still
+`packages/shared-types/src/marketing-engine.ts`; this page is the readable version. The text
+further down, written 2026-11-15 when v2 was expected to implement it, is kept for the paths
+and shapes, which did not change.
+
+## How it is served (2026-11-16)
+
+- `/commerce/marketing/engine/<path>` on the AI gateway, the same paths `live.ts` calls. No
+  `/v1` hop, no external host. `MARKETING_ENGINE_URL` + `MARKETING_ENGINE_KEY`, if both are
+  ever set, put the old proxy (`engine.ts`) back instead - an override, off by default.
+- **Who:** the caller's own Directus session (`/users/me`) and their `app_roles` row
+  (`effectivePrivileges`). `use_marketing_portal` opens the door; `manage_marketing` prepares
+  (campaigns, submission, status, issuance, studies, gift card products, earning rules);
+  `approve_marketing` decides; the `Administrator` role holds all three.
+- **Storage:** written only by `svc-ai-gateway` after the rules: `marketing_campaigns` (typed
+  columns + the whole validated draft in `draft`), `marketing_studies`,
+  `marketing_gift_card_products`, `marketing_earning_rules`, `marketing_activity`. People read
+  them; nobody writes them directly.
+- **Rules enforced on the server:** four eyes (the creator never decides their own campaign or
+  study, the Administrator included); the approval reasons (`cost_above_threshold`,
+  `deep_discount`, `forecast_loss`) recomputed from the draft and the money model
+  (`app_settings.marketing_money_model` over `DEFAULT_MONEY_MODEL`) at submission and at the
+  decision; `LOCKED_WHEN_LIVE` for live, paused and ended campaigns; no edits while waiting for
+  approval; editing an approved campaign withdraws the approval; status moves only
+  `approved -> live <-> paused -> ended`.
+- **Issuance** (`POST /issuance`) goes through the EXISTING coupon pipeline: one
+  `marketing_coupons` list coupon per batch, its customers as `marketing_coupon_recipients`,
+  marked approved (by the campaign's approver) after the list is written; the workers'
+  marketing sender (`MARKETING_COUPON_SEND=on`) creates it on Yiji and hands it out. Customer
+  ids are Saudi mobiles, or Yiji customer ids the CRM knows from `contacts`. The control group
+  is held back; customers who already hold it, or past the total-redemptions / budget ceiling,
+  are skipped with the reason. **A campaign whose rules a v1 coupon cannot carry is refused
+  with the fields named** (`422 not_issuable`), never issued wider than approved: offer types
+  other than FIXED / capped PERCENT, partial redemption, A/B experiment, stamp cards, a maximum
+  order, previous-orders / first-order rules, a subset of payment methods, more than one brand,
+  branches / categories / products, daily limits, times of day, days of the week, an
+  unlimited-per-customer mode without a number, an expired end date, a SHARED code not in the
+  `MKT-` form.
+- **No data source yet, answered empty or zero in the sample's shapes:** redemptions,
+  performance revenue / discount / ROI / control-group lift, gift card sales, stats and
+  activity, points (rewards campaigns, items, stats, members), the orders export, opportunities
+  and customer groups, the catalogue's categories and products (brands are the coupon brands,
+  branches the CRM stores). Performance's `issued` and `perDay` are real: what the sender gave.
+
+## Going live (2026-11-16)
+
+1. Schema: `pnpm --filter @yiji/directus-bootstrap run apply:fields -- --only=marketing_campaigns,marketing_studies,marketing_gift_card_products,marketing_earning_rules`
+   (plus the four marketing collections where they are still missing).
+2. Grants: the `svc-ai-gateway` rows from `roles.ts`; the portal roles' rows come from the
+   `app-roles-sync` extension when Directus restarts with it.
+3. Deploy the services (gateway) and the Directus extension.
+4. The Administrator sets `marketing_engine` = `live`. The sample engine stays for local
+   development and tests.
+
+---
 
 ## How the CRM calls you
 
