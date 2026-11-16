@@ -194,6 +194,15 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     'recipient_count',
     'campaign',
   ];
+  /** What the Campaigns page writes on a campaign; the engine's columns are not among them. */
+  const MARKETING_CAMPAIGN_PAGE_FIELDS = [
+    'name',
+    'goal',
+    'start_date',
+    'end_date',
+    'budget',
+    'status',
+  ];
   /** A bulk list may change only while its coupon is still its author's draft. */
   const OWN_DRAFT_LIST = {
     _and: [
@@ -763,6 +772,12 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       ...readOnly('marketing_coupons'),
       ...readOnly('marketing_coupon_recipients'),
       ...readOnly('marketing_campaigns'),
+      /* The Marketing engine's own collections (owner, 2026-11-16): read
+         here, written only by the AI gateway's engine, which checks
+         manage_marketing / approve_marketing and four eyes itself. */
+      ...readOnly('marketing_studies'),
+      ...readOnly('marketing_gift_card_products'),
+      ...readOnly('marketing_earning_rules'),
     ],
     /* The author: creates a draft or submits it, and changes only their OWN
        coupon while it is a draft or was rejected. Never the decision fields,
@@ -792,8 +807,11 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('marketing_coupon_recipients', 'delete', OWN_DRAFT_LIST),
       // Campaigns are the team's: anyone who prepares work may plan and
       // archive one. No delete - a campaign's history stays.
-      g('marketing_campaigns', 'create'),
-      g('marketing_campaigns', 'update'),
+      /* The Campaigns page's own columns only (owner, 2026-11-16): an engine
+         campaign's status, approval and form are the engine's to change, so
+         writing them here would step around four eyes. */
+      g('marketing_campaigns', 'create', {}, MARKETING_CAMPAIGN_PAGE_FIELDS),
+      g('marketing_campaigns', 'update', {}, MARKETING_CAMPAIGN_PAGE_FIELDS),
     ],
     /* The manager: decides a SUBMITTED coupon somebody ELSE wrote. Four eyes
        by construction - nobody approves their own. */
