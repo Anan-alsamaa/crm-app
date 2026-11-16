@@ -357,30 +357,61 @@ const v2Obj = (v: unknown): Record<string, unknown> =>
   typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
 
 /**
- * One v2 envelope as the CRM's `OrderEvent`, or null when it is not an order
- * event the CRM acts on (or lacks what a live order needs). `order.late`
- * carries `elapsed_seconds` and `placed_at`; when `placed_at` is missing it
- * is derived from `occurred_at - elapsed_seconds` so the clock still runs
- * from the right moment. Money is `{ amount_minor, currency }` -> SAR/BHD
- * major units.
+ * v2's order types (crm-events-v1.yaml, confirmed by the v2 session
+ * 2026-11-16) as the CRM's. A food-court PARENT is the order that is
+ * delivered (the board shows it, grouped); a SUB names its parent and is
+ * hidden behind it. Unknown values are kept off the delivery board.
  */
-export function orderEventFromYiji2(e: Yiji2EventEnvelope): OrderEvent | null {
+const V2_ORDER_TYPE: Record<string, OrderEventOrderType> = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+  carhop: 'carhop',
+  dine_in: 'dine_in',
+  takeaway: 'takeout',
+  food_court_parent: 'delivery',
+  food_court_sub: 'other',
+  catering: 'other',
+};
+
+/**
+ * One v2 envelope as the CRM's `OrderEvent`, or null when it is not an order
+ * event the CRM acts on. v2 guarantees `order_type`, `state`, `order_number`
+ * and `at`/`occurred_at` on every order event, so an envelope WITHOUT one of
+ * them is malformed: null, and `opts.malformed` is told (never defaulted -
+ * a defaulted order type would put a pickup on the delivery board).
+ * `order.late` carries `elapsed_seconds` and `placed_at`; when `placed_at`
+ * is missing it is derived from `occurred_at - elapsed_seconds` so the clock
+ * still runs from the right moment. Money is `{ amount_minor, currency }`
+ * at `data.total` -> SAR/BHD major units.
+ */
+export function orderEventFromYiji2(
+  e: Yiji2EventEnvelope,
+  opts: { malformed?: (reason: string, eventId: string) => void } = {},
+): OrderEvent | null {
   if (!isHandledYiji2Event(e.type)) return null;
   const d = e.data;
+  const bad = (reason: string): null => {
+    opts.malformed?.(reason, e.id);
+    return null;
+  };
   const orderId = v2Id(d.order_number) ?? v2Id(d.order_id);
-  const state = v2Str(d.state) ?? v2Str(d.status) ?? (e.type === 'order.late' ? 'late' : undefined);
-  if (!orderId || !state) return null;
+  if (!orderId) return bad('no order_number');
+  const state = v2Str(d.state) ?? v2Str(d.status);
+  if (!state) return bad('no state');
+  const typeRaw = v2Str(d.order_type)?.toLowerCase();
+  if (!typeRaw) return bad('no order_type');
   const placedAt =
     v2Str(d.placed_at) ??
     (typeof d.elapsed_seconds === 'number'
       ? new Date(Date.parse(e.occurred_at) - d.elapsed_seconds * 1000).toISOString()
       : undefined);
-  if (!placedAt || Number.isNaN(Date.parse(placedAt))) return null;
+  if (!placedAt || Number.isNaN(Date.parse(placedAt)))
+    return bad('no placed_at or elapsed_seconds');
   const lower = state.toLowerCase();
   const status = V2_STATE_STATUS[lower] ?? lower;
   const isOpen = typeof d.is_open === 'boolean' ? d.is_open : !V2_CLOSED.has(lower);
-  const typeRaw = (v2Str(d.order_type) ?? 'delivery').toLowerCase();
-  const orderType = OrderEventOrderType.safeParse(typeRaw === 'takeaway' ? 'takeout' : typeRaw);
+  const orderType: OrderEventOrderType = V2_ORDER_TYPE[typeRaw] ?? 'other';
+  const groupMaster = d.is_group_master === true || typeRaw === 'food_court_parent';
   const customer = v2Obj(d.customer);
   const money = v2Obj(d.total);
   const minor = v2Num(money.amount_minor);
@@ -399,7 +430,7 @@ export function orderEventFromYiji2(e: Yiji2EventEnvelope): OrderEvent | null {
       orderId,
       status,
       isOpen,
-      orderType: orderType.success ? orderType.data : 'other',
+      orderType,
       placedAt,
       ...(v2Id(d.restaurant_id) ? { restaurantId: v2Id(d.restaurant_id) } : {}),
       ...(v2Str(d.restaurant_name) ? { restaurantName: v2Str(d.restaurant_name) } : {}),
@@ -415,7 +446,7 @@ export function orderEventFromYiji2(e: Yiji2EventEnvelope): OrderEvent | null {
           }
         : {}),
       ...(total !== undefined ? { total } : {}),
-      ...(subs > 0 ? { isGroupMaster: true } : {}),
+      ...(subs > 0 || groupMaster ? { isGroupMaster: true } : {}),
       ...(parent ? { parentOrderId: parent } : {}),
     },
   };

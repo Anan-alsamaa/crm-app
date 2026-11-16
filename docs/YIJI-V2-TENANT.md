@@ -96,10 +96,15 @@ answers 503, the poller ignores it, the tenant selector stays hidden, and no cou
 8. **A 404 on a WRITE is a settled refusal** (`POST /compensation-coupons` on a wrong
    `api_base_url` parks the coupon as "coupon not created" rather than retrying). v1 behaves the
    same; set the host right before activating, and watch the first coupon.
-9. **Event payload details to confirm with v2** (`order-events.ts`): `order.late` without
-   `state` records status `late`; only `data.total` is read (not a nested `money.total`); a
-   missing `order_type` is taken as `delivery` (a pickup order would reach the board). If v2's
-   final payload differs, the mapper is adjusted.
+9. **Event payload (confirmed by the v2 session 2026-11-16, `crm-events-v1.yaml`):** every
+   `order.*` event carries `order_number`, `customer_id`, `at`, `restaurant_id`, `brand_id`,
+   `country`, `is_group_master`, `order_type` (delivery | pickup | carhop | dine_in | takeaway |
+   food_court_parent | food_court_sub | catering) and `state`; `order.late` adds
+   `elapsed_seconds` + `threshold_minutes`; the total is `data.total` `{amount_minor, currency}`.
+   The mapper treats a missing `order_type`, `state` or `order_number` as MALFORMED (ignored and
+   logged, never defaulted). A food-court parent is the delivered, grouped order; a sub is hidden
+   behind its parent; takeaway → takeout; catering → other (off the delivery board). The exact
+   payloads are re-checked when v2's events code is merged.
 
 ### Review 2026-11-16 (independent cloud review, fixed in commit after 915af581)
 

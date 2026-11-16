@@ -885,6 +885,8 @@ describe('v2 events -> the CRM order event', () => {
       elapsed_seconds: 3900,
       threshold_minutes: 60,
       state: 'out_for_delivery',
+      order_type: 'delivery',
+      is_group_master: false,
       timeline: [{ state: 'created', at: '2026-11-16T08:55:00Z' }],
     },
   };
@@ -920,11 +922,53 @@ describe('v2 events -> the CRM order event', () => {
       data: {
         order_number: '2611000000001',
         state: 'delivered',
+        order_type: 'delivery',
         placed_at: '2026-11-16T08:55:00Z',
         total: { amount_minor: 8800, currency: 'SAR' },
       },
     })!;
     expect(closed.order).toMatchObject({ status: 'delivered', isOpen: false, total: 88 });
+  });
+
+  it('a missing order_type, state or order_number is MALFORMED: null and reported, never defaulted', () => {
+    /* v2 session 2026-11-16: every order.* event carries order_type and state;
+       a defaulted order type would put a pickup on the delivery board. */
+    const malformed = vi.fn();
+    const without = (k: string) => ({
+      ...late,
+      id: `evt-no-${k}`,
+      data: { ...late.data, [k]: undefined },
+    });
+    expect(orderEventFromYiji2(without('order_type') as never, { malformed })).toBeNull();
+    expect(orderEventFromYiji2(without('state') as never, { malformed })).toBeNull();
+    expect(orderEventFromYiji2(without('order_number') as never, { malformed })).toBeNull();
+    expect(malformed.mock.calls.map((c) => c[0])).toEqual([
+      'no order_type',
+      'no state',
+      'no order_number',
+    ]);
+    /* a type the CRM has no name for is kept, off the delivery board */
+    expect(
+      orderEventFromYiji2({ ...late, data: { ...late.data, order_type: 'catering' } } as never)
+        ?.order.orderType,
+    ).toBe('other');
+  });
+
+  it("maps v2's order types; a food-court parent is the delivered, grouped order", () => {
+    const of = (order_type: string, extra: Record<string, unknown> = {}) =>
+      orderEventFromYiji2({ ...late, data: { ...late.data, order_type, ...extra } } as never)!
+        .order;
+    expect(of('takeaway').orderType).toBe('takeout');
+    expect(of('pickup').orderType).toBe('pickup');
+    expect(of('carhop').orderType).toBe('carhop');
+    expect(of('dine_in').orderType).toBe('dine_in');
+    expect(of('food_court_parent', { is_group_master: true })).toMatchObject({
+      orderType: 'delivery',
+      isGroupMaster: true,
+    });
+    const sub = of('food_court_sub', { parent_order_number: 2611000000009 });
+    expect(sub).toMatchObject({ orderType: 'other', parentOrderId: '2611000000009' });
+    expect(sub.isGroupMaster).toBeUndefined();
   });
 
   it('ignores types the CRM does not act on, and a batch parses', () => {

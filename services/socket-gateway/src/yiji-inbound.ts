@@ -1666,7 +1666,15 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
               fields: zodFieldErrors(parsed.error),
             });
           }
-          incoming = yiji2EventsOf(parsed.data).map((e) => orderEventFromYiji2(e));
+          incoming = yiji2EventsOf(parsed.data).map((e) =>
+            orderEventFromYiji2(e, {
+              malformed: (reason, eventId) =>
+                logger.warn(
+                  { eventId, type: e.type, reason },
+                  `${label} events: malformed order event ignored`,
+                ),
+            }),
+          );
         } else {
           const parsed = parseOrderEventsBody(req.body);
           if (!parsed.success) {

@@ -108,6 +108,8 @@ const lateEvent = (id: string, over: Record<string, unknown> = {}) => ({
     elapsed_seconds: 3900,
     threshold_minutes: 60,
     state: 'out_for_delivery',
+    order_type: 'delivery',
+    is_group_master: false,
     timeline: [{ state: 'created', at: '2026-11-16T08:55:00Z' }],
     ...over,
   },
@@ -170,6 +172,7 @@ describe('POST /webhooks/yiji2/events', () => {
           data: {
             order_number: '2611000000001',
             state: 'delivered',
+            order_type: 'delivery',
             placed_at: '2026-11-16T08:55:00Z',
             total: { amount_minor: 8800, currency: 'SAR' },
           },
@@ -180,10 +183,17 @@ describe('POST /webhooks/yiji2/events', () => {
           occurred_at: '2026-11-16T10:31:00Z',
           data: { grant_id: 1 },
         },
+        /* malformed (v2 guarantees order_type): ignored and logged, never defaulted */
+        {
+          id: 'v2-ev-5b',
+          type: 'order.late',
+          occurred_at: '2026-11-16T10:32:00Z',
+          data: { order_number: '2611000000002', state: 'preparing', elapsed_seconds: 4000 },
+        },
       ],
     };
     const res = await app.inject(signed('/webhooks/yiji2/events', body, V2_SECRET));
-    expect(res.json()).toEqual({ ok: true, accepted: 1, duplicates: 0, ignored: 1 });
+    expect(res.json()).toEqual({ ok: true, accepted: 1, duplicates: 0, ignored: 2 });
     expect(enqueueV2.mock.calls[0]![0 as never]).toMatchObject({
       vendorKey: 'yiji2:2',
       event: { order: { status: 'delivered', isOpen: false, total: 88 } },
