@@ -351,11 +351,14 @@ async function couponPlatform(
     )) as unknown as { platform?: string | null };
     return row?.platform?.trim() || 'yiji';
   } catch (err) {
+    /* FAIL CLOSED: an unknown platform must never fall through to v1's
+       admin API (a v2 grant id would delete some v1 customer's coupon).
+       Throwing lets BullMQ retry when Directus answers again. */
     deps.logger.warn(
       { id: couponApprovalId, vendor, err: errorText(err) },
-      'could not read the coupon vendor platform - treating it as v1',
+      'could not read the coupon vendor platform - not sent anywhere, retried',
     );
-    return null;
+    throw new Error(`coupon vendor platform unreadable: ${errorText(err)}`);
   }
 }
 const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
@@ -721,6 +724,10 @@ export const processors: Record<QueueName, Processor> = {
     if (!connector) return;
     /* Yiji, or the mock (answers Yiji's shapes in memory, MV-6). */
     const yiji = asCouponPushConnector(connector);
+    /* The coupon reader and the group-order reader are v1's admin API, built
+       from the workers' v1 env: only a v1 (or mock) job may use them. A v2
+       coupon id or order number read on v1 is a stranger's row. */
+    const v1Readers = yiji.platform !== 'yiji2';
     await processCouponPushJob(job as Job<CouponPushJob>, {
       directus: deps.directus,
       logger: deps.logger,
@@ -740,7 +747,7 @@ export const processors: Record<QueueName, Processor> = {
       postCoupon: (couponDeliveryEnabled ? yiji.adminPost : null) ?? undefined,
       readOrder: yiji.readCouponOrderContext ?? undefined,
       /* Group orders (owner, 2026-11-11): read only when coupons are delivered. */
-      readOrderGroup: (couponDeliveryEnabled ? orderGroupReader : null) ?? undefined,
+      readOrderGroup: (couponDeliveryEnabled && v1Readers ? orderGroupReader : null) ?? undefined,
       /* One push per coupon at a time (2026-11-11): two at once gave one
          coupon two grants on staging. Per environment - Redis is shared. */
       ...(lock ? { lock } : {}),
@@ -749,8 +756,10 @@ export const processors: Record<QueueName, Processor> = {
          must not start resolving customers either. */
       findCustomer: (couponDeliveryEnabled ? yiji.findCustomerIdByPhone : null) ?? undefined,
       findUserCoupon: (couponDeliveryEnabled ? yiji.findCustomerCoupon : null) ?? undefined,
-      /* The Private check on every new coupon (owner, 2026-11-02). */
-      readCoupon: (couponDeliveryEnabled ? couponReader : null) ?? undefined,
+      /* The Private check on every new coupon (owner, 2026-11-02). The reader
+         is v1's admin API: handed ONLY to a v1 job (a v2 coupon id read on v1
+         would park the coupon on a stranger's coupon type). */
+      readCoupon: (couponDeliveryEnabled && v1Readers ? couponReader : null) ?? undefined,
       alertNotPrivate: async (code, detail) => {
         await alertAdministrators(
           {

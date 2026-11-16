@@ -44,20 +44,35 @@ describe('the v2 vendor row the script writes', () => {
     expect('actions' in again && again.actions.map((a) => a.op)).toEqual(['none']);
   });
 
-  it('never switches an activated row back off, and only corrects managed fields', () => {
+  it("never switches an activated row back off and never resets the owner's host", () => {
+    /* review 2026-11-16: a re-run after activation reset the real host to the
+       placeholder, and the prod credentials would have gone there. */
     const active = {
       id: 'uuid-v2',
       ...YIJI2_VENDOR,
       status: 'active',
+      name: 'Yiji V2 (prod)',
       api_base_url: 'https://api.yiji.app',
     };
     const plan = planYiji2Seed({ vendors: [yiji, active] });
-    expect('actions' in plan && plan.actions[0]).toMatchObject({
+    expect('actions' in plan && plan.actions.map((a) => a.op)).toEqual(['none']);
+    /* identity drift IS corrected; status still untouched */
+    const drifted = { ...active, webhook_path_key: 'yiji-two' };
+    const fix = planYiji2Seed({ vendors: [yiji, drifted] });
+    expect('actions' in fix && fix.actions[0]).toMatchObject({
       op: 'update',
       id: 'uuid-v2',
+      data: { webhook_path_key: 'yiji2' },
+    });
+    expect('actions' in fix && fix.actions[0]?.data).not.toHaveProperty('status');
+    expect('actions' in fix && fix.actions[0]?.data).not.toHaveProperty('api_base_url');
+    /* an EMPTY host gets the placeholder, so the row is never left URL-less */
+    const blank = { ...active, api_base_url: '' };
+    const fill = planYiji2Seed({ vendors: [yiji, blank] });
+    expect('actions' in fill && fill.actions[0]).toMatchObject({
+      op: 'update',
       data: { api_base_url: YIJI2_VENDOR.api_base_url },
     });
-    expect('actions' in plan && plan.actions[0]?.data).not.toHaveProperty('status');
   });
 
   it('refuses to adopt a vendor on another platform that already holds the id or the key', () => {

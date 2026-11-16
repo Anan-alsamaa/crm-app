@@ -90,6 +90,32 @@ answers 503, the poller ignores it, the tenant selector stays hidden, and no cou
    each vendor's rows side by side; no linked-person view yet.
 6. **Reports** filter by vendor already (MV-4); per-platform settings beyond the late threshold
    (none are read per vendor today) are added when a second one appears.
+7. **Currency is SAR unless told otherwise.** The connector never guesses it from the vendor's
+   name (review 2026-11-16). A Bahrain vendor needs an explicit `currency` (`Yiji2PlatformSettings.currency`),
+   which means a `vendors.currency` column + read grant before such a vendor is activated.
+8. **A 404 on a WRITE is a settled refusal** (`POST /compensation-coupons` on a wrong
+   `api_base_url` parks the coupon as "coupon not created" rather than retrying). v1 behaves the
+   same; set the host right before activating, and watch the first coupon.
+9. **Event payload details to confirm with v2** (`order-events.ts`): `order.late` without
+   `state` records status `late`; only `data.total` is read (not a nested `money.total`); a
+   missing `order_type` is taken as `delivery` (a pickup order would reach the board). If v2's
+   final payload differs, the mapper is adjusted.
+
+### Review 2026-11-16 (independent cloud review, fixed in commit after 915af581)
+
+- v1's coupon reader / group-order reader are handed only to v1 jobs (a v2 coupon id read on v1
+  parked the coupon on a stranger's coupon type); the hourly misuse check skips v2 rows.
+- Removal/edit guard fails CLOSED: an unreadable vendor platform throws (retried), never falls
+  through to v1's admin API.
+- The v2 late-orders board is rebuilt from the live table on every poll, not only inside the
+  15-minute events mode (an order late at 10:00 is still late at 10:20 with no new event).
+- A refused or empty token answer is an outage (retried), never a parked coupon.
+- Coupon dates go to v2 as RFC 3339 with the fixed `+03:00` offset (SA and BH).
+- A failed integration read never gives an active v2 vendor the in-memory mock (staging).
+- The seed script corrects only `platform` + `webhook_path_key`; the owner's host/name/colours
+  are never reset; an empty host gets the placeholder.
+- Attach-by-code is matched as v1 sends it (ids in the path).
+- `Yiji2UnavailableError` is an outage to the v1 helpers too (`isYijiUnavailable`).
 
 ## 6. Tests
 

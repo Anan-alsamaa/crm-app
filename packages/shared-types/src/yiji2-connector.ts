@@ -79,6 +79,8 @@ export interface Yiji2PlatformSettings {
   mock?: boolean;
   /** Which v2 environment the vendor row names; informational (logged, echoed). */
   environment?: string;
+  /** Money currency for coupon bodies: SAR (default) or BHD. Explicit only. */
+  currency?: 'SAR' | 'BHD';
 }
 
 /** The partner API's base path. */
@@ -473,6 +475,8 @@ export function yiji2RefusalAsV1(err: Yiji2RefusedError): YijiRefusedError {
 
 /** v2 could not answer (5xx, network, timeout, 429). Retried by the caller's rules. */
 export class Yiji2UnavailableError extends Error {
+  /** The v1 helpers' shape test (`isYijiUnavailable`): an outage, not an answer. */
+  readonly isYijiUnavailable = true;
   constructor(
     message: string,
     readonly retryAfterSec: number | null = null,
@@ -538,17 +542,20 @@ export class HttpYiji2Transport implements Yiji2Transport {
         client_secret: this.opts.clientSecret,
       }),
     });
+    /* A token the CRM cannot get is an OUTAGE, never a settled answer about
+       the coupon: a rotated secret, a wrong host or a down auth server must
+       leave the coupon retried, not parked under `yiji_push_error` (the v1
+       client treats a refused login the same way; review 2026-11-16). */
     if (!res.ok) {
-      if (res.status >= 500 || res.status === 429) {
-        throw new Yiji2UnavailableError(`yiji2 token endpoint answered ${res.status}`);
-      }
-      throw new Yiji2RefusedError('auth_failed', `yiji2 token refused (${res.status})`, res.status);
+      throw new Yiji2UnavailableError(
+        `yiji2 token endpoint answered ${res.status} - credentials or endpoint`,
+      );
     }
     const body = (await res.json().catch(() => ({}))) as {
       access_token?: string;
       expires_in?: number;
     };
-    if (!body.access_token) throw new Yiji2RefusedError('auth_failed', 'yiji2 token missing', 200);
+    if (!body.access_token) throw new Yiji2UnavailableError('yiji2 token endpoint sent no token');
     const ttl = (num(body.expires_in) ?? 15 * 60) * 1000;
     this.token = { value: body.access_token, expiresAt: this.now() + ttl };
     return body.access_token;
@@ -1046,6 +1053,19 @@ export interface Yiji2V1Answer {
 }
 
 /**
+ * v1 coupon dates are zone-less Riyadh wall clock (`2026-12-16T23:59:00`,
+ * `couponWindow`); v2 wants RFC 3339. Both tenants' countries (SA, BH) are
+ * UTC+3, so the offset is fixed. Anything already zoned passes through.
+ */
+export function yiji2Rfc3339(s: string | undefined): string | undefined {
+  if (!s) return s;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return `${s}T00:00:00+03:00`;
+  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(:\d{2})?(\.\d+)?$/.exec(s);
+  if (m) return `${m[1]}T${m[2]}${m[3] ?? ':00'}+03:00`;
+  return s;
+}
+
+/**
  * The v1 coupon body as v2's `CompensationCouponCreate` (partner-v1.yaml
  * draft, agreed with the v2 session on 2026-11-16): `code` is the CRM's
  * coupon code and the idempotency key; `title` is bilingual (the same text
@@ -1088,8 +1108,8 @@ export function v1CouponDraft(
         : {}),
     usage_limit: num(coupon.limitForUser),
     ...(reach != null ? { total_discount_limit: yiji2Minor(reach, currency) } : {}),
-    valid_from: str(coupon.activationDateTime) ?? str(coupon.activationDate),
-    valid_to: str(coupon.expirationDateTime) ?? str(coupon.expirationDate),
+    valid_from: yiji2Rfc3339(str(coupon.activationDateTime) ?? str(coupon.activationDate)),
+    valid_to: yiji2Rfc3339(str(coupon.expirationDateTime) ?? str(coupon.expirationDate)),
     reason:
       str(cu.compensationReason) ??
       str(body.compensationReason) ??
@@ -1181,11 +1201,19 @@ export async function translateV1AdminCall(
     });
     return grantAnswer(g);
   }
-  if (/\/api\/CouponUser\/AddCouponToUserByCode$/i.test(path)) {
+  /* v1 sends the ids IN THE PATH (`AddCouponToUserByCode/<userId>/<code>`,
+     body `{}`); a body form is accepted too. */
+  const byCode = /\/api\/CouponUser\/AddCouponToUserByCode(?:\/([^/?]+)\/([^/?]+))?\/?$/i.exec(
+    path,
+  );
+  if (byCode) {
+    const pathUser = byCode[1] ? decodeURIComponent(byCode[1]) : undefined;
+    const pathCode = byCode[2] ? decodeURIComponent(byCode[2]) : undefined;
+    const customerId = yiji2Id(b.userId) ?? pathUser;
     const g = await transport.request<Yiji2GrantWire>('POST', '/grants', {
       body: {
-        code: str(b.code) ?? str(b.couponCode),
-        ...(yiji2Id(b.userId) ? { customer_id: yiji2Id(b.userId) } : {}),
+        code: str(b.code) ?? str(b.couponCode) ?? pathCode,
+        ...(customerId ? { customer_id: customerId } : {}),
       },
       ...withIdem('grant'),
     });
@@ -1384,9 +1412,15 @@ export class Yiji2Connector implements VendorConnector {
       );
   }
 
-  /** The vendor's currency for bodies this connector builds: SA = SAR; a BH vendor says `BHD` in `tenant_id`'s companion setting. */
+  /**
+   * The currency for bodies this connector builds: `settings.currency` when
+   * set (env vendor, or a `vendors.currency` column once one exists), else
+   * SAR. NEVER guessed from the vendor's name (review 2026-11-16: a vendor
+   * called "Yiji V2 Abha" would have sent 10 SAR as 10 BHD).
+   */
   private currency(): string {
-    return (this.settings.environment ?? '').toUpperCase().includes('BH') ? 'BHD' : 'SAR';
+    const c = (this.settings.currency ?? '').toUpperCase();
+    return c === 'BHD' ? 'BHD' : 'SAR';
   }
 
   private async get<T>(path: string, query?: Yiji2RequestOptions['query']): Promise<T | null> {

@@ -252,14 +252,27 @@ async function pollVendor(
       if (changed) result.changed.push(vendorKey);
       return;
     }
+    /*
+     * A v2 vendor is fed by events ONLY: its board is rebuilt from the live
+     * table on every poll, in or out of events mode. Events mode expires
+     * after a quiet quarter hour, and an order late at 10:00 is still late
+     * at 10:20 with no new event (review 2026-11-16).
+     */
+    if (connector.platform === 'yiji2') {
+      const { changed } = await rebuildLiveSnapshot(
+        { redis, logger, notify: deps.notify, now: () => now },
+        vendorKey,
+        now,
+      );
+      if (changed) result.changed.push(vendorKey);
+      return;
+    }
     if (!canAskPlatform(connector)) {
       if (!warnedUnconfigured.has(vendorKey)) {
         warnedUnconfigured.add(vendorKey);
         logger.warn(
           { vendorKey },
-          connector.platform === 'yiji2'
-            ? 'late-orders poll: a Yiji v2 vendor is fed by events, never polled'
-            : 'late-orders poll: this vendor has no Yiji API URL + admin credential in the workers env - not polled (the gateway keeps answering it)',
+          'late-orders poll: this vendor has no Yiji API URL + admin credential in the workers env - not polled (the gateway keeps answering it)',
         );
       }
       return;

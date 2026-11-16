@@ -14,6 +14,8 @@ import {
   Yiji2UnavailableError,
   asCouponPushConnector,
   isYijiRefused,
+  isYijiUnavailable,
+  yiji2Rfc3339,
   isYiji2OrderNumber,
   lateDeliveryMinutesKeyFor,
   mapYiji2Cart,
@@ -436,6 +438,36 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
   });
 });
 
+describe('HttpYiji2Transport token endpoint', () => {
+  it('a refused or empty token answer is an OUTAGE (retried), never a settled refusal', async () => {
+    const mk = (tokenRes: () => Response) =>
+      new HttpYiji2Transport({
+        apiBaseUrl: 'https://api.staging.yiji.app',
+        clientId: 'id',
+        clientSecret: 'rotated',
+        fetchImpl: (async (url: string | URL | Request) =>
+          String(url).endsWith('/auth/token')
+            ? tokenRes()
+            : new Response('{}', { status: 200 })) as unknown as typeof fetch,
+        now: () => NOW,
+      });
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      });
+    const e401 = await mk(() => json(401, { error: { code: 'INVALID_CLIENT' } }))
+      .request('POST', '/compensation-coupons', { body: {} })
+      .catch((x: unknown) => x);
+    expect(e401).toBeInstanceOf(Yiji2UnavailableError);
+    expect(isYijiUnavailable(e401)).toBe(true);
+    const empty = await mk(() => json(200, {}))
+      .request('GET', '/customers/1')
+      .catch((x: unknown) => x);
+    expect(empty).toBeInstanceOf(Yiji2UnavailableError);
+  });
+});
+
 /* ── refusals through the connector ─────────────────────────────── */
 
 describe('a v2 refusal through the connector', () => {
@@ -669,8 +701,10 @@ describe('RecordVendorSettingsSource for yiji2', () => {
         notifyTitle: 'Yiji Support',
         openChatAction: undefined,
       },
-      environment: 'Yiji V2 (SA)',
     });
+    /* currency is never guessed from the name (review 2026-11-16) */
+    expect(s).not.toHaveProperty('environment');
+    expect(s).not.toHaveProperty('currency');
     expect(JSON.stringify(s)).not.toContain('v1-');
     /* v1 is untouched by the v2 row. */
     const v1 = await src.settingsFor(V1_VENDOR);
@@ -721,6 +755,98 @@ describe('RecordVendorSettingsSource for yiji2', () => {
       credentialEnv: {},
     });
     expect(((await withUrl.settingsFor(V2_VENDOR)) as Yiji2PlatformSettings).mock).toBeUndefined();
+    /* a FAILED integration read is "unconfigured", never the in-memory mock
+       (a real coupon would be "delivered" into memory - review 2026-11-16) */
+    const readFails = new RecordVendorSettingsSource({
+      env: { platform: 'yiji', ...env },
+      legacyVendorKey: '1',
+      load: async () => {
+        throw new Error('directus down');
+      },
+      allowMock: true,
+      credentialEnv: {},
+    });
+    const s = (await readFails.settingsFor(V2_VENDOR)) as Yiji2PlatformSettings;
+    expect(s.platform).toBe('yiji2');
+    expect(s.mock).toBeUndefined();
+    expect(s.apiBaseUrl).toBeUndefined();
+  });
+});
+
+describe('review fixes 2026-11-16', () => {
+  it('coupon dates reach v2 as RFC 3339 with the fixed +03:00 offset', () => {
+    expect(yiji2Rfc3339('2026-12-16T23:59:00')).toBe('2026-12-16T23:59:00+03:00');
+    expect(yiji2Rfc3339('2026-12-16T23:59')).toBe('2026-12-16T23:59:00+03:00');
+    expect(yiji2Rfc3339('2026-12-16')).toBe('2026-12-16T00:00:00+03:00');
+    expect(yiji2Rfc3339('2026-12-16T20:59:00Z')).toBe('2026-12-16T20:59:00Z');
+    expect(yiji2Rfc3339('2026-12-16T23:59:00+03:00')).toBe('2026-12-16T23:59:00+03:00');
+    expect(yiji2Rfc3339(undefined)).toBeUndefined();
+  });
+
+  it('the draft carries zoned dates', async () => {
+    const t = new MockYiji2Transport();
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      {
+        code: 'D1',
+        discount: 5,
+        activationDateTime: '2026-11-16T00:00:00',
+        expirationDateTime: '2026-12-16T23:59:00',
+      },
+      {},
+      { currency: 'SAR' },
+    );
+    expect(t.coupons[0]?.body).toMatchObject({
+      valid_from: '2026-11-16T00:00:00+03:00',
+      valid_to: '2026-12-16T23:59:00+03:00',
+    });
+  });
+
+  it('attach-by-code takes the ids from the PATH, as v1 sends them', async () => {
+    const t = new MockYiji2Transport();
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      { code: 'BC-1', discount: 5 },
+      {},
+      { currency: 'SAR' },
+    );
+    const a = await translateV1AdminCall(
+      t,
+      '/api/CouponUser/AddCouponToUserByCode/2000000002/BC-1',
+      {},
+      {},
+      { currency: 'SAR' },
+    );
+    expect(a).toMatchObject({ result: 1, extendedProperties: { CouponUserId: '700001' } });
+    expect(t.grants[0]).toMatchObject({ customer_id: '2000000002', code: 'BC-1' });
+  });
+
+  it('currency is explicit: SAR unless settings say BHD; the vendor name never decides', async () => {
+    const bh = new Yiji2Connector(
+      { ...V2_VENDOR, name: 'Yiji V2 Abha' },
+      { ...mockSettings, currency: 'BHD' },
+      { transport: new MockYiji2Transport() },
+    );
+    await bh.adminPost!('/api/Coupon/AddCoupon', { code: 'C-BH', discount: 1.5 }, {});
+    expect((bh.transport as MockYiji2Transport).coupons[0]?.body).toMatchObject({
+      value: { amount_minor: 1500, currency: 'BHD' },
+      country: 'BH',
+    });
+    const named = new Yiji2Connector({ ...V2_VENDOR, name: 'Yiji V2 BH branch' }, mockSettings, {
+      transport: new MockYiji2Transport(),
+    });
+    await named.adminPost!('/api/Coupon/AddCoupon', { code: 'C-SA', discount: 10 }, {});
+    expect((named.transport as MockYiji2Transport).coupons[0]?.body).toMatchObject({
+      value: { amount_minor: 1000, currency: 'SAR' },
+      country: 'SA',
+    });
+  });
+
+  it('a Yiji2UnavailableError is an outage to the v1 helpers too', () => {
+    expect(isYijiUnavailable(new Yiji2UnavailableError('down'))).toBe(true);
+    expect(isYijiRefused(new Yiji2UnavailableError('down'))).toBe(false);
   });
 });
 

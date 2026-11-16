@@ -720,7 +720,10 @@ export class RecordVendorSettingsSource implements VendorSettingsSource {
             openChatAction: str(n.openChatAction),
           }
         : undefined;
-    const mock = Boolean(this.opts.allowMock) && !apiBaseUrl;
+    /* The in-memory transport only for a ROW that names no API URL. A failed
+       integration read (rec null) must leave the vendor unconfigured - never
+       "delivered" into memory (review 2026-11-16). */
+    const mock = Boolean(this.opts.allowMock) && rec !== null && !apiBaseUrl;
     return {
       platform: 'yiji2',
       ...(apiBaseUrl ? { apiBaseUrl } : {}),
@@ -730,7 +733,6 @@ export class RecordVendorSettingsSource implements VendorSettingsSource {
       ...(brandId ? { brandId } : {}),
       ...(push ? { push } : {}),
       ...(mock ? { mock: true } : {}),
-      ...(vendor.name ? { environment: vendor.name } : {}),
     };
   }
 

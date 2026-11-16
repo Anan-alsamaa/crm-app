@@ -37,8 +37,14 @@ export const YIJI2_VENDOR = Object.freeze({
   colors: { primary: '#1F6FEB', secondary: '#F2B705' },
 });
 
-/** The fields a re-run may correct. `status` is deliberately absent. */
-const MANAGED_FIELDS = ['name', 'platform', 'webhook_path_key', 'api_base_url', 'colors'];
+/**
+ * The fields a re-run may correct: the IDENTITY of the row only. `status`,
+ * `name`, `colors` and `api_base_url` are the owner's once the row exists
+ * (review 2026-11-16: a re-run after activation reset the real host to the
+ * placeholder, and the prod credentials would have gone to it). The host is
+ * filled in only when the row has none.
+ */
+const MANAGED_FIELDS = ['platform', 'webhook_path_key'];
 
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
@@ -100,6 +106,7 @@ export function planYiji2Seed({ vendors }) {
   for (const k of MANAGED_FIELDS) {
     if (!same(vendor[k], YIJI2_VENDOR[k])) data[k] = YIJI2_VENDOR[k];
   }
+  if (!String(vendor.api_base_url ?? '').trim()) data.api_base_url = YIJI2_VENDOR.api_base_url;
   if (!Object.keys(data).length) {
     return {
       actions: [
