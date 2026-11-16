@@ -1,11 +1,12 @@
 import {
   CAMPAIGN_OBJECTIVES,
   DEFAULT_MONEY_MODEL,
-  LOCKED_WHEN_LIVE,
   OBJECTIVE_CATALOGUE,
   canApproveCampaign,
   forecastCampaign,
+  lockedFieldChanges,
   objectiveSpec,
+  simulateCampaignCheckout,
   type Campaign,
   type CampaignDraft,
   type CampaignForecast,
@@ -942,20 +943,8 @@ export class SampleMarketingEngine implements MarketingEngine {
       const prev = this.store.campaigns[i]!;
       /* LOCKED WHEN LIVE: once customers hold the coupon the discount, the
          audience, the code, the rules and the start date cannot change. */
-      if (['live', 'paused', 'ended'].includes(prev.status)) {
-        const at = (o: unknown, path: string) =>
-          path
-            .split('.')
-            .reduce<unknown>(
-              (x, p) =>
-                x && typeof x === 'object' ? (x as Record<string, unknown>)[p] : undefined,
-              o,
-            );
-        const changed = LOCKED_WHEN_LIVE.filter(
-          (p) => JSON.stringify(at(prev, p)) !== JSON.stringify(at(draft, p)),
-        );
-        if (changed.length) throw new Error(`locked while live: ${changed.join(', ')}`);
-      }
+      const changed = lockedFieldChanges(prev, draft);
+      if (changed.length) throw new Error(`locked while live: ${changed.join(', ')}`);
       const next: Campaign = {
         ...prev,
         ...draft,
@@ -1355,67 +1344,8 @@ export class SampleMarketingEngine implements MarketingEngine {
     loyalty: boolean;
   }): Promise<CheckoutSimulation> {
     await wait();
-    const c = this.store.campaigns.find((x) => x.id === input.campaignId);
-    if (!c)
-      return {
-        allowed: false,
-        discountSar: 0,
-        message: 'Unknown coupon.',
-        appliedOrder: [],
-        reason: 'unknown',
-      };
-    const order: CheckoutSimulation['appliedOrder'] = [];
-    if (input.otherOffer) order.push('PROMOTIONAL_OFFER');
-    if (input.otherOffer && !c.stacking.combineWithOtherOffers)
-      return {
-        allowed: false,
-        discountSar: 0,
-        message: 'This coupon cannot be used with the offer in the cart.',
-        appliedOrder: order,
-        reason: 'stacking_offer',
-      };
-    if (input.otherCoupon && !c.stacking.combineWithOtherCoupons)
-      return {
-        allowed: false,
-        discountSar: 0,
-        message: 'One coupon per order.',
-        appliedOrder: order,
-        reason: 'stacking_coupon',
-      };
-    if (input.subtotalSar < c.rules.minOrderSar)
-      return {
-        allowed: false,
-        discountSar: 0,
-        message: `Minimum order SAR ${c.rules.minOrderSar}.`,
-        appliedOrder: order,
-        reason: 'min_order',
-      };
-    if (c.scope.brandIds.length && !c.scope.brandIds.includes(input.brandId))
-      return {
-        allowed: false,
-        discountSar: 0,
-        message: 'Not valid for this brand.',
-        appliedOrder: order,
-        reason: 'scope_brand',
-      };
-    if (!c.scope.orderTypes.includes(input.orderType))
-      return {
-        allowed: false,
-        discountSar: 0,
-        message: 'Not valid for this order type.',
-        appliedOrder: order,
-        reason: 'scope_order_type',
-      };
-    const { discountPerOrder } = await import('@yiji/shared-types');
-    const discountSar = Math.round(discountPerOrder(c.offer, input.subtotalSar) * 100) / 100;
-    order.push('COUPON');
-    if (input.loyalty) order.push(c.stacking.combineWithLoyalty ? 'LOYALTY' : 'COUPON');
-    return {
-      allowed: true,
-      discountSar,
-      message: `SAR ${discountSar} off applied.`,
-      appliedOrder: order,
-    };
+    const c = this.store.campaigns.find((x) => x.id === input.campaignId) ?? null;
+    return simulateCampaignCheckout(c, input);
   }
   async listStudies(): Promise<Study[]> {
     await wait();

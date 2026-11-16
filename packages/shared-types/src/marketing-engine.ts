@@ -1449,3 +1449,110 @@ export function offerLabel(offer: CampaignDraft['offer']): string {
       return `Bundle at SAR ${offer.bundle?.priceSar ?? 0}`;
   }
 }
+
+/* ── the engine's rules, shared by the sample and the CRM's server engine ── */
+
+/** The statuses in which customers may already hold the campaign's coupon. */
+export const CAMPAIGN_LOCKED_STATUSES: readonly CampaignStatus[] = ['live', 'paused', 'ended'];
+
+/** One dotted path out of a campaign or draft (`validity.startDate`). */
+export function valueAtPath(o: unknown, path: string): unknown {
+  return path
+    .split('.')
+    .reduce<unknown>(
+      (x, p) => (x && typeof x === 'object' ? (x as Record<string, unknown>)[p] : undefined),
+      o,
+    );
+}
+
+/**
+ * Which LOCKED_WHEN_LIVE paths `next` would change on `prev` - empty when the
+ * edit is allowed. Only a campaign customers may already hold is locked.
+ */
+export function lockedFieldChanges(
+  prev: Pick<Campaign, 'status'> & Partial<CampaignDraft>,
+  next: Partial<CampaignDraft>,
+): string[] {
+  if (!CAMPAIGN_LOCKED_STATUSES.includes(prev.status)) return [];
+  return LOCKED_WHEN_LIVE.filter(
+    (p) => JSON.stringify(valueAtPath(prev, p)) !== JSON.stringify(valueAtPath(next, p)),
+  );
+}
+
+/**
+ * Why a campaign needs a manager, judged by the ENGINE from the draft and the
+ * money model - never fewer reasons than the page's own forecast claimed. The
+ * cost ceiling is the budget plus the messages; a percentage above the
+ * deep-discount line always needs approval; a forecast loss is flagged.
+ */
+export function campaignApprovalReasons(
+  draft: Pick<CampaignDraft, 'offer' | 'limits'>,
+  forecast: Pick<CampaignForecast, 'messageCostSar' | 'netSar'> &
+    Partial<Pick<CampaignForecast, 'approvalReasons'>>,
+  model: MoneyModel = DEFAULT_MONEY_MODEL,
+): string[] {
+  const reasons = new Set<string>(forecast.approvalReasons ?? []);
+  const messages = Math.max(0, Number(forecast.messageCostSar) || 0);
+  if (draft.limits.budgetSar + messages > model.approvalAboveSar)
+    reasons.add('cost_above_threshold');
+  const deep =
+    (draft.offer.type === 'PERCENT' || draft.offer.type === 'CASHBACK') &&
+    (draft.offer.percent ?? 0) > model.deepDiscountPct;
+  if (deep) reasons.add('deep_discount');
+  if ((Number(forecast.netSar) || 0) < 0) reasons.add('forecast_loss');
+  return [...reasons];
+}
+
+/**
+ * The checkout rules a coupon is tried against: stacking, minimum order, brand
+ * and order type. Pure, so the sample engine and the CRM's engine answer the
+ * simulator the same way.
+ */
+export function simulateCampaignCheckout(
+  c: Pick<Campaign, 'offer' | 'rules' | 'scope' | 'stacking'> | null,
+  input: {
+    brandId: string;
+    orderType: OrderType;
+    subtotalSar: number;
+    otherOffer: boolean;
+    otherCoupon: boolean;
+    loyalty: boolean;
+  },
+): CheckoutSimulation {
+  if (!c)
+    return {
+      allowed: false,
+      discountSar: 0,
+      message: 'Unknown coupon.',
+      appliedOrder: [],
+      reason: 'unknown',
+    };
+  const order: CheckoutSimulation['appliedOrder'] = [];
+  const refuse = (message: string, reason: string): CheckoutSimulation => ({
+    allowed: false,
+    discountSar: 0,
+    message,
+    appliedOrder: order,
+    reason,
+  });
+  if (input.otherOffer) order.push('PROMOTIONAL_OFFER');
+  if (input.otherOffer && !c.stacking.combineWithOtherOffers)
+    return refuse('This coupon cannot be used with the offer in the cart.', 'stacking_offer');
+  if (input.otherCoupon && !c.stacking.combineWithOtherCoupons)
+    return refuse('One coupon per order.', 'stacking_coupon');
+  if (input.subtotalSar < c.rules.minOrderSar)
+    return refuse(`Minimum order SAR ${c.rules.minOrderSar}.`, 'min_order');
+  if (c.scope.brandIds.length && !c.scope.brandIds.includes(input.brandId))
+    return refuse('Not valid for this brand.', 'scope_brand');
+  if (!c.scope.orderTypes.includes(input.orderType))
+    return refuse('Not valid for this order type.', 'scope_order_type');
+  const discountSar = Math.round(discountPerOrder(c.offer, input.subtotalSar) * 100) / 100;
+  order.push('COUPON');
+  if (input.loyalty) order.push(c.stacking.combineWithLoyalty ? 'LOYALTY' : 'COUPON');
+  return {
+    allowed: true,
+    discountSar,
+    message: `SAR ${discountSar} off applied.`,
+    appliedOrder: order,
+  };
+}
