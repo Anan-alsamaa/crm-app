@@ -21,6 +21,7 @@ import { Server as SocketServer } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import pino from 'pino';
 import {
+  YIJI2_VENDOR_KEY,
   CouponPushJob,
   CouponRemoveJob,
   CouponEditJob,
@@ -755,6 +756,73 @@ async function main(): Promise<void> {
               const client = pubClient!;
               const r = await client.set(
                 envKey(`yiji-events:seen:${eventId}`),
+                '1',
+                'EX',
+                7 * 24 * 60 * 60,
+                'NX',
+              );
+              return r !== 'OK';
+            },
+            enqueue: (job) =>
+              producer.enqueueLateOrdersEvent
+                ? producer.enqueueLateOrdersEvent(job)
+                : Promise.resolve(null),
+          },
+        }
+      : {}),
+  });
+
+  /*
+   * YIJI V2 - THE SECOND TENANT'S INBOUND API (owner, 2026-11-16). The same
+   * three routes + events, mounted at `/webhooks/yiji2/...` (the ALB's
+   * `/webhooks/*` rule already routes it), verified with
+   * VENDOR_YIJI2_WEBHOOK_SECRET - never v1's secret - and writing under the
+   * v2 vendor row (`YIJI2_VENDOR_ID`, active only; 503 while inactive).
+   * Events arrive in v2's envelope, are de-duplicated under their own key
+   * namespace, and feed the `yiji2:<id>` late-orders table - v1's untouched.
+   */
+  const yiji2Secret = vendorSecrets.webhookSecret(YIJI2_VENDOR_KEY) ?? '';
+  if (!yiji2Secret) {
+    logger.info(
+      {},
+      'Yiji v2 inbound API: VENDOR_YIJI2_WEBHOOK_SECRET is not set - the API answers 503',
+    );
+  }
+  registerYijiInboundApi(app, {
+    prefix: `/webhooks/${YIJI2_VENDOR_KEY}`,
+    label: 'yiji2',
+    secret: yijiToken ? yiji2Secret : '',
+    toleranceSec: config.WEBHOOK_TOLERANCE_SEC,
+    rate: { capacity: config.YIJI_INBOUND_RATE_CAPACITY, perSec: config.YIJI_INBOUND_RATE_PER_SEC },
+    logger,
+    service: createYijiInboundService({
+      store: new YijiInboundDirectus(
+        createServiceClient({
+          url: config.DIRECTUS_INTERNAL_URL,
+          token: yijiToken ?? config.SVC_GATEWAY_TOKEN,
+        }),
+        {
+          yijiVendorExternalId: config.YIJI2_VENDOR_ID,
+          actorUserId: config.YIJI_INBOUND_ACTOR_USER_ID || null,
+        },
+      ),
+      policy: {
+        enforce: config.YIJI_INBOUND_POLICY_ENFORCE,
+        maxExposureSar: config.YIJI_INBOUND_POLICY_MAX_SAR,
+        maxPercent: config.YIJI_INBOUND_POLICY_MAX_PERCENT,
+        maxValidityDays: config.YIJI_INBOUND_POLICY_MAX_DAYS,
+      },
+      teamId: config.YIJI_INBOUND_TEAM_ID || null,
+      logger,
+    }),
+    ...(pubClient
+      ? {
+          events: {
+            format: 'yiji2' as const,
+            vendorKey: `yiji2:${config.YIJI2_VENDOR_ID}`,
+            seen: async (eventId: string) => {
+              const r = await pubClient!.set(
+                envKey(`yiji2-events:seen:${eventId}`),
                 '1',
                 'EX',
                 7 * 24 * 60 * 60,

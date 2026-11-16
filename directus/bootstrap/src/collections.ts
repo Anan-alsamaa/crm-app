@@ -107,9 +107,9 @@ export const collections: CollectionSpec[] = [
         type: 'string',
         /* `mock` (MV-6): the staging TEST platform — simulated data, zero
            network calls, served only where ALLOW_MOCK_VENDORS=true. */
-        choices: ['yiji', 'mock'],
+        choices: ['yiji', 'yiji2', 'mock'],
         defaultValue: 'yiji',
-        note: 'The commerce platform this vendor runs on — picks the connector. NULL reads as yiji (every vendor before MV-1). `mock` = staging test vendor (simulated data, never calls any platform; refused unless the service sets ALLOW_MOCK_VENDORS=true).',
+        note: 'The commerce platform this vendor runs on — picks the connector. NULL reads as yiji (every vendor before MV-1). `yiji2` = Yiji v2, the second tenant (own partner API, own VENDOR_<KEY>_* credentials; docs/YIJI-V2-TENANT.md). `mock` = staging test vendor (simulated data, never calls any platform; refused unless the service sets ALLOW_MOCK_VENDORS=true).',
       },
       {
         field: 'api_base_url',

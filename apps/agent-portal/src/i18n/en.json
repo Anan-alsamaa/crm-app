@@ -37,7 +37,9 @@
     "saved": "Customer details saved.",
     "withEmail": "with email",
     "withPhone": "with phone",
-    "withVendor": "linked vendor"
+    "withVendor": "linked vendor",
+    "vendorLabel": "Vendor",
+    "anyVendor": "All vendors"
   },
   "commerce": {
     "groupOrder": "Group order",

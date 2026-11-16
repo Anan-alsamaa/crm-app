@@ -106,6 +106,9 @@ export interface LateOrdersPollResult {
  * answering it as before.
  */
 function canAskPlatform(connector: VendorConnector): boolean {
+  /* YIJI V2 (owner, 2026-11-16): no poller. v2 pushes order.late and
+     order.status_changed; the board is the CRM's own live table. */
+  if (connector.platform === 'yiji2') return false;
   if (connector.platform !== 'yiji') return true;
   const settings = connector.settings;
   if (settings.platform !== 'yiji') return false;
@@ -254,7 +257,9 @@ async function pollVendor(
         warnedUnconfigured.add(vendorKey);
         logger.warn(
           { vendorKey },
-          'late-orders poll: this vendor has no Yiji API URL + admin credential in the workers env - not polled (the gateway keeps answering it)',
+          connector.platform === 'yiji2'
+            ? 'late-orders poll: a Yiji v2 vendor is fed by events, never polled'
+            : 'late-orders poll: this vendor has no Yiji API URL + admin credential in the workers env - not polled (the gateway keeps answering it)',
         );
       }
       return;

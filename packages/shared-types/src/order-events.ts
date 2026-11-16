@@ -286,3 +286,139 @@ export function parseLiveOrders(raw: Record<string, string>): LiveOrder[] {
   }
   return out;
 }
+
+/* ── Yiji v2 events (owner, 2026-11-16) ─────────────────────────────────── */
+
+/**
+ * WHAT V2 SENDS: `POST /webhooks/<v2 key>/events`, signed like v1's inbound,
+ * envelope `{ id, type, occurred_at, environment, data }`, at-least-once
+ * (de-duplicated on `id`). The CRM acts on `order.late` (sent once when the
+ * order crosses v2's threshold, replacing the poll) and `order.status_changed`
+ * (every change, incl. the close); `order.created` is taken too when sent.
+ * Coupon, customer and campaign types are accepted and ignored here.
+ */
+export const YIJI2_ORDER_EVENT_TYPES = [
+  'order.created',
+  'order.status_changed',
+  'order.late',
+] as const;
+
+export const Yiji2EventEnvelope = z.object({
+  id: z.string().trim().min(1).max(128),
+  type: z.string().trim().min(1).max(64),
+  occurred_at: isoDateTime,
+  environment: z.string().trim().max(32).optional(),
+  data: z.record(z.unknown()),
+});
+export type Yiji2EventEnvelope = z.infer<typeof Yiji2EventEnvelope>;
+
+export const Yiji2EventsBatch = z.object({ events: z.array(Yiji2EventEnvelope).min(1).max(100) });
+
+/** Parse one v2 envelope or a batch of them (same batch rule as v1's route). */
+export function parseYiji2EventsBody(body: unknown) {
+  const isBatch = !!body && typeof body === 'object' && 'events' in (body as object);
+  return isBatch ? Yiji2EventsBatch.safeParse(body) : Yiji2EventEnvelope.safeParse(body);
+}
+
+export function yiji2EventsOf(
+  parsed: Yiji2EventEnvelope | { events: Yiji2EventEnvelope[] },
+): Yiji2EventEnvelope[] {
+  return 'events' in parsed ? parsed.events : [parsed];
+}
+
+export function isHandledYiji2Event(type: string): boolean {
+  return (YIJI2_ORDER_EVENT_TYPES as readonly string[]).includes(type);
+}
+
+/** v2 `state` words -> the board's status words (mirrors yiji2-connector). */
+const V2_STATE_STATUS: Record<string, string> = {
+  created: 'placed',
+  placed: 'placed',
+  accepted: 'received',
+  preparing: 'in_kitchen',
+  ready: 'ready',
+  out_for_delivery: 'in_delivery',
+  delivering: 'in_delivery',
+  delivered: 'delivered',
+  completed: 'delivered',
+  cancelled: 'canceled',
+  canceled: 'canceled',
+  refunded: 'refunded',
+};
+const V2_CLOSED = new Set(['delivered', 'completed', 'cancelled', 'canceled', 'refunded']);
+
+const v2Str = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() ? v.trim() : undefined;
+const v2Id = (v: unknown): string | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? String(v) : v2Str(v);
+const v2Num = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+const v2Obj = (v: unknown): Record<string, unknown> =>
+  typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+
+/**
+ * One v2 envelope as the CRM's `OrderEvent`, or null when it is not an order
+ * event the CRM acts on (or lacks what a live order needs). `order.late`
+ * carries `elapsed_seconds` and `placed_at`; when `placed_at` is missing it
+ * is derived from `occurred_at - elapsed_seconds` so the clock still runs
+ * from the right moment. Money is `{ amount_minor, currency }` -> SAR/BHD
+ * major units.
+ */
+export function orderEventFromYiji2(e: Yiji2EventEnvelope): OrderEvent | null {
+  if (!isHandledYiji2Event(e.type)) return null;
+  const d = e.data;
+  const orderId = v2Id(d.order_number) ?? v2Id(d.order_id);
+  const state = v2Str(d.state) ?? v2Str(d.status) ?? (e.type === 'order.late' ? 'late' : undefined);
+  if (!orderId || !state) return null;
+  const placedAt =
+    v2Str(d.placed_at) ??
+    (typeof d.elapsed_seconds === 'number'
+      ? new Date(Date.parse(e.occurred_at) - d.elapsed_seconds * 1000).toISOString()
+      : undefined);
+  if (!placedAt || Number.isNaN(Date.parse(placedAt))) return null;
+  const lower = state.toLowerCase();
+  const status = V2_STATE_STATUS[lower] ?? lower;
+  const isOpen = typeof d.is_open === 'boolean' ? d.is_open : !V2_CLOSED.has(lower);
+  const typeRaw = (v2Str(d.order_type) ?? 'delivery').toLowerCase();
+  const orderType = OrderEventOrderType.safeParse(typeRaw === 'takeaway' ? 'takeout' : typeRaw);
+  const customer = v2Obj(d.customer);
+  const money = v2Obj(d.total);
+  const minor = v2Num(money.amount_minor);
+  const currency = v2Str(money.currency)?.toUpperCase();
+  const total = minor !== undefined ? minor / (currency === 'BHD' ? 1000 : 100) : undefined;
+  const parent = v2Id(d.parent_order_number);
+  const subs = Array.isArray(d.sub_orders) ? d.sub_orders.length : 0;
+  const customerId = v2Id(d.customer_id) ?? v2Id(customer.id);
+  const customerName = v2Str(customer.name);
+  const customerPhone = v2Str(customer.phone);
+  const candidate = {
+    id: e.id,
+    type: e.type === 'order.late' ? 'order.status_changed' : e.type,
+    at: e.occurred_at,
+    order: {
+      orderId,
+      status,
+      isOpen,
+      orderType: orderType.success ? orderType.data : 'other',
+      placedAt,
+      ...(v2Id(d.restaurant_id) ? { restaurantId: v2Id(d.restaurant_id) } : {}),
+      ...(v2Str(d.restaurant_name) ? { restaurantName: v2Str(d.restaurant_name) } : {}),
+      ...(v2Id(d.brand_id) ? { brandId: v2Id(d.brand_id) } : {}),
+      ...(v2Str(d.brand_name) ? { brandName: v2Str(d.brand_name) } : {}),
+      ...(customerId || customerName || customerPhone
+        ? {
+            customer: {
+              ...(customerId ? { id: customerId } : {}),
+              ...(customerName ? { name: customerName } : {}),
+              ...(customerPhone ? { phone: customerPhone } : {}),
+            },
+          }
+        : {}),
+      ...(total !== undefined ? { total } : {}),
+      ...(subs > 0 ? { isGroupMaster: true } : {}),
+      ...(parent ? { parentOrderId: parent } : {}),
+    },
+  };
+  const parsed = OrderEvent.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}

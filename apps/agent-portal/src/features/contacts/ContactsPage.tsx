@@ -7,6 +7,7 @@ import {
   cn,
   EmptyState,
   SearchIcon,
+  SelectMenu,
   Skeleton,
   StoreIcon,
   toast,
@@ -18,6 +19,7 @@ import {
 import { displayContactName } from '@yiji/shared-types';
 import { useContacts, type ContactRow } from './api.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
+import { useVendorDirectory } from '../../lib/vendors.js';
 import { exportFileName } from '@yiji/shared-config';
 
 /**
@@ -74,12 +76,20 @@ export function ContactsPage() {
   const contacts = useContacts();
   const { can } = useAuth();
   const [search, setSearch] = useState('');
+  /* TENANT FILTER (owner, 2026-11-16, Yiji v2 as a second tenant): one
+     vendor or all, default all - the same rule as tickets (MV-4): offered
+     only when 2+ vendors are active, so with one vendor nothing changes. */
+  const vendors = useVendorDirectory();
+  const [vendorChoice, setVendorChoice] = useState('');
+  const vendorFilter =
+    vendors.show && vendors.options.some((v) => v.id === vendorChoice) ? vendorChoice : '';
 
   const filtered = useMemo(() => {
     const all = contacts.data ?? [];
-    if (!search.trim()) return all;
+    const scoped = vendorFilter ? all.filter((c) => c.vendor?.id === vendorFilter) : all;
+    if (!search.trim()) return scoped;
     const q = search.toLowerCase();
-    return all.filter(
+    return scoped.filter(
       (c) =>
         (c.name ?? '').toLowerCase().includes(q) ||
         (c.email ?? '').toLowerCase().includes(q) ||
@@ -87,7 +97,7 @@ export function ContactsPage() {
         (c.external_customer_id ?? '').toLowerCase().includes(q) ||
         (c.vendor?.name ?? '').toLowerCase().includes(q),
     );
-  }, [contacts.data, search]);
+  }, [contacts.data, search, vendorFilter]);
 
   const onExport = () => {
     if (filtered.length === 0) {
@@ -132,6 +142,19 @@ export function ContactsPage() {
           )}
         </span>
         <ToolbarSpacer />
+        {vendors.show && (
+          <SelectMenu
+            size="sm"
+            className="w-[11rem]"
+            value={vendorFilter}
+            onChange={setVendorChoice}
+            aria-label={t('contacts.vendorLabel', { defaultValue: 'Vendor' })}
+            options={[
+              { value: '', label: t('contacts.anyVendor', { defaultValue: 'All vendors' }) },
+              ...vendors.options.map((v) => ({ value: v.id, label: v.name })),
+            ]}
+          />
+        )}
         <div className="relative w-full max-w-xs sm:w-72">
           <svg
             aria-hidden

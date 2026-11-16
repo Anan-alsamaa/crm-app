@@ -106,6 +106,13 @@ const schema = z
      * HMAC secret, separate from YIJI_WEBHOOK_SECRET; empty = every route 503.
      */
     YIJI_INBOUND_API_SECRET: z.string().default(''),
+    /**
+     * YIJI V2 (owner, 2026-11-16): the v2 vendor row's platform id
+     * (`vendors.yiji_vendor_id`). Its inbound API is mounted at
+     * `/webhooks/yiji2/...` and verified with VENDOR_YIJI2_WEBHOOK_SECRET;
+     * 503 until that secret is set, 503 while the row is inactive.
+     */
+    YIJI2_VENDOR_ID: z.string().default('2'),
     /* The "Yiji" system user that requests are recorded as (requested_by,
        ticket history). Empty = the gateway's own service account. */
     YIJI_INBOUND_ACTOR_USER_ID: z.string().default(''),

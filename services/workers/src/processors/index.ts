@@ -1,6 +1,6 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { readItems } from '@directus/sdk';
+import { readItem, readItems } from '@directus/sdk';
 import {
   QUEUES,
   asCouponPushConnector,
@@ -330,6 +330,34 @@ function connectorsFor(deps: Pick<ProcessorDeps, 'directus' | 'logger'>): Connec
   registry ??= buildConnectors(deps);
   return registry;
 }
+
+/**
+ * The platform of a coupon row's vendor, or null when the row has no vendor
+ * (a pre-MV-1 row: v1's) or the vendor cannot be resolved (logged by the
+ * registry's caller later; here it only means "not provably another platform").
+ */
+async function couponPlatform(
+  deps: Pick<ProcessorDeps, 'directus' | 'logger'>,
+  couponApprovalId: string,
+): Promise<string | null> {
+  if (!couponApprovalId) return null;
+  const vendor = await readCouponVendor(deps.directus, couponApprovalId, deps.logger);
+  if (!vendor) return null;
+  /* The ROW, not the registry: an inactive v2 vendor (the morning state) is
+     invisible to the registry, and its coupon must still never reach v1. */
+  try {
+    const row = (await deps.directus.request(
+      readItem('vendors' as never, vendor, { fields: ['platform'] } as never),
+    )) as unknown as { platform?: string | null };
+    return row?.platform?.trim() || 'yiji';
+  } catch (err) {
+    deps.logger.warn(
+      { id: couponApprovalId, vendor, err: errorText(err) },
+      'could not read the coupon vendor platform - treating it as v1',
+    );
+    return null;
+  }
+}
 const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
   createEnvConnectorRegistry({
     vendorId: process.env.YIJI_VENDOR_ID,
@@ -597,6 +625,24 @@ export const processors: Record<QueueName, Processor> = {
   [QUEUES.coupons]: async (job, deps) => {
     /* EMA-80: the same queue carries removals, by job NAME. */
     const lock: CouponPushLock | undefined = deps.redis ? couponPushLock(deps.redis) : undefined;
+    /*
+     * YIJI V2 (owner, 2026-11-16): the removal and the edit processors talk to
+     * Yiji v1's admin API through the workers' own v1 client, not through the
+     * row's connector. A coupon that belongs to another platform must never
+     * reach v1's API, so it is refused here, logged, and left as it is until
+     * the v2 removal/edit path is wired (docs/YIJI-V2-TENANT.md, open items).
+     */
+    if (job.name === COUPON_REMOVE_JOB_NAME || job.name === COUPON_EDIT_JOB_NAME) {
+      const id = (job.data as { couponApprovalId?: string })?.couponApprovalId ?? '';
+      const platform = await couponPlatform(deps, id);
+      if (platform && platform !== 'yiji' && platform !== 'mock') {
+        deps.logger.error(
+          { id, platform, job: job.name },
+          'coupon change for a non-v1 platform - not sent to Yiji v1 (v2 removal/edit not wired)',
+        );
+        return;
+      }
+    }
     if (job.name === COUPON_REMOVE_JOB_NAME) {
       /* One change per coupon at a time (owner, 2026-11-12): a removal waits
          for a send or an edit of the same coupon (BullMQ retries). */
@@ -678,6 +724,8 @@ export const processors: Record<QueueName, Processor> = {
     await processCouponPushJob(job as Job<CouponPushJob>, {
       directus: deps.directus,
       logger: deps.logger,
+      /* v2's tenant id is not '1': the platform picks the endpoint. */
+      platform: yiji.platform,
       /*
        * Signed in as the service account, with the SAME credential the
        * status-history integration already uses against this host — the coupon

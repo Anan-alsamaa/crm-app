@@ -5,7 +5,8 @@ vendor runs on a commerce **platform**, and the platform's **connector** (in
 `packages/shared-types/src/connector.ts`) turns that platform's API into the CRM's standard shapes.
 
 **How the connector is chosen:** `vendors.platform` -> `ConnectorRegistry` factory for that
-platform. `yiji` -> `YijiConnector`; `mock` -> `MockConnector` (only with `ALLOW_MOCK_VENDORS=true`);
+platform. `yiji` -> `YijiConnector`; `yiji2` -> `Yiji2Connector` (Yiji v2, the second tenant:
+`docs/YIJI-V2-TENANT.md`); `mock` -> `MockConnector` (only with `ALLOW_MOCK_VENDORS=true`);
 anything else -> refused (`unsupported_platform`). A refused vendor is **never** answered by
 another platform's connector. A NULL platform reads as `yiji` (every vendor before MV-1).
 

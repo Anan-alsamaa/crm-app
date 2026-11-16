@@ -237,7 +237,17 @@ const COUPON_ENDPOINTS: Record<string, CouponEndpoint> = {
  * while Yiji is the sole platform — the day a second one exists it must be
  * removed, or somebody else's coupons quietly become Yiji's.
  */
-export function couponEndpointFor(vendorId: string | null | undefined): CouponEndpoint | null {
+export function couponEndpointFor(
+  vendorId: string | null | undefined,
+  platform?: string | null,
+): CouponEndpoint | null {
+  /* YIJI V2 (owner, 2026-11-16): the platform, not the tenant id, picks the
+     endpoint. The path stays v1's LOGICAL path: the v2 connector's poster
+     translates it to `POST /compensation-coupons` + `POST /grants`
+     (shared-types yiji2-connector.ts), so the body built here is unchanged. */
+  if ((platform ?? '').trim().toLowerCase() === 'yiji2') {
+    return { path: YIJI_COUPON_PATH, platform: 'yiji2' };
+  }
   const key = (vendorId ?? '').trim() || '1';
   return COUPON_ENDPOINTS[key] ?? null;
 }
@@ -245,6 +255,11 @@ export function couponEndpointFor(vendorId: string | null | undefined): CouponEn
 export interface CouponPushDeps {
   directus: YijiDirectusClient;
   logger: Logger;
+  /**
+   * The connector's platform (`yiji`, `yiji2`, `mock`). Picks the coupon
+   * endpoint for v2, whose tenant id is not `1` (owner, 2026-11-16).
+   */
+  platform?: string;
   /**
    * Sends the coupon to Yiji, signed in as the service account.
    *
@@ -1468,10 +1483,13 @@ async function createWithheldCoupon(args: {
   postCoupon?: YijiAdminPoster;
   readOrder?: YijiOrderReader;
   yijiTenantId: string;
+  /** The connector's platform; v2 picks its endpoint by it (see couponEndpointFor). */
+  platform?: string;
   redirectCouponsTo?: string;
 }): Promise<PushOutcome> {
   const { row, id, directus, logger, postCoupon, readOrder, yijiTenantId, redirectCouponsTo } =
     args;
+  const platform = args.platform;
 
   if (!postCoupon) {
     logger.info(
@@ -1482,7 +1500,7 @@ async function createWithheldCoupon(args: {
   }
   /* Same vendor rule as the assigned path: an unknown platform is skipped,
      never guessed. */
-  if (!couponEndpointFor(yijiTenantId)) {
+  if (!couponEndpointFor(yijiTenantId, platform)) {
     logger.warn(
       { id, code: row.coupon_code, vendorId: yijiTenantId },
       'no coupon endpoint for this vendor — withheld coupon not created',
@@ -1799,6 +1817,7 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
       // Phone only (owner, 2026-10-11): the order number is never looked up.
       readOrder: undefined,
       yijiTenantId,
+      ...(deps.platform ? { platform: deps.platform } : {}),
       redirectCouponsTo,
     });
   }
@@ -1994,7 +2013,7 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
    * rather than assumed so a second platform is a row in COUPON_ENDPOINTS.
    * An unknown vendor is skipped, not guessed — see `couponEndpointFor`.
    */
-  const endpoint = couponEndpointFor(yijiTenantId);
+  const endpoint = couponEndpointFor(yijiTenantId, deps.platform);
   if (!endpoint) {
     logger.warn(
       { id, code: row.coupon_code, vendorId: yijiTenantId },
