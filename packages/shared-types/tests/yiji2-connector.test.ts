@@ -31,6 +31,9 @@ import {
   yiji2Amount,
   yiji2Id,
   yiji2Minor,
+  yiji2IsOpen,
+  yiji2Status,
+  YIJI2_STATE_TO_STATUS,
   type ConnectorVendor,
   type Yiji2OrderWire,
   type Yiji2PlatformSettings,
@@ -969,6 +972,44 @@ describe('v2 events -> the CRM order event', () => {
     const sub = of('food_court_sub', { parent_order_number: 2611000000009 });
     expect(sub).toMatchObject({ orderType: 'other', parentOrderId: '2611000000009' });
     expect(sub.isGroupMaster).toBeUndefined();
+  });
+
+  it("maps v2's 15 partner states and 12 event states; only final/handed states close", () => {
+    const open = [
+      'created',
+      'awaiting_payment',
+      'pending_payment',
+      'paid',
+      'accepted',
+      'sent_to_kitchen',
+      'kitchen_confirmed',
+      'preparing',
+      'ready',
+      'finding_courier',
+      'courier_assigned',
+      'out_for_delivery',
+      'arrived',
+    ];
+    for (const s of open) {
+      expect(yiji2IsOpen(s), s).toBe(true);
+      expect(yiji2Status(s), s).not.toBe('unknown');
+      expect(yiji2Status(s), s).toBe(YIJI2_STATE_TO_STATUS[s]);
+    }
+    for (const s of ['delivered', 'handed_over', 'closed', 'cancelled', 'refunded']) {
+      expect(yiji2IsOpen(s), s).toBe(false);
+    }
+    expect(yiji2Status('finding_courier')).toBe('ready');
+    expect(yiji2Status('arrived')).toBe('in_delivery');
+    expect(yiji2Status('handed_over')).toBe('delivered');
+    expect(yiji2Status('closed')).toBe('delivered');
+    /* the event mapper agrees */
+    const closed = orderEventFromYiji2({
+      ...late,
+      id: 'evt-ho',
+      type: 'order.status_changed',
+      data: { ...late.data, state: 'handed_over' },
+    } as never)!;
+    expect(closed.order).toMatchObject({ status: 'delivered', isOpen: false });
   });
 
   it('ignores types the CRM does not act on, and a batch parses', () => {

@@ -74,7 +74,13 @@ answers 503, the poller ignores it, the tenant selector stays hidden, and no cou
    client; for a v2 coupon they refuse and log (`coupon change for a non-v1 platform`). The
    connector already translates `RemoveUserCoupon` → `DELETE /grants/{id}` and `UpdateCoupon` →
    `PUT /coupons/{id}`; wiring those processors through the row's connector is the next step.
-2. **Historical late-orders register for v2** (a date range). v2 has no `GetFilteredOrders`;
+2. **Historical late-orders register for v2** (a date range). Since 2026-11-16 v2 offers
+   `GET /orders/export` (closed orders created in a range of at most 92 days, up to 5,000 rows
+   with items, money breakdown and `closed_at`) and `GET /orders/changed?since=` (one row per
+   status change, at most 92 days back); the register can be built on them. Order states are
+   mirrored from `partner-v1.yaml` (15) and `crm-events-v1.yaml` (12): `delivered`,
+   `handed_over`, `closed`, `cancelled`, `refunded` close an order; `arrived` is still in
+   delivery; `finding_courier` / `courier_assigned` are "ready". v2 has no `GetFilteredOrders`;
    `GET /orders/changed?since=` is reconciliation only and not wired. Today's live board works
    from events; a past range answers empty for v2.
 3. **The `POST /compensation-coupons` body** follows the draft's `CompensationCouponCreate`

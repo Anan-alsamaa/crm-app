@@ -223,20 +223,40 @@ const obj = (v: unknown): Record<string, unknown> =>
 
 /** v2 `state` -> the CRM's order status word (the board shows `in_delivery` etc.). */
 export const YIJI2_STATE_TO_STATUS: Record<string, string> = {
+  /* created -> handed over, as partner-v1.yaml (15 states) and
+     crm-events-v1.yaml (12) name them, 2026-11-16; both lists accepted. */
   created: 'placed',
   placed: 'placed',
+  awaiting_payment: 'placed',
+  pending_payment: 'placed',
+  paid: 'placed',
   accepted: 'received',
+  sent_to_kitchen: 'in_kitchen',
+  kitchen_confirmed: 'in_kitchen',
   preparing: 'in_kitchen',
   ready: 'ready',
+  finding_courier: 'ready',
+  courier_assigned: 'ready',
   out_for_delivery: 'in_delivery',
   delivering: 'in_delivery',
+  arrived: 'in_delivery',
   delivered: 'delivered',
+  handed_over: 'delivered',
+  closed: 'delivered',
   completed: 'delivered',
   cancelled: 'canceled',
   canceled: 'canceled',
   refunded: 'refunded',
 };
-const CLOSED_STATES = new Set(['delivered', 'completed', 'cancelled', 'canceled', 'refunded']);
+const CLOSED_STATES = new Set([
+  'delivered',
+  'handed_over',
+  'closed',
+  'completed',
+  'cancelled',
+  'canceled',
+  'refunded',
+]);
 
 export function yiji2Status(state: string | null | undefined): string {
   const s = String(state ?? '')
