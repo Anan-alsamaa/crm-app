@@ -934,7 +934,22 @@ export class MockYiji2Transport implements Yiji2Transport {
       const coupon_id = String(++this.nextCoupon);
       const code = str(b.code) ?? `V2-${coupon_id}`;
       this.coupons.push({ coupon_id, code, body: b, status: 'active' });
-      return { coupon_id: Number(coupon_id), code, status: 'active' };
+      /* CompensationCouponResult: granted in the same call when a customer
+         (id or phone) or an order was named. */
+      const order_number = yiji2Id(b.order_number) ?? null;
+      let customer_id = yiji2Id(b.customer_id) ?? null;
+      if (!customer_id && order_number) {
+        customer_id =
+          YIJI2_MOCK_ORDERS.find((o) => o.orderNumber === order_number)?.customerId ?? null;
+      }
+      if (!customer_id && str(b.phone))
+        customer_id = this.customerByPhone(str(b.phone)!)?.id ?? null;
+      if (customer_id) {
+        const grant_id = String(++this.nextGrant);
+        this.grants.push({ grant_id, coupon_id, code, customer_id, order_number, removed: false });
+        return { coupon_id: Number(coupon_id), grant_id: Number(grant_id), code, state: 'active' };
+      }
+      return { coupon_id: Number(coupon_id), code, state: 'active' };
     }
     if (method === 'PUT' && (m = /^\/coupons\/(\d+)$/.exec(path))) {
       const c = this.coupons.find((x) => x.coupon_id === m![1]);
@@ -1006,36 +1021,61 @@ export interface Yiji2V1Answer {
   transactionStatus?: number;
 }
 
-function v1CouponDraft(body: Record<string, unknown>, currency: string): Record<string, unknown> {
+/**
+ * The v1 coupon body as v2's `CompensationCouponCreate` (partner-v1.yaml
+ * draft, agreed with the v2 session on 2026-11-16): `code` is the CRM's
+ * coupon code and the idempotency key; `title` is bilingual (the same text
+ * in both when the CRM has one); `type` amount|percent; `category`
+ * general|private (v1 type 0/1); money is `{ amount_minor, currency }`;
+ * a percent coupon carries `percent_bps` (percent x 100) and `max`;
+ * `country` SA|BH. A customer (`customer_id` or E.164 `phone`) and an
+ * `order_number` may be named on creation, in which case v2 grants the
+ * coupon in the same call and answers `grant_id`.
+ */
+export function v1CouponDraft(
+  body: Record<string, unknown>,
+  opts: { currency: string; country: string },
+): Record<string, unknown> {
+  const { currency, country } = opts;
   const cu = obj(body.couponUser);
   const coupon = obj(body.coupon ?? cu.coupon ?? body);
   const discount = num(coupon.discount);
   const pct = num(coupon.discountPercentage);
   const cap = num(coupon.maximumDiscount);
   const reach = num(coupon.reachLimit);
+  const isPercent = !!pct && pct > 0;
+  const title = str(coupon.name) ?? str(cu.couponName) ?? str(body.couponName);
+  const customerId = yiji2Id(body.userId ?? cu.userId);
+  const phone = str(body.customerPhone ?? cu.customerPhone);
+  const orderNumber = yiji2Id(body.orderId ?? cu.orderId);
   return {
     code: str(body.code) ?? str(coupon.code) ?? str(cu.couponCode) ?? str(body.couponCode),
-    title: str(coupon.name) ?? str(cu.couponName),
-    reason:
-      str(cu.compensationReason) ?? str(coupon.compensationReason) ?? str(coupon.compensation),
-    /* v1 type 0 = General, 1 = Private; v2 says it in words. */
-    visibility: num(coupon.type) === 1 ? 'private' : num(coupon.type) === 0 ? 'general' : undefined,
-    discount:
-      pct && pct > 0
-        ? {
-            kind: 'percent',
-            percent: pct,
-            ...(cap != null ? { max: yiji2Minor(cap, currency) } : {}),
-          }
-        : discount != null
-          ? { kind: 'amount', amount: yiji2Minor(discount, currency) }
-          : undefined,
+    ...(title ? { title: { ar: title, en: title } } : {}),
+    type: isPercent ? 'percent' : 'amount',
+    /* v1 type 0 = General, 1 = Private. */
+    category: num(coupon.type) === 1 ? 'private' : num(coupon.type) === 0 ? 'general' : undefined,
+    ...(isPercent
+      ? {
+          percent_bps: Math.round(pct! * 100),
+          ...(cap != null ? { max: yiji2Minor(cap, currency) } : {}),
+        }
+      : discount != null
+        ? { value: yiji2Minor(discount, currency) }
+        : {}),
     usage_limit: num(coupon.limitForUser),
     ...(reach != null ? { total_discount_limit: yiji2Minor(reach, currency) } : {}),
     valid_from: str(coupon.activationDateTime) ?? str(coupon.activationDate),
     valid_to: str(coupon.expirationDateTime) ?? str(coupon.expirationDate),
-    ...(num(coupon.restaurantId) != null ? { restaurant_id: num(coupon.restaurantId) } : {}),
+    reason:
+      str(cu.compensationReason) ??
+      str(body.compensationReason) ??
+      str(coupon.compensationReason) ??
+      str(coupon.compensation),
     ...(num(coupon.brandId) != null ? { brand_id: num(coupon.brandId) } : {}),
+    ...(num(coupon.restaurantId) != null ? { restaurant_id: num(coupon.restaurantId) } : {}),
+    country,
+    ...(customerId ? { customer_id: customerId } : phone ? { phone } : {}),
+    ...(orderNumber ? { order_number: orderNumber } : {}),
   };
 }
 
@@ -1048,7 +1088,7 @@ export async function translateV1AdminCall(
   path: string,
   body: unknown,
   headers: Record<string, string>,
-  opts: { currency: string },
+  opts: { currency: string; country?: string },
 ): Promise<Yiji2V1Answer> {
   const b = obj(body);
   const cu = obj(b.couponUser);
@@ -1059,7 +1099,8 @@ export async function translateV1AdminCall(
     if (!id) return { result: 2, exceptionMessage: 'grant not created' };
     return { result: 1, extendedProperties: { CouponUserId: id } };
   };
-  const draft = v1CouponDraft(b, opts.currency);
+  const country = opts.country ?? (opts.currency.toUpperCase() === 'BHD' ? 'BH' : 'SA');
+  const draft = v1CouponDraft(b, { currency: opts.currency, country });
 
   if (/\/api\/CouponUser\/AddCompensationCoupon\b/i.test(path)) {
     throw new Yiji2RefusedError(
@@ -1080,12 +1121,16 @@ export async function translateV1AdminCall(
   }
   if (/\/api\/CouponUserOrder\/CreateCouponUserFromOrder$/i.test(path)) {
     const orderNumber = yiji2Id(b.orderId ?? cu.orderId);
-    const c = await transport.request<{ coupon_id?: unknown }>('POST', '/compensation-coupons', {
-      body: { ...draft, ...(orderNumber ? { order_number: orderNumber } : {}) },
-      ...withIdem('coupon'),
-    });
+    const c = await transport.request<{ coupon_id?: unknown; grant_id?: unknown }>(
+      'POST',
+      '/compensation-coupons',
+      { body: draft, ...withIdem('coupon') },
+    );
     const couponId = yiji2Id(c?.coupon_id);
     if (!couponId) return { result: 2, exceptionMessage: 'coupon not created' };
+    /* v2 grants in the same call when the creation named a customer or an order. */
+    const granted = yiji2Id(c?.grant_id);
+    if (granted) return { result: 1, extendedProperties: { CouponUserId: granted } };
     const g = await transport.request<Yiji2GrantWire>('POST', '/grants', {
       body: {
         coupon_id: couponId,

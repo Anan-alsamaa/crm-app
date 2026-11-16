@@ -112,9 +112,15 @@ describe('the mock transport never touches the network', () => {
     expect(answer.extendedProperties?.CouponUserId).toBe('700001');
     expect(transport.coupons[0]).toMatchObject({ code: 'V2-TEST-1' });
     expect(transport.coupons[0]?.body).toMatchObject({
-      visibility: 'private',
-      discount: { kind: 'amount', amount: { amount_minor: 2500, currency: 'SAR' } },
+      category: 'private',
+      type: 'amount',
+      value: { amount_minor: 2500, currency: 'SAR' },
+      title: { ar: '0500000201', en: '0500000201' },
+      country: 'SA',
+      order_number: '2611000000001',
     });
+    /* granted in the creation call: one request, not two */
+    expect(transport.calls.map((c) => c.path)).toEqual(['/compensation-coupons']);
     expect(transport.grants[0]).toMatchObject({
       customer_id: '2000000001',
       order_number: '2611000000001',
@@ -295,9 +301,14 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
     expect(a).toEqual({ result: 1, exceptionMessage: '500001', transactionStatus: 1 });
     expect(t.calls[0]).toMatchObject({ method: 'POST', path: '/compensation-coupons' });
     expect(t.coupons[0]?.body).toMatchObject({
-      visibility: 'general',
-      discount: { kind: 'percent', percent: 10, max: { amount_minor: 3000, currency: 'SAR' } },
+      category: 'general',
+      type: 'percent',
+      percent_bps: 1000,
+      max: { amount_minor: 3000, currency: 'SAR' },
+      country: 'SA',
     });
+    expect(t.coupons[0]?.body).not.toHaveProperty('value');
+    expect(t.grants).toHaveLength(0);
   });
 
   it('AddUserCoupon -> POST /grants; a second grant of the same coupon is refused', async () => {

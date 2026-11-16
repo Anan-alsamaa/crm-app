@@ -77,11 +77,13 @@ answers 503, the poller ignores it, the tenant selector stays hidden, and no cou
 2. **Historical late-orders register for v2** (a date range). v2 has no `GetFilteredOrders`;
    `GET /orders/changed?since=` is reconciliation only and not wired. Today's live board works
    from events; a past range answers empty for v2.
-3. **The `POST /compensation-coupons` body.** v2's draft OpenAPI (35 paths) does not fix the
-   coupon-creation fields; the connector sends `{ code, title, reason, visibility, discount
-{kind, amount|percent, max}, usage_limit, total_discount_limit, valid_from, valid_to,
-restaurant_id, brand_id, order_number }` in minor units. The v2 team confirms or the
-   `v1CouponDraft` mapping is adjusted.
+3. **The `POST /compensation-coupons` body** follows the draft's `CompensationCouponCreate`
+   (agreed with the v2 session 2026-11-16): `code` (also the idempotency key), `title {ar, en}`,
+   `type` amount|percent, `category` general|private, `valid_from`, `valid_to`, `usage_limit`,
+   `total_discount_limit` (Money), `reason`, `brand_id`, `country` SA|BH; optional `customer_id`
+   or `phone`, `order_number`, `restaurant_id`, `value` (Money) or `percent_bps` + `max`. The
+   answer (`CompensationCouponResult`) carries `grant_id` when a customer or order was named, so
+   the grant is one call. Still a draft on both sides.
 4. **Money for display is converted** (`yiji2Amount`); the marketing contract stays SAR-only
    (brief §7.1).
 5. **"All tenants" view linking one person across vendors by phone** (brief §7.3): the lists show

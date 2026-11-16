@@ -149,8 +149,10 @@ describe('coupon for the v2 vendor', () => {
     expect(t.coupons).toHaveLength(1);
     expect(t.coupons[0]).toMatchObject({ code: 'V2-0001' });
     expect(t.coupons[0]?.body).toMatchObject({
-      visibility: 'private',
-      discount: { kind: 'amount', amount: { amount_minor: 1000, currency: 'SAR' } },
+      category: 'private',
+      type: 'amount',
+      value: { amount_minor: 1000, currency: 'SAR' },
+      country: 'SA',
     });
     expect(t.grants).toHaveLength(1);
     expect(t.grants[0]).toMatchObject({ customer_id: '2000000001', code: 'V2-0001' });
