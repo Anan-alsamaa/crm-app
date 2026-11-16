@@ -13,6 +13,7 @@ import {
   Yiji2RefusedError,
   Yiji2UnavailableError,
   asCouponPushConnector,
+  isYijiRefused,
   isYiji2OrderNumber,
   lateDeliveryMinutesKeyFor,
   mapYiji2Cart,
@@ -435,6 +436,60 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
   });
 });
 
+/* ── refusals through the connector ─────────────────────────────── */
+
+describe('a v2 refusal through the connector', () => {
+  it('reaches the v1 coupon processor as the refusal it records and never retries', async () => {
+    const { connector } = mockConnector();
+    const e = await connector.adminPost!('/api/CouponUser/AddCompensationCoupon', {}, {}).catch(
+      (x: unknown) => x,
+    );
+    /* the v1 processor's own classifier says "refused" -> recorded, job done */
+    expect(isYijiRefused(e)).toBe(true);
+    expect(e).toMatchObject({
+      status: 403,
+      body: {
+        result: 2,
+        exceptionMessage: 'not_provided: AddCompensationCoupon is not provided on v2.',
+      },
+    });
+  });
+
+  it('keeps a 400 VALIDATION_FAILED with its trace id in the recorded reason', async () => {
+    const transport = {
+      request: async () => {
+        throw new Yiji2RefusedError('VALIDATION_FAILED', 'coupon.valid_to.past', 400, 'tr-77');
+      },
+    };
+    const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport });
+    const e = await connector.adminPost!(
+      '/api/Coupon/AddCoupon',
+      { code: 'X', discount: 5 },
+      {},
+    ).catch((x: unknown) => x);
+    expect(isYijiRefused(e)).toBe(true);
+    expect(e).toMatchObject({
+      status: 400,
+      body: {
+        result: 2,
+        exceptionMessage: 'VALIDATION_FAILED: coupon.valid_to.past (trace tr-77)',
+      },
+    });
+  });
+
+  it('lets an outage through unchanged, so the caller retries it', async () => {
+    const transport = {
+      request: async () => {
+        throw new Yiji2UnavailableError('yiji2 rate limited (429)', 7);
+      },
+    };
+    const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport });
+    await expect(
+      connector.adminPost!('/api/Coupon/AddCoupon', { code: 'X', discount: 5 }, {}),
+    ).rejects.toBeInstanceOf(Yiji2UnavailableError);
+  });
+});
+
 /* ── the HTTP transport ─────────────────────────────────────────── */
 
 describe('HttpYiji2Transport', () => {
@@ -482,18 +537,31 @@ describe('HttpYiji2Transport', () => {
     expect(seen[2]?.idem).toBe('k1');
   });
 
-  it('a refusal is typed with v2 error code; 429 and 5xx are unavailable', async () => {
-    const { t } = transport((url) => {
+  it('a 400 VALIDATION_FAILED is a typed refusal (code, message_key, trace_id); 429 and 5xx are unavailable', async () => {
+    const { t, fetchImpl } = transport((url) => {
       if (url.endsWith('/auth/token')) return json(200, { access_token: 'tok', expires_in: 900 });
+      /* v2 (2026-11-16): invalid input = HTTP 400, no "fields" list, same as its other APIs */
       if (url.includes('/refuse'))
-        return json(422, { error: { code: 'invalid_discount', message: 'Too much.' } });
+        return json(400, {
+          error: {
+            code: 'VALIDATION_FAILED',
+            message_key: 'coupon.value.required',
+            trace_id: 'tr-1',
+          },
+        });
       if (url.includes('/slow')) return json(429, {}, { 'retry-after': '7' });
       return json(503, {});
     });
-    await expect(t.request('POST', '/refuse', { body: {} })).rejects.toMatchObject({
-      code: 'invalid_discount',
-      status: 422,
+    const refused = await t.request('POST', '/refuse', { body: {} }).catch((x: unknown) => x);
+    expect(refused).toBeInstanceOf(Yiji2RefusedError);
+    expect(refused).toMatchObject({
+      code: 'VALIDATION_FAILED',
+      status: 400,
+      traceId: 'tr-1',
+      message: 'VALIDATION_FAILED (coupon.value.required)',
     });
+    /* refused = decided: one request, no retry of the same body */
+    expect(fetchImpl.mock.calls.filter(([u]) => String(u).includes('/refuse'))).toHaveLength(1);
     const e = await t.request('GET', '/slow').catch((x: unknown) => x);
     expect(e).toBeInstanceOf(Yiji2UnavailableError);
     expect((e as Yiji2UnavailableError).retryAfterSec).toBe(7);

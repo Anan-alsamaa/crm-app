@@ -55,6 +55,7 @@ import type {
   YijiPlatformSettings,
 } from './connector.js';
 import { normalizePhone } from './phone.js';
+import { YijiRefusedError } from './yiji-impl.js';
 
 /* ── Settings ────────────────────────────────────────────────────── */
 
@@ -440,16 +441,34 @@ export interface Yiji2Transport {
   ): Promise<T | null>;
 }
 
-/** v2 said no: `{ error: { code, message } }` with a 4xx. Not retried. */
+/**
+ * v2 said no: a 4xx with `{ error: { code, message_key, trace_id } }` (the
+ * v2 session, 2026-11-16: invalid input is HTTP 400 `VALIDATION_FAILED`, no
+ * field list, the same shape as its customer and staff APIs). Never retried:
+ * the same body gets the same answer. The connector's `adminPost` hands it
+ * to the v1 coupon processor as the refusal it recognises (`yiji2RefusalAsV1`).
+ */
 export class Yiji2RefusedError extends Error {
   constructor(
     readonly code: string,
     message: string,
     readonly status: number,
+    readonly traceId: string | null = null,
   ) {
     super(message);
     this.name = 'Yiji2RefusedError';
   }
+}
+
+/**
+ * A v2 refusal in the shape the UNCHANGED v1 coupon processor records and
+ * stops on (`isYijiRefused`: name + status; `describeRefusal`: the
+ * `exceptionMessage`). Without this a 400 from v2 would be an unknown error
+ * to that processor and BullMQ would retry it five times for the same answer.
+ */
+export function yiji2RefusalAsV1(err: Yiji2RefusedError): YijiRefusedError {
+  const detail = `${err.code}: ${err.message}` + (err.traceId ? ` (trace ${err.traceId})` : '');
+  return new YijiRefusedError(detail, err.status, { result: 2, exceptionMessage: detail });
 }
 
 /** v2 could not answer (5xx, network, timeout, 429). Retried by the caller's rules. */
@@ -568,11 +587,16 @@ export class HttpYiji2Transport implements Yiji2Transport {
       if (res.status === 204) return {} as T;
       const body = (await res.json().catch(() => null)) as unknown;
       if (!res.ok) {
+        /* `{ error: { code, message_key, trace_id } }`; older drafts said
+           `message`. 400 VALIDATION_FAILED lands here too: refused, not retried. */
         const e = obj(obj(body).error);
+        const code = str(e.code) ?? `http_${res.status}`;
+        const key = str(e.message_key);
         throw new Yiji2RefusedError(
-          str(e.code) ?? `http_${res.status}`,
-          str(e.message) ?? `yiji2 refused (${res.status})`,
+          code,
+          str(e.message) ?? (key ? `${code} (${key})` : `yiji2 refused (${res.status})`),
           res.status,
+          str(e.trace_id) ?? null,
         );
       }
       return body as T;
@@ -1340,10 +1364,19 @@ export class Yiji2Connector implements VendorConnector {
         }
       : null;
     this.adminPost = t
-      ? ((async (path: string, body: unknown, headers?: Record<string, string>) =>
-          translateV1AdminCall(t, path, body, headers ?? {}, {
-            currency: this.currency(),
-          })) as PlatformAdminPoster)
+      ? ((async (path: string, body: unknown, headers?: Record<string, string>) => {
+          try {
+            return await translateV1AdminCall(t, path, body, headers ?? {}, {
+              currency: this.currency(),
+            });
+          } catch (err) {
+            /* A refusal (400 VALIDATION_FAILED, 403, 409, ...) reaches the v1
+               processor as the refusal IT recognises: recorded once, never
+               retried. An outage (429, 5xx, network) passes through: retried. */
+            if (err instanceof Yiji2RefusedError) throw yiji2RefusalAsV1(err);
+            throw err;
+          }
+        }) as PlatformAdminPoster)
       : null;
     if (!t)
       warn(

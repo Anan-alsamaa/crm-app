@@ -5,9 +5,10 @@ import {
   ConnectorRegistry,
   EnvVendorSettingsSource,
   StaticVendorDirectory,
+  MockYiji2Transport,
   Yiji2Connector,
+  Yiji2RefusedError,
   asCouponPushConnector,
-  type MockYiji2Transport,
 } from '@yiji/shared-types';
 import {
   couponEndpointFor,
@@ -163,5 +164,55 @@ describe('coupon for the v2 vendor', () => {
     expect(update).toMatchObject({ status: 'assigned', yiji_coupon_user_id: '700001' });
     expect(t.calls.map((c) => c.path)).toEqual(['/compensation-coupons', '/grants']);
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('a 400 VALIDATION_FAILED from v2 is recorded on the row and NOT retried (the job finishes)', async () => {
+    /* v2 session, 2026-11-16: invalid input is HTTP 400 { error: { code:
+       "VALIDATION_FAILED", message_key, trace_id } }, no field list. */
+    const inner = new MockYiji2Transport();
+    const transport = {
+      request: async <T>(
+        method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+        path: string,
+        opts?: Parameters<MockYiji2Transport['request']>[2],
+      ): Promise<T | null> => {
+        if (method === 'POST' && path === '/compensation-coupons')
+          throw new Yiji2RefusedError('VALIDATION_FAILED', 'coupon.valid_to.past', 400, 'tr-400');
+        return inner.request<T>(method, path, opts);
+      },
+    };
+    const v2 = new Yiji2Connector(
+      { crmId: 'uuid-v2', platformVendorId: '2', platform: 'yiji2', status: 'active' },
+      { platform: 'yiji2', mock: true, tenantId: '2' },
+      { transport },
+    );
+    const directus = {
+      request: vi.fn(async (arg: unknown) =>
+        arg && typeof arg === 'object' && 'payload' in (arg as object) ? {} : ROW,
+      ),
+    };
+    const outcome = await processCouponPushJob(
+      { data: { couponApprovalId: 'ca-v2' } } as Job<{ couponApprovalId: string }>,
+      {
+        directus: directus as never,
+        logger,
+        platform: v2.platform,
+        postCoupon: v2.adminPost ?? undefined,
+        findCustomer: v2.findCustomerIdByPhone ?? undefined,
+        findUserCoupon: v2.findCustomerCoupon ?? undefined,
+        yijiTenantId: '2',
+      },
+    );
+    /* refused, not thrown: BullMQ sees a finished job, never a retry */
+    expect(outcome).toBe('refused');
+    const update = directus.request.mock.calls
+      .map((c) => c[0] as { payload?: Record<string, unknown> })
+      .find((a) => a.payload)?.payload;
+    expect(update).toMatchObject({
+      yiji_push_error: 'VALIDATION_FAILED: coupon.valid_to.past (trace tr-400)',
+    });
+    expect(update).not.toHaveProperty('status');
+    expect(inner.coupons).toHaveLength(0);
+    expect(inner.grants).toHaveLength(0);
   });
 });
