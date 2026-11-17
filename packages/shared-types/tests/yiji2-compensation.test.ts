@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   COMPENSATION_ESCALATION_TARGETS,
   DEFAULT_COMPENSATION_ESCALATION_ROLES,
@@ -28,6 +28,10 @@ import {
   yiji2OverrideProblem,
   effectivePrivileges,
   OWNER_PRIVILEGES,
+  caseFieldsFromGrant,
+  isYiji2CompensationGrant,
+  stableJson,
+  yiji2RequestKey,
 } from '../src/index.js';
 
 /**
@@ -529,5 +533,76 @@ describe('the HTTP transport reads data.reason of a 409 (fake fetch)', () => {
     expect(err).toBeInstanceOf(Yiji2RefusedError);
     expect(err).toMatchObject({ status: 409, code: 'INVALID_TRANSITION', reason: 'evidence_hold' });
     expect(err.traceId).toBe('tr-1');
+  });
+});
+
+/* ── Review follow-ups (18 Nov 2026) ───────────────────────────────────── */
+
+describe('yiji2RequestKey: one key per distinct request', () => {
+  const body = { agent_id: 'u-1', reason: 'late', amount: { amount_minor: 1500, currency: 'SAR' } };
+  const k = (b: unknown, base = 'nonce-0001') => yiji2RequestKey(base, { caseId: '9', body: b });
+
+  it('the same request gives the same key, whatever the key order', () => {
+    expect(k(body)).toBe(k(body));
+    expect(
+      k({ amount: { currency: 'SAR', amount_minor: 1500 }, reason: 'late', agent_id: 'u-1' }),
+    ).toBe(k(body));
+  });
+
+  it('a changed amount, reason, absent field or base is a new key', () => {
+    const keys = new Set([
+      k(body),
+      k({ ...body, amount: { amount_minor: 1200, currency: 'SAR' } }),
+      k({ ...body, reason: 'very late' }),
+      k({ agent_id: 'u-1', reason: 'late' }),
+      k(body, 'nonce-0002'),
+    ]);
+    expect(keys.size).toBe(5);
+  });
+
+  it('fits the gateway and V2 limits', () => {
+    expect(k(body)).toMatch(/^[A-Za-z0-9_-]{8,100}$/);
+    expect(k(body)).toHaveLength(36);
+  });
+
+  it('stableJson drops undefined fields and keeps array order', () => {
+    expect(stableJson({ b: 1, a: undefined, c: [2, 1] })).toBe('{"b":1,"c":[2,1]}');
+  });
+});
+
+describe('a compensation coupon.granted (no pending_grant_id)', () => {
+  const env = (data: Record<string, unknown>) => ({
+    id: 'e-1',
+    type: 'coupon.granted',
+    occurred_at: '2026-11-17T21:57:45.610701Z',
+    data,
+  });
+  it('becomes a compensation job; a pending one never does', () => {
+    const job = compensationEventFromYiji2(
+      env({ grant_id: 1, coupon_id: 1, code: 'COMP-6' }),
+      'yiji2:2',
+    );
+    expect(job).toMatchObject({ type: 'coupon.granted', data: { grant_id: 1, code: 'COMP-6' } });
+    expect(isYiji2CompensationGrant(env({ grant_id: 1, code: 'X', pending_grant_id: 5 }))).toBe(
+      false,
+    );
+    expect(
+      compensationEventFromYiji2(env({ grant_id: 1, code: 'X', pending_grant_id: 5 }), 'yiji2:2'),
+    ).toBeNull();
+  });
+  it('without a grant id or a code: ignored, not malformed', () => {
+    const malformed = vi.fn();
+    expect(compensationEventFromYiji2(env({ code: 'X' }), 'yiji2:2', { malformed })).toBeNull();
+    expect(compensationEventFromYiji2(env({ grant_id: 1 }), 'yiji2:2', { malformed })).toBeNull();
+    expect(malformed).not.toHaveBeenCalled();
+  });
+  it('maps to the coupon columns only', () => {
+    expect(
+      caseFieldsFromGrant({ grant_id: 1, coupon_id: 2, code: 'COMP-6', status: 'active' }),
+    ).toEqual({
+      grant_id: '1',
+      coupon_id: '2',
+      coupon_code: 'COMP-6',
+    });
   });
 });

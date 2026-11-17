@@ -1,4 +1,8 @@
-import type { CompensationCaseRow, Yiji2AgentComplaintCode } from '@yiji/shared-types';
+import {
+  yiji2RequestKey,
+  type CompensationCaseRow,
+  type Yiji2AgentComplaintCode,
+} from '@yiji/shared-types';
 import { resolveUrl } from '@yiji/shared-config';
 import { auth } from './directus.js';
 
@@ -7,9 +11,11 @@ import { auth } from './directus.js';
  *
  * Calls the AI gateway (never V2): the gateway checks the agent's own session,
  * the ticket and the `approve_compensation_cases` switch, then calls V2 with
- * the partner credential it alone holds. Every write carries the
- * Idempotency-Key the dialog made when it opened, so a double click or a
- * retried request never acts twice on V2.
+ * the partner credential it alone holds. Every write carries an
+ * Idempotency-Key derived from the dialog's nonce AND the request's material
+ * fields (`requestKey`): a double click or an identical retry never acts
+ * twice on V2, and a retry with a changed amount, reason, result or category
+ * is a new request (review follow-up, 18 Nov 2026).
  */
 
 const GATEWAY_URL = resolveUrl(
@@ -38,6 +44,8 @@ export class CaseActionError extends Error {
     readonly detail: string | null,
     /** The case as V2 now has it (sent back after a 409). */
     readonly fresh: CompensationCaseRow | null,
+    /** `case_on_other_ticket`: that ticket, only when the caller may read it. */
+    readonly ticketId: string | null = null,
   ) {
     super(code);
     this.name = 'CaseActionError';
@@ -69,6 +77,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
             ? json.field
             : null,
       (json.case as CompensationCaseRow | undefined) ?? null,
+      typeof json.ticketId === 'string' ? json.ticketId : null,
     );
   }
   return (json as { data: T }).data;
@@ -79,6 +88,19 @@ export function newIdempotencyKey(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
   if (c?.randomUUID) return c.randomUUID();
   return `k${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+}
+
+/**
+ * The key of ONE request: the form's nonce + case + action + body (without
+ * the key itself). Same request -> same key; any changed field -> a new key.
+ */
+export function requestKey(
+  nonce: string,
+  caseId: string | null,
+  action: CaseAction | 'log',
+  body: Record<string, unknown>,
+): string {
+  return yiji2RequestKey(nonce, { caseId, action, body });
 }
 
 export type CaseAction = 'approve' | 'reject' | 'evidence' | 'verification';

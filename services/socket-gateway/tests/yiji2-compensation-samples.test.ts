@@ -158,7 +158,7 @@ describe('a coupon case: coupon.granted and compensation.decided in either order
     },
   });
   it.each(['granted first', 'decided first'])(
-    '%s: the decision is queued, the grant is not handed to the pending-grants job',
+    '%s: both go to the compensation job (the code reaches the case), never the pending-grants job',
     async (order) => {
       const events =
         order === 'granted first'
@@ -166,12 +166,31 @@ describe('a coupon case: coupon.granted and compensation.decided in either order
           : [envelope('decided_2_2_approved_coupon'), couponGranted()];
       const res = await build().inject(signed({ events }));
       expect(res.statusCode).toBe(202);
+      expect(res.json()).toMatchObject({ accepted: 2, ignored: 0 });
       expect(enqueueCoupon).not.toHaveBeenCalled();
-      expect(jobs()).toHaveLength(1);
-      expect(jobs()[0]).toMatchObject({
-        type: 'compensation.decided',
-        data: { case_id: 6, grant_id: 1, coupon_id: 1 },
-      });
+      expect(jobs()).toHaveLength(2);
+      const decided = jobs().find((j) => j.type === 'compensation.decided');
+      const granted = jobs().find((j) => j.type === 'coupon.granted');
+      expect(decided).toMatchObject({ data: { case_id: 6, grant_id: 1, coupon_id: 1 } });
+      expect(granted).toMatchObject({ data: { grant_id: 1, coupon_id: 1, code: 'COMP-6' } });
     },
   );
+
+  it('a grant WITH pending_grant_id stays the pending-grants job alone', async () => {
+    const e = couponGranted();
+    (e.data as Rec).pending_grant_id = 77;
+    const res = await build().inject(signed(e));
+    expect(res.statusCode).toBe(202);
+    expect(enqueueCoupon).toHaveBeenCalledTimes(1);
+    expect(jobs()).toHaveLength(0);
+  });
+
+  it('a non-pending grant without a code is ignored, as before', async () => {
+    const e = couponGranted();
+    delete (e.data as Rec).code;
+    const res = await build().inject(signed(e));
+    expect(res.json()).toMatchObject({ accepted: 0, ignored: 1 });
+    expect(jobs()).toHaveLength(0);
+    expect(enqueueCoupon).not.toHaveBeenCalled();
+  });
 });

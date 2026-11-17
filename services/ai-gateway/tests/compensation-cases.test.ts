@@ -4,6 +4,7 @@ import {
   MockYiji2Transport,
   UnknownVendorError,
   Yiji2Connector,
+  yiji2RequestKey,
   type CompensationCasePatch,
   type CompensationCaseRow,
   type VendorConnector,
@@ -53,6 +54,8 @@ function memoryStore(): CompensationCaseStore & { rows: CompensationCaseRow[] } 
   const tickets: Record<string, { id: string; vendor: string; order_id: string | null }> = {
     't-v2': { id: 't-v2', vendor: V2, order_id: '2611000000001' },
     't-v2-other': { id: 't-v2-other', vendor: V2, order_id: '2611000000002' },
+    /* A second ticket about the same order as t-v2. */
+    't-v2-same-order': { id: 't-v2-same-order', vendor: V2, order_id: '2611000000001' },
     't-v2-noorder': { id: 't-v2-noorder', vendor: V2, order_id: null },
     't-v1': { id: 't-v1', vendor: V1, order_id: '1095975' },
   };
@@ -81,6 +84,14 @@ function memoryStore(): CompensationCaseStore & { rows: CompensationCaseRow[] } 
 
 function build(opts: { hidden?: string[]; inactive?: boolean } = {}) {
   const transport = new MockYiji2Transport({ now: () => NOW });
+  /* Every write's key as V2 receives it, replays included (the mock answers a
+     known key from its store without noting a call). */
+  const sentKeys: Array<string | undefined> = [];
+  const request = transport.request.bind(transport);
+  transport.request = ((method, path, o) => {
+    if (method !== 'GET') sentKeys.push(o?.idempotencyKey);
+    return request(method, path, o);
+  }) as typeof transport.request;
   const connector = new Yiji2Connector(
     { crmId: V2, platformVendorId: '2', platform: 'yiji2', status: 'active' },
     { platform: 'yiji2', mock: true },
@@ -98,7 +109,7 @@ function build(opts: { hidden?: string[]; inactive?: boolean } = {}) {
     connectors: { connectorFor },
     now: () => NOW,
   });
-  return { app, store, transport, connectorFor };
+  return { app, store, transport, connectorFor, sentKeys };
 }
 
 const auth = (t: string) => ({ authorization: `Bearer ${t}` });
@@ -235,14 +246,21 @@ describe('approve / reject / evidence / verification', () => {
         amountMinor: 1500,
       },
     });
+    const sent = {
+      agent_id: 'u-approver',
+      reason: 'late',
+      amount: { amount_minor: 1500, currency: 'SAR' },
+    };
     expect(b.transport.calls.at(-1)).toMatchObject({
       path: `/compensation-cases/${id}/approve`,
-      idempotencyKey: key('approve'),
-      body: {
-        agent_id: 'u-approver',
+      /* The portal's key AND the request: one key per distinct request. */
+      idempotencyKey: yiji2RequestKey(key('approve'), {
+        caseId: id,
+        action: 'approve',
+        body: sent,
         reason: 'late',
-        amount: { amount_minor: 1500, currency: 'SAR' },
-      },
+      }),
+      body: sent,
     });
     const row = b.store.rows.find((r) => r.case_id === id)!;
     expect(row).toMatchObject({ status: 'approved', overridden: true, issued_minor: 1500 });
@@ -252,6 +270,132 @@ describe('approve / reject / evidence / verification', () => {
       reason: 'late',
       amount_minor: 1500,
       outcome: 'ok',
+    });
+  });
+
+  /* Review follow-up 1 (18 Nov): after a refusal the form keeps its key. A
+     retry with a CHANGED body must be a new request to V2; an identical one
+     must reach V2 with the same key. */
+  describe('the key V2 receives follows the request', () => {
+    const act = (
+      b: ReturnType<typeof build>,
+      id: string,
+      action: string,
+      payload: Record<string, unknown>,
+    ) =>
+      b.app.inject({
+        method: 'POST',
+        url: `/commerce/compensation-cases/${id}/${action}`,
+        headers: auth('tok-approver'),
+        payload: { ticketId: 't-v2', idempotencyKey: key('form'), ...payload },
+      });
+    const lastKey = (b: ReturnType<typeof build>) => b.sentKeys.at(-1);
+
+    it('approve: a changed amount (same portal key) is a new V2 request; the first answer is not replayed', async () => {
+      const b = build();
+      const id = await seeded(b);
+      /* V2 refuses the first try and would answer that key with it again. */
+      b.transport.failOnApprove.add(id);
+      const first = await act(b, id, 'approve', { reason: 'late', amountMinor: 1500 });
+      expect(first.statusCode).toBe(409);
+      const k1 = lastKey(b);
+      const n = b.transport.calls.length;
+      await act(b, id, 'approve', { reason: 'late', amountMinor: 1200 });
+      /* A real call with the new body, under a new key. */
+      expect(b.transport.calls.length).toBe(n + 1);
+      expect(lastKey(b)).not.toBe(k1);
+      expect(b.transport.calls.at(-1)!.body).toMatchObject({
+        amount: { amount_minor: 1200, currency: 'SAR' },
+      });
+    });
+
+    it('approve: an identical retry reaches V2 with the same key (V2 answers it once)', async () => {
+      const b = build();
+      const id = await seeded(b);
+      await act(b, id, 'approve', { reason: 'late', amountMinor: 1500 });
+      const k1 = lastKey(b);
+      const calls = b.transport.calls.length;
+      const again = await act(b, id, 'approve', { reason: 'late', amountMinor: 1500 });
+      expect(again.statusCode).toBe(200);
+      expect(b.sentKeys).toHaveLength(2);
+      expect(lastKey(b)).toBe(k1);
+      /* V2 (the mock) answered it from its store: no second approval. */
+      expect(b.transport.calls.length).toBe(calls);
+      /* The mock answers the stored result: approved once, issued once. */
+      expect(b.store.rows.find((r) => r.case_id === id)).toMatchObject({
+        status: 'approved',
+        issued_minor: 1500,
+      });
+    });
+
+    it('approve: a changed reason, or no amount instead of one, is a new key', async () => {
+      const b = build();
+      const id = await seeded(b);
+      b.transport.failOnApprove.add(id);
+      const keys = new Set<string>();
+      for (const p of [
+        { reason: 'late', amountMinor: 1500 },
+        { reason: 'very late', amountMinor: 1500 },
+        { reason: 'very late' },
+        { reason: 'very late', amountMinor: 1500 },
+      ]) {
+        await act(b, id, 'approve', p);
+        keys.add(lastKey(b)!);
+      }
+      /* The 2nd and 4th bodies are identical: same key. */
+      expect(keys.size).toBe(3);
+    });
+
+    it('reject, evidence, verification and log complaint: same body same key, changed body new key', async () => {
+      const b = build();
+      const keysOf = async (
+        send: (p: Record<string, unknown>) => Promise<unknown>,
+        a: Record<string, unknown>,
+        changed: Record<string, unknown>,
+      ) => {
+        await send(a);
+        const k1 = lastKey(b);
+        await send(a);
+        const k2 = lastKey(b);
+        await send(changed);
+        return [k1, k2, lastKey(b)];
+      };
+      const held = await seeded(b, { status: 'evidence_hold' });
+      const ver = await seeded(b, { verification: 'open', status: 'approved' });
+      const open = await seeded(b);
+      const results = [
+        await keysOf(
+          (p) => act(b, open, 'reject', p),
+          { reason: 'not our fault' },
+          { reason: 'the branch checked' },
+        ),
+        await keysOf(
+          (p) => act(b, held, 'evidence', p),
+          { reason: 'photos ok' },
+          { reason: 'photos checked twice' },
+        ),
+        await keysOf(
+          (p) => act(b, ver, 'verification', p),
+          { reason: 'cam 2', result: 'confirmed' },
+          { reason: 'cam 2', result: 'not_confirmed' },
+        ),
+        await keysOf(
+          (p) =>
+            b.app.inject({
+              method: 'POST',
+              url: '/commerce/compensation-cases',
+              headers: auth('tok-approver'),
+              payload: { ticketId: 't-v2-other', idempotencyKey: key('form'), ...p },
+            }),
+          { category: 'CUT', text: 'a cut' },
+          { category: 'HAIR', text: 'a cut' },
+        ),
+      ];
+      for (const [k1, k2, k3] of results) {
+        expect(k1).toBeTruthy();
+        expect(k2).toBe(k1);
+        expect(k3).not.toBe(k1);
+      }
     });
   });
 
@@ -421,16 +565,111 @@ describe('POST /commerce/compensation-cases (Log V2 complaint)', () => {
       onThisTicket: true,
       case: { status: 'evidence_hold', rule_code: 'HAIR', ticket: 't-v2', vendor: V2 },
     });
+    const sent = {
+      order_number: '2611000000001',
+      category: 'HAIR',
+      agent_id: 'u-approver',
+      has_photos: false,
+      text: 'hair in the burger',
+    };
     expect(b.transport.calls.at(-1)).toMatchObject({
       path: '/compensation-cases',
-      idempotencyKey: key('log'),
-      body: {
-        order_number: '2611000000001',
-        category: 'HAIR',
-        agent_id: 'u-approver',
-        has_photos: false,
-        text: 'hair in the burger',
-      },
+      idempotencyKey: yiji2RequestKey(key('log'), { action: 'log', body: sent }),
+      body: sent,
+    });
+  });
+
+  /* Review follow-up 2 (18 Nov): V2 answers with the order's EXISTING case,
+     linked to another CRM ticket. The row is never returned. */
+  describe('an existing case on ANOTHER ticket', () => {
+    async function loggedOnFirst(b: ReturnType<typeof build>) {
+      const first = await b.app.inject({
+        method: 'POST',
+        url: '/commerce/compensation-cases',
+        headers: auth('tok-approver'),
+        payload: { ticketId: 't-v2', idempotencyKey: key('first'), category: 'CUT' },
+      });
+      expect(first.statusCode).toBe(200);
+      return first.json().data.case as CompensationCaseRow;
+    }
+    const second = (b: ReturnType<typeof build>) =>
+      b.app.inject({
+        method: 'POST',
+        url: '/commerce/compensation-cases',
+        headers: auth('tok-approver'),
+        payload: { ticketId: 't-v2-same-order', idempotencyKey: key('second'), category: 'CUT' },
+      });
+
+    it('409 case_on_other_ticket with only that ticket id when the caller may read it', async () => {
+      const b = build();
+      const c = await loggedOnFirst(b);
+      const res = await second(b);
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toEqual({
+        error: 'case_on_other_ticket',
+        message: expect.stringContaining('another ticket'),
+        ticketId: 't-v2',
+      });
+      /* The row stays on its ticket; nothing is noted on it by this caller. */
+      const row = b.store.rows.find((r) => r.case_id === c.case_id)!;
+      expect(row.ticket).toBe('t-v2');
+      expect(row.agent_actions).toHaveLength(1);
+    });
+
+    it('no ticket id and no row when the caller cannot read the other ticket', async () => {
+      const b = build();
+      await loggedOnFirst(b);
+      /* Same V2 and store as b; only the caller's visibility differs. */
+      const app = Fastify();
+      void registerCompensationCaseRoutes(app, {
+        sessions: sessions(['t-v2']),
+        store: b.store,
+        connectors: { connectorFor: async () => (await b.connectorFor(V2)) as VendorConnector },
+        now: () => NOW,
+      });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/commerce/compensation-cases',
+        headers: auth('tok-approver'),
+        payload: { ticketId: 't-v2-same-order', idempotencyKey: key('h'), category: 'CUT' },
+      });
+      expect(res.statusCode).toBe(409);
+      const body = res.json();
+      expect(body.error).toBe('case_on_other_ticket');
+      expect(body).not.toHaveProperty('ticketId');
+      expect(body).not.toHaveProperty('data');
+      expect(body).not.toHaveProperty('case');
+      expect(JSON.stringify(body)).not.toContain('t-v2"');
+    });
+
+    it('a race (the events job linked it elsewhere first) is refused the same way', async () => {
+      const b = build();
+      /* The case exists on V2 but the CRM row appears, on t-v2, only while
+         this request is on its way (the events job won the create). */
+      const id = b.transport.seedCase({ rule_code: 'CUT', order_number: '2611000000001' });
+      const create = b.store.createCase;
+      b.store.createCase = async (p) => {
+        await create({ ...p, ticket: 't-v2' });
+        throw new Error('not unique');
+      };
+      const res = await second(b);
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toMatchObject({ error: 'case_on_other_ticket', ticketId: 't-v2' });
+      expect(res.json()).not.toHaveProperty('data');
+      expect(b.store.rows.find((r) => r.case_id === id)!.ticket).toBe('t-v2');
+    });
+
+    it('the same ticket again answers the case as before', async () => {
+      const b = build();
+      const c = await loggedOnFirst(b);
+      const again = await b.app.inject({
+        method: 'POST',
+        url: '/commerce/compensation-cases',
+        headers: auth('tok-approver'),
+        payload: { ticketId: 't-v2', idempotencyKey: key('again'), category: 'CUT' },
+      });
+      expect(again.statusCode).toBe(200);
+      expect(again.json().data).toMatchObject({ onThisTicket: true, case: { case_id: c.case_id } });
     });
   });
 

@@ -66,6 +66,27 @@ Each is one place in the code, so a change is small.
 | Agent portal    | `apps/agent-portal/src/features/tickets/V2CompensationPanel.tsx`                  | On a v2 ticket: status, rule/occurrence, action type, amount or percent, calculation, minutes late, escalation banner, verification, countdown, photos/items/text; actions with reasons; "Log V2 complaint".      |
 | Admin portal    | `apps/admin-portal/src/features/app-roles/CompensationEscalation.tsx`             | The escalation mapping (Administrator only).                                                                                                                                                                      |
 
+### Review follow-ups (18 Nov 2026)
+
+1. **Idempotency follows the request.** The portal's form makes one nonce when it opens; the key
+   it sends is `yiji2RequestKey(nonce, { caseId, action, body })`. The gateway sends V2
+   `yiji2RequestKey(<portal key>, { caseId, action, body: <what V2 receives>, reason })` (log:
+   `{ action: 'log', body }`). An identical retry reaches V2 with the same key; a changed amount,
+   reason, result or category is a new key, so V2 never answers it with the first request's stored
+   result. Same rule for approve, reject, evidence, verification and log complaint.
+2. **A case on another ticket.** When "Log V2 complaint" is answered with an existing case already
+   linked to a different CRM ticket, the gateway answers 409 `case_on_other_ticket` with no case
+   row; `ticketId` is included only when the caller may read that ticket. The panel says so in
+   English or Arabic (`v2Case.error.otherTicket`, `otherTicketHidden`).
+3. **The coupon code on the case.** A `coupon.granted` WITHOUT `pending_grant_id` now goes to the
+   compensation job (never to the pending-grants job, never to `coupon_approvals`). Its `code` and
+   `coupon_id` go on the case row with that `grant_id`. V2 sends the grant before
+   `compensation.decided`, so the grant is first held in the workers' Redis for 30 days
+   (`yiji2:compensation-grant:<vendor key>:<grant id>`); each side writes, then looks for the
+   other, so the code lands whichever arrives first. A grant that matches no case (a CRM coupon's
+   own grant) is only held until it lapses. A grant without `grant_id` or `code` is ignored, as
+   before.
+
 ### 409 reasons
 
 | `data.reason`     | What the agent reads                                                                            |

@@ -4,6 +4,7 @@ import {
   Yiji2CompensationEventJob,
   compensationEventFromYiji2,
   couponEventFromYiji2,
+  isYiji2CompensationGrant,
   parseYiji2EventsBody,
   yiji2EventsOf,
   type Yiji2EventEnvelope,
@@ -124,16 +125,30 @@ const USERS = [
   { id: 'u-agent', status: 'active', role: { name: 'WeCare Agent' } },
 ];
 
+/** The Redis stash, in memory (vendor key + grant id -> the grant). */
+function memoryStash() {
+  const m = new Map<string, { coupon_code: string; coupon_id?: string }>();
+  return {
+    m,
+    put: async (v: string, g: string, grant: { coupon_code: string; coupon_id?: string }) => {
+      m.set(`${v}:${g}`, grant);
+    },
+    get: async (v: string, g: string) => m.get(`${v}:${g}`) ?? null,
+  };
+}
+
 function setup(seed: Record<string, Rec[]> = {}) {
   const d = fakeDirectus({ directus_users: USERS, ...seed });
   const notifications = { add: vi.fn(async () => ({ id: 'n' })) };
+  const stash = memoryStash();
   const deps = {
     directus: d as never,
     logger,
     notificationsQueue: notifications,
     vendorOf: async (key: string) => (key === 'yiji2:2' ? { id: V2_VENDOR } : null),
+    grantStash: stash,
   };
-  return { d, notifications, deps };
+  return { d, notifications, deps, stash };
 }
 
 let seq = 0;
@@ -180,7 +195,7 @@ async function deliver(names: SampleName[], deps: Deps, opts: { reversed?: boole
     for (const e of received(body)) {
       const coupon = couponEventFromYiji2(e, 'yiji2:2');
       if (coupon) out.push(await processYiji2CouponEvent(coupon, deps as never));
-      if (e.type.startsWith('compensation.'))
+      if (e.type.startsWith('compensation.') || isYiji2CompensationGrant(e))
         out.push(await processYiji2CompensationEvent(jobOf(e), deps));
     }
   }
@@ -599,8 +614,9 @@ describe('ORDERING: coupon.granted and compensation.decided of a coupon case (2.
     yiji_coupon_user_id: null,
   };
 
-  async function run(first: 'granted' | 'decided') {
-    const { d, deps } = setup({ coupon_approvals: [crmCoupon] });
+  async function run(first: 'granted' | 'decided', opts: { noStash?: boolean } = {}) {
+    const { d, deps: all } = setup({ coupon_approvals: [crmCoupon] });
+    const deps = opts.noStash ? { ...all, grantStash: undefined } : all;
     const bodies: Rec[] =
       first === 'granted'
         ? [couponGranted(), envelope('decided_2_2_approved_coupon')]
@@ -610,22 +626,26 @@ describe('ORDERING: coupon.granted and compensation.decided of a coupon case (2.
       for (const e of received(body)) {
         const coupon = couponEventFromYiji2(e, 'yiji2:2');
         if (coupon) outcomes.push(await processYiji2CouponEvent(coupon, deps as never));
-        if (e.type.startsWith('compensation.'))
+        if (e.type.startsWith('compensation.') || isYiji2CompensationGrant(e))
           outcomes.push(await processYiji2CompensationEvent(jobOf(e), deps));
       }
     return { d, outcomes };
   }
 
   it.each(['granted', 'decided'] as const)(
-    '%s first: the case ends approved with grant 1 / coupon 1, and no CRM coupon is touched',
+    '%s first: the case ends approved with grant 1 / coupon 1 AND its code, and no CRM coupon is touched',
     async (first) => {
       const { d, outcomes } = await run(first);
-      /* Only the compensation job ran: coupon.granted without pending_grant_id is not the pending-grants handler's. */
-      expect(outcomes).toEqual(['case-created']);
+      /* Only the compensation job ran: coupon.granted without pending_grant_id
+         is never the pending-grants handler's. */
+      expect(outcomes).toEqual(
+        first === 'granted' ? ['coupon-held', 'case-created'] : ['case-created', 'coupon-recorded'],
+      );
       expect(caseRow(d, '6')).toMatchObject({
         status: 'approved',
         grant_id: '1',
         coupon_id: '1',
+        coupon_code: 'COMP-6',
         issued_minor: 500,
       });
       expect(ticketOf(d, '6').compensation).toBe('Compensated');
@@ -637,5 +657,49 @@ describe('ORDERING: coupon.granted and compensation.decided of a coupon case (2.
     const a = await run('granted');
     const b = await run('decided');
     expect(snapshot(b.d)).toEqual(snapshot(a.d));
+  });
+
+  it('a redelivered grant changes nothing more; a second decision keeps the code', async () => {
+    const { d, deps } = setup({ coupon_approvals: [crmCoupon] });
+    const job = (b: Rec) => jobOf(received(b)[0]!);
+    const g = couponGranted();
+    await processYiji2CompensationEvent(job(g), deps);
+    await processYiji2CompensationEvent(job(envelope('decided_2_2_approved_coupon')), deps);
+    const before = structuredClone(d.table('compensation_cases'));
+    expect(await processYiji2CompensationEvent(job({ ...g, id: 'again' }), deps)).toBe(
+      'coupon-recorded',
+    );
+    await processYiji2CompensationEvent(job(envelope('decided_2_2_approved_coupon')), deps);
+    expect(d.table('compensation_cases')).toEqual(before);
+    expect(d.table('coupon_approvals')).toEqual([crmCoupon]);
+  });
+
+  it('a grant that matches no case (a CRM coupon’s own grant) is only held: no row, no ticket, no coupon change', async () => {
+    const { d, deps, stash } = setup({ coupon_approvals: [crmCoupon] });
+    const g = couponGranted();
+    (g.data as Rec).grant_id = 4242;
+    expect(await processYiji2CompensationEvent(jobOf(received(g)[0]!), deps)).toBe('coupon-held');
+    expect(d.table('compensation_cases')).toEqual([]);
+    expect(d.table('tickets')).toEqual([]);
+    expect(d.table('coupon_approvals')).toEqual([crmCoupon]);
+    expect(stash.m.get('yiji2:2:4242')).toEqual({ coupon_code: 'COMP-6', coupon_id: '1' });
+  });
+
+  it('without the stash (no Redis), the grant after its decision still lands; before it, it is logged and left', async () => {
+    const after = await run('decided', { noStash: true });
+    expect(caseRow(after.d, '6').coupon_code).toBe('COMP-6');
+    const before = await run('granted', { noStash: true });
+    expect(caseRow(before.d, '6').coupon_code ?? null).toBeNull();
+    expect(before.d.table('coupon_approvals')).toEqual([crmCoupon]);
+  });
+
+  it('a grant of another vendor’s case is never applied (the case is matched under the v2 vendor)', async () => {
+    const { d, deps } = setup({
+      compensation_cases: [{ id: 'cc-x', case_id: '6', vendor: 'other', grant_id: '1' }],
+    });
+    expect(await processYiji2CompensationEvent(jobOf(received(couponGranted())[0]!), deps)).toBe(
+      'coupon-held',
+    );
+    expect(caseRow(d, '6').coupon_code).toBeUndefined();
   });
 });

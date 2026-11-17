@@ -36,6 +36,7 @@ import {
   type Yiji2CouponEventJob,
   compensationEventFromYiji2,
   isYiji2CompensationEvent,
+  isYiji2CompensationGrant,
   type Yiji2CompensationEventJob,
   yiji2EventsOf,
   type OrderEvent,
@@ -1702,7 +1703,9 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
           }
           if (events.enqueueCompensationEvent) {
             for (const e of all) {
-              if (!isYiji2CompensationEvent(e.type)) continue;
+              /* Also a coupon.granted with no pending grant id: a compensation
+                 coupon's code goes on its case row (review follow-up, 18 Nov). */
+              if (!isYiji2CompensationEvent(e.type) && !isYiji2CompensationGrant(e)) continue;
               const job = compensationEventFromYiji2(e, events.vendorKey, {
                 malformed: malformed(e.type),
               });
