@@ -419,7 +419,7 @@ async function applyUserFields(client: AnyClient): Promise<void> {
   );
 }
 
-async function applyRoles(client: AnyClient): Promise<void> {
+async function applyRoles(client: AnyClient, onlyRoles?: Set<string>): Promise<void> {
   // Directus 11 access model: Role groups users; a Policy carries access flags
   // (admin_access / app_access) and Permissions; directus_access links them.
   // Truly idempotent: Directus permits duplicate role/policy NAMES, so we must
@@ -436,6 +436,9 @@ async function applyRoles(client: AnyClient): Promise<void> {
   );
 
   for (const role of roles) {
+    /* --roles-only: the named roles and nothing else (their revoke pass
+       still only touches collections this file governs). */
+    if (onlyRoles && !onlyRoles.has(role.name)) continue;
     if (role.name === 'Administrator') {
       console.log('  = Administrator (built-in)');
       continue;
@@ -580,7 +583,11 @@ async function applyRoles(client: AnyClient): Promise<void> {
           JSON.stringify([...(current.fields ?? [])].sort()) ===
           JSON.stringify([...wantFields].sort());
         const sameFilter = JSON.stringify(current.permissions ?? {}) === JSON.stringify(wantFilter);
-        if (sameFields && sameFilter) {
+        const wantValidation = p.validation ?? {};
+        const sameValidation =
+          JSON.stringify((current as { validation?: unknown }).validation ?? {}) ===
+          JSON.stringify(wantValidation);
+        if (sameFields && sameFilter && sameValidation) {
           console.log(`  = perm ${role.name} ${p.action} ${p.collection} (exists)`);
           continue;
         }
@@ -589,6 +596,7 @@ async function applyRoles(client: AnyClient): Promise<void> {
             updatePermission(current.id, {
               fields: wantFields,
               permissions: wantFilter,
+              validation: wantValidation,
             } as never),
           ),
         );
@@ -602,7 +610,7 @@ async function applyRoles(client: AnyClient): Promise<void> {
             action: p.action,
             fields: p.fields ?? ['*'],
             permissions: p.permissions ?? {},
-            validation: {},
+            validation: p.validation ?? {},
           } as never),
         ),
       );
@@ -939,6 +947,36 @@ async function main(): Promise<void> {
       )
     : undefined;
   if (only && !fieldsOnly) throw new Error('--only requires --fields-only');
+  /*
+   * `--roles-only=svc-ai-gateway,...`: reconcile just those roles' policies
+   * and permissions - no schema, no users, no constraints, no other role.
+   * The way to ship a service account's new grants to staging/prod without
+   * the full bootstrap rewriting every role (marketing engine, 2026-11-17).
+   */
+  const rolesOnlyArg = process.argv.find((a) => a.startsWith('--roles-only='));
+  const rolesOnly = rolesOnlyArg
+    ? new Set(
+        rolesOnlyArg
+          .slice('--roles-only='.length)
+          .split(',')
+          .map((r) => r.trim())
+          .filter(Boolean),
+      )
+    : undefined;
+  if (rolesOnly && fieldsOnly)
+    throw new Error('--roles-only cannot be combined with --fields-only');
+  if (rolesOnly) {
+    const known = new Set(roles.map((r) => r.name));
+    const unknown = [...rolesOnly].filter((r) => !known.has(r));
+    if (unknown.length) throw new Error(`Unknown role(s): ${unknown.join(', ')}`);
+    if (rolesOnly.has('Administrator')) throw new Error('--roles-only never touches Administrator');
+    console.log(`Applying ROLES ONLY (${[...rolesOnly].join(', ')}) at ${env.directusUrl} ...`);
+    const client = makeClient(env.directusUrl);
+    await client.login(env.adminEmail, env.adminPassword);
+    await applyRoles(client, rolesOnly);
+    console.log('Done. Only the named roles were touched.');
+    return;
+  }
   console.log(
     fieldsOnly
       ? `Applying SCHEMA ONLY (no roles, no users, no constraints) at ${env.directusUrl} ...`

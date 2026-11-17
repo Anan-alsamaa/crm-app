@@ -385,7 +385,7 @@ export function CampaignDetailPage() {
                   ],
                   [
                     t('promo.wizard.validity', { defaultValue: 'Valid' }),
-                    `${c.validity.startDate} → ${c.validity.endDate}${c.validity.startTime ? ` · ${c.validity.startTime}–${c.validity.endTime}` : ''}`,
+                    `${c.schedule.startDate} → ${c.schedule.endDate}${c.schedule.timeWindow?.from ? ` · ${c.schedule.timeWindow.from}–${c.schedule.timeWindow.to ?? ''}` : ''}`,
                   ],
                   [
                     t('promo.wizard.limits', { defaultValue: 'Limits' }),

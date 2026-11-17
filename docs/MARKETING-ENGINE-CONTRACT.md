@@ -1,9 +1,93 @@
-# The promotion engine contract: what Yiji v2 provides to the CRM's marketing portal
+# The marketing engine contract: what the CRM's marketing portal is served
 
-For the Yiji v2 team. Written 2026-11-15 from the CRM's marketing portal, which is built and
-running on sample data to this exact interface; going live is a configuration change once v2
-answers these calls. The source of truth is `packages/shared-types/src/marketing-engine.ts`
-(TypeScript types and zod schemas) - this page is the readable version.
+**2026-11-16 (owner): the CRM owns its marketing backend.** Yiji v2 implements nothing for the
+marketing portal; Yiji (v1 today, v2 later) is only the commerce platform - customers, orders,
+coupons, grants, push - reached through the vendor connectors and the workers. The engine below
+is answered by the CRM's own AI gateway (`services/ai-gateway/src/marketing/crm-engine.ts`,
+routes in `engine-routes.ts`), stored in Directus. The source of truth for the shapes is still
+`packages/shared-types/src/marketing-engine.ts`; this page is the readable version. The text
+further down, written 2026-11-15 when v2 was expected to implement it, is kept for the paths
+and shapes, which did not change.
+
+## How it is served (2026-11-16)
+
+- `/commerce/marketing/engine/<path>` on the AI gateway, the same paths `live.ts` calls. No
+  `/v1` hop, no external host. `MARKETING_ENGINE_URL` + `MARKETING_ENGINE_KEY`, if both are
+  ever set, put the old proxy (`engine.ts`) back instead - an override, off by default.
+- **Who:** the caller's own Directus session (`/users/me`) and their `app_roles` row
+  (`effectivePrivileges`). `use_marketing_portal` opens the door; `manage_marketing` prepares
+  (campaigns, submission, status, issuance, studies, gift card products, earning rules);
+  `approve_marketing` decides; the `Administrator` role holds all three.
+- **Storage:** written only by `svc-ai-gateway` after the rules: `marketing_campaigns` (typed
+  columns + the whole validated draft in `draft`), `marketing_studies`,
+  `marketing_gift_card_products`, `marketing_earning_rules`, `marketing_activity`. People read
+  them; nobody writes them directly.
+- **Rules enforced on the server:** four eyes (the creator never decides their own campaign or
+  study, the Administrator included); the approval reasons (`cost_above_threshold`,
+  `deep_discount`, `forecast_loss`) recomputed from the draft and the money model
+  (`app_settings.marketing_money_model` over `DEFAULT_MONEY_MODEL`) at submission and at the
+  decision; `LOCKED_WHEN_LIVE` for live, paused and ended campaigns; no edits while waiting for
+  approval; editing an approved campaign withdraws the approval; status moves only
+  `approved -> live <-> paused -> ended`.
+- **Issuance** (`POST /issuance`) goes through the EXISTING coupon pipeline: one
+  `marketing_coupons` list coupon per batch, its customers as `marketing_coupon_recipients`,
+  marked approved (by the campaign's approver) after the list is written; the workers'
+  marketing sender (`MARKETING_COUPON_SEND=on`) creates it on Yiji and hands it out. Customer
+  ids are Saudi mobiles, or Yiji customer ids the CRM knows from `contacts`. The control group
+  is held back; customers who already hold it, or past the total-redemptions / budget ceiling,
+  are skipped with the reason. **A campaign whose rules a v1 coupon cannot carry is refused
+  with the fields named** (`422 not_issuable`), never issued wider than approved: offer types
+  other than FIXED / capped PERCENT, partial redemption, A/B experiment, stamp cards, a maximum
+  order, previous-orders / first-order rules, a subset of payment methods, more than one brand,
+  branches / categories / products, daily limits, times of day, days of the week, an
+  unlimited-per-customer mode without a number, an expired end date, a SHARED code not in the
+  `MKT-` form.
+- **No data source yet, answered empty or zero in the sample's shapes:** redemptions,
+  performance revenue / discount / ROI / control-group lift, gift card sales, stats and
+  activity, points (rewards campaigns, items, stats, members), the orders export, opportunities
+  and customer groups, the catalogue's categories and products (brands are the coupon brands,
+  branches the CRM stores). Performance's `issued` and `perDay` are real: what the sender gave.
+
+## Going live (2026-11-16)
+
+1. Schema: `pnpm --filter @yiji/directus-bootstrap run apply:fields -- --only=marketing_campaigns,marketing_studies,marketing_gift_card_products,marketing_earning_rules`
+   (plus the four marketing collections where they are still missing).
+2. Grants: the `svc-ai-gateway` rows from `roles.ts`; the portal roles' rows come from the
+   `app-roles-sync` extension when Directus restarts with it.
+3. Deploy the services (gateway) and the Directus extension.
+4. The Administrator sets `marketing_engine` = `live`. The sample engine stays for local
+   development and tests.
+
+### Review fixes (2026-11-16, independent cloud review of PR #38)
+
+- **The live lock covers every money field.** `LOCKED_WHEN_LIVE` now holds objective, tenant,
+  offer, experiment, trigger, loyalty, audience, rules, scope, limits, distribution, stacking,
+  validity and study (2026-11-17: `validity` is now `schedule`, and `fraud`, `communication`
+  and `forecast` are locked too). A live, paused or ended campaign keeps its approval, so only its name,
+  notes, reason code and funding can change. A bigger budget means ending it and approving a
+  new campaign (re-approval of a live campaign is not built).
+- **Four eyes covers editors.** Whoever created, edited or submitted a campaign cannot decide
+  it. For a study, its creator and submitter can neither do the finance review nor decide, and
+  its name, objective, period, data and scenarios freeze once it is submitted.
+- **One issuance per campaign at a time**, through a Redis lock across gateway tasks
+  (`marketing:lock:issue:<id>`; a call waits up to 15 s, then 409 `issuance_in_progress`).
+- **A PHONES campaign reaches only its approved numbers.** LIST and SEGMENT have no list or
+  segment store yet: the person issuing chooses, bounded by the approved ceilings.
+- **A batch that broke halfway is cancelled**, never left pending in the coupon queue, and its
+  customers count as holding nothing, so a retry reaches them.
+- **The engine writes as `svc-ai-gateway` only** (`SVC_AI_TOKEN`, never `DIRECTUS_AI_TOKEN`).
+  Its `marketing_coupons` grant creates only pending, campaign-linked batches and releases or
+  cancels only pending engine batches (row filter + validation), so a coupon a person wrote is
+  never approved by the gateway.
+- **`app-roles-sync` skips grants on collections an environment does not have yet**, so a
+  Directus restart before the schema step does not break role saves.
+- **Still open:** the `svc-ai-gateway` grants have no fields-only command (they are part of the
+  full bootstrap `apply`), and `check-permission-drift.mjs` gets the gateway's marketing entries
+  once they are applied; customer ids are not yet matched per vendor; a SHARED code covers the
+  first batch only; an `admin_access` user on a role other than Administrator is refused by the
+  gateway (the safe side).
+
+---
 
 ## How the CRM calls you
 
@@ -27,25 +111,33 @@ answers these calls. The source of truth is `packages/shared-types/src/marketing
 ## 2. Campaigns (the seven-step form)
 
 A campaign is `CampaignDraft` + status + audit. The field set is the portal's "Field
-specification" page (`CAMPAIGN_FIELD_SPEC`, 84 fields in 7 steps):
+specification" page (`CAMPAIGN_FIELD_SPEC`): exactly the owner-approved design's 107 fields
+in 7 steps (`docs/marketing/ayman-draft-fields.csv`; mapping and old-path handling in
+`docs/marketing/field-parity.md`, 2026-11-17):
 
 - `objective` (16 goals), `name {en, ar}`, `reasonCode`, `funding {source, partnerSharePct}`, `tenantId`, `notes`
-- `offer`: `type` PERCENT | FIXED | BXGY | FREE_ITEM | BUNDLE | FREE_DELIVERY | CASHBACK, with `percent`, `amountSar`, `maxDiscountSar`, `bxgy {buyQty, getQty, productIds}`, `freeItem {productId, quantity}`, `bundle {productIds, priceSar}`, `deliveryFeeCovered` (FULL | SAR), `cashback {creditValidityDays}`, `posDiscountCode`, `onRefund`, `onCancelBeforeCompletion`, `partialRedemption {enabled, maxPerOrderSar, balanceExpiry, onOrderCancel}`
+- `offer`: `type` PERCENT | FIXED | BXGY | FREE_ITEM | BUNDLE | FREE_DELIVERY | CASHBACK, with `percent`, `amountSar`, `maxDiscountSar`, `bxgy {buyQty, getQty, productId}`, `freeItem {productId, quantity}`, `bundle {productIds[], priceSar}`, `deliveryFeeCoveredSar` (FULL | SAR), `cashback {creditValidityDays}`, `posDiscountCode`, `onRefund`, `onCancelBeforeCompletion`, `partialRedemption {enabled, maxPerOrderSar, balanceExpiry, onOrderCancel}`
 - `experiment {enabled, variantB.value, splitPctA, winnerMetric, autoWinnerAfterDays}`
 - `trigger.birthday {occasion, issueDaysBefore, missingDateOfBirth, tierBoost}`
-- `loyalty {stampsRequired, reward, stampExpiryDays, milestones, minOrderToCountSar, countOrdersFrom, repeat, progressMessages}`
+- `loyalty {type STAMP|CHALLENGE|MILESTONE, ordersRequired, windowDays, stampExpiryDays, milestones[], minOrderToCountSar, countOrdersFrom, repeat, progressMessages}`
 - `audience {mode SEGMENT|LIST|PHONES|ALL, conditions[{c,p}], match, phoneNumbers[], listId, visibility, controlGroupPct, excludeDiscountSensitive}`
-- `rules {minOrderSar, maxOrderSar, previousOrders, firstOrderOnly, paymentMethods[]}`
-- `scope {brandIds[], branchIds[], categoryIds[], productIds[], excludedProductIds[], orderTypes[]}`
+- `rules {minOrderSar, maxOrderSar, previousOrders, firstOrderOnly, paymentMethods[], binRanges[]}`
+- `scope {allBrands, brandIds[], branchIds[], categoryIds[], productIds[], excludedProductIds[], orderTypes[]}`
 - `limits {perCustomerMode, perCustomerMax, totalRedemptions, dailyRedemptions, budgetSar}`
-- `distribution {codeType NONE|SHARED|UNIQUE, code, uniqueCodeCount, channels[]}`
+- `distribution {codeType NONE|SHARED|UNIQUE, code, uniqueCodeCount, channels[], addMode AUTO_WALLET|CUSTOMER_CLAIMS, issueMode ALL_AT_ONCE|WHEN_ELIGIBLE}`
 - `stacking {combineWithOtherOffers, combineWithLoyalty, combineWithOtherCoupons}`
-- `validity {startDate, endDate, startTime, endTime, daysOfWeek[]}`
+- `fraud {onePerPhoneAndDevice, excludeStaffAndTestAccounts, blockFlaggedCustomers}`
+- `schedule {startDate, endDate, allDay, timeWindow {from, to}, onlyDuringBranchHours, daysOfWeek[], expiresAfterIssueDays, limitedTime {enabled, hours}}` (was `validity`; an old row is read in this shape)
+- `communication {push {title, body}, banner {text}, sms {text}` (each `{en, ar}`)`, sendTime, frequencyCap, quietHours, respectConsent}`
+- `forecast {baselineOrderRatePct, expectedUpliftPts}` (planning inputs)
+
+The English name is unique among campaigns not ended or rejected, and a shared code among
+those that hold or will hold it (409 `not_unique`).
 
 Status: `draft → finance_review → waiting_approval → approved → live → paused → ended`, or
 `rejected`. **Rules the engine enforces:** the creator never approves (`createdBy !==
 decidedBy`); once `live`, `offer`, `audience`, `distribution.code`, `rules` and
-`validity.startDate` cannot change (`LOCKED_WHEN_LIVE`); the campaign pauses itself at
+`schedule.startDate` cannot change (`LOCKED_WHEN_LIVE`); the campaign pauses itself at
 `limits.budgetSar` or `limits.totalRedemptions`.
 
 | Call                                            | Body / returns                                                                                                                                                                                     |

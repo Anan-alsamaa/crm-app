@@ -19,6 +19,9 @@ import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
 import { registerMarketingPointsRoutes } from './marketing/points.js';
 import { registerMarketingEngineProxy } from './marketing/engine.js';
+import { registerMarketingEngineRoutes } from './marketing/engine-routes.js';
+import { DirectusEngineStore } from './marketing/engine-store.js';
+import { redisLock, type LockRedis } from './marketing/crm-engine.js';
 import { CommerceCache } from './commerce/cache.js';
 import { RedisLateOrdersLiveStore } from './commerce/late-orders-live.js';
 import { Registry } from './metrics.js';
@@ -264,13 +267,28 @@ async function main(): Promise<void> {
       tenantId: process.env.YIJI_TENANT_ID,
     },
   });
-  /* The Marketing portal's live engine = Yiji v2, through this proxy only
-     (owner, 2026-11-15). 503 until MARKETING_ENGINE_URL/KEY are set. */
-  await registerMarketingEngineProxy(app, {
-    directusUrl: config.DIRECTUS_INTERNAL_URL,
-    engineUrl: config.MARKETING_ENGINE_URL,
-    engineKey: config.MARKETING_ENGINE_KEY,
-  });
+  /* The Marketing portal's live engine is the CRM's own (owner, 2026-11-16:
+     Yiji v2 implements nothing for marketing), served here and stored in
+     Directus through the gateway's service account. MARKETING_ENGINE_URL +
+     _KEY, if both are ever set, put the old proxy to an external engine back
+     in its place - an override, off by default. */
+  if (config.MARKETING_ENGINE_URL && config.MARKETING_ENGINE_KEY) {
+    await registerMarketingEngineProxy(app, {
+      directusUrl: config.DIRECTUS_INTERNAL_URL,
+      engineUrl: config.MARKETING_ENGINE_URL,
+      engineKey: config.MARKETING_ENGINE_KEY,
+    });
+  } else {
+    await registerMarketingEngineRoutes(app, {
+      directusUrl: config.DIRECTUS_INTERNAL_URL,
+      /* The engine writes as svc-ai-gateway ONLY - the account its grants
+         are written for (review 2026-11-16), never DIRECTUS_AI_TOKEN. */
+      store: new DirectusEngineStore(config.DIRECTUS_INTERNAL_URL, config.SVC_AI_TOKEN),
+      engineOptions: {
+        withLock: redisLock(redis as unknown as LockRedis, { prefix: envKey('marketing:lock:') }),
+      },
+    });
+  }
 
   await registerCommerceRoutes(app, {
     directus,

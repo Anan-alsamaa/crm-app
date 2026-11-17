@@ -29,12 +29,12 @@ import type {
 import { auth } from '../lib/directus.js';
 
 /**
- * THE LIVE ENGINE: Yiji v2's promotion engine, reached through the CRM's
- * gateway (`/commerce/marketing/engine/*`). The browser holds no v2
- * credential - the gateway checks this person may use the Marketing portal,
- * adds the engine key and forwards. Every path here is one line of the
- * contract in docs/MARKETING-ENGINE-CONTRACT.md; v2 implements them under
- * its `/v1/...` and the gateway maps 1:1.
+ * THE LIVE ENGINE: the CRM's own marketing engine, served by the CRM's
+ * gateway (`/commerce/marketing/engine/*`, owner 2026-11-16 - Yiji v2 builds
+ * nothing for marketing). The gateway checks who this person is and what
+ * their role may do, enforces the rules (four eyes, the live-campaign locks,
+ * the approval threshold) and stores everything in Directus. Every path here
+ * is one line of docs/MARKETING-ENGINE-CONTRACT.md.
  */
 const GATEWAY_URL = resolveUrl(
   'AI_GATEWAY_URL',
