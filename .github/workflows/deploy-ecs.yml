@@ -98,6 +98,42 @@ jobs:
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "::notice::Deploying $ENVIRONMENT at tag $TAG (build=$BUILD)"
 
+      # ── PRODUCTION GUARD: Yiji v2 (owner, 17 Nov 2026) ──────────────────────
+      # Yiji v2 (platform 'yiji2') is approved for STAGING ONLY and "must NOT
+      # reach production in any way". This runs in `plan`, which every other
+      # job needs, so a production release that carries the v2 tenant fails
+      # HERE — before any image is promoted, any portal uploaded or any task
+      # definition registered. It reads the TAGGED tree (or the dispatched ref
+      # for a manual prod deploy): the v2 connector file, or any file under
+      # services/ or packages/ that mentions `yiji2` (git grep -il), fails it
+      # and every offending file is listed.
+      #
+      # Staging is untouched: the step only runs when the plan says prod.
+      # Override: the repository variable ALLOW_YIJI2_ON_PROD == 'true' (NOT
+      # set today; setting it is the owner's call). See docs/YIJI-V2-TENANT.md.
+      #
+      # A PROMOTION ships main's code, not the tag's: with build=false the
+      # deploy job re-tags the `:main` image. So when the plan does not build,
+      # main's tree is checked as well — otherwise a tag on a branch without
+      # v2 would pass while promoting an image that contains it.
+      - name: Checkout (production guard)
+        if: steps.p.outputs.environment == 'prod'
+        uses: actions/checkout@v5
+      - name: 'Guard: Yiji v2 must not reach production (owner, 17 Nov)'
+        if: steps.p.outputs.environment == 'prod'
+        env:
+          ALLOW_YIJI2_ON_PROD: ${{ vars.ALLOW_YIJI2_ON_PROD }}
+          BUILD: ${{ steps.p.outputs.build }}
+        run: |
+          fail=0
+          node scripts/release-check/yiji2-prod-guard.mjs tree || fail=1
+          if [ "$BUILD" != true ]; then
+            echo "This release promotes the :main image — checking main's tree too."
+            git fetch --no-tags --depth=1 origin +refs/heads/main:refs/remotes/origin/main
+            node scripts/release-check/yiji2-prod-guard.mjs tree origin/main || fail=1
+          fi
+          exit $fail
+
   # ── 3. Build and push the service images ──────────────────────────────────
   build:
     name: Build ${{ matrix.name }}
@@ -701,6 +737,17 @@ jobs:
           fi
           echo "no placeholders"
 
+      # The same owner rule (17 Nov) on the task definition about to be
+      # registered: production must not carry a VENDOR_YIJI2_* / YIJI2_*
+      # variable or secret, even one added to the live revision by hand.
+      # Names only are printed, never values. Same override as the plan guard.
+      - name: 'Guard: Yiji v2 must not reach production (owner, 17 Nov) — task definition'
+        if: needs.plan.outputs.environment == 'prod'
+        env:
+          ALLOW_YIJI2_ON_PROD: ${{ vars.ALLOW_YIJI2_ON_PROD }}
+          SERVICE: ${{ matrix.service }}
+        run: node scripts/release-check/yiji2-prod-guard.mjs taskdef /tmp/taskdef.json
+
       - name: Guard — staging may deliver ONLY to a redirect handset
         # Real money, real customers, and delivery works from a BACKLOG: the
         # first sweep after it goes live sends every approved-undelivered coupon
@@ -1013,7 +1060,18 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Run the release checks
+        env:
+          ALLOW_YIJI2_ON_PROD: ${{ vars.ALLOW_YIJI2_ON_PROD }}
         run: |
+          # Yiji v2 must not reach production (owner, 17 Nov): no production
+          # task definition may carry a VENDOR_YIJI2_* / YIJI2_* variable.
+          # Read-only (aws ecs describe-*), needs no login, so it runs even
+          # when the release-check credentials below are missing.
+          guard=0
+          if [ "$ENVIRONMENT" = prod ]; then
+            CLUSTER=crm-prod node scripts/release-check/yiji2-prod-guard.mjs ecs || guard=1
+          fi
+
           if [ "$ENVIRONMENT" = prod ]; then
             API=https://crm-api.anan.sa; ORIGIN=https://crm.anan.sa
             EMAIL="$CHECK_EMAIL_PROD"; PASSWORD="$CHECK_PASSWORD_PROD"
@@ -1023,7 +1081,7 @@ jobs:
           fi
           if [ -z "$EMAIL" ] || [ -z "$PASSWORD" ]; then
             echo "::warning::RELEASE CHECKS NOT RUN on $ENVIRONMENT — add the RELEASE_CHECK_${ENVIRONMENT^^}_EMAIL / _PASSWORD secrets (EMA-51)."
-            exit 0
+            exit $guard
           fi
 
           # The Yiji login the workers use, from their RUNNING task definition.
@@ -1035,7 +1093,7 @@ jobs:
           echo "::add-mask::$YIJI_ADMIN_PASSWORD"
           rm -f /tmp/wenv.json
 
-          fail=0
+          fail=$guard
           API="$API" ENV="$ENVIRONMENT" ADMIN_EMAIL="$EMAIL" ADMIN_PASSWORD="$PASSWORD" \
             node scripts/release-check/regressions.mjs || fail=1
 

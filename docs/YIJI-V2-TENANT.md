@@ -63,10 +63,35 @@ Nothing of v1's is reused: a v2 vendor without its own variable has no credentia
    a signed `POST /webhooks/yiji2/events` with an `order.late` puts the order on the late-orders
    board under the v2 tenant; a v2 ticket through `POST /webhooks/yiji2/tickets` lands under the
    v2 vendor; a coupon approved for it is delivered as a v2 coupon + grant.
-3. **Production**, on the owner's word only: same row, same variables, activate.
+3. **Production**, on the owner's word only: same row, same variables, activate. Today the
+   owner's word is **no** (17 Nov 2026: staging only, "must NOT reach production in any way"),
+   and the production guard below enforces it.
 
 While the row is inactive: the registry answers `unknown_vendor` (404) for it, the inbound API
 answers 503, the poller ignores it, the tenant selector stays hidden, and no coupon is sent.
+
+## 4a. Production guard (owner, 17 Nov 2026: staging only)
+
+Yiji v2 must not reach production in any way. Three checks stop it; all three are **production
+only**, so staging (main) deploys with the v2 code present exactly as before:
+
+| Where                                                                                  | When                                                 | Fails if                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `deploy-ecs.yml` → `plan` → **Guard: Yiji v2 must not reach production**               | every prod run (a `v*` tag, or a manual prod deploy) | the tagged tree has `packages/shared-types/src/yiji2-connector.ts` or any file under `services/` or `packages/` mentioning `yiji2` (`git grep -il`; every file is listed). When the release promotes the `:main` image (`build=false`), main's tree too. |
+| `deploy-ecs.yml` → `deploy` → the same guard on the task definition                    | before each prod task definition is registered       | it carries a `VENDOR_YIJI2_*` or `YIJI2_*` variable or secret (names printed, never values)                                                                                                                                                              |
+| `deploy-ecs.yml` → `release-checks` → `scripts/release-check/yiji2-prod-guard.mjs ecs` | after every prod release                             | any running task definition on cluster `crm-prod` carries such a variable                                                                                                                                                                                |
+
+`plan` is the job every other job needs, so the first check fails the release **before any image
+is built or promoted, any portal uploaded, or any task definition registered**. Once this branch is
+on `main`, a production release that promotes `:main` is therefore blocked until v2 is approved
+for production — releases cut as `release/svc-*` / `release/portals-*` branches without v2 are not.
+
+**Override (the owner's decision only):** the repository variable `ALLOW_YIJI2_ON_PROD` set to
+exactly `true` (Settings → Secrets and variables → Actions → Variables). It is **not set today**.
+With it, each check reports a warning listing what would ship instead of failing. Decisions:
+`scripts/release-check/lib/prod-tenant-guard.mjs`, tested in
+`packages/shared-types/tests/prod-tenant-guard.test.ts` (that test never spells the token, so it
+cannot trip the tree check itself). Locally: `node scripts/release-check/yiji2-prod-guard.mjs tree`.
 
 ## 5. Open items (not in this change)
 
@@ -197,4 +222,5 @@ into the mock; an inactive vendor gets nothing), `services/socket-gateway/tests/
 (signature with v2's secret, de-dup, batch, v1/v2 isolation, chat token),
 `services/ai-gateway/tests/commerce-yiji2.test.ts` (connector, cache keys, per-platform threshold,
 inactive = 404), `apps/admin-portal/tests/vendors-page-yiji2.test.tsx`,
-`apps/agent-portal/tests/contacts-vendor-filter.test.tsx`.
+`apps/agent-portal/tests/contacts-vendor-filter.test.tsx`, and the production guard in
+`packages/shared-types/tests/prod-tenant-guard.test.ts`.
