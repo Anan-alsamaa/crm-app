@@ -81,6 +81,15 @@ export async function runMarketingCouponSend(deps: {
   logger: Logger;
   fetchImpl?: Fetch;
   pauseMs?: number;
+  /**
+   * EVERY GENERAL COUPON ALERTS (owner, 17 Nov 2026): told for a coupon Yiji
+   * will hold as General (audience not `list`) when it is picked up approved
+   * and when Yiji created it. Alert only - never awaited into a decision.
+   */
+  alertGeneral?: (
+    stage: 'approved' | 'created',
+    row: { id: string; code: string },
+  ) => Promise<void>;
 }): Promise<{ created: number; failed: number; waiting: number; given: number }> {
   const { directus, config, logger } = deps;
   const f = deps.fetchImpl ?? fetch;
@@ -127,6 +136,15 @@ export async function runMarketingCouponSend(deps: {
   const wait = () => (pause > 0 ? new Promise((r) => setTimeout(r, pause)) : Promise.resolve());
   const mark = (id: string, patch: Record<string, unknown>) =>
     directus.request(updateItem('marketing_coupons' as never, id, patch as never));
+  /* General on Yiji = not a list coupon (marketingCouponPayload type 0). */
+  const tellGeneral = async (stage: 'approved' | 'created', row: Row) => {
+    if (!deps.alertGeneral || row.audience === 'list') return;
+    await deps
+      .alertGeneral(stage, row)
+      .catch((err: unknown) =>
+        logger.warn({ id: row.id, stage, err: describeError(err) }, 'general coupon alert failed'),
+      );
+  };
 
   /**
    * The list as the manager approved it: rows added AFTER the decision are
@@ -155,6 +173,7 @@ export async function runMarketingCouponSend(deps: {
   for (const row of rows.filter((r) => r.status === 'approved')) {
     if (!first) await wait();
     first = false;
+    await tellGeneral('approved', row);
     const problems = marketingCouponProblems(row);
     const listSize = row.audience === 'list' ? await countList(row) : 0;
     if (row.audience === 'list' && listSize === 0) problems.push('The list is empty.');
@@ -199,6 +218,7 @@ export async function runMarketingCouponSend(deps: {
       });
       out.created += 1;
       logger.info({ id: row.id, code: row.code, couponId }, 'marketing coupon created on Yiji');
+      await tellGeneral('created', row);
     } else {
       await mark(row.id, {
         status: 'failed',

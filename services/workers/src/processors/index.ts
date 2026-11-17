@@ -81,6 +81,7 @@ import {
   alertGeneralCoupon,
   GENERAL_COUPON_REQUEST_ALERT_JOB,
   loadCompensationFacts,
+  loadMarketingFacts,
   runGeneralCouponRequestAlert,
   type GeneralAlertRedis,
   type GeneralCouponAlertDeps,
@@ -527,6 +528,15 @@ export const processors: Record<QueueName, Processor> = {
         directus: deps.directus,
         config: marketingYijiConfigFromEnv(),
         logger: deps.logger,
+        /* A code coupon is General on Yiji: told when approved and created
+           (owner, 17 Nov 2026). */
+        alertGeneral: async (stage, row) => {
+          await alertGeneralCoupon(
+            generalAlertDeps(deps),
+            { source: 'marketing', id: row.id, stage },
+            loadMarketingFacts(deps.directus, row.id),
+          );
+        },
       });
       return;
     }
