@@ -1082,9 +1082,13 @@ export type PushOutcome =
   | 'awaiting-replacement'
   /**
    * The customer has no Yiji account YET (owner, 2026-10-07, EMA-49). The
-   * coupon is held in the CRM — `awaiting_signup_at` — and the delivery sweep
-   * looks the number up again on a tapering schedule (`signupCheck`), delivering
-   * the moment it resolves. Nothing is created on Yiji until then.
+   * coupon is watched in the CRM — `awaiting_signup_at` — and the delivery
+   * sweep looks the number up again on a tapering schedule (`signupCheck`),
+   * assigning it the moment it resolves.
+   *
+   * Since 17 Nov 2026 (owner) the coupon is also CREATED on Yiji right away,
+   * Private and assigned to nobody (`yiji_coupon_id`); the signup only ASSIGNS
+   * that existing coupon. See `createForSignup`.
    */
   | 'awaiting-signup'
   | 'disabled'
@@ -1235,7 +1239,14 @@ export async function runCouponDeliverySweep(deps: {
             yiji_coupon_user_id: { _null: true },
             yiji_push_error: { _null: true },
           },
-          fields: ['id', 'coupon_code', 'awaiting_signup_at', 'signup_checked_at', 'valid_to'],
+          fields: [
+            'id',
+            'coupon_code',
+            'awaiting_signup_at',
+            'signup_checked_at',
+            'valid_to',
+            'yiji_coupon_id',
+          ],
           limit: -1,
         } as never,
       ),
@@ -1245,6 +1256,7 @@ export async function runCouponDeliverySweep(deps: {
       awaiting_signup_at: string;
       signup_checked_at: string | null;
       valid_to: string | null;
+      yiji_coupon_id?: string | number | null;
     }>;
     const skip = new Set<string>();
     for (const h of held ?? []) {
@@ -1256,10 +1268,18 @@ export async function runCouponDeliverySweep(deps: {
       if (verdict === 'wait') skip.add(h.id);
       if (verdict === 'expired') {
         skip.add(h.id);
+        /* Since 17 Nov 2026 a held coupon usually EXISTS on Yiji (created
+           unassigned, Private) - say so, with its id, rather than "nothing". */
+        const created =
+          h.yiji_coupon_id != null && String(h.yiji_coupon_id).trim() !== ''
+            ? String(h.yiji_coupon_id).trim()
+            : null;
         await recordFailure(
           directus,
           h.id,
-          'the customer did not join Yiji before the coupon expired — nothing was created',
+          created
+            ? `the customer did not join Yiji before the coupon expired — it was created on Yiji (coupon #${created}, Private) but never assigned to anyone`
+            : 'the customer did not join Yiji before the coupon expired — nothing was created',
         );
         logger.info({ id: h.id, code: h.coupon_code }, 'held coupon expired before signup');
       }
@@ -1317,13 +1337,21 @@ export async function runCouponDeliverySweep(deps: {
 }
 
 /**
- * HOLD A COUPON UNTIL ITS CUSTOMER JOINS YIJI (owner, 2026-10-07, EMA-49).
+ * WATCH A COUPON UNTIL ITS CUSTOMER JOINS YIJI (owner, 2026-10-07, EMA-49).
  *
- * This replaced creating the coupon on Yiji UNASSIGNED, as a code the agent
- * sent over WhatsApp: a code that anybody who learned it could redeem, never
- * tied to the customer's number, and reported as "delivered" when nobody held
- * it. Now nothing is created until the number exists on Yiji; then the ordinary
- * order-less path creates the coupon and attaches it to the new account.
+ * This replaced creating the coupon on Yiji UNASSIGNED AS GENERAL, as a code
+ * the agent sent over WhatsApp: a code that anybody who learned it could
+ * redeem, never tied to the customer's number, and reported as "delivered"
+ * when nobody held it.
+ *
+ * OWNER, 17 Nov 2026: "the moment a coupon is created and the customer is not
+ * on yiji, it must create the coupon in yiji by calling the api for coupon
+ * creation alone. when the customer signs into yiji, it can call the coupon
+ * assigning api for the customer." So the coupon is now created on Yiji at
+ * once - PRIVATE, `assignee: []`, redeemable by nobody, never "delivered" -
+ * by `createForSignup`, and `extra` carries its `yiji_coupon_id` into the SAME
+ * patch as the watch stamp. When the number resolves, the push ASSIGNS that
+ * existing coupon (`AddUserCoupon`) and never creates it again.
  *
  * `awaiting_signup_at` is stamped once (the start of the wait, kept afterwards
  * as history); `signup_checked_at` on every look. The sweep reads both to
@@ -1335,6 +1363,8 @@ async function holdForSignup(args: {
   id: string;
   directus: YijiDirectusClient;
   logger: Logger;
+  /** Written in the same patch: the coupon just created on Yiji (17 Nov 2026). */
+  extra?: Record<string, unknown>;
 }): Promise<PushOutcome> {
   const { row, id, directus, logger } = args;
   const current = (await directus.request(
@@ -1345,13 +1375,171 @@ async function holdForSignup(args: {
     updateItem('coupon_approvals' as never, id, {
       ...(current?.awaiting_signup_at ? {} : { awaiting_signup_at: now }),
       signup_checked_at: now,
+      ...(args.extra ?? {}),
     } as never),
   );
   logger.info(
-    { id, code: row.coupon_code, since: current?.awaiting_signup_at ?? now },
-    'customer has no Yiji account yet — coupon held until they sign up',
+    {
+      id,
+      code: row.coupon_code,
+      since: current?.awaiting_signup_at ?? now,
+      ...(args.extra?.yiji_coupon_id ? { couponId: args.extra.yiji_coupon_id } : {}),
+    },
+    args.extra?.yiji_coupon_id
+      ? 'customer has no Yiji account yet — coupon created on Yiji (Private, unassigned); it is assigned when they sign up'
+      : 'customer has no Yiji account yet — coupon held until they sign up',
   );
   return 'awaiting-signup';
+}
+
+/**
+ * Was this row's `yiji_coupon_id` created for a customer WAITING TO JOIN
+ * YIJI (owner, 17 Nov 2026), so that a resolved number may be ASSIGNED it?
+ *
+ * Only then is a row that already has a Yiji coupon id allowed past the
+ * "never twice" guard - and only into the assign step, never into creation.
+ * Every other row with an id (withheld, withheld-then-unticked, a coupon the
+ * Private check blocked before the watch was stamped) stays where it was:
+ * never assigned. Read apart from the main row, like `yiji_coupon_id`. A read
+ * that fails throws, so BullMQ retries rather than guessing either way.
+ */
+async function createdForSignup(directus: YijiDirectusClient, id: string): Promise<boolean> {
+  const r = (await directus.request(
+    readItem('coupon_approvals' as never, id, { fields: ['awaiting_signup_at'] } as never),
+  )) as unknown as { awaiting_signup_at?: string | null } | null;
+  return Boolean(r?.awaiting_signup_at);
+}
+
+type SignupCreation =
+  /** Created on Yiji, Private, assigned to nobody. */
+  | { kind: 'created'; couponId: number }
+  /** Not created now - watched exactly as before 17 Nov (see the reasons). */
+  | { kind: 'hold'; why: string }
+  /** Settled: a refusal recorded on the row, or the Private check blocked it. */
+  | { kind: 'done'; outcome: PushOutcome };
+
+/**
+ * CREATE THE COUPON ON YIJI NOW, ASSIGNED TO NOBODY (owner, 17 Nov 2026).
+ *
+ * The customer's number has no Yiji account yet. The owner's rule: create the
+ * coupon on Yiji at once with the creation API ALONE, and assign it when they
+ * sign up. This is the withheld path's creation, unchanged: `AddCoupon`, the
+ * withheld body (`assignee: []`, every term the assigned coupon's, the name =
+ * the customer's phone, the agent's type never forced), a stable idempotency
+ * key, the Private read-back. Nothing here can give the coupon to anyone.
+ *
+ * NOT created now - watched exactly as before, created and assigned when the
+ * number resolves - when:
+ *   - the coupon is not Private: an unowned General code can be added by
+ *     anyone who learns it (October 2026), which is what EMA-49 ended;
+ *   - staging (`redirectCouponsTo`): it shares Yiji's PRODUCTION API, and a
+ *     coupon for nobody is one the test-handset redirect cannot protect;
+ *   - the platform is not v1 Yiji (Yiji v2 is unchanged by this rule);
+ *   - no credential/endpoint, or no code (the assign step needs the code);
+ *   - Yiji says the code "already exists" and it is this row's alone: an
+ *     earlier attempt of ours created it but its id was never stored. The row
+ *     stays watched; on signup the order-less path's own recovery attaches it
+ *     BY CODE and believes it only after the wallet read-back.
+ *
+ * A considered refusal is recorded like every other (`yiji_push_error`,
+ * settled, "Try again" clears it); an outage throws so BullMQ retries.
+ */
+async function createForSignup(args: {
+  row: CouponApprovalRow;
+  id: string;
+  deps: CouponPushDeps;
+}): Promise<SignupCreation> {
+  const { row, id, deps } = args;
+  const { directus, logger, postCoupon, yijiTenantId, redirectCouponsTo } = deps;
+  if (!postCoupon) return { kind: 'hold', why: 'no Yiji service credential' };
+  /* v1 Yiji only: Yiji v2 is unchanged by this rule. Read loosely so this
+     compiles on release lines that predate the v2 `platform` dep. */
+  const platform = String((deps as { platform?: string | null }).platform ?? '')
+    .trim()
+    .toLowerCase();
+  const endpoint = couponEndpointFor(yijiTenantId);
+  if ((platform && platform !== 'yiji') || !endpoint || endpoint.platform !== 'yiji') {
+    return { kind: 'hold', why: 'not a v1 Yiji coupon' };
+  }
+  if (redirectCouponsTo?.trim()) return { kind: 'hold', why: 'staging' };
+  if (yijiCouponTypeCode(row.coupon_type) !== YIJI_PRIVATE_TYPE) {
+    return { kind: 'hold', why: 'not a Private coupon' };
+  }
+  const code = row.coupon_code?.trim();
+  if (!code) return { kind: 'hold', why: 'no coupon code' };
+
+  const refused = async (detail: string): Promise<SignupCreation> => {
+    if (/already exists/i.test(detail) && (await codeIsOnlyThisRow(directus, id, code))) {
+      logger.warn(
+        { id, code, detail },
+        'coupon code already exists on yiji (an earlier attempt created it) — watched for signup; attached by code then',
+      );
+      return { kind: 'hold', why: 'already exists on Yiji' };
+    }
+    await recordFailure(directus, id, `yiji would not create the coupon: ${detail}`);
+    logger.warn(
+      { id, code, detail },
+      'yiji refused to create the coupon for a customer with no account',
+    );
+    return { kind: 'done', outcome: 'refused' };
+  };
+
+  let body: YijiCouponResponse;
+  try {
+    body = await postCoupon<YijiCouponResponse>(
+      YIJI_UNASSIGNED_COUPON_PATH,
+      yijiCouponPayload(row, null, { withheld: true }),
+      {
+        ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
+        /* Stable across retries, so a timeout that in fact succeeded cannot
+           mint a second coupon with the same code. */
+        'idempotency-key': `unassigned:${code}`,
+      },
+    );
+  } catch (err) {
+    if (isYijiRefused(err)) return refused(describeRefusal(err.body));
+    throw new Error(
+      `${isYijiUnavailable(err) ? 'yiji unavailable' : 'yiji coupon create failed'}: ${describeError(err)}`,
+    );
+  }
+  const couponId = readNewCouponId(body);
+  if (couponId == null) return refused(describeRefusal(body));
+
+  /* THE PRIVATE CHECK, as on the order-less path: a coupon Yiji holds as
+     anything but Private is never assigned. Its id is kept so it is never
+     created again, and the recorded refusal parks the row; a "Try again"
+     re-runs the Private check before any assign. */
+  if (deps.readCoupon) {
+    let saved: { type: number | null } | null | undefined;
+    try {
+      saved = await deps.readCoupon(couponId);
+    } catch (err) {
+      logger.warn(
+        { id, code, couponId, err: describeError(err) },
+        'could not read the new coupon back for the Private check — continuing',
+      );
+    }
+    if (saved && saved.type !== YIJI_PRIVATE_TYPE) {
+      const detail =
+        `Yiji saved this coupon as ${saved.type === 0 ? 'General' : `type ${saved.type ?? 'unknown'}`} ` +
+        `(Yiji coupon #${couponId}), not Private - so it will NOT be given to the customer. ` +
+        'A General coupon can be added by anyone who knows the code.';
+      await directus.request(
+        updateItem('coupon_approvals' as never, id, {
+          yiji_coupon_id: String(couponId),
+          yiji_push_error: detail,
+        } as never),
+      );
+      logger.warn({ id, code, couponId, type: saved.type }, 'coupon NOT Private on Yiji — blocked');
+      await deps
+        .alertNotPrivate?.(code, detail)
+        .catch((err: unknown) =>
+          logger.warn({ id, err: describeError(err) }, 'could not alert about the blocked coupon'),
+        );
+      return { kind: 'done', outcome: 'refused' };
+    }
+  }
+  return { kind: 'created', couponId };
 }
 
 /**
@@ -1728,7 +1916,14 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
     }
     logger.warn({ id, err: describeError(err) }, 'could not read yiji_coupon_id — continuing');
   }
-  if (withheldCouponId) {
+  /*
+   * CREATED ON YIJI WHILE THE CUSTOMER HAD NO ACCOUNT (owner, 17 Nov 2026):
+   * this one id may still be ASSIGNED - never created again - once the number
+   * resolves. Never for a withheld row.
+   */
+  const awaitingAssign =
+    withheldCouponId != null && !row.delivery_excluded && (await createdForSignup(directus, id));
+  if (withheldCouponId && !awaitingAssign) {
     logger.info(
       { id, code: row.coupon_code, couponId: withheldCouponId },
       'withheld coupon already created on Yiji — nothing to do, and never assigned',
@@ -1885,14 +2080,20 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
     }
     if (!compensationUserId) {
       /*
-       * NO APP ACCOUNT YET: HOLD THE COUPON (owner, 2026-10-07, EMA-49).
+       * NO APP ACCOUNT YET: WATCH THE NUMBER (owner, 2026-10-07, EMA-49).
        *
-       * Not created on Yiji and not given up on. The coupon stays approved
-       * with `awaiting_signup_at` stamped, and the delivery sweep looks the
-       * number up again on a tapering schedule — every 10 min for a day,
-       * hourly for a week, then daily until the coupon expires (`signupCheck`)
-       * — never every sweep, which once meant ~1,440 futile lookups a day per
-       * coupon. When the number resolves, this same path grants it by user.
+       * Not given up on. The coupon stays approved with `awaiting_signup_at`
+       * stamped, and the delivery sweep looks the number up again on a
+       * tapering schedule — every 10 min for a day, hourly for a week, then
+       * daily until the coupon expires (`signupCheck`) — never every sweep,
+       * which once meant ~1,440 futile lookups a day per coupon.
+       *
+       * Since 17 Nov 2026 (owner) the coupon is CREATED on Yiji here, Private
+       * and assigned to nobody (`createForSignup`); when the number resolves,
+       * this same path only ASSIGNS that coupon by its stored id. A row held
+       * before that change (no `yiji_coupon_id`) is created unassigned at its
+       * next due look - or, if the number resolves first, created and granted
+       * by the order-less path exactly as before. Either way one coupon.
        *
        * Only when a lookup actually RAN and answered "nobody". The two other
        * ways here are not settled facts and stay plain `no-order`:
@@ -1901,7 +2102,33 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
        * A lookup that THREW rethrows above — an outage is not an answer.
        */
       if (findCustomer && phone) {
-        return await holdForSignup({ row, id, directus, logger });
+        /*
+         * CREATED ON YIJI NOW, ASSIGNED ON SIGNUP (owner, 17 Nov 2026): the
+         * creation API alone - Private, assigned to nobody - and the id kept
+         * in the SAME patch as the watch stamp. Already created: only the
+         * watch is stamped; nothing is created twice.
+         */
+        if (awaitingAssign) return await holdForSignup({ row, id, directus, logger });
+        const made = await createForSignup({ row, id, deps });
+        if (made.kind === 'done') return made.outcome;
+        if (made.kind === 'hold') {
+          logger.info(
+            { id, code: row.coupon_code, why: made.why },
+            'coupon not created on Yiji yet — watched until the customer signs up',
+          );
+          return await holdForSignup({ row, id, directus, logger });
+        }
+        return await holdForSignup({
+          row,
+          id,
+          directus,
+          logger,
+          extra: {
+            yiji_coupon_id: String(made.couponId),
+            yiji_pushed_at: new Date().toISOString(),
+            yiji_push_error: null,
+          },
+        });
       }
       logger.warn(
         {
@@ -2083,65 +2310,88 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
        * fault that made 88 coupons unredeemable — this path would have made
        * the next one too.
        */
-      let created: YijiCouponResponse;
-      try {
-        created = await postCoupon<YijiCouponResponse>(
-          YIJI_UNASSIGNED_COUPON_PATH,
-          yijiCouponPayload(row, order, { redirectCouponsTo, withheld: true }),
-          headers,
-        );
-      } catch (err) {
-        /*
-         * "COUPON WITH CODE ... ALREADY EXISTS" = OUR EARLIER ATTEMPT WORKED
-         * (OPS-WB8WVPSF, OPS-MRNE7C2G, 2026-10-11). Yiji was slow, our 6 s
-         * timeout fired after it had CREATED the coupon, and the retry was
-         * refused - so the code existed on Yiji and the customer never got it.
-         * When the code is this row's alone, attach the existing coupon BY
-         * CODE, and believe it only once the customer's coupons show it.
-         */
-        if (
-          isYijiRefused(err) &&
-          /already exists/i.test(describeRefusal(err.body)) &&
-          row.coupon_code &&
-          (await codeIsOnlyThisRow(directus, id, row.coupon_code))
-        ) {
-          /*
-           * THE CUSTOMER MAY ALREADY HOLD IT (2026-11-11, OPS-HNXZRMZC on
-           * staging): two pushes of the same coupon ran at the same moment; the
-           * first created AND attached it, the second hit "already exists" and
-           * attached it again - one coupon, two grants in the wallet. Look in
-           * the wallet FIRST; attach by code only when it is really missing.
-           */
-          if (await recordIfActuallyHeld('created by an earlier attempt; already held')) {
-            return 'delivered';
-          }
-          logger.warn(
-            { id, code: row.coupon_code },
-            'coupon already exists on yiji (an earlier attempt created it) — attaching it by code',
-          );
-          try {
-            await postCoupon<unknown>(
-              `${YIJI_ATTACH_BY_CODE_PATH}/${encodeURIComponent(compensationUserId)}/${encodeURIComponent(row.coupon_code)}`,
-              {},
-              headers,
-            );
-          } catch (attachErr) {
-            if (!isYijiRefused(attachErr)) throw attachErr; // an outage: retried
-          }
-          if (await recordIfActuallyHeld('created by an earlier attempt; attached by code')) {
-            return 'delivered';
-          }
+      /*
+       * ALREADY ON YIJI, ASSIGNED TO NOBODY (owner, 17 Nov 2026): it was
+       * created while the customer had no account. Now that they do, it is
+       * only ASSIGNED - `AddUserCoupon` with the stored id - and never
+       * created again. The wallet is read FIRST, so a retry after an assign
+       * that timed out but landed is not granted twice.
+       */
+      let couponId: number | null = null;
+      if (awaitingAssign && withheldCouponId) {
+        if (await recordIfActuallyHeld('already in the wallet before the assign')) {
+          return 'delivered';
         }
-        throw err;
-      }
-      const couponId = readNewCouponId(created);
-      if (couponId == null) {
-        /* Yiji declined to create it. Recorded, not retried: the same body
+        couponId = Number(withheldCouponId);
+        if (!Number.isInteger(couponId) || couponId <= 0) {
+          await recordFailure(
+            directus,
+            id,
+            `the stored Yiji coupon id "${withheldCouponId}" is not a coupon id - not assigned`,
+          );
+          return 'refused';
+        }
+      } else {
+        let created: YijiCouponResponse;
+        try {
+          created = await postCoupon<YijiCouponResponse>(
+            YIJI_UNASSIGNED_COUPON_PATH,
+            yijiCouponPayload(row, order, { redirectCouponsTo, withheld: true }),
+            headers,
+          );
+        } catch (err) {
+          /*
+           * "COUPON WITH CODE ... ALREADY EXISTS" = OUR EARLIER ATTEMPT WORKED
+           * (OPS-WB8WVPSF, OPS-MRNE7C2G, 2026-10-11). Yiji was slow, our 6 s
+           * timeout fired after it had CREATED the coupon, and the retry was
+           * refused - so the code existed on Yiji and the customer never got it.
+           * When the code is this row's alone, attach the existing coupon BY
+           * CODE, and believe it only once the customer's coupons show it.
+           */
+          if (
+            isYijiRefused(err) &&
+            /already exists/i.test(describeRefusal(err.body)) &&
+            row.coupon_code &&
+            (await codeIsOnlyThisRow(directus, id, row.coupon_code))
+          ) {
+            /*
+             * THE CUSTOMER MAY ALREADY HOLD IT (2026-11-11, OPS-HNXZRMZC on
+             * staging): two pushes of the same coupon ran at the same moment; the
+             * first created AND attached it, the second hit "already exists" and
+             * attached it again - one coupon, two grants in the wallet. Look in
+             * the wallet FIRST; attach by code only when it is really missing.
+             */
+            if (await recordIfActuallyHeld('created by an earlier attempt; already held')) {
+              return 'delivered';
+            }
+            logger.warn(
+              { id, code: row.coupon_code },
+              'coupon already exists on yiji (an earlier attempt created it) — attaching it by code',
+            );
+            try {
+              await postCoupon<unknown>(
+                `${YIJI_ATTACH_BY_CODE_PATH}/${encodeURIComponent(compensationUserId)}/${encodeURIComponent(row.coupon_code)}`,
+                {},
+                headers,
+              );
+            } catch (attachErr) {
+              if (!isYijiRefused(attachErr)) throw attachErr; // an outage: retried
+            }
+            if (await recordIfActuallyHeld('created by an earlier attempt; attached by code')) {
+              return 'delivered';
+            }
+          }
+          throw err;
+        }
+        couponId = readNewCouponId(created);
+        if (couponId == null) {
+          /* Yiji declined to create it. Recorded, not retried: the same body
            will be declined the same way next sweep. */
-        const detail = describeRefusal(created);
-        await recordFailure(directus, id, `yiji would not create the coupon: ${detail}`);
-        logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused to create the coupon');
-        return 'refused';
+          const detail = describeRefusal(created);
+          await recordFailure(directus, id, `yiji would not create the coupon: ${detail}`);
+          logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused to create the coupon');
+          return 'refused';
+        }
       }
       /*
        * THE PRIVATE CHECK (owner, 2026-11-02). Coupons created as General
@@ -2156,6 +2406,11 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
         try {
           saved = await deps.readCoupon(couponId);
         } catch (err) {
+          /* A coupon that has waited on Yiji for its customer is not assigned
+             blind: nothing is urgent, so a failed read is retried. */
+          if (awaitingAssign) {
+            throw new Error(`could not read Yiji coupon ${couponId} back: ${describeError(err)}`);
+          }
           logger.warn(
             { id, code: row.coupon_code, couponId, err: describeError(err) },
             'could not read the new coupon back for the Private check — continuing',
@@ -2190,7 +2445,9 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
       createdCouponId = couponId;
       logger.info(
         { id, code: row.coupon_code, couponId },
-        'coupon created on yiji — attaching it to the customer',
+        awaitingAssign
+          ? 'customer joined Yiji — assigning the coupon created while they had no account'
+          : 'coupon created on yiji — attaching it to the customer',
       );
       body = await postCoupon<YijiCouponResponse>(
         YIJI_COMPENSATION_COUPON_PATH,

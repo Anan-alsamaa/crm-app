@@ -200,23 +200,27 @@ describe('a coupon with no order', () => {
    * nobody today will not resolve in a minute.
    */
   /*
-   * NO YIJI ACCOUNT YET: HELD, NOT CREATED (owner, 2026-10-07, EMA-49).
+   * NO YIJI ACCOUNT YET: CREATED UNASSIGNED, WATCHED (owner, 2026-10-07,
+   * EMA-49; 17 Nov 2026).
    *
-   * It used to be created on Yiji UNASSIGNED, as a code the agent sent over
-   * WhatsApp — redeemable by anyone who learned it, never tied to the number.
-   * Now nothing reaches Yiji; the coupon waits in the CRM and the sweep looks
-   * the number up again on a schedule until the customer signs up.
+   * Since EMA-49 nothing was created until the customer signed up. The owner
+   * changed that on 17 Nov 2026: the coupon is created on Yiji at once with
+   * the creation API alone - Private, assigned to nobody - and the sweep keeps
+   * looking the number up, to ASSIGN it when they sign up.
    */
-  it('holds the coupon when the customer has no Yiji account', async () => {
+  it('creates (only) the coupon when the customer has no Yiji account, and watches', async () => {
     const { deps: d, postCoupon, patches } = deps({ findCustomer: (async () => null) as never });
     await expect(processCouponPushJob(job(), d)).resolves.toBe('awaiting-signup');
-    expect(postCoupon).not.toHaveBeenCalled();
+    expect(postCoupon).toHaveBeenCalledTimes(1);
+    expect(postCoupon.mock.calls[0]![0]).toBe(YIJI_UNASSIGNED_COUPON_PATH);
     const patch = patches[0] as Record<string, unknown>;
+    expect(patch.yiji_coupon_id).toBe('73900');
     expect(patch.awaiting_signup_at).toEqual(expect.any(String));
     expect(patch.signup_checked_at).toEqual(expect.any(String));
-    // Still owed: no status change, no refusal recorded.
+    // Still owed: no status change, no refusal recorded, nobody holds it.
     expect(patch).not.toHaveProperty('status');
-    expect(patch).not.toHaveProperty('yiji_push_error');
+    expect(patch).not.toHaveProperty('yiji_coupon_user_id');
+    expect(patch.yiji_push_error ?? null).toBeNull();
   });
 
   it('keeps when the wait STARTED on every later look', async () => {

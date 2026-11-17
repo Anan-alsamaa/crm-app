@@ -1275,9 +1275,11 @@ function Row({
                 </Button>
               </div>
             ) : row.awaiting_signup_at ? (
-              /* Held until the customer joins Yiji (owner, 2026-10-07, EMA-49):
-                 nothing exists on Yiji yet, and the number is looked up again
-                 on a schedule — say so, and when it was last looked at. */
+              /* Waiting for the customer to join Yiji (owner, 2026-10-07, EMA-49):
+                 since 17 Nov 2026 the coupon is usually already created on Yiji,
+                 Private and assigned to nobody (`yiji_coupon_id`); the number is
+                 looked up again on a schedule and the coupon assigned when it
+                 resolves — say so, and when it was last looked at. */
               <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 <Pill tone="warning" size="sm" dot>
                   {t('couponApprovals.awaitingSignup', {
