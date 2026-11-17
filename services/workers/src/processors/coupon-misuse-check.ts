@@ -395,7 +395,16 @@ export async function alertAdministrators(
     logger: Pick<Logger, 'warn'>;
     recipients?: () => Promise<string[]>;
   },
-  alert: { title: string; body: string; codes: string[]; stamp: string },
+  alert: {
+    title: string;
+    body: string;
+    codes: string[];
+    stamp: string;
+    /** Where the bell takes them; default the approvals page, null = no link. */
+    link?: string | null;
+    /** Extra notification payload; `kind` overrides 'coupon_misuse'. */
+    payload?: Record<string, unknown>;
+  },
 ): Promise<'sent' | 'failed' | 'no-recipient'> {
   let recipients: string[];
   try {
@@ -427,8 +436,8 @@ export async function alertAdministrators(
           type: 'automation',
           title: alert.title,
           body: alert.body,
-          link: LINK,
-          payload: { kind: 'coupon_misuse', codes: alert.codes },
+          ...(alert.link === null ? {} : { link: alert.link ?? LINK }),
+          payload: { kind: 'coupon_misuse', codes: alert.codes, ...alert.payload },
         } satisfies NotificationJob,
         { jobId: `coupon-alert-${alert.stamp}-${recipientId}` },
       ),

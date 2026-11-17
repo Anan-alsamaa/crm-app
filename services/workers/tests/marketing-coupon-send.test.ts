@@ -185,3 +185,74 @@ describe('a bulk (list) coupon', () => {
     expect(updates.find((u) => u.id === 'r2')!.patch.status).toBe('no_account');
   });
 });
+
+describe('every General marketing coupon alerts (owner, 17 Nov 2026)', () => {
+  const created = () =>
+    vi
+      .fn()
+      .mockResolvedValueOnce(json(200, { token: 't' }))
+      .mockResolvedValueOnce(json(200, { result: 1, exceptionMessage: 'couponId 91234' }));
+
+  it('a code coupon (General on Yiji) alerts approved, then created', async () => {
+    const { directus } = directusWith([{ ...row, audience: 'code' }]);
+    const alertGeneral = vi.fn(async () => undefined);
+    const r = await runMarketingCouponSend({
+      directus,
+      config,
+      logger,
+      fetchImpl: created(),
+      pauseMs: 0,
+      alertGeneral,
+    });
+    expect(r.created).toBe(1);
+    expect(alertGeneral.mock.calls.map((c) => (c as unknown as [string])[0])).toEqual([
+      'approved',
+      'created',
+    ]);
+  });
+
+  it('a list coupon (Private on Yiji) never alerts', async () => {
+    const { directus } = directusWith(
+      [{ ...row, audience: 'list' }],
+      [{ id: 'r1', phone: '0536418952', status: 'queued' }],
+    );
+    const alertGeneral = vi.fn(async () => undefined);
+    await runMarketingCouponSend({
+      directus,
+      config,
+      logger,
+      fetchImpl: created(),
+      pauseMs: 0,
+      alertGeneral,
+    });
+    expect(alertGeneral).not.toHaveBeenCalled();
+  });
+
+  it('a refused coupon was approved but never created', async () => {
+    const { directus } = directusWith([row]);
+    const alertGeneral = vi.fn(async () => undefined);
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(json(200, { token: 't' }))
+      .mockResolvedValueOnce(json(200, { result: 2, exceptionMessage: 'nope' }));
+    await runMarketingCouponSend({ directus, config, logger, fetchImpl, pauseMs: 0, alertGeneral });
+    expect(alertGeneral.mock.calls.map((c) => (c as unknown as [string])[0])).toEqual(['approved']);
+  });
+
+  it('an alert that fails never stops the coupon', async () => {
+    const { directus, updates } = directusWith([row]);
+    const alertGeneral = vi.fn(async () => {
+      throw new Error('redis down');
+    });
+    const r = await runMarketingCouponSend({
+      directus,
+      config,
+      logger,
+      fetchImpl: created(),
+      pauseMs: 0,
+      alertGeneral,
+    });
+    expect(r.created).toBe(1);
+    expect(updates[0]!.patch).toMatchObject({ status: 'created', yiji_coupon_id: '91234' });
+  });
+});
