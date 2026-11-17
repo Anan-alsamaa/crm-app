@@ -19,7 +19,9 @@ const draft = CampaignDraft.parse({
   name: { en: 'Second order', ar: 'الطلب الثاني' },
   offer: { type: 'FIXED', amountSar: 7 },
   limits: { totalRedemptions: 3000, budgetSar: 5000 },
-  validity: { startDate: '2026-11-01', endDate: '2026-11-30' },
+  schedule: { startDate: '2026-11-01', endDate: '2026-11-30', expiresAfterIssueDays: 30 },
+  distribution: { channels: ['APP_WALLET'] },
+  audience: { mode: 'ALL' },
 });
 const forecast = { messageCostSar: 0, netSar: 100, approvalReasons: [] as string[] };
 
@@ -37,14 +39,14 @@ describe('lockedFieldChanges', () => {
       const next = {
         ...draft,
         offer: { ...draft.offer, amountSar: 9 },
-        validity: { ...draft.validity, startDate: '2026-11-02', endDate: '2026-12-30' },
+        schedule: { ...draft.schedule, startDate: '2026-11-02', endDate: '2026-12-30' },
         limits: { ...draft.limits, budgetSar: 9000 },
       };
-      expect(lockedFieldChanges(prev, next)).toEqual(['offer', 'limits', 'validity']);
+      expect(lockedFieldChanges(prev, next)).toEqual(['offer', 'limits', 'schedule']);
     },
   );
   it('reads dotted paths', () => {
-    expect(valueAtPath(draft, 'validity.startDate')).toBe('2026-11-01');
+    expect(valueAtPath(draft, 'schedule.startDate')).toBe('2026-11-01');
     expect(valueAtPath(draft, 'distribution.code')).toBeUndefined();
   });
 });
@@ -107,7 +109,7 @@ describe('simulateCampaignCheckout', () => {
     );
     const min = { ...c, rules: { ...c.rules, minOrderSar: 100 } };
     expect(simulateCampaignCheckout(min, input).reason).toBe('min_order');
-    const brand = { ...c, scope: { ...c.scope, brandIds: ['3'] } };
+    const brand = { ...c, scope: { ...c.scope, allBrands: false, brandIds: ['3'] } };
     expect(simulateCampaignCheckout(brand, input).reason).toBe('scope_brand');
     expect(simulateCampaignCheckout(c, { ...input, orderType: 'DINE_IN' }).reason).toBe(
       'scope_order_type',
@@ -116,10 +118,11 @@ describe('simulateCampaignCheckout', () => {
 });
 
 describe('the field specification', () => {
-  /* The docs say 84; the encoded list holds 83 unique paths (2026-11-16).
-     Pinned so a field added or lost is a visible change, not a silent one. */
-  it('has 83 fields, every path unique', () => {
-    expect(CAMPAIGN_FIELD_SPEC).toHaveLength(83);
-    expect(new Set(CAMPAIGN_FIELD_SPEC.map((f) => f.path)).size).toBe(83);
+  /* The owner-approved draft has 107 rows (docs/marketing/ayman-draft-fields.csv,
+     2026-11-17); the spec holds exactly those. Pinned so a field added or lost
+     is a visible change, not a silent one. */
+  it('has 107 fields, every path unique', () => {
+    expect(CAMPAIGN_FIELD_SPEC).toHaveLength(107);
+    expect(new Set(CAMPAIGN_FIELD_SPEC.map((f) => f.path)).size).toBe(107);
   });
 });

@@ -1,6 +1,8 @@
 import {
-  CampaignDraft,
+  CampaignDraftShape,
+  readCampaignDraft,
   type Campaign,
+  type CampaignDraft,
   type EarningRule,
   type GiftCardProduct,
   type Study,
@@ -99,7 +101,7 @@ export interface EngineStore {
 
 /* ── row mapping (pure, tested field by field) ─────────────────────────── */
 
-const DRAFT_KEYS = Object.keys(CampaignDraft.shape) as Array<keyof CampaignDraft>;
+const DRAFT_KEYS = Object.keys(CampaignDraftShape.shape) as Array<keyof CampaignDraft>;
 
 /** The draft part of a campaign: exactly the keys of the CampaignDraft schema. */
 export function draftOf(c: Partial<Campaign>): Partial<CampaignDraft> {
@@ -124,8 +126,8 @@ export function campaignToRow(c: Campaign): Record<string, unknown> {
     name: c.name.en,
     name_ar: c.name.ar,
     goal: c.notes ?? null,
-    start_date: c.validity.startDate,
-    end_date: c.validity.endDate,
+    start_date: c.schedule.startDate,
+    end_date: c.schedule.endDate,
     budget: c.limits.budgetSar,
     status: c.status === 'ended' || c.status === 'rejected' ? 'archived' : 'active',
     draft: draftOf(c),
@@ -147,8 +149,14 @@ const json = <T>(v: unknown, fallback: T): T => {
   return v as T;
 };
 
+/**
+ * A row back to a campaign. The draft is read through `readCampaignDraft`:
+ * a row stored before field parity (2026-11-17: `validity`, `stampsRequired`,
+ * `bxgy.productIds`, ...) comes back in today's shape, and a row that no
+ * longer passes today's rules still opens - it is re-checked when saved.
+ */
 export function rowToCampaign(row: Record<string, unknown>): Campaign {
-  const draft = json<CampaignDraft>(row.draft, {} as CampaignDraft);
+  const draft = readCampaignDraft(json<unknown>(row.draft, {}));
   return {
     ...draft,
     id: String(row.engine_code),
@@ -181,7 +189,10 @@ export function studyToRow(s: Study): Record<string, unknown> {
 }
 
 export function rowToStudy(row: Record<string, unknown>): Study {
-  return json<Study>(row.study, null as unknown as Study);
+  const s = json<Study>(row.study, null as unknown as Study);
+  if (!s || !Array.isArray(s.scenarios)) return s;
+  /* A scenario's draft is a campaign draft too: read it in today's shape. */
+  return { ...s, scenarios: s.scenarios.map((x) => ({ ...x, draft: readCampaignDraft(x.draft) })) };
 }
 
 const num = (v: unknown): number => {

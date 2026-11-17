@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  CAMPAIGN_CODE_ONLY_FIELDS,
   CAMPAIGN_FIELD_SPEC,
   DEFAULT_MONEY_MODEL,
   marketingCouponProblems,
@@ -14,7 +15,7 @@ import {
   inControlGroup,
   mergeMoneyModel,
 } from '../src/marketing/crm-engine.js';
-import { issuanceBlockers } from '../src/marketing/campaign-coupon.js';
+import { couponValidTo, issuanceBlockers } from '../src/marketing/campaign-coupon.js';
 import {
   MemoryEngineStore,
   admin,
@@ -46,6 +47,9 @@ async function refusal(p: Promise<unknown>): Promise<EngineRefusal> {
   }
   throw new Error('expected a refusal');
 }
+
+/** The design: a campaign's English name is unique - a second campaign needs its own. */
+const other = (en = 'Another campaign') => issuableDraft({ name: { en, ar: 'حملة أخرى' } });
 
 /** maker creates and submits, checker approves: an approved campaign. */
 async function approved(engine: CrmMarketingEngine, draft = issuableDraft()): Promise<Campaign> {
@@ -114,7 +118,7 @@ describe('campaigns: who may do what', () => {
       'own_campaign',
     );
     /* someone who only submitted it is barred too */
-    const c2 = await engine.saveCampaign(maker, issuableDraft());
+    const c2 = await engine.saveCampaign(maker, other());
     await engine.submitForApproval(both, c2.id, { forecast: forecastFor() });
     expect((await refusal(engine.decideCampaign(both, c2.id, { decision: 'approve' }))).code).toBe(
       'own_campaign',
@@ -124,7 +128,7 @@ describe('campaigns: who may do what', () => {
       'approved',
     );
     /* and a rejection on an earlier round does not bar the same person later */
-    const c3 = await engine.saveCampaign(maker, issuableDraft());
+    const c3 = await engine.saveCampaign(maker, other('A third campaign'));
     await engine.submitForApproval(maker, c3.id, { forecast: forecastFor() });
     await engine.decideCampaign(checker, c3.id, { decision: 'reject', note: 'fix it' });
     await engine.submitForApproval(maker, c3.id, { forecast: forecastFor() });
@@ -264,8 +268,10 @@ describe('LOCKED_WHEN_LIVE and edits after approval', () => {
     for (const more of [
       { limits: { ...draft.limits, budgetSar: 9000 } },
       { limits: { ...draft.limits, totalRedemptions: 100000 } },
-      { validity: { ...draft.validity, endDate: '2027-12-31' } },
-      { scope: { ...draft.scope, brandIds: ['999'] } },
+      { schedule: { ...draft.schedule, endDate: '2027-12-31' } },
+      { fraud: { ...draft.fraud, blockFlaggedCustomers: true } },
+      { communication: { ...draft.communication, quietHours: false } },
+      { scope: { ...draft.scope, allBrands: false, brandIds: ['999'] } },
     ]) {
       const r3 = await refusal(engine.saveCampaign(maker, { ...draft, ...more }, c.id));
       expect(r3).toMatchObject({ status: 422, code: 'locked_while_live' });
@@ -301,7 +307,7 @@ describe('LOCKED_WHEN_LIVE and edits after approval', () => {
     await engine.setCampaignStatus(maker, c.id, { status: 'live' });
     await engine.setCampaignStatus(maker, c.id, { status: 'paused' });
     const d = issuableDraft();
-    const bad = { ...d, validity: { ...d.validity, startDate: '2026-11-11' } };
+    const bad = { ...d, schedule: { ...d.schedule, startDate: '2026-11-11' } };
     expect((await refusal(engine.saveCampaign(maker, bad, c.id))).code).toBe('locked_while_live');
     await engine.setCampaignStatus(maker, c.id, { status: 'ended' });
     expect((await refusal(engine.saveCampaign(maker, bad, c.id))).code).toBe('locked_while_live');
@@ -338,7 +344,7 @@ describe('LOCKED_WHEN_LIVE and edits after approval', () => {
     const c = await engine.saveCampaign(maker, issuableDraft());
     const r = await refusal(engine.setCampaignStatus(maker, c.id, { status: 'live' }));
     expect(r).toMatchObject({ status: 409, code: 'bad_transition', detail: { from: 'draft' } });
-    const a = await approved(engine);
+    const a = await approved(engine, other());
     expect((await refusal(engine.setCampaignStatus(maker, a.id, { status: 'paused' }))).code).toBe(
       'bad_transition',
     );
@@ -398,7 +404,7 @@ describe('issuance through the existing marketing coupon pipeline', () => {
       engine,
       issuableDraft({
         offer: { ...d.offer, type: 'PERCENT', percent: 20, maxDiscountSar: 25 },
-        scope: { ...d.scope, brandIds: ['3'], orderTypes: ['PICKUP'] },
+        scope: { ...d.scope, allBrands: false, brandIds: ['3'], orderTypes: ['PICKUP'] },
         stacking: {
           combineWithOtherOffers: true,
           combineWithLoyalty: true,
@@ -459,7 +465,10 @@ describe('issuance through the existing marketing coupon pipeline', () => {
     ]);
     const c2 = await approved(
       engine,
-      issuableDraft({ limits: { ...d.limits, totalRedemptions: 1 } }),
+      issuableDraft({
+        name: { en: 'One redemption only', ar: 'مرة واحدة' },
+        limits: { ...d.limits, totalRedemptions: 1 },
+      }),
     );
     expect(
       (await engine.issue(maker, { campaignId: c2.id, customerIds: ['0551000001', '0551000002'] }))
@@ -545,13 +554,19 @@ describe('issuance through the existing marketing coupon pipeline', () => {
       (await refusal(engine.issue(maker, { campaignId: draft.id, customerIds: ['0551234567'] })))
         .code,
     ).toBe('not_issuable_status');
-    const c = await approved(engine);
+    const c = await approved(engine, other());
     expect(
       (await refusal(engine.issue(checker, { campaignId: c.id, customerIds: ['0551234567'] })))
         .status,
     ).toBe(403);
     const d = issuableDraft();
-    const all = await approved(engine, issuableDraft({ audience: { ...d.audience, mode: 'ALL' } }));
+    const all = await approved(
+      engine,
+      issuableDraft({
+        name: { en: 'Everyone', ar: 'الجميع' },
+        audience: { ...d.audience, mode: 'ALL' },
+      }),
+    );
     expect(
       (await refusal(engine.issue(maker, { campaignId: all.id, customerIds: ['0551234567'] })))
         .code,
@@ -567,9 +582,14 @@ describe('issuance through the existing marketing coupon pipeline', () => {
     const c = await approved(
       engine,
       issuableDraft({
-        offer: { ...d.offer, type: 'FREE_DELIVERY', deliveryFeeCovered: 'FULL' },
-        scope: { ...d.scope, branchIds: ['b-1'], brandIds: ['1', '3'] },
-        validity: { ...d.validity, startTime: '14:00', daysOfWeek: [0, 1] },
+        offer: { ...d.offer, type: 'FREE_DELIVERY', deliveryFeeCoveredSar: 'FULL' },
+        scope: { ...d.scope, allBrands: false, branchIds: ['b-1'], brandIds: ['1', '3'] },
+        schedule: {
+          ...d.schedule,
+          allDay: false,
+          timeWindow: { from: '14:00', to: '17:00' },
+          daysOfWeek: [0, 1],
+        },
         rules: { ...d.rules, maxOrderSar: 200, paymentMethods: ['CARD'] },
       }),
     );
@@ -581,8 +601,9 @@ describe('issuance through the existing marketing coupon pipeline', () => {
       'rules.paymentMethods[]',
       'scope.brandIds[]',
       'scope.branchIds[]',
-      'validity.startTime',
-      'validity.daysOfWeek[]',
+      'schedule.timeWindow.from',
+      'schedule.timeWindow.to',
+      'schedule.daysOfWeek[]',
     ]);
     expect(store.coupons).toHaveLength(0);
   });
@@ -602,8 +623,10 @@ describe('issuance through the existing marketing coupon pipeline', () => {
         },
       },
       experiment: { ...d.experiment, enabled: true },
+      trigger: { birthday: { tierBoost: { enabled: true, extraSar: 10 } } },
       loyalty: {
-        stampsRequired: 5,
+        type: 'STAMP' as const,
+        ordersRequired: 5,
         stampExpiryDays: 60,
         milestones: [],
         minOrderToCountSar: 30,
@@ -611,35 +634,97 @@ describe('issuance through the existing marketing coupon pipeline', () => {
         repeat: true,
         progressMessages: true,
       },
-      rules: { ...d.rules, previousOrders: 'NONE' as const, firstOrderOnly: true },
+      rules: {
+        ...d.rules,
+        previousOrders: 'NONE' as const,
+        firstOrderOnly: true,
+        binRanges: ['400000-499999'],
+      },
       scope: {
         ...d.scope,
+        allBrands: false,
         brandIds: ['nope'],
         categoryIds: ['c'],
         productIds: ['p'],
         excludedProductIds: ['x'],
       },
       limits: { ...d.limits, perCustomerMode: 'UNLIMITED' as const, dailyRedemptions: 5 },
-      validity: { ...d.validity, endTime: '17:00', endDate: '2026-11-01' },
-      distribution: { ...d.distribution, codeType: 'SHARED' as const, code: 'WELCOME40' },
+      fraud: {
+        onePerPhoneAndDevice: true,
+        excludeStaffAndTestAccounts: true,
+        blockFlaggedCustomers: true,
+      },
+      schedule: {
+        ...d.schedule,
+        timeWindow: { to: '17:00' },
+        onlyDuringBranchHours: true,
+        endDate: '2026-11-01',
+        limitedTime: { enabled: true, hours: 4 },
+      },
+      distribution: {
+        ...d.distribution,
+        codeType: 'SHARED' as const,
+        code: 'WELCOME40',
+        addMode: 'CUSTOMER_CLAIMS' as const,
+        issueMode: 'WHEN_ELIGIBLE' as const,
+      },
     } as unknown as Campaign;
     expect(issuanceBlockers(c, '2026-11-16')).toEqual([
       'offer.maxDiscountSar',
       'offer.partialRedemption.enabled',
       'experiment.enabled',
-      'loyalty.stampsRequired',
+      'trigger.birthday.tierBoost.enabled',
+      'loyalty.type',
       'rules.previousOrders',
       'rules.firstOrderOnly',
+      'rules.binRanges[]',
       'scope.brandIds[]',
       'scope.categoryIds[]',
       'scope.productIds[]',
       'scope.excludedProductIds[]',
       'limits.perCustomerMax',
       'limits.dailyRedemptions',
-      'validity.endTime',
-      'validity.endDate',
+      'fraud.onePerPhoneAndDevice',
+      'fraud.excludeStaffAndTestAccounts',
+      'fraud.blockFlaggedCustomers',
+      'schedule.timeWindow.to',
+      'schedule.onlyDuringBranchHours',
+      'schedule.endDate',
+      'schedule.limitedTime.enabled',
       'distribution.code',
+      'distribution.addMode',
+      'distribution.issueMode',
     ]);
+  });
+
+  it('refuses "all brands" switched off with no brand listed - it would reach every brand', () => {
+    const d = issuableDraft();
+    const c = {
+      ...d,
+      scope: { ...d.scope, allBrands: false, brandIds: [] },
+    } as unknown as Campaign;
+    expect(issuanceBlockers(c, '2026-11-16')).toEqual(['scope.allBrands']);
+  });
+
+  it('carries "expires after it is issued" into the coupon window, and refuses one that would expire before it starts', async () => {
+    const d = issuableDraft();
+    const seven = { ...d, schedule: { ...d.schedule, expiresAfterIssueDays: 7 } };
+    /* issued on 2026-11-16: 7 days inclusive -> the 22nd, well before the end */
+    expect(couponValidTo(seven as unknown as Campaign, '2026-11-16')).toBe('2026-11-22');
+    /* near the end the campaign's own end date wins */
+    expect(couponValidTo(seven as unknown as Campaign, '2026-12-08')).toBe('2026-12-10');
+    const early = {
+      ...d,
+      schedule: { ...d.schedule, startDate: '2026-12-01', expiresAfterIssueDays: 3 },
+    } as unknown as Campaign;
+    expect(issuanceBlockers(early, '2026-11-16')).toEqual(['schedule.expiresAfterIssueDays']);
+    const { engine, store } = setup();
+    const c = await approved(engine, issuableDraft({ schedule: seven.schedule }));
+    await engine.issue(maker, { campaignId: c.id, customerIds: ['0551000001'] });
+    expect(store.coupons[0]!.row).toMatchObject({
+      valid_from: '2026-11-10',
+      valid_to: '2026-11-22',
+    });
   });
 
   it('uses a SHARED MKT- code for the first batch only', async () => {
@@ -686,7 +771,7 @@ describe('results', () => {
     const { engine } = setup();
     const c = await approved(engine);
     await engine.setCampaignStatus(maker, c.id, { status: 'live' });
-    const w = await engine.saveCampaign(maker, issuableDraft());
+    const w = await engine.saveCampaign(maker, other());
     await engine.submitForApproval(maker, w.id, { forecast: forecastFor() });
     const home = await engine.home();
     expect(home.coupons).toEqual({ live: 1, redeemed: 0, discountSar: 0, waitingApproval: 1 });
@@ -965,6 +1050,49 @@ describe('pre-studies: stamped by the server, four eyes on approval', () => {
   });
 });
 
+describe("the design's uniqueness rules and the old shape", () => {
+  it('refuses a second campaign with the same English name while the first is not over', async () => {
+    const { engine } = setup();
+    const a = await engine.saveCampaign(maker, issuableDraft());
+    const dup = issuableDraft({ name: { en: '  COME BACK - sar 10 off ', ar: 'x' } });
+    expect(await refusal(engine.saveCampaign(maker, dup))).toMatchObject({
+      status: 409,
+      code: 'not_unique',
+      detail: { fields: ['campaign.name.en'] },
+    });
+    /* saving the campaign itself is not a clash */
+    expect((await engine.saveCampaign(maker, issuableDraft(), a.id)).id).toBe(a.id);
+  });
+
+  it('refuses a shared code another approved or live campaign already uses', async () => {
+    const { engine } = setup();
+    const d = issuableDraft();
+    const shared = { ...d.distribution, codeType: 'SHARED' as const, code: 'MKT-WELCOME' };
+    await approved(engine, issuableDraft({ distribution: shared }));
+    const r = await refusal(
+      engine.saveCampaign(maker, { ...other(), distribution: { ...shared, code: 'mkt-welcome' } }),
+    );
+    expect(r).toMatchObject({ code: 'not_unique', detail: { fields: ['distribution.code'] } });
+  });
+
+  it('accepts a draft in the shape before field parity (a portal deployed after the gateway)', async () => {
+    const { engine, store } = setup();
+    const d = issuableDraft() as unknown as Record<string, unknown>;
+    const { schedule: _s, ...rest } = d;
+    const old = {
+      ...rest,
+      validity: {
+        startDate: '2026-11-10',
+        endDate: '2026-11-19',
+        daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+      },
+    };
+    const c = await engine.saveCampaign(maker, old);
+    expect(c.schedule).toMatchObject({ startDate: '2026-11-10', expiresAfterIssueDays: 10 });
+    expect(store.campaigns[0]!.row.draft).not.toHaveProperty('validity');
+  });
+});
+
 describe('every field of the field specification is persisted and returned', () => {
   /** A draft that sets every one of the spec's paths to a non-default value. */
   const full = issuableDraft({
@@ -975,14 +1103,14 @@ describe('every field of the field specification is persisted and returned', () 
     tenantId: 'yiji-2',
     notes: 'Internal note',
     offer: {
-      type: 'PERCENT',
+      type: 'FIXED',
       percent: 25,
       amountSar: 7,
       maxDiscountSar: 30,
-      bxgy: { buyQty: 2, getQty: 1, productIds: ['P-1'] },
+      bxgy: { buyQty: 2, getQty: 1, productId: 'P-1' },
       freeItem: { productId: 'P-2', quantity: 2 },
       bundle: { productIds: ['P-3', 'P-4'], priceSar: 32 },
-      deliveryFeeCovered: 5,
+      deliveryFeeCoveredSar: 5,
       cashback: { creditValidityDays: 21 },
       posDiscountCode: 'POS-9',
       onRefund: 'KEEP',
@@ -1010,8 +1138,9 @@ describe('every field of the field specification is persisted and returned', () 
       },
     },
     loyalty: {
-      stampsRequired: 6,
-      reward: 'Free pasta',
+      type: 'CHALLENGE',
+      ordersRequired: 6,
+      windowDays: 30,
       stampExpiryDays: 90,
       milestones: ['5', '10'],
       minOrderToCountSar: 35,
@@ -1033,10 +1162,12 @@ describe('every field of the field specification is persisted and returned', () 
       minOrderSar: 45,
       maxOrderSar: 300,
       previousOrders: 'THREE_PLUS',
-      firstOrderOnly: true,
+      firstOrderOnly: false,
       paymentMethods: ['MADA', 'CARD'],
+      binRanges: ['400000-499999', '52345678'],
     },
     scope: {
+      allBrands: false,
       brandIds: ['3'],
       branchIds: ['b-1'],
       categoryIds: ['c-1'],
@@ -1055,49 +1186,75 @@ describe('every field of the field specification is persisted and returned', () 
       codeType: 'UNIQUE',
       code: 'BDAY',
       uniqueCodeCount: 5000,
-      channels: ['SMS', 'EMAIL'],
+      channels: ['PUSH', 'IN_APP_BANNER', 'WHATSAPP'],
+      addMode: 'CUSTOMER_CLAIMS',
+      issueMode: 'WHEN_ELIGIBLE',
     },
     stacking: {
       combineWithOtherOffers: true,
       combineWithLoyalty: false,
       combineWithOtherCoupons: true,
     },
-    validity: {
+    fraud: {
+      onePerPhoneAndDevice: true,
+      excludeStaffAndTestAccounts: true,
+      blockFlaggedCustomers: true,
+    },
+    schedule: {
       startDate: '2026-12-01',
       endDate: '2026-12-31',
-      startTime: '10:00',
-      endTime: '22:00',
+      allDay: false,
+      timeWindow: { from: '10:00', to: '22:00' },
+      onlyDuringBranchHours: true,
       daysOfWeek: [5, 6],
+      expiresAfterIssueDays: 10,
+      limitedTime: { enabled: true, hours: 6 },
     },
+    communication: {
+      push: {
+        title: { en: 'A gift for you', ar: 'هدية لك' },
+        body: { en: 'Your gift is in the wallet', ar: 'هديتك في المحفظة' },
+      },
+      banner: { text: { en: 'Happy birthday', ar: 'عيد ميلاد سعيد' } },
+      sms: { text: { en: 'Your gift awaits', ar: 'هديتك بانتظارك' } },
+      sendTime: 'BEST_TIME',
+      frequencyCap: 'ONE_PER_WEEK',
+      quietHours: false,
+      respectConsent: false,
+    },
+    forecast: { baselineOrderRatePct: 30, expectedUpliftPts: 8 },
+    studyId: 'STU-2611-0009',
   });
 
   /** `campaign.name.en` -> `name.en`; `audience.conditions[]` -> `audience.conditions`. */
   const draftPath = (p: string) => p.replace(/^campaign\./, '').replace(/\[\]$/, '');
 
-  it('round-trips all 83 spec paths through the Directus row and back', async () => {
+  it('round-trips all 107 design paths (and the kept code-only ones) through the Directus row and back', async () => {
     const { engine, store } = setup();
     const saved = await engine.saveCampaign(maker, full);
     await engine.submitForApproval(maker, saved.id, { forecast: forecastFor() });
     const back = (await engine.getCampaign(saved.id))!;
     const missing: string[] = [];
     for (const f of CAMPAIGN_FIELD_SPEC) {
-      if (f.path === 'review.snapshot') {
-        if (!back.snapshot) missing.push(f.path);
-        continue;
-      }
       const p = draftPath(f.path);
       const want = valueAtPath(full, p);
       if (want === undefined) missing.push(`${f.path} (not set by the test)`);
       else if (JSON.stringify(valueAtPath(back, p)) !== JSON.stringify(want)) missing.push(f.path);
     }
+    for (const f of CAMPAIGN_CODE_ONLY_FIELDS) {
+      const want = valueAtPath(full, f.path);
+      if (want === undefined) missing.push(`${f.path} (not set by the test)`);
+      else if (JSON.stringify(valueAtPath(back, f.path)) !== JSON.stringify(want))
+        missing.push(f.path);
+    }
     expect(missing).toEqual([]);
-    expect(CAMPAIGN_FIELD_SPEC).toHaveLength(83);
+    expect(CAMPAIGN_FIELD_SPEC).toHaveLength(107);
     /* ...and the typed columns a list or filter reads. */
     expect(store.campaigns[0]!.row).toMatchObject({
       engine_code: saved.id,
       engine_status: 'waiting_approval',
       objective: 'OCCASION',
-      offer_type: 'PERCENT',
+      offer_type: 'FIXED',
       tenant_id: 'yiji-2',
       prepared_by: 'user-maker',
       name: 'Birthday gift',
@@ -1108,7 +1265,11 @@ describe('every field of the field specification is persisted and returned', () 
       status: 'active',
     });
     /* The study it came from, too. */
-    const withStudy = await engine.saveCampaign(maker, { ...full, studyId: 'STU-1' });
+    const withStudy = await engine.saveCampaign(maker, {
+      ...full,
+      name: { ...full.name, en: 'Birthday gift 2' },
+      studyId: 'STU-1',
+    });
     expect((await engine.getCampaign(withStudy.id))!.studyId).toBe('STU-1');
   });
 });

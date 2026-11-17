@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import {
   CAMPAIGN_OBJECTIVES,
-  CampaignDraft,
+  StoredCampaignDraft,
+  campaignUniquenessConflicts,
+  type CampaignDraft,
   DEFAULT_MONEY_MODEL,
   MARKETING_BRANDS,
   MARKETING_LIST_MAX,
@@ -409,8 +411,13 @@ export class CrmMarketingEngine {
     return r;
   }
 
+  /**
+   * Today's shape, or the one before field parity (a portal deployed after
+   * the gateway still sends `validity`): both are upgraded, then checked
+   * against the design's rules.
+   */
   private parseDraft(body: unknown): CampaignDraft {
-    const parsed = CampaignDraft.safeParse(body);
+    const parsed = StoredCampaignDraft.safeParse(body);
     if (!parsed.success) throw new EngineRefusal(422, 'invalid_campaign', firstIssue(parsed.error));
     return parsed.data;
   }
@@ -427,6 +434,11 @@ export class CrmMarketingEngine {
     requirePrepare(actor);
     const draft = this.parseDraft(body);
     const now = this.iso();
+    /* The design: the English name is unique, a shared code is unique across
+       the campaigns that hold or will hold it. */
+    const others = (await this.store.listCampaigns()).map((r) => r.campaign);
+    const taken = campaignUniquenessConflicts(draft, id, others);
+    if (taken.length) throw new EngineRefusal(409, 'not_unique', { fields: taken });
     if (!id) {
       const c: Campaign = {
         ...draft,
@@ -682,6 +694,7 @@ export class CrmMarketingEngine {
     if (!picked.length) return { batchId: '', requested, issued: 0, skipped };
     const row = campaignCouponRow(c, rowId, picked.length, {
       firstBatch: already.size === 0,
+      today: dayOf(this.now()),
       random: this.random,
     });
     const problems = campaignCouponProblems(row);

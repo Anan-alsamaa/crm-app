@@ -62,7 +62,8 @@ and shapes, which did not change.
 
 - **The live lock covers every money field.** `LOCKED_WHEN_LIVE` now holds objective, tenant,
   offer, experiment, trigger, loyalty, audience, rules, scope, limits, distribution, stacking,
-  validity and study. A live, paused or ended campaign keeps its approval, so only its name,
+  validity and study (2026-11-17: `validity` is now `schedule`, and `fraud`, `communication`
+  and `forecast` are locked too). A live, paused or ended campaign keeps its approval, so only its name,
   notes, reason code and funding can change. A bigger budget means ending it and approving a
   new campaign (re-approval of a live campaign is not built).
 - **Four eyes covers editors.** Whoever created, edited or submitted a campaign cannot decide
@@ -110,25 +111,33 @@ and shapes, which did not change.
 ## 2. Campaigns (the seven-step form)
 
 A campaign is `CampaignDraft` + status + audit. The field set is the portal's "Field
-specification" page (`CAMPAIGN_FIELD_SPEC`, 84 fields in 7 steps):
+specification" page (`CAMPAIGN_FIELD_SPEC`): exactly the owner-approved design's 107 fields
+in 7 steps (`docs/marketing/ayman-draft-fields.csv`; mapping and old-path handling in
+`docs/marketing/field-parity.md`, 2026-11-17):
 
 - `objective` (16 goals), `name {en, ar}`, `reasonCode`, `funding {source, partnerSharePct}`, `tenantId`, `notes`
-- `offer`: `type` PERCENT | FIXED | BXGY | FREE_ITEM | BUNDLE | FREE_DELIVERY | CASHBACK, with `percent`, `amountSar`, `maxDiscountSar`, `bxgy {buyQty, getQty, productIds}`, `freeItem {productId, quantity}`, `bundle {productIds, priceSar}`, `deliveryFeeCovered` (FULL | SAR), `cashback {creditValidityDays}`, `posDiscountCode`, `onRefund`, `onCancelBeforeCompletion`, `partialRedemption {enabled, maxPerOrderSar, balanceExpiry, onOrderCancel}`
+- `offer`: `type` PERCENT | FIXED | BXGY | FREE_ITEM | BUNDLE | FREE_DELIVERY | CASHBACK, with `percent`, `amountSar`, `maxDiscountSar`, `bxgy {buyQty, getQty, productId}`, `freeItem {productId, quantity}`, `bundle {productIds[], priceSar}`, `deliveryFeeCoveredSar` (FULL | SAR), `cashback {creditValidityDays}`, `posDiscountCode`, `onRefund`, `onCancelBeforeCompletion`, `partialRedemption {enabled, maxPerOrderSar, balanceExpiry, onOrderCancel}`
 - `experiment {enabled, variantB.value, splitPctA, winnerMetric, autoWinnerAfterDays}`
 - `trigger.birthday {occasion, issueDaysBefore, missingDateOfBirth, tierBoost}`
-- `loyalty {stampsRequired, reward, stampExpiryDays, milestones, minOrderToCountSar, countOrdersFrom, repeat, progressMessages}`
+- `loyalty {type STAMP|CHALLENGE|MILESTONE, ordersRequired, windowDays, stampExpiryDays, milestones[], minOrderToCountSar, countOrdersFrom, repeat, progressMessages}`
 - `audience {mode SEGMENT|LIST|PHONES|ALL, conditions[{c,p}], match, phoneNumbers[], listId, visibility, controlGroupPct, excludeDiscountSensitive}`
-- `rules {minOrderSar, maxOrderSar, previousOrders, firstOrderOnly, paymentMethods[]}`
-- `scope {brandIds[], branchIds[], categoryIds[], productIds[], excludedProductIds[], orderTypes[]}`
+- `rules {minOrderSar, maxOrderSar, previousOrders, firstOrderOnly, paymentMethods[], binRanges[]}`
+- `scope {allBrands, brandIds[], branchIds[], categoryIds[], productIds[], excludedProductIds[], orderTypes[]}`
 - `limits {perCustomerMode, perCustomerMax, totalRedemptions, dailyRedemptions, budgetSar}`
-- `distribution {codeType NONE|SHARED|UNIQUE, code, uniqueCodeCount, channels[]}`
+- `distribution {codeType NONE|SHARED|UNIQUE, code, uniqueCodeCount, channels[], addMode AUTO_WALLET|CUSTOMER_CLAIMS, issueMode ALL_AT_ONCE|WHEN_ELIGIBLE}`
 - `stacking {combineWithOtherOffers, combineWithLoyalty, combineWithOtherCoupons}`
-- `validity {startDate, endDate, startTime, endTime, daysOfWeek[]}`
+- `fraud {onePerPhoneAndDevice, excludeStaffAndTestAccounts, blockFlaggedCustomers}`
+- `schedule {startDate, endDate, allDay, timeWindow {from, to}, onlyDuringBranchHours, daysOfWeek[], expiresAfterIssueDays, limitedTime {enabled, hours}}` (was `validity`; an old row is read in this shape)
+- `communication {push {title, body}, banner {text}, sms {text}` (each `{en, ar}`)`, sendTime, frequencyCap, quietHours, respectConsent}`
+- `forecast {baselineOrderRatePct, expectedUpliftPts}` (planning inputs)
+
+The English name is unique among campaigns not ended or rejected, and a shared code among
+those that hold or will hold it (409 `not_unique`).
 
 Status: `draft → finance_review → waiting_approval → approved → live → paused → ended`, or
 `rejected`. **Rules the engine enforces:** the creator never approves (`createdBy !==
 decidedBy`); once `live`, `offer`, `audience`, `distribution.code`, `rules` and
-`validity.startDate` cannot change (`LOCKED_WHEN_LIVE`); the campaign pauses itself at
+`schedule.startDate` cannot change (`LOCKED_WHEN_LIVE`); the campaign pauses itself at
 `limits.budgetSar` or `limits.totalRedemptions`.
 
 | Call                                            | Body / returns                                                                                                                                                                                     |

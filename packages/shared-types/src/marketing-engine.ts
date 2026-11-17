@@ -107,25 +107,68 @@ export type AudienceCondition = (typeof AUDIENCE_CONDITIONS)[number];
 const sar = z.number().min(0);
 const pct = z.number().min(0).max(100);
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const hhmm = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
+
+/*
+ * FIELD PARITY WITH THE DESIGN (owner, 2026-11-17). The schema below is the
+ * owner-approved draft's field list (docs/marketing/ayman-draft-fields.csv,
+ * 107 rows) field by field; docs/marketing/field-parity.md maps every row to
+ * the code. Each field carries the draft's type, its required/conditional
+ * rule (in `campaignDraftIssues`, below) and its options and ranges. Rows
+ * stored before the parity work are read through `upgradeCampaignDraft`, so
+ * nothing already saved stops opening.
+ */
+
+export const LOYALTY_TYPES = ['STAMP', 'CHALLENGE', 'MILESTONE'] as const;
+export const LOYALTY_MILESTONES = ['5', '10', '25', '50', '100'] as const;
+export const ADD_MODES = ['AUTO_WALLET', 'CUSTOMER_CLAIMS'] as const;
+export const ISSUE_MODES = ['ALL_AT_ONCE', 'WHEN_ELIGIBLE'] as const;
+export const SEND_TIMES = ['ON_ISSUE', 'ON_START_DATE', 'BEST_TIME'] as const;
+export const FREQUENCY_CAPS = [
+  'ONE_PER_DAY',
+  'THREE_PER_WEEK',
+  'ONE_PER_WEEK',
+  'NO_LIMIT',
+] as const;
+export const COMPENSATION_REASONS = [
+  'LATE_ORDER',
+  'MISSING_ITEM',
+  'QUALITY',
+  'DRIVER',
+  'APP_ISSUE',
+] as const;
+export const FUNDING_SOURCES = ['YIJI_MARKETING', 'BRAND', 'PARTNER', 'SHARED'] as const;
+/** The tenants a campaign can belong to (the current screen's single tenant). */
+export const CAMPAIGN_TENANTS = ['yiji'] as const;
+
+/** A card's first 6-8 digits (BIN), or a range of two BINs of the same length. */
+export const BIN_RANGE = /^(\d{6,8})(?:-(\d{6,8}))?$/;
 
 export const CampaignOffer = z.object({
   type: z.enum(OFFER_TYPES),
-  percent: pct.optional(),
-  amountSar: sar.optional(),
+  /** 1-100: PERCENT and CASHBACK. */
+  percent: z.number().min(1).max(100).optional(),
+  /** Greater than 0: FIXED (and the cost estimate of the item offers). */
+  amountSar: z.number().gt(0).optional(),
   /** Caps the saving on large orders; mandatory for PERCENT and CASHBACK. */
-  maxDiscountSar: sar.optional(),
+  maxDiscountSar: z.number().gt(0).optional(),
   bxgy: z
     .object({
       buyQty: z.number().int().min(1),
       getQty: z.number().int().min(1),
-      productIds: z.array(z.string()),
+      /** The menu product; the free one is the same or a cheaper one. */
+      productId: z.string().max(64),
     })
     .optional(),
-  freeItem: z.object({ productId: z.string(), quantity: z.number().int().min(1) }).optional(),
-  bundle: z.object({ productIds: z.array(z.string()).min(2), priceSar: sar }).optional(),
+  freeItem: z
+    .object({ productId: z.string().max(64), quantity: z.number().int().min(1).default(1) })
+    .optional(),
+  bundle: z
+    .object({ productIds: z.array(z.string().max(64)).min(2), priceSar: z.number().gt(0) })
+    .optional(),
   /** FULL, or a SAR amount of the delivery fee covered. */
-  deliveryFeeCovered: z.union([z.literal('FULL'), sar]).optional(),
-  cashback: z.object({ creditValidityDays: z.number().int().min(1) }).optional(),
+  deliveryFeeCoveredSar: z.union([z.literal('FULL'), z.number().gt(0)]).optional(),
+  cashback: z.object({ creditValidityDays: z.number().int().min(1).max(365) }).optional(),
   /** Matches the discount line in the restaurant POS. */
   posDiscountCode: z.string().max(64).optional(),
   onRefund: z.enum(['RETURN_IF_VALID', 'KEEP', 'NEVER_RETURN']).default('RETURN_IF_VALID'),
@@ -135,7 +178,7 @@ export const CampaignOffer = z.object({
   partialRedemption: z
     .object({
       enabled: z.boolean().default(false),
-      maxPerOrderSar: sar.optional(),
+      maxPerOrderSar: z.number().gt(0).optional(),
       balanceExpiry: z.enum(['SAME', 'DAYS_30', 'DAYS_90']).default('SAME'),
       onOrderCancel: z.enum(['RESTORE', 'KEEP']).default('RESTORE'),
     })
@@ -144,10 +187,11 @@ export const CampaignOffer = z.object({
 
 export const CampaignExperiment = z.object({
   enabled: z.boolean().default(false),
-  variantB: z.object({ value: z.number().min(0) }).optional(),
+  variantB: z.object({ value: z.number().gt(0) }).optional(),
+  /** 10-90: the share who get version A; the rest get version B. */
   splitPctA: z.number().int().min(10).max(90).default(50),
   winnerMetric: z.enum(['PROFIT', 'REDEMPTIONS', 'REVENUE']).default('PROFIT'),
-  autoWinnerAfterDays: z.number().int().min(0).default(7),
+  autoWinnerAfterDays: z.number().int().min(0).max(90).default(7),
 });
 
 export const CampaignTrigger = z.object({
@@ -164,10 +208,15 @@ export const CampaignTrigger = z.object({
 });
 
 export const CampaignLoyalty = z.object({
-  stampsRequired: z.number().int().min(2).max(50).optional(),
-  reward: z.string().max(200).optional(),
-  stampExpiryDays: z.number().int().min(1).default(60),
-  milestones: z.array(z.string()).default([]),
+  /** How customers earn the reward. */
+  type: z.enum(LOYALTY_TYPES),
+  /** STAMP and CHALLENGE: orders per card. */
+  ordersRequired: z.number().int().min(2).max(50).optional(),
+  /** CHALLENGE: the orders must fall within this many days. */
+  windowDays: z.number().int().min(1).max(365).optional(),
+  stampExpiryDays: z.number().int().min(1).max(365).default(60),
+  /** MILESTONE: the lifetime order numbers that earn the reward. */
+  milestones: z.array(z.enum(LOYALTY_MILESTONES)).default([]),
   minOrderToCountSar: sar.default(30),
   countOrdersFrom: z.enum(['ANY', 'THIS_BRAND', 'THIS_BRANCH']).default('ANY'),
   repeat: z.boolean().default(true),
@@ -179,9 +228,11 @@ export const CampaignAudience = z.object({
   conditions: z
     .array(z.object({ c: z.enum(AUDIENCE_CONDITIONS), p: z.string().max(200) }))
     .default([]),
+  /** Code-only (kept): how the conditions combine - ALL (AND) or ANY (OR). */
   match: z.enum(['ALL', 'ANY']).default('ALL'),
   phoneNumbers: z.array(z.string().regex(/^\+9665\d{8}$/)).default([]),
-  listId: z.string().optional(),
+  /** Code-only (kept): the saved list a LIST audience uses. */
+  listId: z.string().max(80).optional(),
   visibility: z.enum(['TARGETED', 'PUBLIC']).default('TARGETED'),
   /** 0-20: a share who do NOT get the coupon, so the extra orders can be measured. */
   controlGroupPct: z.number().int().min(0).max(20).default(10),
@@ -193,10 +244,17 @@ export const CampaignRules = z.object({
   maxOrderSar: sar.default(0),
   previousOrders: z.enum(['ANY', 'NONE', 'ONE_PLUS', 'THREE_PLUS']).default('ANY'),
   firstOrderOnly: z.boolean().default(false),
-  paymentMethods: z.array(z.enum(PAYMENT_METHODS)).default([...PAYMENT_METHODS]),
+  paymentMethods: z
+    .array(z.enum(PAYMENT_METHODS))
+    .min(1)
+    .default([...PAYMENT_METHODS]),
+  /** Partner offers: the bank cards (BIN or BIN-BIN range) the coupon is limited to. */
+  binRanges: z.array(z.string().regex(BIN_RANGE)).max(50).default([]),
 });
 
 export const CampaignScope = z.object({
+  /** Every brand and branch, including ones opened later. */
+  allBrands: z.boolean().default(true),
   brandIds: z.array(z.string()).default([]),
   branchIds: z.array(z.string()).default([]),
   categoryIds: z.array(z.string()).default([]),
@@ -217,8 +275,12 @@ export const CampaignLimits = z.object({
 export const CampaignDistribution = z.object({
   codeType: z.enum(['NONE', 'SHARED', 'UNIQUE']).default('NONE'),
   code: z.string().max(32).optional(),
-  uniqueCodeCount: z.number().int().min(1).optional(),
-  channels: z.array(z.enum(CHANNELS)).default(['APP_WALLET', 'PUSH']),
+  uniqueCodeCount: z.number().int().min(1).max(1_000_000).optional(),
+  channels: z.array(z.enum(CHANNELS)).min(1).default(['APP_WALLET', 'PUSH']),
+  /** AUTO_WALLET: added to the wallet; CUSTOMER_CLAIMS: the customer claims it. */
+  addMode: z.enum(ADD_MODES).default('AUTO_WALLET'),
+  /** ALL_AT_ONCE: one batch to the audience; WHEN_ELIGIBLE: each customer when they qualify. */
+  issueMode: z.enum(ISSUE_MODES).default('ALL_AT_ONCE'),
 });
 
 export const CampaignStacking = z.object({
@@ -227,31 +289,72 @@ export const CampaignStacking = z.object({
   combineWithOtherCoupons: z.boolean().default(false),
 });
 
-export const CampaignValidity = z.object({
+export const CampaignFraud = z.object({
+  /** Mandatory for first-order and new-customer coupons. */
+  onePerPhoneAndDevice: z.boolean().default(false),
+  excludeStaffAndTestAccounts: z.boolean().default(false),
+  blockFlaggedCustomers: z.boolean().default(false),
+});
+
+/** When the coupon can be used (the draft's `schedule`; was `validity`). */
+export const CampaignSchedule = z.object({
   startDate: day,
   endDate: day,
-  startTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/)
-    .optional(),
-  endTime: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/)
-    .optional(),
-  daysOfWeek: z.array(z.number().int().min(0).max(6)).default([0, 1, 2, 3, 4, 5, 6]),
+  allDay: z.boolean().default(true),
+  timeWindow: z.object({ from: hhmm.optional(), to: hhmm.optional() }).default({}),
+  onlyDuringBranchHours: z.boolean().default(false),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1).default([0, 1, 2, 3, 4, 5, 6]),
+  /** The customer's coupon expires this many days after it is issued. */
+  expiresAfterIssueDays: z.number().int().min(1).max(365),
+  /** A flash offer: once issued, it must be used within `hours`. */
+  limitedTime: z
+    .object({
+      enabled: z.boolean().default(false),
+      hours: z.number().int().min(1).max(168).optional(),
+    })
+    .default({}),
+});
+
+const bilingual = (max: number) =>
+  z
+    .object({
+      en: z.string().trim().max(max).default(''),
+      ar: z.string().trim().max(max).default(''),
+    })
+    .default({});
+
+/** What the customer is told, per channel (step 6). */
+export const CampaignCommunication = z.object({
+  push: z.object({ title: bilingual(65), body: bilingual(240) }).default({}),
+  banner: z.object({ text: bilingual(80) }).default({}),
+  sms: z.object({ text: bilingual(320) }).default({}),
+  sendTime: z.enum(SEND_TIMES).default('ON_ISSUE'),
+  /** Shared across campaigns; enforced by the notification service. */
+  frequencyCap: z.enum(FREQUENCY_CAPS).default('THREE_PER_WEEK'),
+  /** No messages between 23:00 and 09:00. */
+  quietHours: z.boolean().default(true),
+  /** PDPL: must stay on for SMS and email. */
+  respectConsent: z.boolean().default(true),
+});
+
+/** Planning inputs for the business case (step 7); empty = estimated. */
+export const CampaignForecastPlan = z.object({
+  baselineOrderRatePct: pct.optional(),
+  expectedUpliftPts: pct.optional(),
 });
 
 export const CampaignFunding = z.object({
-  source: z.enum(['YIJI_MARKETING', 'BRAND', 'PARTNER', 'SHARED']).default('YIJI_MARKETING'),
+  source: z.enum(FUNDING_SOURCES).default('YIJI_MARKETING'),
   partnerSharePct: pct.default(0),
 });
 
-export const CampaignDraft = z.object({
+/** The draft's fields, without the cross-field rules (read old rows with this). */
+export const CampaignDraftShape = z.object({
   objective: z.enum(CAMPAIGN_OBJECTIVES),
   name: z.object({ en: z.string().trim().min(1).max(60), ar: z.string().trim().min(1).max(60) }),
   reasonCode: z.string().max(64).optional(),
   funding: CampaignFunding.default({}),
-  tenantId: z.string().default('yiji'),
+  tenantId: z.string().min(1).max(40).default('yiji'),
   notes: z.string().max(1000).optional(),
   offer: CampaignOffer,
   experiment: CampaignExperiment.default({}),
@@ -263,19 +366,382 @@ export const CampaignDraft = z.object({
   limits: CampaignLimits,
   distribution: CampaignDistribution.default({}),
   stacking: CampaignStacking.default({}),
-  validity: CampaignValidity,
+  fraud: CampaignFraud.default({}),
+  schedule: CampaignSchedule,
+  communication: CampaignCommunication.default({}),
+  forecast: CampaignForecastPlan.default({}),
   /** The pre-study this campaign came from, if any. */
   studyId: z.string().optional(),
+});
+type DraftShape = z.infer<typeof CampaignDraftShape>;
+
+/** Objectives (and rules) whose coupon is only for a customer's first order. */
+export function firstOrderCoupon(
+  d: Pick<DraftShape, 'objective'> & { rules?: { firstOrderOnly?: boolean } },
+): boolean {
+  return (
+    d.objective === 'FIRST_ORDER' || d.objective === 'NEW_CUSTOMER' || !!d.rules?.firstOrderOnly
+  );
+}
+
+/** Inclusive days from `from` to `to` (yyyy-mm-dd), or null when unreadable. */
+export function inclusiveDays(from: string, to: string): number | null {
+  const a = Date.parse(`${from}T00:00:00Z`);
+  const b = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.round((b - a) / 86_400_000) + 1;
+}
+
+/**
+ * The draft's required/conditional rules, as path + message. Pure: the form,
+ * the sample engine and the CRM's engine refuse the same drafts.
+ */
+export function campaignDraftIssues(
+  d: DraftShape,
+): Array<{ path: string; rule: string; message: string }> {
+  const out: Array<{ path: string; rule: string; message: string }> = [];
+  const add = (path: string, rule: string, message: string) => out.push({ path, rule, message });
+  const o = d.offer;
+  const pctOffer = o.type === 'PERCENT' || o.type === 'CASHBACK';
+  /* step 1 */
+  if (d.objective === 'SERVICE_RECOVERY' && !d.reasonCode)
+    add('reasonCode', 'reasonRequired', 'Required for compensation.');
+  if (
+    (d.funding.source === 'PARTNER' || d.funding.source === 'SHARED') &&
+    !(d.funding.partnerSharePct > 0)
+  )
+    add('funding.partnerSharePct', 'partnerShareRequired', 'Say how much the partner pays.');
+  /* step 2 - the discount */
+  if (pctOffer && o.percent === undefined)
+    add('offer.percent', 'percentRequired', 'Required: 1-100.');
+  if (pctOffer && o.maxDiscountSar === undefined)
+    add('offer.maxDiscountSar', 'maxDiscountRequired', 'Mandatory for percentage and cashback.');
+  if (o.type === 'FIXED' && o.amountSar === undefined)
+    add('offer.amountSar', 'amountRequired', 'Required: greater than 0.');
+  if (o.type === 'BXGY' && !o.bxgy?.productId)
+    add('offer.bxgy.productId', 'itemRequired', 'Pick the item.');
+  if (o.type === 'FREE_ITEM' && !o.freeItem?.productId)
+    add('offer.freeItem.productId', 'freeItemRequired', 'Pick the free item.');
+  if (o.type === 'BUNDLE' && !o.bundle)
+    add('offer.bundle.productIds', 'bundleItemsRequired', 'At least 2 menu items.');
+  if (o.partialRedemption?.enabled && o.type !== 'FIXED')
+    add('offer.partialRedemption.enabled', 'partialFixedOnly', 'Fixed-amount coupons only.');
+  if (d.experiment.enabled) {
+    if (!(o.type === 'PERCENT' || o.type === 'FIXED' || o.type === 'CASHBACK'))
+      add(
+        'experiment.enabled',
+        'experimentTypes',
+        'Only for percentage, fixed amount and cashback.',
+      );
+    if (!d.experiment.variantB)
+      add('experiment.variantB.value', 'variantBRequired', 'Required for a test.');
+    else if (pctOffer && d.experiment.variantB.value > 100)
+      add('experiment.variantB.value', 'variantBPercent', 'A percentage: 1-100.');
+  }
+  const boost = d.trigger.birthday?.tierBoost;
+  if (boost?.enabled && !(boost.extraSar > 0))
+    add('trigger.birthday.tierBoost.extraSar', 'extraRequired', 'Required: greater than 0.');
+  if (d.objective === 'FREQUENT_ORDER' && !d.loyalty)
+    add('loyalty.type', 'loyaltyTypeRequired', 'Say how customers earn the reward.');
+  if (d.loyalty) {
+    const l = d.loyalty;
+    if ((l.type === 'STAMP' || l.type === 'CHALLENGE') && l.ordersRequired === undefined)
+      add('loyalty.ordersRequired', 'ordersRequired', 'Required: 2-50 orders.');
+    if (l.type === 'CHALLENGE' && l.windowDays === undefined)
+      add(
+        'loyalty.windowDays',
+        'windowDaysRequired',
+        'Required: the days the orders must fall within.',
+      );
+    if (l.type === 'MILESTONE' && l.milestones.length === 0)
+      add('loyalty.milestones', 'milestonesRequired', 'Pick at least one order number.');
+  }
+  /* step 3 - customers */
+  if (d.audience.mode === 'SEGMENT' && d.audience.conditions.length === 0)
+    add('audience.conditions', 'conditionsRequired', 'Add at least one condition.');
+  if (d.audience.mode === 'PHONES' && d.audience.phoneNumbers.length === 0)
+    add('audience.phoneNumbers', 'phonesRequired', 'Add the phone numbers.');
+  if (d.audience.mode === 'LIST' && !d.audience.listId)
+    add('audience.listId', 'listRequired', 'Pick the list.');
+  /* step 4 - eligibility */
+  if (!d.scope.allBrands && d.scope.brandIds.length === 0)
+    add('scope.brandIds', 'brandsRequired', 'Pick at least one brand, or all brands.');
+  if (d.scope.allBrands && d.scope.brandIds.length > 0)
+    add('scope.allBrands', 'allBrandsOrList', 'All brands, or a list of brands - not both.');
+  if (d.limits.perCustomerMode === 'MONTHLY' && d.limits.perCustomerMax === undefined)
+    add('limits.perCustomerMax', 'perCustomerMaxRequired', 'Required for a monthly limit.');
+  if (d.distribution.codeType === 'SHARED' && !d.distribution.code?.trim())
+    add('distribution.code', 'codeRequired', 'Type the shared code.');
+  if (d.distribution.codeType === 'UNIQUE' && d.distribution.uniqueCodeCount === undefined)
+    add('distribution.uniqueCodeCount', 'uniqueCountRequired', 'Say how many codes.');
+  for (const [i, r] of d.rules.binRanges.entries()) {
+    const m = BIN_RANGE.exec(r);
+    if (m?.[2] && (m[2].length !== m[1]!.length || m[2] < m[1]!))
+      add(
+        `rules.binRanges.${i}`,
+        'binRange',
+        'A range is two BINs of the same length, low to high.',
+      );
+  }
+  if (firstOrderCoupon(d) && !d.fraud.onePerPhoneAndDevice)
+    add(
+      'fraud.onePerPhoneAndDevice',
+      'onePerPhoneMandatory',
+      'Mandatory for first-order and new-customer coupons.',
+    );
+  /* step 5 - schedule */
+  const s = d.schedule;
+  if (s.endDate < s.startDate)
+    add('schedule.endDate', 'endAfterStart', 'On or after the start date.');
+  const { from, to } = s.timeWindow;
+  if (s.allDay && (from || to))
+    add('schedule.allDay', 'allDayOrWindow', 'All day, or a time window - not both.');
+  if (!s.allDay && !s.onlyDuringBranchHours && !(from && to))
+    add(
+      'schedule.timeWindow.from',
+      'timesOrAllDay',
+      'Set the start and end time, or choose all day.',
+    );
+  if ((from && !to) || (!from && to))
+    add(
+      from ? 'schedule.timeWindow.to' : 'schedule.timeWindow.from',
+      'bothTimes',
+      'Both times, or neither.',
+    );
+  if (from && to && from === to)
+    add('schedule.timeWindow.to', 'timesDiffer', 'Must differ from the start time.');
+  if (s.limitedTime.enabled && s.limitedTime.hours === undefined)
+    add('schedule.limitedTime.hours', 'flashHoursRequired', 'Required for a flash offer.');
+  /* step 6 - distribution */
+  const ch = d.distribution.channels;
+  const c = d.communication;
+  const both = (path: string, v: { en: string; ar: string }) => {
+    if (!v.en.trim()) add(`${path}.en`, 'channelCopyRequired', 'Required for this channel.');
+    if (!v.ar.trim()) add(`${path}.ar`, 'channelCopyRequired', 'Required for this channel.');
+  };
+  if (ch.includes('PUSH')) {
+    both('communication.push.title', c.push.title);
+    both('communication.push.body', c.push.body);
+  }
+  if (ch.includes('IN_APP_BANNER')) both('communication.banner.text', c.banner.text);
+  if (ch.includes('SMS')) both('communication.sms.text', c.sms.text);
+  if ((ch.includes('SMS') || ch.includes('EMAIL')) && !c.respectConsent)
+    add(
+      'communication.respectConsent',
+      'consentMandatory',
+      'Must stay on for SMS and email (PDPL).',
+    );
+  return out;
+}
+
+/**
+ * The design: a bundle's price is below its items' normal total. It needs the
+ * menu, so it is checked where the menu is known (the form and the sample
+ * engine); null when it holds or an item's price is not known.
+ */
+export function bundlePriceProblem(
+  offer: Pick<DraftShape['offer'], 'type' | 'bundle'>,
+  products: ReadonlyArray<{ id: string; priceSar: number }>,
+): string | null {
+  if (offer.type !== 'BUNDLE' || !offer.bundle) return null;
+  const prices = offer.bundle.productIds.map((id) => products.find((p) => p.id === id)?.priceSar);
+  if (prices.some((p) => p === undefined)) return null;
+  const total = prices.reduce<number>((a, b) => a + (b ?? 0), 0);
+  return offer.bundle.priceSar < total
+    ? null
+    : `offer.bundle.priceSar: must be below the items' normal total (SAR ${total}).`;
+}
+
+/** The campaign draft, with the design's required and conditional rules. */
+export const CampaignDraft = CampaignDraftShape.superRefine((d, ctx) => {
+  for (const i of campaignDraftIssues(d))
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: i.path.split('.'),
+      message: i.message,
+      params: { rule: i.rule },
+    });
 });
 export type CampaignDraft = z.infer<typeof CampaignDraft>;
 
 /**
+ * The paths renamed by the field-parity work: the old (stored) path -> the
+ * draft's path. Old rows are rewritten on read by `upgradeCampaignDraft`.
+ */
+export const CAMPAIGN_FIELD_RENAMES: Readonly<Record<string, string>> = {
+  'validity.startDate': 'schedule.startDate',
+  'validity.endDate': 'schedule.endDate',
+  'validity.startTime': 'schedule.timeWindow.from',
+  'validity.endTime': 'schedule.timeWindow.to',
+  'validity.daysOfWeek[]': 'schedule.daysOfWeek[]',
+  'offer.bxgy.productIds': 'offer.bxgy.productId',
+  'offer.bundle.productIds': 'offer.bundle.productIds[]',
+  'offer.deliveryFeeCovered': 'offer.deliveryFeeCoveredSar',
+  'loyalty.stampsRequired': 'loyalty.ordersRequired',
+  'loyalty.milestones': 'loyalty.milestones[]',
+};
+
+type Loose = Record<string, unknown>;
+const isObj = (v: unknown): v is Loose => !!v && typeof v === 'object' && !Array.isArray(v);
+
+/**
+ * A stored draft in the shape before field parity -> today's shape. Pure and
+ * total: it never throws and leaves anything it does not recognise alone, so
+ * a row written by any earlier build still opens. Idempotent.
+ *
+ *   validity.{startDate,endDate,daysOfWeek} -> schedule.*
+ *   validity.startTime/endTime -> schedule.timeWindow.from/to (allDay = false)
+ *   (no expiry)                -> schedule.expiresAfterIssueDays = the window's days
+ *   offer.bxgy.productIds[0]   -> offer.bxgy.productId
+ *   offer.deliveryFeeCovered   -> offer.deliveryFeeCoveredSar
+ *   loyalty.stampsRequired     -> loyalty.type STAMP + loyalty.ordersRequired
+ *   loyalty.reward (text)      -> appended to notes (the field is gone)
+ *   (no scope.allBrands)       -> true when no brand is listed
+ *   (no fraud)                 -> one per phone and device for first-order coupons
+ */
+export function upgradeCampaignDraft(raw: unknown): unknown {
+  if (!isObj(raw)) return raw;
+  const d: Loose = { ...raw };
+  if (isObj(d.validity) && !isObj(d.schedule)) {
+    const { startTime, endTime, ...rest } = d.validity;
+    const window: Loose = {};
+    if (typeof startTime === 'string' && startTime) window.from = startTime;
+    if (typeof endTime === 'string' && endTime) window.to = endTime;
+    const schedule: Loose = {
+      ...rest,
+      allDay: Object.keys(window).length === 0,
+      timeWindow: window,
+    };
+    const days =
+      typeof rest.startDate === 'string' && typeof rest.endDate === 'string'
+        ? inclusiveDays(rest.startDate, rest.endDate)
+        : null;
+    if (days !== null) schedule.expiresAfterIssueDays = Math.min(365, Math.max(1, days));
+    d.schedule = schedule;
+  }
+  delete d.validity;
+  if (isObj(d.offer)) {
+    const offer: Loose = { ...d.offer };
+    if (isObj(offer.bxgy) && offer.bxgy.productId === undefined) {
+      const { productIds, ...bxgy } = offer.bxgy;
+      const first = Array.isArray(productIds) ? productIds[0] : undefined;
+      offer.bxgy = { ...bxgy, productId: typeof first === 'string' ? first : '' };
+    }
+    if (offer.deliveryFeeCovered !== undefined) {
+      if (offer.deliveryFeeCoveredSar === undefined)
+        offer.deliveryFeeCoveredSar = offer.deliveryFeeCovered;
+      delete offer.deliveryFeeCovered;
+    }
+    d.offer = offer;
+  }
+  if (isObj(d.loyalty)) {
+    const { stampsRequired, reward, ...loyalty } = d.loyalty;
+    if (loyalty.type === undefined) {
+      if (typeof stampsRequired === 'number') {
+        loyalty.type = 'STAMP';
+        loyalty.ordersRequired = stampsRequired;
+      } else if (Array.isArray(loyalty.milestones) && loyalty.milestones.length) {
+        loyalty.type = 'MILESTONE';
+      }
+    }
+    if (typeof reward === 'string' && reward.trim()) {
+      const note = `Loyalty reward: ${reward.trim()}`;
+      const notes = typeof d.notes === 'string' && d.notes ? `${d.notes}\n${note}` : note;
+      d.notes = notes.slice(0, 1000);
+    }
+    /* A loyalty block with no way to earn was never a programme: drop it. */
+    if (loyalty.type === undefined) delete d.loyalty;
+    else d.loyalty = loyalty;
+  }
+  if (isObj(d.scope) && d.scope.allBrands === undefined) {
+    const ids = d.scope.brandIds;
+    d.scope = { ...d.scope, allBrands: !(Array.isArray(ids) && ids.length > 0) };
+  }
+  if (d.fraud === undefined && typeof d.objective === 'string') {
+    const rules = isObj(d.rules) ? d.rules : {};
+    if (
+      firstOrderCoupon({
+        objective: d.objective as DraftShape['objective'],
+        rules: { firstOrderOnly: rules.firstOrderOnly === true },
+      })
+    )
+      d.fraud = { onePerPhoneAndDevice: true };
+  }
+  return d;
+}
+
+/** Accepts today's shape or any earlier one (an older portal, a stored row). */
+export const StoredCampaignDraft = z.preprocess(upgradeCampaignDraft, CampaignDraft);
+
+/**
+ * A stored draft for READING: upgraded, then each section given its defaults.
+ * Never refuses - a section that does not validate is kept as stored - because
+ * a row that once saved must keep opening (the engine re-checks it on save).
+ */
+export function readCampaignDraft(raw: unknown): CampaignDraft {
+  const up = upgradeCampaignDraft(raw);
+  return lenient(CampaignDraftShape, isObj(up) ? up : {}) as CampaignDraft;
+}
+
+/** `schema` applied field by field: what validates gets its defaults, the rest stays as is. */
+function lenient(schema: z.ZodTypeAny, v: unknown): unknown {
+  const r = schema.safeParse(v);
+  if (r.success) return r.data;
+  let inner: z.ZodTypeAny = schema;
+  while (inner instanceof z.ZodDefault || inner instanceof z.ZodOptional)
+    inner = inner._def.innerType as z.ZodTypeAny;
+  if (!(inner instanceof z.ZodObject) || !isObj(v)) return v;
+  const out: Loose = { ...v };
+  for (const [k, s] of Object.entries(inner.shape as Record<string, z.ZodTypeAny>)) {
+    const x = lenient(s, v[k]);
+    if (x !== undefined) out[k] = x;
+  }
+  return out;
+}
+
+/**
+ * The fields that must be unique: the English name among the campaigns that
+ * are not over, and a shared code among those customers may hold or soon will.
+ */
+export function campaignUniquenessConflicts(
+  draft: Pick<CampaignDraft, 'name' | 'distribution'>,
+  id: string | undefined,
+  others: ReadonlyArray<Pick<Campaign, 'id' | 'status' | 'name' | 'distribution'>>,
+): string[] {
+  const out: string[] = [];
+  const norm = (s: string | undefined) => (s ?? '').trim().toLowerCase();
+  const rest = others.filter((c) => c.id !== id && c.status !== 'ended' && c.status !== 'rejected');
+  if (rest.some((c) => norm(c.name?.en) === norm(draft.name.en))) out.push('campaign.name.en');
+  const code = draft.distribution.codeType === 'SHARED' ? norm(draft.distribution.code) : '';
+  if (
+    code &&
+    rest.some(
+      (c) =>
+        CODE_HOLDING_STATUSES.includes(c.status) &&
+        c.distribution?.codeType === 'SHARED' &&
+        norm(c.distribution.code) === code,
+    )
+  )
+    out.push('distribution.code');
+  return out;
+}
+
+/** Statuses in which a shared code is taken: approved, about to be or already live. */
+const CODE_HOLDING_STATUSES: readonly CampaignStatus[] = [
+  'waiting_approval',
+  'approved',
+  'live',
+  'paused',
+];
+
+/**
  * Once customers hold the coupon these never change (Ayman's "live campaigns"
  * rule). Review 2026-11-16: the lock covers EVERY field that decides what a
- * customer can get or how much it can cost - limits, validity, scope,
- * stacking included - because a live campaign keeps its approval; only the
- * name, notes, reason code and funding stay editable. A bigger budget on a
- * live campaign = end it and approve a new one.
+ * customer can get or how much it can cost - limits, schedule, scope,
+ * stacking, fraud rules and what customers are told included - because a live
+ * campaign keeps its approval; only the name, notes, reason code and funding
+ * stay editable. A bigger budget on a live campaign = end it and approve a
+ * new one.
  */
 export const LOCKED_WHEN_LIVE: readonly string[] = [
   'objective',
@@ -290,7 +756,10 @@ export const LOCKED_WHEN_LIVE: readonly string[] = [
   'limits',
   'distribution',
   'stacking',
-  'validity',
+  'fraud',
+  'schedule',
+  'communication',
+  'forecast',
   'studyId',
 ];
 
@@ -374,7 +843,8 @@ export interface CampaignForecast {
  * approval card shows.
  */
 export function forecastCampaign(
-  draft: Pick<CampaignDraft, 'offer' | 'audience' | 'limits' | 'distribution' | 'scope'>,
+  draft: Pick<CampaignDraft, 'offer' | 'audience' | 'limits' | 'distribution' | 'scope'> &
+    Partial<Pick<CampaignDraft, 'forecast'>>,
   input: {
     customersMatched: number;
     redemptionRatePct: number;
@@ -392,7 +862,9 @@ export function forecastCampaign(
   const discountCapped = Math.min(expectedRedemptions * perOrderDiscount, draft.limits.budgetSar);
   const expectedOrders = Math.round(expectedRedemptions * (input.ordersPerRedeemer ?? 1));
   const revenueSar = expectedOrders * input.avgOrderSar;
-  const extraOrders = Math.round(expectedOrders * (1 - model.wouldOrderAnywayPct / 100));
+  const extraOrders = Math.round(
+    expectedOrders * (1 - wouldOrderAnywayPct(draft.forecast, model) / 100),
+  );
   const orderType = draft.scope.orderTypes[0] ?? 'DELIVERY';
   const marginPct = 100 - model.foodCostPct - model.packagingPct - model.channelCostPct[orderType];
   const extraProfitSar = extraOrders * input.avgOrderSar * (marginPct / 100);
@@ -427,6 +899,22 @@ export function forecastCampaign(
   };
 }
 
+/**
+ * The share of redeemers who would have ordered anyway (%). The draft's
+ * planning inputs (step 7) decide it when both are given: of the customers
+ * who order, `baseline` would have anyway and `uplift` more come because of
+ * the coupon. Empty = the money model's estimate.
+ */
+export function wouldOrderAnywayPct(
+  plan: Partial<CampaignDraft['forecast']> | undefined,
+  model: Pick<MoneyModel, 'wouldOrderAnywayPct'> = DEFAULT_MONEY_MODEL,
+): number {
+  const b = plan?.baselineOrderRatePct;
+  const u = plan?.expectedUpliftPts;
+  if (b === undefined || u === undefined || b + u <= 0) return model.wouldOrderAnywayPct;
+  return (b / (b + u)) * 100;
+}
+
 /** What one redemption costs, for an order of `avgOrderSar`. */
 export function discountPerOrder(offer: CampaignDraft['offer'], avgOrderSar: number): number {
   switch (offer.type) {
@@ -441,9 +929,9 @@ export function discountPerOrder(offer: CampaignDraft['offer'], avgOrderSar: num
       return offer.maxDiscountSar ? Math.min(raw, offer.maxDiscountSar) : raw;
     }
     case 'FREE_DELIVERY':
-      return offer.deliveryFeeCovered === 'FULL' || offer.deliveryFeeCovered === undefined
+      return offer.deliveryFeeCoveredSar === 'FULL' || offer.deliveryFeeCoveredSar === undefined
         ? 12
-        : offer.deliveryFeeCovered;
+        : offer.deliveryFeeCoveredSar;
     case 'FREE_ITEM':
       return offer.amountSar ?? 15;
     case 'BXGY':
@@ -597,7 +1085,7 @@ export const OBJECTIVE_CATALOGUE: readonly ObjectiveSpec[] = [
     key: 'DELIVERY',
     goal: 'SHIFT_ORDER_CHANNEL',
     recommended: {
-      offer: { type: 'FREE_DELIVERY', deliveryFeeCovered: 'FULL' },
+      offer: { type: 'FREE_DELIVERY', deliveryFeeCoveredSar: 'FULL' },
       minOrderSar: 60,
       validityDays: 14,
       audience: { mode: 'ALL', conditions: [] },
@@ -658,484 +1146,1193 @@ export function objectiveSpec(key: CampaignObjective): ObjectiveSpec {
 
 /* ── the field specification (Ayman's "For IT" page, generated from the form) ─ */
 
+/** The draft's own field types (docs/marketing/ayman-draft-fields.csv, column `type`). */
+export type FieldSpecType =
+  | 'objective'
+  | 'text'
+  | 'textarea'
+  | 'select'
+  | 'cards'
+  | 'multicards'
+  | 'radio'
+  | 'number'
+  | 'range'
+  | 'bool'
+  | 'yesno'
+  | 'multi'
+  | 'rules'
+  | 'itemselect'
+  | 'itempicker'
+  | 'date'
+  | 'time';
+
 export interface FieldSpec {
   step: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+  /** The i18n key under `promo.field.` (path without `campaign.` and `[]`, dots -> `_`). */
+  key: string;
+  /** The draft's English label. */
+  label: string;
+  /** The draft's api_path. */
   path: string;
-  type:
-    | 'enum'
-    | 'string'
-    | 'number'
-    | 'integer'
-    | 'boolean'
-    | 'yesno'
-    | 'enum[]'
-    | 'productId[]'
-    | 'object[]'
-    | 'string[]'
-    | 'date'
-    | 'time';
+  type: FieldSpecType;
   required: 'yes' | 'no' | 'conditional';
   default: string;
   /** Shown only for certain offer types / modes. */
   when?: string;
+  /** The draft's notes (options, ranges, what it replaced). */
+  notes: string;
 }
 
+/**
+ * EXACTLY the design's 107 rows, in its order (owner, 2026-11-17: "match the
+ * approved design field by field"). The round-trip test sets every path and
+ * reads it back from the Directus row; a test also pins each row to the CSV.
+ */
 export const CAMPAIGN_FIELD_SPEC: readonly FieldSpec[] = [
   {
     step: 1,
+    key: 'objective',
+    label: 'Coupon objective',
     path: 'campaign.objective',
-    type: 'enum',
+    type: 'objective',
     required: 'yes',
     default: '"REPEAT_PURCHASE"',
+    notes: '15 objectives; each maps to a catalogue type (C01–C25) and pre-fills defaults',
   },
-  { step: 1, path: 'campaign.name.en', type: 'string', required: 'yes', default: '""' },
-  { step: 1, path: 'campaign.name.ar', type: 'string', required: 'yes', default: '""' },
   {
     step: 1,
+    key: 'name_en',
+    label: 'Campaign name (English)',
+    path: 'campaign.name.en',
+    type: 'text',
+    required: 'yes',
+    default: '""',
+    notes: 'Unique; max 60 characters. Was “Title”.',
+  },
+  {
+    step: 1,
+    key: 'name_ar',
+    label: 'Campaign name (Arabic)',
+    path: 'campaign.name.ar',
+    type: 'text',
+    required: 'yes',
+    default: '""',
+    notes: 'Required; shown in the Arabic app',
+  },
+  {
+    step: 1,
+    key: 'reasonCode',
+    label: 'Compensation reason',
     path: 'campaign.reasonCode',
-    type: 'enum',
+    type: 'select',
     required: 'conditional',
     default: '""',
     when: 'SERVICE_RECOVERY',
+    notes: 'Required for compensation; kept for audit. Was “compensation”.',
   },
   {
     step: 1,
+    key: 'funding_source',
+    label: 'Who pays for the discount',
     path: 'campaign.funding.source',
-    type: 'enum',
+    type: 'select',
     required: 'no',
     default: '"YIJI_MARKETING"',
+    notes: 'Was “Issuing Side”',
   },
   {
     step: 1,
+    key: 'funding_partnerSharePct',
+    label: 'Partner pays',
     path: 'campaign.funding.partnerSharePct',
     type: 'number',
     required: 'conditional',
     default: '0',
     when: 'PARTNER | SHARED',
+    notes: 'Recorded for reconciliation with the partner',
   },
-  { step: 1, path: 'campaign.tenantId', type: 'enum', required: 'yes', default: '"yiji"' },
-  { step: 1, path: 'campaign.notes', type: 'string', required: 'no', default: '""' },
-  { step: 2, path: 'offer.type', type: 'enum', required: 'yes', default: '"FIXED"' },
+  {
+    step: 1,
+    key: 'tenantId',
+    label: 'Tenant',
+    path: 'campaign.tenantId',
+    type: 'select',
+    required: 'yes',
+    default: '"yiji"',
+    notes: 'Kept from the current screen',
+  },
+  {
+    step: 1,
+    key: 'notes',
+    label: 'Internal note (optional)',
+    path: 'campaign.notes',
+    type: 'textarea',
+    required: 'no',
+    default: '""',
+    notes: '',
+  },
   {
     step: 2,
+    key: 'offer_type',
+    label: 'Discount type',
+    path: 'offer.type',
+    type: 'cards',
+    required: 'yes',
+    default: '"FIXED"',
+    notes: 'PERCENT, FIXED, BXGY, FREE_ITEM, BUNDLE, FREE_DELIVERY, CASHBACK. Was “Coupon Types”.',
+  },
+  {
+    step: 2,
+    key: 'offer_percent',
+    label: 'Discount percentage',
     path: 'offer.percent',
     type: 'number',
     required: 'conditional',
     default: '20',
     when: 'PERCENT | CASHBACK',
+    notes: '1–100',
   },
   {
     step: 2,
+    key: 'offer_amountSar',
+    label: 'Discount amount',
     path: 'offer.amountSar',
     type: 'number',
     required: 'conditional',
     default: '7',
     when: 'FIXED',
+    notes: 'Greater than 0',
   },
   {
     step: 2,
+    key: 'offer_maxDiscountSar',
+    label: 'Maximum discount',
     path: 'offer.maxDiscountSar',
     type: 'number',
     required: 'conditional',
     default: '25',
     when: 'PERCENT | CASHBACK',
+    notes: 'Mandatory for percentage and cashback. Was “Maximum Discount”.',
   },
   {
     step: 2,
+    key: 'offer_bxgy_buyQty',
+    label: 'Customer buys',
     path: 'offer.bxgy.buyQty',
     type: 'number',
     required: 'conditional',
     default: '1',
     when: 'BXGY',
+    notes: '',
   },
   {
     step: 2,
+    key: 'offer_bxgy_getQty',
+    label: 'Customer gets free',
     path: 'offer.bxgy.getQty',
     type: 'number',
     required: 'conditional',
     default: '1',
     when: 'BXGY',
+    notes: '',
   },
   {
     step: 2,
-    path: 'offer.bxgy.productIds',
-    type: 'productId[]',
+    key: 'offer_bxgy_productId',
+    label: 'Applies to item',
+    path: 'offer.bxgy.productId',
+    type: 'itemselect',
     required: 'conditional',
-    default: '[]',
+    default: '""',
     when: 'BXGY',
+    notes: 'Menu product ID. The free item is the same or a cheaper one',
   },
   {
     step: 2,
+    key: 'offer_freeItem_productId',
+    label: 'Free item',
     path: 'offer.freeItem.productId',
-    type: 'string',
+    type: 'itemselect',
     required: 'conditional',
     default: '""',
     when: 'FREE_ITEM',
+    notes: 'Menu product ID from the brand menu',
   },
   {
     step: 2,
+    key: 'offer_freeItem_quantity',
+    label: 'Quantity',
     path: 'offer.freeItem.quantity',
     type: 'number',
     required: 'no',
     default: '1',
     when: 'FREE_ITEM',
+    notes: '',
   },
   {
     step: 2,
-    path: 'offer.bundle.productIds',
-    type: 'productId[]',
+    key: 'offer_bundle_productIds',
+    label: 'Items in the bundle',
+    path: 'offer.bundle.productIds[]',
+    type: 'itempicker',
     required: 'conditional',
     default: '[]',
     when: 'BUNDLE',
+    notes: 'At least 2 menu items',
   },
   {
     step: 2,
+    key: 'offer_bundle_priceSar',
+    label: 'Bundle price',
     path: 'offer.bundle.priceSar',
     type: 'number',
     required: 'conditional',
     default: '32',
     when: 'BUNDLE',
+    notes: 'Below the items’ normal total',
   },
   {
     step: 2,
-    path: 'offer.deliveryFeeCovered',
-    type: 'enum',
+    key: 'offer_deliveryFeeCoveredSar',
+    label: 'Delivery fee covered',
+    path: 'offer.deliveryFeeCoveredSar',
+    type: 'select',
     required: 'no',
     default: '"FULL"',
     when: 'FREE_DELIVERY',
+    notes: '',
   },
   {
     step: 2,
+    key: 'rules_minOrderSar',
+    label: 'Minimum order',
+    path: 'rules.minOrderSar',
+    type: 'number',
+    required: 'yes',
+    default: '50',
+    notes: 'Was “Order Minimum”',
+  },
+  {
+    step: 2,
+    key: 'offer_cashback_creditValidityDays',
+    label: 'Credit can be used for',
     path: 'offer.cashback.creditValidityDays',
     type: 'number',
     required: 'no',
     default: '14',
     when: 'CASHBACK',
+    notes: '',
   },
-  { step: 2, path: 'offer.posDiscountCode', type: 'string', required: 'no', default: '""' },
-  { step: 2, path: 'offer.onRefund', type: 'enum', required: 'no', default: '"RETURN_IF_VALID"' },
   {
     step: 2,
+    key: 'offer_posDiscountCode',
+    label: 'POS discount code',
+    path: 'offer.posDiscountCode',
+    type: 'text',
+    required: 'no',
+    default: '""',
+    notes: 'Kept from the current screen (posDiscountCode)',
+  },
+  {
+    step: 2,
+    key: 'offer_onRefund',
+    label: 'If the order is refunded',
+    path: 'offer.onRefund',
+    type: 'select',
+    required: 'no',
+    default: '"RETURN_IF_VALID"',
+    notes: '',
+  },
+  {
+    step: 2,
+    key: 'offer_onCancelBeforeCompletion',
+    label: 'If the order is cancelled before delivery',
     path: 'offer.onCancelBeforeCompletion',
-    type: 'enum',
+    type: 'select',
     required: 'no',
     default: '"REISSUE_IF_VALID"',
+    notes: '',
   },
   {
     step: 2,
+    key: 'experiment_enabled',
+    label: 'Test two discount values against each other',
     path: 'experiment.enabled',
-    type: 'boolean',
+    type: 'bool',
     required: 'no',
     default: 'false',
     when: 'PERCENT | FIXED | CASHBACK',
+    notes: 'Only for percentage, fixed amount and cashback',
   },
   {
     step: 2,
+    key: 'experiment_variantB_value',
+    label: 'Version B amount',
     path: 'experiment.variantB.value',
     type: 'number',
     required: 'conditional',
     default: '10',
     when: 'experiment',
+    notes: 'Version A is the main discount value',
   },
   {
     step: 2,
+    key: 'experiment_splitPctA',
+    label: 'Share who get version A',
     path: 'experiment.splitPctA',
-    type: 'integer',
+    type: 'range',
     required: 'no',
     default: '50',
     when: 'experiment',
+    notes: '10–90%; the rest get version B',
   },
   {
     step: 2,
+    key: 'experiment_winnerMetric',
+    label: 'Pick the winner by',
     path: 'experiment.winnerMetric',
-    type: 'enum',
+    type: 'select',
     required: 'no',
     default: '"PROFIT"',
     when: 'experiment',
+    notes: '',
   },
   {
     step: 2,
+    key: 'experiment_autoWinnerAfterDays',
+    label: 'Send everyone the winner after',
     path: 'experiment.autoWinnerAfterDays',
     type: 'number',
     required: 'no',
     default: '7',
     when: 'experiment',
+    notes: '',
   },
   {
     step: 2,
+    key: 'trigger_birthday_occasion',
+    label: 'Celebrate',
     path: 'trigger.birthday.occasion',
-    type: 'enum',
+    type: 'radio',
     required: 'no',
     default: '"BIRTHDAY"',
     when: 'OCCASION',
+    notes: '',
   },
   {
     step: 2,
+    key: 'trigger_birthday_issueDaysBefore',
+    label: 'Send the gift',
     path: 'trigger.birthday.issueDaysBefore',
     type: 'number',
     required: 'no',
     default: '3',
     when: 'OCCASION',
+    notes: 'One gift per occasion per year',
   },
   {
     step: 2,
+    key: 'trigger_birthday_missingDateOfBirth',
+    label: 'Customers without a date of birth',
     path: 'trigger.birthday.missingDateOfBirth',
-    type: 'enum',
+    type: 'select',
     required: 'no',
     default: '"ASK"',
     when: 'OCCASION',
+    notes: 'Date of birth can be edited only once, to stop repeated gifts',
   },
   {
     step: 2,
+    key: 'trigger_birthday_tierBoost_enabled',
+    label: 'Give Gold and VIP members a bigger gift',
     path: 'trigger.birthday.tierBoost.enabled',
-    type: 'boolean',
+    type: 'bool',
     required: 'no',
     default: 'true',
     when: 'OCCASION',
+    notes: '',
   },
   {
     step: 2,
+    key: 'trigger_birthday_tierBoost_extraSar',
+    label: 'Extra value for Gold and VIP',
     path: 'trigger.birthday.tierBoost.extraSar',
     type: 'number',
     required: 'conditional',
     default: '10',
     when: 'OCCASION',
+    notes: '',
   },
   {
     step: 2,
-    path: 'loyalty.stampsRequired',
+    key: 'loyalty_type',
+    label: 'How customers earn the reward',
+    path: 'loyalty.type',
+    type: 'cards',
+    required: 'conditional',
+    default: '"STAMP"',
+    when: 'FREQUENT_ORDER',
+    notes: 'STAMP, CHALLENGE or MILESTONE',
+  },
+  {
+    step: 2,
+    key: 'loyalty_ordersRequired',
+    label: 'Orders per stamp card',
+    path: 'loyalty.ordersRequired',
     type: 'number',
     required: 'conditional',
     default: '5',
-    when: 'FREQUENT_ORDER',
+    when: 'STAMP | CHALLENGE',
+    notes: '',
   },
   {
     step: 2,
-    path: 'loyalty.reward',
-    type: 'string',
+    key: 'loyalty_windowDays',
+    label: 'Within',
+    path: 'loyalty.windowDays',
+    type: 'number',
     required: 'conditional',
-    default: '""',
-    when: 'FREQUENT_ORDER',
+    default: '30',
+    when: 'CHALLENGE',
+    notes: '',
   },
   {
     step: 2,
+    key: 'loyalty_stampExpiryDays',
+    label: 'Stamps expire after',
     path: 'loyalty.stampExpiryDays',
     type: 'number',
     required: 'no',
     default: '60',
     when: 'FREQUENT_ORDER',
+    notes: '',
   },
   {
     step: 2,
-    path: 'loyalty.milestones',
-    type: 'enum[]',
+    key: 'loyalty_milestones',
+    label: 'Reward on lifetime order number',
+    path: 'loyalty.milestones[]',
+    type: 'multi',
     required: 'conditional',
     default: '["5","10","25"]',
-    when: 'FREQUENT_ORDER',
+    when: 'MILESTONE',
+    notes: '',
   },
   {
     step: 2,
+    key: 'loyalty_minOrderToCountSar',
+    label: 'An order counts if it is at least',
     path: 'loyalty.minOrderToCountSar',
     type: 'number',
     required: 'no',
     default: '30',
     when: 'FREQUENT_ORDER',
+    notes: '',
   },
   {
     step: 2,
+    key: 'loyalty_countOrdersFrom',
+    label: 'Which orders count',
     path: 'loyalty.countOrdersFrom',
-    type: 'enum',
+    type: 'radio',
     required: 'no',
     default: '"ANY"',
     when: 'FREQUENT_ORDER',
+    notes: '',
   },
   {
     step: 2,
+    key: 'loyalty_repeat',
+    label: 'Start a new card after each reward',
     path: 'loyalty.repeat',
-    type: 'boolean',
+    type: 'bool',
     required: 'no',
     default: 'true',
     when: 'FREQUENT_ORDER',
+    notes: '',
   },
   {
     step: 2,
+    key: 'loyalty_progressMessages',
+    label: 'Send a progress message after each order (e.g. “2 more orders to go”)',
     path: 'loyalty.progressMessages',
-    type: 'boolean',
+    type: 'bool',
     required: 'no',
     default: 'true',
     when: 'FREQUENT_ORDER',
+    notes: '',
   },
-  { step: 3, path: 'audience.mode', type: 'enum', required: 'yes', default: '"SEGMENT"' },
   {
     step: 3,
+    key: 'audience_mode',
+    label: 'How do you want to choose customers?',
+    path: 'audience.mode',
+    type: 'radio',
+    required: 'yes',
+    default: '"SEGMENT"',
+    notes: '',
+  },
+  {
+    step: 3,
+    key: 'audience_conditions',
+    label: 'Conditions',
     path: 'audience.conditions[]',
-    type: 'object[]',
+    type: 'rules',
     required: 'conditional',
     default: '[{"c":"ORDERED_ONCE","p":""}]',
     when: 'SEGMENT',
+    notes: 'Each { condition, value }; combined by audience.match = ALL (AND) or ANY (OR)',
   },
   {
     step: 3,
-    path: 'audience.match',
-    type: 'enum',
-    required: 'no',
-    default: '"ALL"',
-    when: 'SEGMENT',
-  },
-  {
-    step: 3,
+    key: 'audience_phoneNumbers',
+    label: 'Customer phone numbers',
     path: 'audience.phoneNumbers[]',
-    type: 'string[]',
+    type: 'textarea',
     required: 'conditional',
     default: '[]',
     when: 'PHONES',
+    notes: 'Saudi mobile numbers +9665XXXXXXXX',
   },
   {
     step: 3,
-    path: 'audience.listId',
-    type: 'string',
-    required: 'conditional',
-    default: '""',
-    when: 'LIST',
+    key: 'audience_visibility',
+    label: 'Who can see the coupon in the app?',
+    path: 'audience.visibility',
+    type: 'select',
+    required: 'no',
+    default: '"TARGETED"',
+    notes: '',
   },
-  { step: 3, path: 'audience.visibility', type: 'enum', required: 'no', default: '"TARGETED"' },
-  { step: 3, path: 'audience.controlGroupPct', type: 'integer', required: 'no', default: '10' },
   {
     step: 3,
+    key: 'audience_controlGroupPct',
+    label: 'Measurement group',
+    path: 'audience.controlGroupPct',
+    type: 'range',
+    required: 'no',
+    default: '10',
+    notes: '0–20%',
+  },
+  {
+    step: 3,
+    key: 'audience_excludeDiscountSensitive',
+    label: 'Leave out customers who almost only order with coupons',
     path: 'audience.excludeDiscountSensitive',
-    type: 'boolean',
+    type: 'bool',
     required: 'no',
     default: 'true',
+    notes: '',
   },
-  { step: 4, path: 'rules.minOrderSar', type: 'number', required: 'yes', default: '50' },
-  { step: 4, path: 'rules.maxOrderSar', type: 'number', required: 'no', default: '0' },
-  { step: 4, path: 'rules.previousOrders', type: 'enum', required: 'no', default: '"ANY"' },
-  { step: 4, path: 'rules.firstOrderOnly', type: 'boolean', required: 'no', default: 'false' },
   {
     step: 4,
+    key: 'rules_maxOrderSar',
+    label: 'Maximum eligible order (optional)',
+    path: 'rules.maxOrderSar',
+    type: 'number',
+    required: 'no',
+    default: '0',
+    notes: 'Was “Order Maximum”',
+  },
+  {
+    step: 4,
+    key: 'rules_previousOrders',
+    label: 'Number of previous orders',
+    path: 'rules.previousOrders',
+    type: 'select',
+    required: 'no',
+    default: '"ANY"',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'rules_firstOrderOnly',
+    label: 'Only valid on the customer’s first order',
+    path: 'rules.firstOrderOnly',
+    type: 'bool',
+    required: 'no',
+    default: 'false',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'rules_paymentMethods',
+    label: 'Payment methods',
     path: 'rules.paymentMethods[]',
-    type: 'enum[]',
+    type: 'multi',
     required: 'yes',
     default: '["MADA","CARD","APPLE_PAY","CASH","WALLET"]',
+    notes: '',
   },
-  { step: 4, path: 'scope.brandIds[]', type: 'enum[]', required: 'no', default: '[]' },
-  { step: 4, path: 'scope.branchIds[]', type: 'enum[]', required: 'no', default: '[]' },
-  { step: 4, path: 'scope.categoryIds[]', type: 'enum[]', required: 'no', default: '[]' },
-  { step: 4, path: 'scope.productIds[]', type: 'productId[]', required: 'no', default: '[]' },
   {
     step: 4,
-    path: 'scope.excludedProductIds[]',
-    type: 'productId[]',
+    key: 'scope_allBrands',
+    label: 'All brands and branches, including future ones',
+    path: 'scope.allBrands',
+    type: 'bool',
+    required: 'no',
+    default: 'true',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'scope_brandIds',
+    label: 'Brands',
+    path: 'scope.brandIds[]',
+    type: 'multi',
+    required: 'conditional',
+    default: '[]',
+    when: 'not allBrands',
+    notes: 'Replaces Brand + Assignment tree',
+  },
+  {
+    step: 4,
+    key: 'scope_branchIds',
+    label: 'Branches (optional)',
+    path: 'scope.branchIds[]',
+    type: 'multi',
     required: 'no',
     default: '[]',
+    notes: 'Replaces “Restaurant”',
   },
   {
     step: 4,
+    key: 'scope_categoryIds',
+    label: 'Menu categories (optional)',
+    path: 'scope.categoryIds[]',
+    type: 'multi',
+    required: 'no',
+    default: '[]',
+    notes: 'Value = BRAND|Category from the menu',
+  },
+  {
+    step: 4,
+    key: 'scope_productIds',
+    label: 'Only these items (optional)',
+    path: 'scope.productIds[]',
+    type: 'itempicker',
+    required: 'no',
+    default: '[]',
+    notes: 'Was “Related Items”',
+  },
+  {
+    step: 4,
+    key: 'scope_excludedProductIds',
+    label: 'Excluded items (optional)',
+    path: 'scope.excludedProductIds[]',
+    type: 'itempicker',
+    required: 'no',
+    default: '[]',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'scope_orderTypes',
+    label: 'Order types',
     path: 'scope.orderTypes[]',
-    type: 'enum[]',
+    type: 'multi',
     required: 'yes',
     default: '["DELIVERY","PICKUP","CARHOP"]',
+    notes: 'Replaces “Delivery Types”',
   },
-  { step: 4, path: 'limits.perCustomerMode', type: 'enum', required: 'no', default: '"ONE"' },
   {
     step: 4,
+    key: 'limits_perCustomerMode',
+    label: 'Redemptions per customer',
+    path: 'limits.perCustomerMode',
+    type: 'radio',
+    required: 'no',
+    default: '"ONE"',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'limits_perCustomerMax',
+    label: 'Maximum per customer',
     path: 'limits.perCustomerMax',
     type: 'number',
     required: 'conditional',
     default: '3',
     when: 'MONTHLY',
+    notes: 'Was “Monthly coupon use”',
   },
-  { step: 4, path: 'limits.totalRedemptions', type: 'number', required: 'yes', default: '3000' },
-  { step: 4, path: 'limits.dailyRedemptions', type: 'number', required: 'no', default: '0' },
-  { step: 4, path: 'limits.budgetSar', type: 'number', required: 'yes', default: '20000' },
-  { step: 4, path: 'distribution.codeType', type: 'enum', required: 'no', default: '"NONE"' },
   {
     step: 4,
+    key: 'limits_totalRedemptions',
+    label: 'Total redemption limit',
+    path: 'limits.totalRedemptions',
+    type: 'number',
+    required: 'yes',
+    default: '3000',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'limits_dailyRedemptions',
+    label: 'Daily redemption limit (optional)',
+    path: 'limits.dailyRedemptions',
+    type: 'number',
+    required: 'no',
+    default: '0',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'limits_budgetSar',
+    label: 'Discount budget',
+    path: 'limits.budgetSar',
+    type: 'number',
+    required: 'yes',
+    default: '20000',
+    notes: 'Was “Total given discount limit”',
+  },
+  {
+    step: 4,
+    key: 'distribution_codeType',
+    label: 'Coupon code',
+    path: 'distribution.codeType',
+    type: 'radio',
+    required: 'no',
+    default: '"NONE"',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'distribution_code',
+    label: 'Shared code',
     path: 'distribution.code',
-    type: 'string',
+    type: 'text',
     required: 'conditional',
     default: '""',
     when: 'SHARED',
+    notes: 'Unique across live campaigns. Was “code”.',
   },
   {
     step: 4,
+    key: 'distribution_uniqueCodeCount',
+    label: 'Number of unique codes',
     path: 'distribution.uniqueCodeCount',
     type: 'number',
     required: 'conditional',
     default: '5000',
     when: 'UNIQUE',
+    notes: '',
   },
   {
     step: 4,
+    key: 'stacking_combineWithOtherOffers',
+    label: 'Can this coupon be used with other offers?',
     path: 'stacking.combineWithOtherOffers',
     type: 'yesno',
     required: 'no',
     default: 'false',
+    notes:
+      'Checked by the checkout service. Replaces “Don’t apply Offer / loyalty with this coupon”',
   },
-  { step: 4, path: 'stacking.combineWithLoyalty', type: 'yesno', required: 'no', default: 'true' },
   {
     step: 4,
+    key: 'stacking_combineWithLoyalty',
+    label: 'Can this coupon be combined with loyalty benefits?',
+    path: 'stacking.combineWithLoyalty',
+    type: 'yesno',
+    required: 'no',
+    default: 'true',
+    notes:
+      'Loyalty benefits: cashback redemption, points redemption, VIP benefits, loyalty discounts and promotions',
+  },
+  {
+    step: 4,
+    key: 'stacking_combineWithOtherCoupons',
+    label: 'Can this coupon be combined with other discounts?',
     path: 'stacking.combineWithOtherCoupons',
     type: 'yesno',
     required: 'no',
     default: 'false',
+    notes: 'Other coupon discounts and promo codes',
   },
   {
     step: 4,
+    key: 'offer_partialRedemption_enabled',
+    label: 'Allow partial redemption?',
     path: 'offer.partialRedemption.enabled',
     type: 'yesno',
     required: 'no',
     default: 'false',
     when: 'FIXED',
+    notes: 'Fixed-amount coupons only. A ledger keeps the remaining balance per customer.',
   },
   {
     step: 4,
+    key: 'offer_partialRedemption_maxPerOrderSar',
+    label: 'Maximum per order (optional)',
     path: 'offer.partialRedemption.maxPerOrderSar',
     type: 'number',
     required: 'no',
     default: '""',
     when: 'partial',
+    notes: 'Optional',
   },
   {
     step: 4,
+    key: 'offer_partialRedemption_balanceExpiry',
+    label: 'Remaining balance expiry',
     path: 'offer.partialRedemption.balanceExpiry',
-    type: 'enum',
+    type: 'select',
     required: 'no',
     default: '"SAME"',
     when: 'partial',
+    notes: '',
   },
   {
     step: 4,
+    key: 'offer_partialRedemption_onOrderCancel',
+    label: 'If an order is cancelled or refunded',
     path: 'offer.partialRedemption.onOrderCancel',
-    type: 'enum',
+    type: 'select',
     required: 'no',
     default: '"RESTORE"',
     when: 'partial',
+    notes: 'Each redemption can be restored once; a second cancellation gives no credit',
   },
-  { step: 5, path: 'validity.startDate', type: 'date', required: 'yes', default: 'today' },
+  {
+    step: 4,
+    key: 'rules_binRanges',
+    label: 'Bank card ranges (partner offers, optional)',
+    path: 'rules.binRanges[]',
+    type: 'text',
+    required: 'no',
+    default: '[]',
+    notes: 'Restored from the earlier version',
+  },
+  {
+    step: 4,
+    key: 'fraud_onePerPhoneAndDevice',
+    label: 'One use per phone number and device, even across accounts',
+    path: 'fraud.onePerPhoneAndDevice',
+    type: 'bool',
+    required: 'no',
+    default: 'false',
+    notes: 'Mandatory for first-order and new-customer coupons',
+  },
+  {
+    step: 4,
+    key: 'fraud_excludeStaffAndTestAccounts',
+    label: 'Exclude staff and test accounts',
+    path: 'fraud.excludeStaffAndTestAccounts',
+    type: 'bool',
+    required: 'no',
+    default: 'false',
+    notes: '',
+  },
+  {
+    step: 4,
+    key: 'fraud_blockFlaggedCustomers',
+    label: 'Block customers flagged for coupon abuse',
+    path: 'fraud.blockFlaggedCustomers',
+    type: 'bool',
+    required: 'no',
+    default: 'false',
+    notes: '',
+  },
   {
     step: 5,
-    path: 'validity.endDate',
+    key: 'schedule_startDate',
+    label: 'Campaign start date',
+    path: 'schedule.startDate',
+    type: 'date',
+    required: 'yes',
+    default: 'today',
+    notes: 'Was “Enter a date range”',
+  },
+  {
+    step: 5,
+    key: 'schedule_endDate',
+    label: 'Campaign end date',
+    path: 'schedule.endDate',
     type: 'date',
     required: 'yes',
     default: 'today + validityDays',
+    notes: '',
   },
-  { step: 5, path: 'validity.startTime', type: 'time', required: 'no', default: '""' },
-  { step: 5, path: 'validity.endTime', type: 'time', required: 'no', default: '""' },
-  { step: 5, path: 'validity.daysOfWeek[]', type: 'enum[]', required: 'no', default: '[0..6]' },
+  {
+    step: 5,
+    key: 'schedule_allDay',
+    label: 'Valid all day',
+    path: 'schedule.allDay',
+    type: 'bool',
+    required: 'no',
+    default: 'true',
+    notes: '',
+  },
+  {
+    step: 5,
+    key: 'schedule_timeWindow_from',
+    label: 'Start time',
+    path: 'schedule.timeWindow.from',
+    type: 'time',
+    required: 'no',
+    default: '""',
+    when: 'not allDay',
+    notes: 'Was “From Time”',
+  },
+  {
+    step: 5,
+    key: 'schedule_timeWindow_to',
+    label: 'End time',
+    path: 'schedule.timeWindow.to',
+    type: 'time',
+    required: 'no',
+    default: '""',
+    when: 'not allDay',
+    notes: 'Was “To Time”',
+  },
+  {
+    step: 5,
+    key: 'schedule_onlyDuringBranchHours',
+    label: 'Only during each branch’s opening hours',
+    path: 'schedule.onlyDuringBranchHours',
+    type: 'bool',
+    required: 'no',
+    default: 'false',
+    notes: '',
+  },
+  {
+    step: 5,
+    key: 'schedule_daysOfWeek',
+    label: 'Days of the week',
+    path: 'schedule.daysOfWeek[]',
+    type: 'multi',
+    required: 'yes',
+    default: '[0..6]',
+    notes: 'Replaces the 7 day checkboxes',
+  },
+  {
+    step: 5,
+    key: 'schedule_expiresAfterIssueDays',
+    label: 'Coupon expires after it is issued',
+    path: 'schedule.expiresAfterIssueDays',
+    type: 'number',
+    required: 'yes',
+    default: 'validityDays',
+    notes: '',
+  },
+  {
+    step: 5,
+    key: 'schedule_limitedTime_enabled',
+    label: 'Limited-time redemption (flash offer)',
+    path: 'schedule.limitedTime.enabled',
+    type: 'bool',
+    required: 'no',
+    default: 'false',
+    notes: '',
+  },
+  {
+    step: 5,
+    key: 'schedule_limitedTime_hours',
+    label: 'Must be used within',
+    path: 'schedule.limitedTime.hours',
+    type: 'number',
+    required: 'conditional',
+    default: '24',
+    when: 'limitedTime',
+    notes: '',
+  },
   {
     step: 6,
+    key: 'distribution_channels',
+    label: 'Channels',
     path: 'distribution.channels[]',
-    type: 'enum[]',
+    type: 'multicards',
     required: 'yes',
     default: '["APP_WALLET","PUSH"]',
+    notes: 'At least 1',
+  },
+  {
+    step: 6,
+    key: 'distribution_addMode',
+    label: 'How is the coupon added to the customer?',
+    path: 'distribution.addMode',
+    type: 'cards',
+    required: 'no',
+    default: '"AUTO_WALLET"',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'distribution_issueMode',
+    label: 'How is the coupon issued?',
+    path: 'distribution.issueMode',
+    type: 'radio',
+    required: 'no',
+    default: '"ALL_AT_ONCE"',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_push_title_en',
+    label: 'Notification title (English)',
+    path: 'communication.push.title.en',
+    type: 'text',
+    required: 'conditional',
+    default: '""',
+    when: 'PUSH',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_push_title_ar',
+    label: 'Notification title (Arabic)',
+    path: 'communication.push.title.ar',
+    type: 'text',
+    required: 'conditional',
+    default: '""',
+    when: 'PUSH',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_sendTime',
+    label: 'Send',
+    path: 'communication.sendTime',
+    type: 'select',
+    required: 'no',
+    default: '"ON_ISSUE"',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_push_body_en',
+    label: 'Message (English)',
+    path: 'communication.push.body.en',
+    type: 'textarea',
+    required: 'conditional',
+    default: '""',
+    when: 'PUSH',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_push_body_ar',
+    label: 'Message (Arabic)',
+    path: 'communication.push.body.ar',
+    type: 'textarea',
+    required: 'conditional',
+    default: '""',
+    when: 'PUSH',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_banner_text_en',
+    label: 'Banner headline (English)',
+    path: 'communication.banner.text.en',
+    type: 'text',
+    required: 'conditional',
+    default: '""',
+    when: 'IN_APP_BANNER',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_banner_text_ar',
+    label: 'Banner headline (Arabic)',
+    path: 'communication.banner.text.ar',
+    type: 'text',
+    required: 'conditional',
+    default: '""',
+    when: 'IN_APP_BANNER',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_sms_text_en',
+    label: 'SMS text (English)',
+    path: 'communication.sms.text.en',
+    type: 'textarea',
+    required: 'conditional',
+    default: '""',
+    when: 'SMS',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_sms_text_ar',
+    label: 'SMS text (Arabic)',
+    path: 'communication.sms.text.ar',
+    type: 'textarea',
+    required: 'conditional',
+    default: '""',
+    when: 'SMS',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_frequencyCap',
+    label: 'Maximum promotional messages per customer',
+    path: 'communication.frequencyCap',
+    type: 'select',
+    required: 'no',
+    default: '"THREE_PER_WEEK"',
+    notes: 'Shared limit across campaigns; enforced by the notification service',
+  },
+  {
+    step: 6,
+    key: 'communication_quietHours',
+    label: 'No messages between 23:00 and 09:00',
+    path: 'communication.quietHours',
+    type: 'bool',
+    required: 'no',
+    default: 'true',
+    notes: '',
+  },
+  {
+    step: 6,
+    key: 'communication_respectConsent',
+    label: 'Only message customers who agreed to marketing messages',
+    path: 'communication.respectConsent',
+    type: 'bool',
+    required: 'no',
+    default: 'true',
+    notes: 'Must stay on for SMS and email (PDPL); customers can opt out at any time',
   },
   {
     step: 7,
-    path: 'review.snapshot',
-    type: 'object[]',
-    required: 'yes',
-    default: 'the forecast, fixed on approval',
+    key: 'forecast_baselineOrderRatePct',
+    label: 'Customers who would order anyway',
+    path: 'forecast.baselineOrderRatePct',
+    type: 'number',
+    required: 'no',
+    default: '""',
+    notes: 'Planning input; empty = estimated from the audience',
+  },
+  {
+    step: 7,
+    key: 'forecast_expectedUpliftPts',
+    label: 'Extra customers the coupon brings',
+    path: 'forecast.expectedUpliftPts',
+    type: 'number',
+    required: 'no',
+    default: '""',
+    notes: 'Planning input; empty = estimated from the objective',
+  },
+];
+
+/**
+ * Code-only fields kept beside the design's 107 (field-parity.md lists why):
+ * something in the engine depends on each of them.
+ */
+export const CAMPAIGN_CODE_ONLY_FIELDS: ReadonlyArray<{ path: string; why: string }> = [
+  {
+    path: 'audience.match',
+    why: "The design's conditions row combines them by audience.match = ALL (AND) or ANY (OR).",
+  },
+  {
+    path: 'audience.listId',
+    why: "audience.mode LIST (the compensation goal's recommended audience) needs the list it sends to.",
+  },
+  {
+    path: 'studyId',
+    why: 'Links a campaign to the pre-study it came from; set by the Studies pages, not typed in the form.',
   },
 ];
 
@@ -1464,9 +2661,9 @@ export function offerLabel(offer: CampaignDraft['offer']): string {
     case 'CASHBACK':
       return `${offer.percent ?? 0}% cashback${offer.maxDiscountSar ? ` up to SAR ${offer.maxDiscountSar}` : ''}`;
     case 'FREE_DELIVERY':
-      return offer.deliveryFeeCovered === 'FULL' || offer.deliveryFeeCovered === undefined
+      return offer.deliveryFeeCoveredSar === 'FULL' || offer.deliveryFeeCoveredSar === undefined
         ? 'Free delivery'
-        : `SAR ${offer.deliveryFeeCovered} off delivery`;
+        : `SAR ${offer.deliveryFeeCoveredSar} off delivery`;
     case 'FREE_ITEM':
       return `Free item x${offer.freeItem?.quantity ?? 1}`;
     case 'BXGY':
@@ -1481,7 +2678,7 @@ export function offerLabel(offer: CampaignDraft['offer']): string {
 /** The statuses in which customers may already hold the campaign's coupon. */
 export const CAMPAIGN_LOCKED_STATUSES: readonly CampaignStatus[] = ['live', 'paused', 'ended'];
 
-/** One dotted path out of a campaign or draft (`validity.startDate`). */
+/** One dotted path out of a campaign or draft (`schedule.startDate`). */
 export function valueAtPath(o: unknown, path: string): unknown {
   return path
     .split('.')

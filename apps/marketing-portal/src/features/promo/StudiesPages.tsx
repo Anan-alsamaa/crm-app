@@ -13,7 +13,7 @@ import {
 } from '@yiji/shared-types';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { useEngine } from '../../engine/index.js';
-import { CampaignDraftFromSpec } from '../../engine/sample.js';
+import { CampaignDraftFromSpec, scheduleFor } from '../../engine/sample.js';
 import { PageHeader, PAGE_BODY, SECTION_CARD } from '../../components/shell/Page.js';
 import {
   AreaTabs,
@@ -533,13 +533,7 @@ export function StudiesCasesPage() {
       const scenarios = [20, 30, 45].map((rate, i) => {
         const draft = CampaignDraftFromSpec(spec, {
           name: { en: `${name} - option ${i + 1}`, ar: `${name} - خيار ${i + 1}` },
-          validity: {
-            startDate: start,
-            endDate: new Date(Date.now() + spec.recommended.validityDays * 86_400_000)
-              .toISOString()
-              .slice(0, 10),
-            daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-          },
+          schedule: scheduleFor(start, spec.recommended.validityDays),
         });
         const input = {
           customersMatched: 2400 + i * 300,
