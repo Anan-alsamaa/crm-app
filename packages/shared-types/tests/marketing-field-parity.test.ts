@@ -7,6 +7,7 @@ import {
   CAMPAIGN_FIELD_SPEC,
   CampaignDraft,
   StoredCampaignDraft,
+  bundlePriceProblem,
   campaignDraftIssues,
   campaignUniquenessConflicts,
   forecastCampaign,
@@ -477,7 +478,11 @@ describe("the design's rules, one at a time", () => {
     const d = CampaignDraft.parse(ok());
     expect(campaignDraftIssues(d)).toEqual([]);
     expect(campaignDraftIssues({ ...d, audience: { ...d.audience, mode: 'SEGMENT' } })).toEqual([
-      { path: 'audience.conditions', message: 'Add at least one condition.' },
+      {
+        path: 'audience.conditions',
+        rule: 'conditionsRequired',
+        message: 'Add at least one condition.',
+      },
     ]);
   });
 });
@@ -629,5 +634,31 @@ describe('the planning inputs (step 7) feed the business case', () => {
       input,
     );
     expect(planned.extraProfitSar).toBeGreaterThan(plain.extraProfitSar);
+  });
+});
+
+describe('a bundle is priced below its items (the menu decides)', () => {
+  const menu = [
+    { id: 'a', priceSar: 20 },
+    { id: 'b', priceSar: 15 },
+  ];
+  it('refuses a bundle priced at or above the normal total, and passes one below it', () => {
+    const bundle = (priceSar: number) => ({
+      type: 'BUNDLE' as const,
+      bundle: { productIds: ['a', 'b'], priceSar },
+    });
+    expect(bundlePriceProblem(bundle(35), menu)).toMatch(
+      /below the items' normal total \(SAR 35\)/,
+    );
+    expect(bundlePriceProblem(bundle(40), menu)).not.toBeNull();
+    expect(bundlePriceProblem(bundle(30), menu)).toBeNull();
+    /* an item the menu does not know: nothing to compare with */
+    expect(
+      bundlePriceProblem(
+        { type: 'BUNDLE', bundle: { productIds: ['a', 'z'], priceSar: 99 } },
+        menu,
+      ),
+    ).toBeNull();
+    expect(bundlePriceProblem({ type: 'FIXED' }, menu)).toBeNull();
   });
 });

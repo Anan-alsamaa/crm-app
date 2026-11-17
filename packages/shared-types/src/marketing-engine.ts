@@ -396,94 +396,128 @@ export function inclusiveDays(from: string, to: string): number | null {
  * The draft's required/conditional rules, as path + message. Pure: the form,
  * the sample engine and the CRM's engine refuse the same drafts.
  */
-export function campaignDraftIssues(d: DraftShape): Array<{ path: string; message: string }> {
-  const out: Array<{ path: string; message: string }> = [];
-  const add = (path: string, message: string) => out.push({ path, message });
+export function campaignDraftIssues(
+  d: DraftShape,
+): Array<{ path: string; rule: string; message: string }> {
+  const out: Array<{ path: string; rule: string; message: string }> = [];
+  const add = (path: string, rule: string, message: string) => out.push({ path, rule, message });
   const o = d.offer;
   const pctOffer = o.type === 'PERCENT' || o.type === 'CASHBACK';
   /* step 1 */
   if (d.objective === 'SERVICE_RECOVERY' && !d.reasonCode)
-    add('reasonCode', 'Required for compensation.');
+    add('reasonCode', 'reasonRequired', 'Required for compensation.');
   if (
     (d.funding.source === 'PARTNER' || d.funding.source === 'SHARED') &&
     !(d.funding.partnerSharePct > 0)
   )
-    add('funding.partnerSharePct', 'Say how much the partner pays.');
+    add('funding.partnerSharePct', 'partnerShareRequired', 'Say how much the partner pays.');
   /* step 2 - the discount */
-  if (pctOffer && o.percent === undefined) add('offer.percent', 'Required: 1-100.');
+  if (pctOffer && o.percent === undefined)
+    add('offer.percent', 'percentRequired', 'Required: 1-100.');
   if (pctOffer && o.maxDiscountSar === undefined)
-    add('offer.maxDiscountSar', 'Mandatory for percentage and cashback.');
+    add('offer.maxDiscountSar', 'maxDiscountRequired', 'Mandatory for percentage and cashback.');
   if (o.type === 'FIXED' && o.amountSar === undefined)
-    add('offer.amountSar', 'Required: greater than 0.');
-  if (o.type === 'BXGY' && !o.bxgy?.productId) add('offer.bxgy.productId', 'Pick the item.');
+    add('offer.amountSar', 'amountRequired', 'Required: greater than 0.');
+  if (o.type === 'BXGY' && !o.bxgy?.productId)
+    add('offer.bxgy.productId', 'itemRequired', 'Pick the item.');
   if (o.type === 'FREE_ITEM' && !o.freeItem?.productId)
-    add('offer.freeItem.productId', 'Pick the free item.');
-  if (o.type === 'BUNDLE' && !o.bundle) add('offer.bundle.productIds', 'At least 2 menu items.');
+    add('offer.freeItem.productId', 'freeItemRequired', 'Pick the free item.');
+  if (o.type === 'BUNDLE' && !o.bundle)
+    add('offer.bundle.productIds', 'bundleItemsRequired', 'At least 2 menu items.');
   if (o.partialRedemption?.enabled && o.type !== 'FIXED')
-    add('offer.partialRedemption.enabled', 'Fixed-amount coupons only.');
+    add('offer.partialRedemption.enabled', 'partialFixedOnly', 'Fixed-amount coupons only.');
   if (d.experiment.enabled) {
     if (!(o.type === 'PERCENT' || o.type === 'FIXED' || o.type === 'CASHBACK'))
-      add('experiment.enabled', 'Only for percentage, fixed amount and cashback.');
-    if (!d.experiment.variantB) add('experiment.variantB.value', 'Required for a test.');
+      add(
+        'experiment.enabled',
+        'experimentTypes',
+        'Only for percentage, fixed amount and cashback.',
+      );
+    if (!d.experiment.variantB)
+      add('experiment.variantB.value', 'variantBRequired', 'Required for a test.');
     else if (pctOffer && d.experiment.variantB.value > 100)
-      add('experiment.variantB.value', 'A percentage: 1-100.');
+      add('experiment.variantB.value', 'variantBPercent', 'A percentage: 1-100.');
   }
   const boost = d.trigger.birthday?.tierBoost;
   if (boost?.enabled && !(boost.extraSar > 0))
-    add('trigger.birthday.tierBoost.extraSar', 'Required: greater than 0.');
+    add('trigger.birthday.tierBoost.extraSar', 'extraRequired', 'Required: greater than 0.');
   if (d.objective === 'FREQUENT_ORDER' && !d.loyalty)
-    add('loyalty.type', 'Say how customers earn the reward.');
+    add('loyalty.type', 'loyaltyTypeRequired', 'Say how customers earn the reward.');
   if (d.loyalty) {
     const l = d.loyalty;
     if ((l.type === 'STAMP' || l.type === 'CHALLENGE') && l.ordersRequired === undefined)
-      add('loyalty.ordersRequired', 'Required: 2-50 orders.');
+      add('loyalty.ordersRequired', 'ordersRequired', 'Required: 2-50 orders.');
     if (l.type === 'CHALLENGE' && l.windowDays === undefined)
-      add('loyalty.windowDays', 'Required: the days the orders must fall within.');
+      add(
+        'loyalty.windowDays',
+        'windowDaysRequired',
+        'Required: the days the orders must fall within.',
+      );
     if (l.type === 'MILESTONE' && l.milestones.length === 0)
-      add('loyalty.milestones', 'Pick at least one order number.');
+      add('loyalty.milestones', 'milestonesRequired', 'Pick at least one order number.');
   }
   /* step 3 - customers */
   if (d.audience.mode === 'SEGMENT' && d.audience.conditions.length === 0)
-    add('audience.conditions', 'Add at least one condition.');
+    add('audience.conditions', 'conditionsRequired', 'Add at least one condition.');
   if (d.audience.mode === 'PHONES' && d.audience.phoneNumbers.length === 0)
-    add('audience.phoneNumbers', 'Add the phone numbers.');
-  if (d.audience.mode === 'LIST' && !d.audience.listId) add('audience.listId', 'Pick the list.');
+    add('audience.phoneNumbers', 'phonesRequired', 'Add the phone numbers.');
+  if (d.audience.mode === 'LIST' && !d.audience.listId)
+    add('audience.listId', 'listRequired', 'Pick the list.');
   /* step 4 - eligibility */
   if (!d.scope.allBrands && d.scope.brandIds.length === 0)
-    add('scope.brandIds', 'Pick at least one brand, or all brands.');
+    add('scope.brandIds', 'brandsRequired', 'Pick at least one brand, or all brands.');
   if (d.scope.allBrands && d.scope.brandIds.length > 0)
-    add('scope.allBrands', 'All brands, or a list of brands - not both.');
+    add('scope.allBrands', 'allBrandsOrList', 'All brands, or a list of brands - not both.');
   if (d.limits.perCustomerMode === 'MONTHLY' && d.limits.perCustomerMax === undefined)
-    add('limits.perCustomerMax', 'Required for a monthly limit.');
+    add('limits.perCustomerMax', 'perCustomerMaxRequired', 'Required for a monthly limit.');
   if (d.distribution.codeType === 'SHARED' && !d.distribution.code?.trim())
-    add('distribution.code', 'Type the shared code.');
+    add('distribution.code', 'codeRequired', 'Type the shared code.');
   if (d.distribution.codeType === 'UNIQUE' && d.distribution.uniqueCodeCount === undefined)
-    add('distribution.uniqueCodeCount', 'Say how many codes.');
+    add('distribution.uniqueCodeCount', 'uniqueCountRequired', 'Say how many codes.');
   for (const [i, r] of d.rules.binRanges.entries()) {
     const m = BIN_RANGE.exec(r);
     if (m?.[2] && (m[2].length !== m[1]!.length || m[2] < m[1]!))
-      add(`rules.binRanges.${i}`, 'A range is two BINs of the same length, low to high.');
+      add(
+        `rules.binRanges.${i}`,
+        'binRange',
+        'A range is two BINs of the same length, low to high.',
+      );
   }
   if (firstOrderCoupon(d) && !d.fraud.onePerPhoneAndDevice)
-    add('fraud.onePerPhoneAndDevice', 'Mandatory for first-order and new-customer coupons.');
+    add(
+      'fraud.onePerPhoneAndDevice',
+      'onePerPhoneMandatory',
+      'Mandatory for first-order and new-customer coupons.',
+    );
   /* step 5 - schedule */
   const s = d.schedule;
-  if (s.endDate < s.startDate) add('schedule.endDate', 'On or after the start date.');
+  if (s.endDate < s.startDate)
+    add('schedule.endDate', 'endAfterStart', 'On or after the start date.');
   const { from, to } = s.timeWindow;
-  if (s.allDay && (from || to)) add('schedule.allDay', 'All day, or a time window - not both.');
+  if (s.allDay && (from || to))
+    add('schedule.allDay', 'allDayOrWindow', 'All day, or a time window - not both.');
   if (!s.allDay && !s.onlyDuringBranchHours && !(from && to))
-    add('schedule.timeWindow.from', 'Set the start and end time, or choose all day.');
+    add(
+      'schedule.timeWindow.from',
+      'timesOrAllDay',
+      'Set the start and end time, or choose all day.',
+    );
   if ((from && !to) || (!from && to))
-    add(from ? 'schedule.timeWindow.to' : 'schedule.timeWindow.from', 'Both times, or neither.');
-  if (from && to && from === to) add('schedule.timeWindow.to', 'Must differ from the start time.');
+    add(
+      from ? 'schedule.timeWindow.to' : 'schedule.timeWindow.from',
+      'bothTimes',
+      'Both times, or neither.',
+    );
+  if (from && to && from === to)
+    add('schedule.timeWindow.to', 'timesDiffer', 'Must differ from the start time.');
   if (s.limitedTime.enabled && s.limitedTime.hours === undefined)
-    add('schedule.limitedTime.hours', 'Required for a flash offer.');
+    add('schedule.limitedTime.hours', 'flashHoursRequired', 'Required for a flash offer.');
   /* step 6 - distribution */
   const ch = d.distribution.channels;
   const c = d.communication;
   const both = (path: string, v: { en: string; ar: string }) => {
-    if (!v.en.trim()) add(`${path}.en`, 'Required for this channel.');
-    if (!v.ar.trim()) add(`${path}.ar`, 'Required for this channel.');
+    if (!v.en.trim()) add(`${path}.en`, 'channelCopyRequired', 'Required for this channel.');
+    if (!v.ar.trim()) add(`${path}.ar`, 'channelCopyRequired', 'Required for this channel.');
   };
   if (ch.includes('PUSH')) {
     both('communication.push.title', c.push.title);
@@ -492,14 +526,41 @@ export function campaignDraftIssues(d: DraftShape): Array<{ path: string; messag
   if (ch.includes('IN_APP_BANNER')) both('communication.banner.text', c.banner.text);
   if (ch.includes('SMS')) both('communication.sms.text', c.sms.text);
   if ((ch.includes('SMS') || ch.includes('EMAIL')) && !c.respectConsent)
-    add('communication.respectConsent', 'Must stay on for SMS and email (PDPL).');
+    add(
+      'communication.respectConsent',
+      'consentMandatory',
+      'Must stay on for SMS and email (PDPL).',
+    );
   return out;
+}
+
+/**
+ * The design: a bundle's price is below its items' normal total. It needs the
+ * menu, so it is checked where the menu is known (the form and the sample
+ * engine); null when it holds or an item's price is not known.
+ */
+export function bundlePriceProblem(
+  offer: Pick<DraftShape['offer'], 'type' | 'bundle'>,
+  products: ReadonlyArray<{ id: string; priceSar: number }>,
+): string | null {
+  if (offer.type !== 'BUNDLE' || !offer.bundle) return null;
+  const prices = offer.bundle.productIds.map((id) => products.find((p) => p.id === id)?.priceSar);
+  if (prices.some((p) => p === undefined)) return null;
+  const total = prices.reduce<number>((a, b) => a + (b ?? 0), 0);
+  return offer.bundle.priceSar < total
+    ? null
+    : `offer.bundle.priceSar: must be below the items' normal total (SAR ${total}).`;
 }
 
 /** The campaign draft, with the design's required and conditional rules. */
 export const CampaignDraft = CampaignDraftShape.superRefine((d, ctx) => {
   for (const i of campaignDraftIssues(d))
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: i.path.split('.'), message: i.message });
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: i.path.split('.'),
+      message: i.message,
+      params: { rule: i.rule },
+    });
 });
 export type CampaignDraft = z.infer<typeof CampaignDraft>;
 
