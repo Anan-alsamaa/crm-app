@@ -337,6 +337,8 @@ Headers: `Authorization: Bearer <admin login>`, `tenantid: 1`, `idempotency-key:
 **Status meanings**: `pending` (waiting for admin) → `approved`/`edited` (approved, being delivered or withheld) → `assigned` (customer holds it on Yiji) · `rejected`.
 Note: a coupon the customer **used** disappears from their Yiji wallet — that is normal, not a loss.
 
+**Every General coupon alerts the Administrators** (owner, 17 Nov 2026): a `coupon_approvals` row typed General/Public is told in-app (same channel and recipients as the Private-check alert) when **requested** (row created or changed to General — a 2-min worker sweep), **approved** (the push picks it up) and **created on Yiji** — once per coupon per stage (Redis key), alert only. Marketing code coupons (General on Yiji) alert when approved and created. Details: `docs/GENERAL-COUPON-ALERT.md`.
+
 ---
 
 ## 10. Flow F — late orders

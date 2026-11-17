@@ -39,6 +39,8 @@ import {
   DEFAULT_COUPON_MISUSE_CHECK_MS,
   scheduleCouponCustomerCheck,
   DEFAULT_COUPON_CUSTOMER_CHECK_MS,
+  scheduleGeneralCouponRequestAlert,
+  DEFAULT_GENERAL_COUPON_REQUEST_ALERT_MS,
   scheduleStoreNotifySend,
   DEFAULT_STORE_NOTIFY_SEND_MS,
   setYijiUsageSink,
@@ -290,6 +292,18 @@ async function main(): Promise<void> {
     logger.info({ everyMs: couponMisuseCheckMs }, 'coupon misuse check scheduled (0 = off)');
   } catch (err) {
     logger.warn({ err: (err as Error).message }, 'coupon misuse check could not be scheduled');
+  }
+
+  /* Every General coupon requested is told to the Administrators, once per
+     coupon, every 2 min (owner, 17 Nov 2026). `GENERAL_COUPON_ALERT_MS=0` off. */
+  const generalCouponAlertMs = Number(
+    process.env.GENERAL_COUPON_ALERT_MS ?? DEFAULT_GENERAL_COUPON_REQUEST_ALERT_MS,
+  );
+  try {
+    await scheduleGeneralCouponRequestAlert(queues[QUEUES.automation], generalCouponAlertMs);
+    logger.info({ everyMs: generalCouponAlertMs }, 'general coupon alert scheduled (0 = off)');
+  } catch (err) {
+    logger.warn({ err: (err as Error).message }, 'general coupon alert could not be scheduled');
   }
 
   /* An edit of an approved coupon that died mid-way leaves the coupon switched

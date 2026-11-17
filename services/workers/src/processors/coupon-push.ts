@@ -24,6 +24,7 @@ import {
   YIJI_REACH_LIMIT,
   couponLimitProblem,
   couponTypeProblem,
+  isGeneralCouponType,
   effectiveTotalLimit,
   yijiCouponTypeCode,
   YIJI_COUPON_CATEGORY,
@@ -301,6 +302,13 @@ export interface CouponPushDeps {
   readCoupon?: (couponId: number) => Promise<{ type: number | null; code: string | null } | null>;
   /** Tells the Administrator a coupon was blocked by the Private check. */
   alertNotPrivate?: (code: string, detail: string) => Promise<void>;
+  /**
+   * EVERY GENERAL COUPON ALERTS (owner, 17 Nov 2026): called for a General /
+   * Public row when the push picks it up approved, and when Yiji created it.
+   * Deduped per coupon per stage by the caller; alert only - see
+   * general-coupon-alert.ts. Absent = no alert.
+   */
+  alertGeneralCoupon?: (stage: 'approved' | 'created', couponApprovalId: string) => Promise<void>;
   /**
    * Yiji's `tenantid` header. Their API is multi-tenant and mis-routes a call
    * without it; the captured request sends `1`.
@@ -1971,6 +1979,16 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
     await recordFailure(directus, id, `not sent: ${typeWrong}`);
     return 'refused';
   }
+  /* A General coupon is ALERTED, never stopped here (owner, 17 Nov 2026). */
+  const tellGeneral = async (stage: 'approved' | 'created'): Promise<void> => {
+    if (!deps.alertGeneralCoupon || !isGeneralCouponType(row.coupon_type)) return;
+    await deps
+      .alertGeneralCoupon(stage, id)
+      .catch((err: unknown) =>
+        logger.warn({ id, stage, err: describeError(err) }, 'general coupon alert failed'),
+      );
+  };
+  await tellGeneral('approved');
   const limitWrong = couponLimitProblem(row);
   if (limitWrong) {
     logger.warn({ id, code: row.coupon_code }, `coupon not sent: ${limitWrong}`);
@@ -1985,7 +2003,7 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
    * never reach a customer however the job was queued, a Retry click included.
    */
   if (row.delivery_excluded) {
-    return await createWithheldCoupon({
+    const withheld = await createWithheldCoupon({
       row,
       id,
       directus,
@@ -1996,6 +2014,8 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
       yijiTenantId,
       redirectCouponsTo,
     });
+    if (withheld === 'withheld') await tellGeneral('created');
+    return withheld;
   }
 
   /*
@@ -2392,6 +2412,7 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
           logger.warn({ id, code: row.coupon_code, detail }, 'yiji refused to create the coupon');
           return 'refused';
         }
+        await tellGeneral('created');
       }
       /*
        * THE PRIVATE CHECK (owner, 2026-11-02). Coupons created as General
@@ -2575,5 +2596,6 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
     { id, code: row.coupon_code, orderId, couponUserId: verdict.couponUserId },
     'coupon attached to the order on Yiji and marked assigned',
   );
+  await tellGeneral('created');
   return 'delivered';
 }
