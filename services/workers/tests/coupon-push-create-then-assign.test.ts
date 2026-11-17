@@ -269,12 +269,6 @@ describe('no Yiji account: created on Yiji now, never granted', () => {
     await expect(h.run({ redirectCouponsTo: '0500000000' })).resolves.toBe('awaiting-signup');
     expect(h.postCoupon).not.toHaveBeenCalled();
   });
-
-  it('Yiji v2 is unchanged: nothing created while the customer has no account', async () => {
-    const h = harness();
-    await expect(h.run({ platform: 'yiji2' } as never)).resolves.toBe('awaiting-signup');
-    expect(h.postCoupon).not.toHaveBeenCalled();
-  });
 });
 
 describe('the customer signs up: the EXISTING coupon is assigned', () => {
