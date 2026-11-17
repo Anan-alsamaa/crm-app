@@ -2,10 +2,14 @@ import {
   CAMPAIGN_OBJECTIVES,
   DEFAULT_MONEY_MODEL,
   OBJECTIVE_CATALOGUE,
+  bundlePriceProblem,
+  campaignUniquenessConflicts,
   canApproveCampaign,
+  firstOrderCoupon,
   forecastCampaign,
   lockedFieldChanges,
   objectiveSpec,
+  readCampaignDraft,
   simulateCampaignCheckout,
   type Campaign,
   type CampaignDraft,
@@ -217,10 +221,16 @@ function seedCampaign(
   const draft = CampaignDraftFromSpec(spec, {
     ...partial,
     name: names,
-    validity: {
-      startDate: start,
-      endDate: plusDays(start, spec.recommended.validityDays),
-      daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    schedule: partial.schedule ?? scheduleFor(start, spec.recommended.validityDays),
+    /* what the customer is told, on every channel the goal recommends */
+    communication: partial.communication ?? {
+      push: { title: names, body: names },
+      banner: { text: names },
+      sms: { text: names },
+      sendTime: 'ON_ISSUE',
+      frequencyCap: 'THREE_PER_WEEK',
+      quietHours: true,
+      respectConsent: true,
     },
   });
   const forecast = forecastCampaign(draft, {
@@ -254,12 +264,30 @@ function seedCampaign(
   };
 }
 
-/** A complete draft from a goal's recommended set-up plus overrides. */
+/** A whole-day schedule of `days` from `start`, the coupon living as long as the campaign. */
+export function scheduleFor(start: string, days: number): CampaignDraft['schedule'] {
+  return {
+    startDate: start,
+    endDate: plusDays(start, days),
+    allDay: true,
+    timeWindow: {},
+    onlyDuringBranchHours: false,
+    daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
+    expiresAfterIssueDays: Math.min(365, Math.max(1, days)),
+    limitedTime: { enabled: false },
+  };
+}
+
+/**
+ * A complete draft from a goal's recommended set-up plus overrides. Every
+ * field the design has is present: what the goal does not set gets the
+ * schema's default (readCampaignDraft), so the form never meets a hole.
+ */
 export function CampaignDraftFromSpec(
   spec: (typeof OBJECTIVE_CATALOGUE)[number],
   over: Partial<CampaignDraft> & {
     name: CampaignDraft['name'];
-    validity: CampaignDraft['validity'];
+    schedule: CampaignDraft['schedule'];
   },
 ): CampaignDraft {
   const base = {
@@ -289,8 +317,10 @@ export function CampaignDraftFromSpec(
       previousOrders: 'ANY',
       firstOrderOnly: spec.key === 'FIRST_ORDER',
       paymentMethods: ['MADA', 'CARD', 'APPLE_PAY', 'CASH', 'WALLET'],
+      binRanges: [],
     },
     scope: {
+      allBrands: true,
       brandIds: [],
       branchIds: [],
       categoryIds: [],
@@ -304,15 +334,28 @@ export function CampaignDraftFromSpec(
       dailyRedemptions: 0,
       budgetSar: 20_000,
     },
-    distribution: { codeType: 'NONE', channels: spec.recommended.channels },
+    distribution: {
+      codeType: 'NONE',
+      channels: spec.recommended.channels,
+      addMode: 'AUTO_WALLET',
+      issueMode: 'ALL_AT_ONCE',
+    },
     stacking: {
       combineWithOtherOffers: false,
       combineWithLoyalty: true,
       combineWithOtherCoupons: false,
     },
-    validity: over.validity,
-  } as CampaignDraft;
-  return { ...base, ...over, offer: { ...base.offer, ...(over.offer ?? {}) } } as CampaignDraft;
+    /* the design: mandatory for first-order and new-customer coupons */
+    fraud: { onePerPhoneAndDevice: firstOrderCoupon({ objective: spec.key }) },
+    /* a stamp card needs a way to earn: five orders, the design's default */
+    ...(spec.key === 'FREQUENT_ORDER' ? { loyalty: { type: 'STAMP', ordersRequired: 5 } } : {}),
+    schedule: over.schedule,
+  } as unknown as CampaignDraft;
+  return readCampaignDraft({
+    ...base,
+    ...over,
+    offer: { ...base.offer, ...(over.offer ?? {}) },
+  });
 }
 
 function seed(): Stored {
@@ -372,7 +415,7 @@ function seed(): Stored {
         objective: 'DELIVERY',
         offer: {
           type: 'FREE_DELIVERY',
-          deliveryFeeCovered: 'FULL',
+          deliveryFeeCoveredSar: 'FULL',
           onRefund: 'RETURN_IF_VALID',
           onCancelBeforeCompletion: 'REISSUE_IF_VALID',
         },
@@ -382,6 +425,7 @@ function seed(): Stored {
           previousOrders: 'ANY',
           firstOrderOnly: false,
           paymentMethods: ['MADA', 'CARD', 'APPLE_PAY', 'CASH', 'WALLET'],
+          binRanges: [],
         },
       },
       'live',
@@ -424,9 +468,10 @@ function seed(): Stored {
           onRefund: 'RETURN_IF_VALID',
           onCancelBeforeCompletion: 'REISSUE_IF_VALID',
         },
+        notes: 'Reward: Free Chicken Pasta',
         loyalty: {
-          stampsRequired: 5,
-          reward: 'Free Chicken Pasta',
+          type: 'STAMP',
+          ordersRequired: 5,
           stampExpiryDays: 60,
           milestones: ['5', '10', '25'],
           minOrderToCountSar: 30,
@@ -435,6 +480,7 @@ function seed(): Stored {
           progressMessages: true,
         },
         scope: {
+          allBrands: false,
           brandIds: ['casapasta'],
           branchIds: [],
           categoryIds: [],
@@ -502,11 +548,10 @@ function seed(): Stored {
           onRefund: 'RETURN_IF_VALID',
           onCancelBeforeCompletion: 'REISSUE_IF_VALID',
         },
-        validity: {
-          startDate: dayOf(daysAgo(3)),
-          endDate: plusDays(dayOf(daysAgo(3)), 30),
-          startTime: '14:00',
-          endTime: '17:00',
+        schedule: {
+          ...scheduleFor(dayOf(daysAgo(3)), 30),
+          allDay: false,
+          timeWindow: { from: '14:00', to: '17:00' },
           daysOfWeek: [0, 1, 2, 3, 4],
         },
       },
@@ -655,11 +700,7 @@ function makeStudy(
   const scenarios = [20, 30, 45].map((rate, i) => {
     const draft = CampaignDraftFromSpec(spec, {
       name: { en: `${name} - option ${i + 1}`, ar: `${name} - خيار ${i + 1}` },
-      validity: {
-        startDate: start,
-        endDate: plusDays(start, spec.recommended.validityDays),
-        daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-      },
+      schedule: scheduleFor(start, spec.recommended.validityDays),
       offer:
         i === 0
           ? spec.recommended.offer
@@ -678,7 +719,7 @@ function makeStudy(
               },
     } as Partial<CampaignDraft> & {
       name: CampaignDraft['name'];
-      validity: CampaignDraft['validity'];
+      schedule: CampaignDraft['schedule'];
     });
     const input = { customersMatched: 2400 + i * 300, redemptionRatePct: rate, avgOrderSar: 67 };
     return {
@@ -732,13 +773,28 @@ function makeStudy(
 function load(): Stored {
   try {
     const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(STORE_KEY) : null;
-    if (raw) return JSON.parse(raw) as Stored;
+    if (raw) return upgradeStored(JSON.parse(raw) as Stored);
   } catch {
     /* a damaged store is replaced */
   }
   const fresh = seed();
   save(fresh);
   return fresh;
+}
+/**
+ * A browser store written by an earlier build holds drafts in the shape
+ * before field parity (`validity`, `stampsRequired`, ...): read them in
+ * today's shape, the same way the CRM's engine reads its rows.
+ */
+function upgradeStored(s: Stored): Stored {
+  return {
+    ...s,
+    campaigns: (s.campaigns ?? []).map((c) => ({ ...c, ...readCampaignDraft(c) })),
+    studies: (s.studies ?? []).map((st) => ({
+      ...st,
+      scenarios: (st.scenarios ?? []).map((x) => ({ ...x, draft: readCampaignDraft(x.draft) })),
+    })),
+  };
 }
 function save(s: Stored): void {
   try {
@@ -762,7 +818,7 @@ function performanceOf(c: Campaign): CampaignPerformance {
   const seed = rng(Number(c.id.replace(/\D/g, '')) + 7);
   const ageDays = Math.max(
     1,
-    Math.min(60, Math.round((Date.now() - Date.parse(c.validity.startDate)) / 86_400_000)),
+    Math.min(60, Math.round((Date.now() - Date.parse(c.schedule.startDate)) / 86_400_000)),
   );
   const live = c.status === 'live' || c.status === 'ended' || c.status === 'paused';
   if (!live) {
@@ -781,7 +837,7 @@ function performanceOf(c: Campaign): CampaignPerformance {
     };
   }
   const perDay = Array.from({ length: ageDays }, (_, i) => {
-    const day = plusDays(c.validity.startDate, i);
+    const day = plusDays(c.schedule.startDate, i);
     const issued = Math.round(60 + seed() * 140);
     const redeemed = Math.round(issued * (0.12 + seed() * 0.25));
     return { day, issued, redeemed, revenueSar: Math.round(redeemed * (55 + seed() * 40)) };
@@ -937,6 +993,11 @@ export class SampleMarketingEngine implements MarketingEngine {
     await wait();
     const now = iso(new Date());
     const me = this.currentUser();
+    /* The engine's rules, not the page's: the same refusals as the CRM's engine. */
+    const taken = campaignUniquenessConflicts(draft, id, this.store.campaigns);
+    if (taken.length) throw new Error(`already used by another campaign: ${taken.join(', ')}`);
+    const bundle = bundlePriceProblem(draft.offer, CATALOGUE.products);
+    if (bundle) throw new Error(bundle);
     if (id) {
       const i = this.store.campaigns.findIndex((c) => c.id === id);
       if (i < 0) throw new Error('campaign not found');
@@ -1371,11 +1432,7 @@ export class SampleMarketingEngine implements MarketingEngine {
       const customersMatched = Math.round(300 + seed() * 4500);
       const draft = CampaignDraftFromSpec(spec, {
         name: { en: objective, ar: objective },
-        validity: {
-          startDate: range.to,
-          endDate: plusDays(range.to, spec.recommended.validityDays),
-          daysOfWeek: [0, 1, 2, 3, 4, 5, 6],
-        },
+        schedule: scheduleFor(range.to, spec.recommended.validityDays),
       });
       const f = forecastCampaign(draft, {
         customersMatched,
