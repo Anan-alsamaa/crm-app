@@ -270,10 +270,18 @@ describe('no Yiji account: created on Yiji now, never granted', () => {
     expect(h.postCoupon).not.toHaveBeenCalled();
   });
 
-  it('Yiji v2 is unchanged: nothing created while the customer has no account', async () => {
+  /* Yiji v2 follows its own contract of 17 Nov 2026 (pending grants, see
+     coupon-push-yiji2-pending.test.ts): ONE creation that names the phone,
+     so v2 holds a pending grant - never a grant, never a second creation. */
+  it('Yiji v2: one creation WITH the phone (v2 pending grant), nothing granted', async () => {
     const h = harness();
     await expect(h.run({ platform: 'yiji2' } as never)).resolves.toBe('awaiting-signup');
-    expect(h.postCoupon).not.toHaveBeenCalled();
+    expect(h.postCoupon).toHaveBeenCalledTimes(1);
+    expect(h.postCoupon.mock.calls[0]![0]).toBe('/api/Coupon/AddCoupon');
+    expect(h.postCoupon.mock.calls[0]![1]).toMatchObject({
+      customerPhone: '0551234567',
+      assignee: [],
+    });
   });
 });
 
