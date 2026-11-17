@@ -18,6 +18,7 @@ import {
 } from '@yiji/ui';
 import { directus } from '../../lib/directus.js';
 import { GlobalSettingsCard } from './GlobalSettings.js';
+import { CompensationEscalationCard } from './CompensationEscalation.js';
 import { BranchPicker } from './BranchPicker.js';
 import {
   PRIVILEGE_PORTAL,
@@ -477,6 +478,10 @@ export function RolesPage() {
       defaultValue:
         'Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)',
     }),
+    approve_compensation_cases: t('roles.p.approveCompensationCases', {
+      defaultValue:
+        'Yiji V2 compensation cases: approve or reject a case, confirm photos and the camera check, log a V2 complaint from a ticket',
+    }),
     view_agent_reports: t('roles.p.viewAgentReports', {
       defaultValue:
         'View agent summary reports (Agent summary, Chat status, Busy time, Agent performance)',
@@ -716,6 +721,9 @@ export function RolesPage() {
                 </ul>
               </div>
             )}
+            {/* Who hears of a Yiji V2 compensation escalation (owner, 18 Nov
+                2026). The Administrator only; renders nothing for others. */}
+            <CompensationEscalationCard />
           </div>
 
           {/* ── the open role ── */}

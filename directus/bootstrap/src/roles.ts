@@ -968,6 +968,25 @@ export const roles: RoleSpec[] = [
        */
       ...appendOnly('yiji_api_usage'),
       { collection: 'yiji_api_usage', action: 'delete' },
+      /*
+       * YIJI V2 COMPENSATION CASES (owner, 18 Nov 2026). The events job keeps
+       * one row per V2 case and opens its CRM ticket (tickets: crud above),
+       * then notifies the roles the Administrator mapped to V2's
+       * `escalate_to` - a setting read from `app_settings`, read-only here
+       * and that ONE key only (the other settings are not the workers' to
+       * read). Without the read the job falls back to the default mapping
+       * (logged), so an escalation is never lost; the Administrator is told
+       * of every one. No delete: a case is V2's record of a decision about
+       * money.
+       */
+      { collection: 'compensation_cases', action: 'create' },
+      { collection: 'compensation_cases', action: 'read' },
+      { collection: 'compensation_cases', action: 'update' },
+      {
+        collection: 'app_settings',
+        action: 'read',
+        permissions: { key: { _eq: 'compensation_escalation_roles' } },
+      },
     ],
   },
   {
@@ -1058,6 +1077,18 @@ export const roles: RoleSpec[] = [
       ...readOnly('brands'),
       ...readOnly('stores'),
       { collection: 'contacts', action: 'read', fields: ['id', 'external_customer_id', 'phone'] },
+      /*
+       * YIJI V2 COMPENSATION CASES (owner, 18 Nov 2026). The gateway decides
+       * WHO may act from the caller's own session (`approve_compensation_cases`)
+       * and checks the caller can read the ticket with THEIR token; it then
+       * reads the ticket's vendor and order with this account, calls V2, and
+       * records V2's answer on the case row. Tickets: those three columns
+       * only, read only. Cases: no delete.
+       */
+      { collection: 'tickets', action: 'read', fields: ['id', 'vendor', 'order_id'] },
+      { collection: 'compensation_cases', action: 'create' },
+      { collection: 'compensation_cases', action: 'read' },
+      { collection: 'compensation_cases', action: 'update' },
     ],
   },
 ];

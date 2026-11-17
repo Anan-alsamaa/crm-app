@@ -839,6 +839,11 @@ async function main(): Promise<void> {
               producer.enqueueYiji2CouponEvent
                 ? producer.enqueueYiji2CouponEvent(job)
                 : Promise.resolve(null),
+            /* compensation.proposed / .decided / .escalated, 18 Nov 2026. */
+            enqueueCompensationEvent: (job) =>
+              producer.enqueueYiji2CompensationEvent
+                ? producer.enqueueYiji2CompensationEvent(job)
+                : Promise.resolve(null),
           },
         }
       : {}),

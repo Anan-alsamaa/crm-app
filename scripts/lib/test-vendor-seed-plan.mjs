@@ -70,6 +70,8 @@ export const TEST_STORES = Object.freeze([
  * is left to be orphaned into "legacy Yiji" or "every vendor".
  */
 export const REMOVE_ORDER = [
+  /* Yiji v2 compensation cases (18 Nov 2026): a child of tickets. */
+  'compensation_cases',
   'coupon_approvals',
   'late_order_decisions',
   'store_notifications',

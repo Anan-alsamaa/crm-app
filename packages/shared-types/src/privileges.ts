@@ -157,6 +157,14 @@ export const OWNER_PRIVILEGES = [
    * default. Every coupon a rule produces still needs a supervisor.
    */
   'manage_compensation_rules',
+  /**
+   * YIJI V2 COMPENSATION CASES (owner, 18 Nov 2026): approve, reject, confirm
+   * photos and close the camera check of a case V2 computed from the owner's
+   * policy, and log a V2 complaint from a ticket. Every case needs this one
+   * approval before V2 issues anything. OFF for every role until the owner
+   * ticks it; the Administrator always holds it.
+   */
+  'approve_compensation_cases',
   // ── reporting ───────────────────────────────────────────────────────────
   /** The Agent tab of the Dashboard (owner, 2026-10-12: its own line). */
   'view_agent_dashboard',
@@ -319,6 +327,8 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
   // Owner, 2026-10-27: the Administrator and WeCare Admin until ticked for another.
   manage_compensation_rules: nameIn('administrator', 'wecare admin'),
+  // New (owner, 18 Nov 2026): nobody until the owner ticks it for a role.
+  approve_compensation_cases: never,
   // The Dashboard page showed its Agent tab to whoever could open the page
   // AND see all chats.
   view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
@@ -435,6 +445,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_coupon_spend: 'coupons',
   delete_compensation: 'coupons',
   manage_ticket_compensation: 'coupons',
+  approve_compensation_cases: 'coupons',
   edit_approved_coupons: 'coupons',
   manage_compensation_rules: 'coupons',
   view_agent_dashboard: 'reporting',
@@ -605,6 +616,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   view_order_details: 'agent',
   request_coupons: 'agent',
   manage_ticket_compensation: 'agent',
+  approve_compensation_cases: 'agent',
   // Offered on the admin Coupon approvals card only (owner, 2026-11-15);
   // listed with the coupon queue it changes.
   edit_approved_coupons: 'admin',
