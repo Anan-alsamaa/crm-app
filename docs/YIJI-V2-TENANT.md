@@ -240,6 +240,13 @@ processor against the mock, the `coupon.granted` / `customer.created` job),
 - Attach-by-code is matched as v1 sends it (ids in the path).
 - `Yiji2UnavailableError` is an outage to the v1 helpers too (`isYijiUnavailable`).
 
+### 18 Nov 2026: automatic compensation cases (CRM approval)
+
+V2 computes each case from the owner's policy, every case needs one CRM agent's approval, V2 then
+issues and messages the customer; cases expire after 72 hours. The CRM side (events, one ticket per
+case, the approval panel, the new `approve_compensation_cases` privilege, escalation recipients,
+schema step) is in `docs/YIJI-V2-COMPENSATION.md`. Yiji v2 only; v1 unchanged.
+
 ## 6. Tests
 
 `packages/shared-types/tests/yiji2-connector.test.ts` (mapping, money, ids, translator, HTTP

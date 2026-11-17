@@ -17,6 +17,7 @@ export * from './yiji-guard.js';
 export * from './connector.js';
 export * from './mock-connector.js';
 export * from './yiji2-connector.js';
+export * from './yiji2-compensation.js';
 export * from './vendor-records.js';
 export * from './vendor-secrets.js';
 export * from './restaurants.js';

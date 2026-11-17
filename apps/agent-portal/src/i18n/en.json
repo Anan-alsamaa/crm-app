@@ -1145,5 +1145,83 @@
     "done": "Let’s go",
     "close": "Close",
     "goTo": "Go to slide {{n}}"
+  },
+  "v2Case": {
+    "action": {
+      "approve": "Approve",
+      "evidence": "Photos received",
+      "reject": "Reject",
+      "verification": "Camera check done"
+    },
+    "actionType": "What approval issues",
+    "amount": "Amount",
+    "amountOverride": "Different amount ({{currency}}, optional)",
+    "amountOverrideHint": "Leave empty to approve {{amount}}. Not above the order total ({{total}}).",
+    "approveHint": "Yiji V2 issues the compensation and sends the customer its message as soon as you approve.",
+    "calculation": "How the amount was reached (minor units)",
+    "cancel": "Cancel",
+    "caseTitle": "Case #{{id}}",
+    "category": "Complaint (policy code)",
+    "conflict": {
+      "closed": "This case is already closed (rejected, expired or failed). Nothing more can be done.",
+      "expired": "This case passed its 72 hours. It can no longer be approved.",
+      "evidenceHold": "This case is waiting for photos. Check the photos, then use \"Photos received\" before approving.",
+      "needsBhdValue": "Yiji V2 has no Bahraini dinar value for this rule yet. The case can only be rejected.",
+      "failed": "Yiji V2 could not issue the compensation (a coupon check refused it). The case is now failed.",
+      "notHeld": "This case is not waiting for photos.",
+      "noVerification": "This case has no camera check to close."
+    },
+    "decided": "{{status}} by {{by}}. {{issued}}{{reason}}",
+    "done": "Sent to Yiji V2.",
+    "error": {
+      "amount": "That amount cannot be sent: above zero, in the order’s currency, and not above the order total.",
+      "forbidden": "You do not have the permission to act on V2 compensation cases.",
+      "generic": "That did not go through. Try again.",
+      "inactive": "Yiji V2 is not active in the CRM, so nothing can be sent.",
+      "refused": "Yiji V2 refused it: {{detail}}",
+      "unavailable": "Yiji V2 is not answering. Nothing was changed; try again shortly."
+    },
+    "escalated": "Escalated: {{role}} was notified{{condition}}.",
+    "evidenceHint": "Confirm only after you checked the photos yourself. V2 then calculates the case and starts a new 72 hours.",
+    "expiresIn": "{{hours}} h {{minutes}} min left",
+    "expiresPassed": "72 hours passed",
+    "hasPhotos": "The customer sent photos",
+    "items": "Affected items",
+    "itemsLater": "Item prices come from the order. Picking the affected items follows when V2 sends order line ids.",
+    "log": "Log V2 complaint",
+    "logSubmit": "Send to Yiji V2",
+    "logged": "Complaint logged. Yiji V2 proposed a case.",
+    "loggedElsewhere": "This order already has a case of that category on another ticket.",
+    "metricMinutes": "Minutes late",
+    "needsBhdValue": "No Bahraini dinar value for this rule yet ({{reason}}). It can only be rejected.",
+    "no": "No",
+    "occurrence": "time {{n}}",
+    "order": "Order",
+    "overridden": " (amount changed by the agent)",
+    "photos": "Photos",
+    "photosSaid": "The app says the customer sent photos. Check them, then use “Photos received”. The app’s flag alone never releases a case.",
+    "pickCategory": "Choose…",
+    "reason": "Reason (required)",
+    "rule": "Rule",
+    "stacked": "Left out because it paid less: {{detail}}",
+    "status": {
+      "approved": "Approved",
+      "evidenceHold": "Waiting for photos",
+      "expired": "Expired",
+      "failed": "Failed",
+      "needsBhdValue": "No BHD value",
+      "proposed": "Waiting for approval",
+      "rejected": "Rejected"
+    },
+    "text": "What the customer said",
+    "title": "Yiji V2 compensation",
+    "verification": {
+      "confirmed": "Confirmed",
+      "notConfirmed": "Not confirmed",
+      "open": "Open"
+    },
+    "verificationLabel": "Camera check",
+    "verificationResult": "What the cameras show",
+    "yes": "Yes"
   }
 }

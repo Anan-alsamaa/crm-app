@@ -267,6 +267,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     /* Owner, 2026-11-12: back, made safe (edit in place). */
     edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
     manage_compensation_rules: nameIn('administrator', 'wecare admin'),
+    /* Yiji v2 compensation cases (owner, 18 Nov 2026): nobody until ticked. */
+    approve_compensation_cases: never,
     view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
     view_agent_reports: holds('view_all_chats'),
     view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
@@ -738,6 +740,12 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       g('app_settings', 'create', {}, null, RULE_COUPON_LIMIT_SETTING),
       g('app_settings', 'update', RULE_COUPON_LIMIT_SETTING),
     ],
+    /* Yiji v2 compensation cases (owner, 18 Nov 2026). Read only: every
+       action (approve, reject, photos, camera check, log a complaint) goes
+       through the AI gateway, which checks this switch from the caller's own
+       session and calls V2 itself; the case rows are written by the gateway
+       and the workers (service tokens), never by a person in Directus. */
+    approve_compensation_cases: [...readOnly('compensation_cases')],
     view_agent_dashboard: [], // UI gate; its reads come with REPORT_ACCESS below
     view_agent_reports: [],
     view_sla_report: [],

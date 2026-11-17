@@ -91,6 +91,7 @@ import {
   parseLegacyOrderBlock,
 } from './OrderSnapshotCard.js';
 import { LateOrderDecisionCard } from '../late-orders/LateOrderDecisionCard.js';
+import { V2CompensationPanel } from './V2CompensationPanel.js';
 import { useContact, useContactConversations } from '../contacts/api.js';
 import { CustomFieldsSection } from '../custom-fields/CustomFieldsSection.js';
 import { resolveMentions } from '../conversation/mentions.js';
@@ -1553,6 +1554,11 @@ function TicketDetail({ ticketId, onBack }: { ticketId: string; onBack?: () => v
           Renders NOTHING when the order has no decision, which is most tickets.
         */}
         <LateOrderDecisionCard orderId={tk.order_id} className="max-w-prose" />
+
+        {/* YIJI V2 COMPENSATION (owner, 18 Nov 2026): the V2 case(s) linked to
+            this ticket, with Approve / Reject / Photos received / Camera check
+            done, and "Log V2 complaint". Renders nothing on a v1 ticket. */}
+        <V2CompensationPanel ticketId={tk.id} className="max-w-prose" />
       </header>
 
       {/* Two-column body: narrative (notes + history) on the left, ticket

@@ -57,6 +57,15 @@ import type {
 import { YIJI2_CLOSING_STATES, YIJI2_STATE_STATUS } from './order-events.js';
 import { normalizePhone } from './phone.js';
 import { YijiRefusedError } from './yiji-impl.js';
+import {
+  Yiji2CaseAgentBody,
+  Yiji2CaseComplaintBody,
+  Yiji2CaseDecisionBody,
+  Yiji2CaseVerificationBody,
+  YIJI2_CASE_LIFETIME_MS,
+  isYiji2AgentComplaintCode,
+  type Yiji2CompensationCaseWire,
+} from './yiji2-compensation.js';
 
 /* ── Settings ────────────────────────────────────────────────────── */
 
@@ -471,6 +480,12 @@ export class Yiji2RefusedError extends Error {
     readonly traceId: string | null = null,
     /** The field v2 names on a 400 VALIDATION_FAILED (e.g. `category`), when it names one. */
     readonly field: string | null = null,
+    /**
+     * `error.data.reason` on a 409 INVALID_TRANSITION of a compensation case
+     * (`closed`, `expired`, `evidence_hold`, `needs_bhd_value`, `failed`,
+     * `not_held`, `no_verification`; contract 2026-11-17).
+     */
+    readonly reason: string | null = null,
   ) {
     super(message);
     this.name = 'Yiji2RefusedError';
@@ -629,6 +644,7 @@ export class HttpYiji2Transport implements Yiji2Transport {
           res.status,
           str(e.trace_id) ?? null,
           str(e.field) ?? null,
+          str(obj(e.data).reason) ?? null,
         );
       }
       return body as T;
@@ -992,6 +1008,379 @@ export class MockYiji2Transport implements Yiji2Transport {
     return [...this.foreignGrants, ...this.grants];
   }
 
+  /* ── Compensation cases (contract 2026-11-17, MOCK rules) ──────────────
+   * The mock does NOT carry the owner's policy. It answers the routes with
+   * the contract's shapes and its state machine, with a few fixed rules so
+   * tests can reach every status:
+   *   - HAIR / FOREIGN without photos -> evidence_hold;
+   *   - a Bahrain order -> needs_bhd_value (no BHD values);
+   *   - BOGO -> a 15% coupon (COUPON_PCT), KID -> APOLOGY_ONLY, MIS ->
+   *     VERIFY_CCTV with an open camera task, anything else -> FIXED
+   *     wallet credit of SAR 20 (capped at the order total);
+   *   - FOREIGN above SAR 200 escalates to "Operations Manager"; HOS always
+   *     to "Relevant management".
+   * Every change records the event V2 would send in `events`. */
+  readonly cases = new Map<string, Yiji2CompensationCaseWire>();
+  /** Case ids whose next approval fails a coupon check (-> `failed`). */
+  readonly failOnApprove = new Set<string>();
+  private nextCase = 900_000;
+  private nextWallet = 950_000;
+
+  /** TEST HELPER: put a case straight into the store (and emit nothing). */
+  seedCase(c: Partial<Yiji2CompensationCaseWire> & { order_number?: string | number }): string {
+    const id = String(c.id ?? ++this.nextCase);
+    const now = this.now();
+    this.cases.set(id, {
+      row_key: 'HAIR-O1',
+      rule_code: 'HAIR',
+      trigger_mode: 'AGENT',
+      source: 'agent',
+      status: 'proposed',
+      order_number: 2611000000001,
+      customer_id: 2000000001,
+      country: 'SA',
+      brand_id: 91,
+      restaurant_id: 9101,
+      order_type: 'delivery',
+      order_total: { amount_minor: 9200, currency: 'SAR' },
+      action_type: 'FIXED',
+      comp_method: 'Monetary',
+      amount: { amount_minor: 2000, currency: 'SAR' },
+      calculation: { formula: 'fixed 2000', result: '2000' },
+      affected_items: [],
+      has_photos: false,
+      overridden: false,
+      expires_at: new Date(now + YIJI2_CASE_LIFETIME_MS).toISOString(),
+      created_at: new Date(now).toISOString(),
+      policy_version: 1,
+      ...c,
+      id: Number(id),
+    } as Yiji2CompensationCaseWire);
+    return id;
+  }
+
+  /** TEST HELPER: the case's 72 hours have passed. */
+  expireCase(id: string): void {
+    const c = this.cases.get(id);
+    if (c) c.expires_at = new Date(this.now() - 1000).toISOString();
+  }
+
+  private conflict(reason: string): never {
+    throw new Yiji2RefusedError(
+      'INVALID_TRANSITION',
+      `case.transition.${reason}`,
+      409,
+      null,
+      null,
+      reason,
+    );
+  }
+
+  private caseEvent(c: Yiji2CompensationCaseWire): Record<string, unknown> {
+    return {
+      case_id: c.id,
+      status: c.status,
+      source: c.source,
+      policy_version: c.policy_version,
+      row_key: c.row_key,
+      rule_code: c.rule_code,
+      order_number: c.order_number,
+      customer_id: c.customer_id,
+      country: c.country,
+      brand_id: c.brand_id,
+      order_total: c.order_total,
+      action_type: c.action_type,
+      comp_method: c.comp_method,
+      ...(c.amount ? { amount: c.amount } : {}),
+      ...(c.percent_bps ? { percent_bps: c.percent_bps } : {}),
+      ...(c.metric_minutes !== undefined ? { metric_minutes: c.metric_minutes } : {}),
+      ...(c.occurrence !== undefined ? { occurrence: c.occurrence } : {}),
+      has_photos: c.has_photos,
+      ...(c.needs_value_reason ? { needs_value_reason: c.needs_value_reason } : {}),
+      ...(c.escalate_to ? { escalate_to: c.escalate_to } : {}),
+      ...(c.verification ? { verification: c.verification.status } : {}),
+      ...(c.logged_by_agent ? { logged_by_agent: c.logged_by_agent } : {}),
+      expires_at: c.expires_at,
+      at: new Date(this.now()).toISOString(),
+    };
+  }
+
+  private decided(c: Yiji2CompensationCaseWire, agent?: string): void {
+    this.emit('compensation.decided', {
+      case_id: c.id,
+      order_number: c.order_number,
+      customer_id: c.customer_id,
+      country: c.country,
+      row_key: c.row_key,
+      decision: c.status,
+      by: agent ? { kind: 'partner_client', id: 'crm' } : { kind: 'system' },
+      ...(agent ? { agent_id: agent } : {}),
+      ...(c.reason ? { reason: c.reason } : {}),
+      ...(c.amount ? { calculated: c.amount } : {}),
+      ...(c.issued ? { issued: c.issued } : {}),
+      ...(c.percent_bps ? { percent_bps: c.percent_bps } : {}),
+      overridden: !!c.overridden,
+      ...(c.wallet_entry_id ? { wallet_entry_id: c.wallet_entry_id } : {}),
+      ...(c.coupon_id ? { coupon_id: c.coupon_id, grant_id: c.grant_id } : {}),
+      ...(c.failure ? { failure: c.failure } : {}),
+      at: new Date(this.now()).toISOString(),
+    });
+  }
+
+  /** The policy's amount step, as the mock fakes it (see above). */
+  private calculate(c: Yiji2CompensationCaseWire): void {
+    const total = c.order_total?.amount_minor ?? 0;
+    const currency = c.order_total?.currency ?? 'SAR';
+    delete c.amount;
+    delete c.percent_bps;
+    delete c.needs_value_reason;
+    if (c.country === 'BH') {
+      c.status = 'needs_bhd_value';
+      c.needs_value_reason = 'no BHD values in the policy yet';
+      return;
+    }
+    c.status = 'proposed';
+    const code = c.rule_code ?? '';
+    if (code === 'BOGO') {
+      c.action_type = 'COUPON_PCT';
+      c.comp_method = 'Coupon';
+      c.percent_bps = 1500;
+      c.calculation = { percent_bps: '1500' };
+    } else if (code === 'KID') {
+      c.action_type = 'APOLOGY_ONLY';
+      c.comp_method = 'Apology';
+      c.calculation = { note: 'apology only' };
+    } else if (code === 'MIS') {
+      c.action_type = 'VERIFY_CCTV';
+      c.comp_method = 'Verify';
+      c.verification = { status: 'open' };
+      c.calculation = { note: 'camera review first' };
+    } else {
+      c.action_type = 'FIXED';
+      c.comp_method = 'Monetary';
+      const amount = Math.min(2000, total);
+      c.amount = { amount_minor: amount, currency };
+      c.calculation = {
+        formula: 'fixed 2000',
+        cap_order_total: String(total),
+        result: String(amount),
+      };
+    }
+  }
+
+  private caseExpired(c: Yiji2CompensationCaseWire): boolean {
+    return Date.parse(c.expires_at) <= this.now();
+  }
+
+  private answerCase(method: string, path: string, b: Record<string, unknown>): unknown {
+    let m: RegExpExecArray | null;
+    if (method === 'POST' && path === '/compensation-cases') {
+      const order = YIJI2_MOCK_ORDERS.find((o) => o.orderNumber === String(b.order_number ?? ''));
+      if (!isYiji2AgentComplaintCode(b.category)) this.invalid('category', 'case.category.unknown');
+      if (!str(b.agent_id)) this.invalid('agent_id', 'case.agent_id.required');
+      if (!order) return null;
+      const items = Array.isArray(b.affected_items) ? (b.affected_items as unknown[]) : [];
+      for (const it of items) {
+        const line = Number(obj(it).order_item_id);
+        if (!Number.isInteger(line) || line < 1 || line > order.items.length)
+          this.invalid('affected_items', 'case.item.not_on_order');
+      }
+      const existing = [...this.cases.values()].find(
+        (c) => String(c.order_number) === order.orderNumber && c.rule_code === b.category,
+      );
+      if (existing) {
+        if (
+          existing.status === 'evidence_hold' &&
+          b.has_photos === true &&
+          !this.caseExpired(existing)
+        ) {
+          existing.has_photos = true;
+          this.calculate(existing);
+          existing.expires_at = new Date(this.now() + YIJI2_CASE_LIFETIME_MS).toISOString();
+          this.emit('compensation.proposed', this.caseEvent(existing));
+        }
+        return { ...existing };
+      }
+      const customer = this.customers().find((x) => x.id === order.customerId)!;
+      const wire = this.orderWire(order, false);
+      const category = b.category as string;
+      const occurrence =
+        [...this.cases.values()].filter(
+          (c) => String(c.customer_id) === customer.id && c.rule_code === category,
+        ).length + 1;
+      const id = String(++this.nextCase);
+      const c: Yiji2CompensationCaseWire = {
+        id: Number(id),
+        policy_version: 1,
+        row_key: `${category}-O${Math.min(occurrence, 3)}`,
+        rule_code: category,
+        trigger_mode: 'AGENT',
+        source: 'agent',
+        status: 'proposed',
+        customer_id: Number(customer.id),
+        order_number: Number(order.orderNumber),
+        brand_id: Number(order.brandId),
+        restaurant_id: Number(order.restaurantId),
+        country: customer.country,
+        order_type: order.orderType,
+        order_total: wire.money!.total!,
+        counter_group: category,
+        occurrence,
+        affected_items: items.map((it) => {
+          const line = Number(obj(it).order_item_id);
+          const seed = order.items[line - 1]!;
+          const qty = num(obj(it).quantity) ?? seed.quantity;
+          return {
+            order_item_id: line,
+            quantity: qty,
+            line_quantity: seed.quantity,
+            unit_price_minor: seed.unitMinor,
+            line_total_minor: seed.unitMinor * seed.quantity,
+          };
+        }),
+        has_photos: b.has_photos === true,
+        ...(str(b.text) ? { text: str(b.text) } : {}),
+        logged_by_agent: str(b.agent_id)!,
+        action_type: 'FIXED',
+        comp_method: 'Monetary',
+        calculation: {},
+        message_template: `MSG_${category}`,
+        expires_at: new Date(this.now() + YIJI2_CASE_LIFETIME_MS).toISOString(),
+        overridden: false,
+        created_at: new Date(this.now()).toISOString(),
+      };
+      if ((category === 'HAIR' || category === 'FOREIGN') && !c.has_photos) {
+        c.status = 'evidence_hold';
+      } else {
+        this.calculate(c);
+      }
+      const total = c.order_total!.amount_minor;
+      if (category === 'FOREIGN' && c.order_total!.currency === 'SAR' && total > 20_000)
+        c.escalate_to = 'Operations Manager';
+      if (category === 'HOS') c.escalate_to = 'Relevant management';
+      if (c.escalate_to) c.escalated_at = new Date(this.now()).toISOString();
+      this.cases.set(id, c);
+      this.emit('compensation.proposed', this.caseEvent(c));
+      if (c.escalate_to)
+        this.emit('compensation.escalated', {
+          case_id: c.id,
+          row_key: c.row_key,
+          rule_code: c.rule_code,
+          escalate_to: c.escalate_to,
+          condition: category === 'HOS' ? 'always' : 'order_total > 200',
+          condition_known: true,
+          order_number: c.order_number,
+          customer_id: c.customer_id,
+          country: c.country,
+          order_total: c.order_total,
+          at: new Date(this.now()).toISOString(),
+        });
+      return { ...c };
+    }
+    if (method === 'GET' && (m = /^\/compensation-cases\/(\d+)$/.exec(path))) {
+      const c = this.cases.get(m[1]!);
+      return c ? { ...c } : null;
+    }
+    m = /^\/compensation-cases\/(\d+)\/(approve|reject|evidence|verification)$/.exec(path);
+    if (method !== 'POST' || !m) return null;
+    const c = this.cases.get(m[1]!);
+    if (!c) return null;
+    const agent = str(b.agent_id);
+    if (!agent) this.invalid('agent_id', 'case.agent_id.required');
+    const action = m[2]!;
+    const terminal = ['approved', 'rejected', 'expired', 'failed'];
+    if (action === 'approve') {
+      if (c.status === 'approved') return { ...c };
+      if (terminal.includes(c.status)) this.conflict('closed');
+      if (this.caseExpired(c)) {
+        c.status = 'expired';
+        this.decided(c);
+        this.conflict('expired');
+      }
+      if (c.status === 'evidence_hold') this.conflict('evidence_hold');
+      if (c.status === 'needs_bhd_value') this.conflict('needs_bhd_value');
+      if (!str(b.reason)) this.invalid('reason', 'case.reason.required');
+      const override = b.amount === undefined ? null : obj(b.amount);
+      if (override) {
+        if (!c.amount || c.percent_bps) this.invalid('amount', 'case.amount.not_amount_case');
+        if (str(override.currency) !== c.order_total?.currency)
+          this.invalid('amount.currency', 'case.amount.currency');
+        const minor = num(override.amount_minor);
+        if (minor === undefined || !Number.isInteger(minor) || minor <= 0)
+          this.invalid('amount.amount_minor', 'case.amount.not_positive');
+        if (minor > (c.order_total?.amount_minor ?? 0))
+          this.invalid('amount.amount_minor', 'case.amount.above_order_total');
+      }
+      c.decided_by = agent;
+      c.decided_at = new Date(this.now()).toISOString();
+      c.reason = str(b.reason);
+      if (this.failOnApprove.has(String(c.id))) {
+        c.status = 'failed';
+        c.failure = 'COUPON_CHECK_REFUSED';
+        this.decided(c, agent);
+        this.conflict('failed');
+      }
+      c.status = 'approved';
+      if (override) {
+        c.overridden = true;
+        c.issued = { amount_minor: num(override.amount_minor)!, currency: str(override.currency)! };
+      } else if (c.amount) {
+        c.issued = { ...c.amount };
+      }
+      if ((c.action_type ?? '').startsWith('COUPON')) {
+        c.coupon_id = ++this.nextCoupon;
+        c.grant_id = ++this.nextGrant;
+        c.coupon_code = `V2C-${c.id}`;
+      } else if (c.issued) {
+        c.wallet_entry_id = ++this.nextWallet;
+      }
+      this.decided(c, agent);
+      return { ...c };
+    }
+    if (action === 'reject') {
+      if (b.amount !== undefined) this.invalid('amount', 'case.amount.not_allowed');
+      if (c.status === 'rejected') return { ...c };
+      if (c.status === 'expired') this.conflict('expired');
+      if (terminal.includes(c.status)) this.conflict('closed');
+      if (this.caseExpired(c)) {
+        c.status = 'expired';
+        this.decided(c);
+        this.conflict('expired');
+      }
+      if (!str(b.reason)) this.invalid('reason', 'case.reason.required');
+      c.status = 'rejected';
+      c.decided_by = agent;
+      c.decided_at = new Date(this.now()).toISOString();
+      c.reason = str(b.reason);
+      this.decided(c, agent);
+      return { ...c };
+    }
+    if (action === 'evidence') {
+      if (c.status !== 'evidence_hold') this.conflict('not_held');
+      if (this.caseExpired(c)) this.conflict('expired');
+      c.has_photos = true;
+      this.calculate(c);
+      c.expires_at = new Date(this.now() + YIJI2_CASE_LIFETIME_MS).toISOString();
+      this.emit('compensation.proposed', this.caseEvent(c));
+      return { ...c };
+    }
+    /* verification */
+    if (!c.verification) this.conflict('no_verification');
+    const result = str(b.result);
+    if (result !== 'confirmed' && result !== 'not_confirmed')
+      this.invalid('result', 'case.verification.result');
+    if (c.verification.status !== 'open') {
+      if (c.verification.status === result) return { ...c };
+      this.conflict('closed');
+    }
+    c.verification = {
+      status: result,
+      ...(str(b.note) ? { note: str(b.note) } : {}),
+      by: agent,
+    };
+    return { ...c };
+  }
+
   private grantWire(g: MockYiji2Transport['grants'][number]): Yiji2GrantWire {
     return {
       grant_id: Number(g.grant_id),
@@ -1177,6 +1566,8 @@ export class MockYiji2Transport implements Yiji2Transport {
       });
     const b = obj(opts.body);
     let m: RegExpExecArray | null;
+    if (path === '/compensation-cases' || path.startsWith('/compensation-cases/'))
+      return this.answerCase(method, path, b);
     if (method === 'POST' && path === '/auth/token')
       return { access_token: 'mock-token', expires_in: 900, token_type: 'Bearer' };
     if (method === 'GET' && path === '/customers') {
@@ -1927,6 +2318,11 @@ export class Yiji2Connector implements VendorConnector {
   readonly adminPost: PlatformAdminPoster | null;
   /** The transport in use; a `MockYiji2Transport` in tests and on a mock vendor. */
   readonly transport: Yiji2Transport | null;
+  /**
+   * AUTOMATIC COMPENSATION (contract 2026-11-17): the `/compensation-cases`
+   * routes. Null without a transport (not configured).
+   */
+  readonly compensationCases: Yiji2CompensationCases | null;
   private warned = false;
 
   constructor(
@@ -2024,6 +2420,7 @@ export class Yiji2Connector implements VendorConnector {
           }
         }) as PlatformAdminPoster)
       : null;
+    this.compensationCases = t ? new Yiji2CompensationCases(t) : null;
     if (!t)
       warn(
         'yiji2 connector without API URL + client credentials: commerce reads answer empty, coupon/push capabilities are null',
@@ -2131,4 +2528,129 @@ export class Yiji2Connector implements VendorConnector {
   ): Promise<CrmLateOrder[]> {
     return [];
   }
+}
+
+/* ── Automatic compensation: the partner routes (contract 2026-11-17) ──── */
+
+/** A case id as the path takes it: V2's int64, digits only. */
+function caseIdPath(caseId: string): string {
+  const id = String(caseId ?? '').trim();
+  if (!/^\d{1,20}$/.test(id))
+    throw new Yiji2RefusedError('VALIDATION_FAILED', 'case id must be digits', 400, null, 'id');
+  return `/compensation-cases/${id}`;
+}
+
+/** Every write carries one (contract section 3); a missing key is a bug here, not V2's. */
+function requireKey(key: string): string {
+  const k = String(key ?? '').trim();
+  if (!k || k.length > 128) throw new Error('compensation case write without an Idempotency-Key');
+  return k;
+}
+
+/** Checked locally first: a body V2 would refuse never leaves the CRM. */
+function checked<T>(
+  schema: {
+    safeParse(v: unknown):
+      | { success: true; data: T }
+      | {
+          success: false;
+          error: { issues: Array<{ path: Array<string | number>; message: string }> };
+        };
+  },
+  body: unknown,
+): T {
+  const r = schema.safeParse(body);
+  if (r.success) return r.data;
+  const issue = r.error.issues[0];
+  const field = issue?.path.join('.') || null;
+  throw new Yiji2RefusedError(
+    'VALIDATION_FAILED',
+    issue ? `${field ?? 'body'}: ${issue.message}` : 'invalid body',
+    400,
+    null,
+    field,
+  );
+}
+
+/**
+ * The CRM's calls to V2's compensation cases (`partner:compensation.approve`).
+ * Each write takes the caller's `Idempotency-Key` (the gateway passes the one
+ * the portal made for that click, so a retried click never acts twice). A
+ * refusal is a `Yiji2RefusedError` (409 carries `reason`), an outage a
+ * `Yiji2UnavailableError`; a write on an unknown case is `not_found`.
+ */
+export class Yiji2CompensationCases {
+  constructor(private readonly t: Yiji2Transport) {}
+
+  /** `POST /compensation-cases`: an agent logs a complaint from a ticket. */
+  async logComplaint(
+    body: Yiji2CaseComplaintBody,
+    idempotencyKey: string,
+  ): Promise<Yiji2CompensationCaseWire> {
+    const b = checked(Yiji2CaseComplaintBody, body);
+    const out = await this.t.request<Yiji2CompensationCaseWire>('POST', '/compensation-cases', {
+      body: b,
+      idempotencyKey: requireKey(idempotencyKey),
+    });
+    if (!out) throw new Yiji2UnavailableError('yiji2 answered no case');
+    return out;
+  }
+
+  /** `GET /compensation-cases/{id}`; null when V2 has no such case (or not in our countries). */
+  async get(caseId: string): Promise<Yiji2CompensationCaseWire | null> {
+    return this.t.request<Yiji2CompensationCaseWire>('GET', caseIdPath(caseId));
+  }
+
+  private async write(
+    caseId: string,
+    action: 'approve' | 'reject' | 'evidence' | 'verification',
+    body: unknown,
+    idempotencyKey: string,
+  ): Promise<Yiji2CompensationCaseWire> {
+    const out = await this.t.request<Yiji2CompensationCaseWire>(
+      'POST',
+      `${caseIdPath(caseId)}/${action}`,
+      { body, idempotencyKey: requireKey(idempotencyKey) },
+    );
+    if (!out) throw new Yiji2UnavailableError('yiji2 answered no case');
+    return out;
+  }
+
+  /** `/approve`: `agent_id`, `reason`, optional `amount` override (minor units, the order's currency). */
+  async approve(caseId: string, body: Yiji2CaseDecisionBody, key: string) {
+    return this.write(caseId, 'approve', checked(Yiji2CaseDecisionBody, body), key);
+  }
+
+  /** `/reject`: `agent_id`, `reason`; an amount is refused. */
+  async reject(caseId: string, body: Omit<Yiji2CaseDecisionBody, 'amount'>, key: string) {
+    const b = checked(Yiji2CaseDecisionBody, body);
+    if (b.amount)
+      throw new Yiji2RefusedError(
+        'VALIDATION_FAILED',
+        'a rejection takes no amount',
+        400,
+        null,
+        'amount',
+      );
+    return this.write(caseId, 'reject', b, key);
+  }
+
+  /** `/evidence`: the agent checked the photos; a held case is calculated and proposed. */
+  async evidence(caseId: string, body: Yiji2CaseAgentBody, key: string) {
+    return this.write(caseId, 'evidence', checked(Yiji2CaseAgentBody, body), key);
+  }
+
+  /** `/verification`: the camera review of a VERIFY_CCTV case is closed. */
+  async verification(caseId: string, body: Yiji2CaseVerificationBody, key: string) {
+    return this.write(caseId, 'verification', checked(Yiji2CaseVerificationBody, body), key);
+  }
+}
+
+/** The compensation-case API of a connector, or null when it has none (every non-v2 platform). */
+export function compensationCasesOf(
+  connector: { platform?: string } | null | undefined,
+): Yiji2CompensationCases | null {
+  if (!connector || connector.platform !== 'yiji2') return null;
+  const api = (connector as { compensationCases?: unknown }).compensationCases;
+  return api instanceof Yiji2CompensationCases ? api : null;
 }

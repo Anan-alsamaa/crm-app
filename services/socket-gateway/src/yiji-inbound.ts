@@ -34,6 +34,9 @@ import {
   couponEventFromYiji2,
   isYiji2CouponEvent,
   type Yiji2CouponEventJob,
+  compensationEventFromYiji2,
+  isYiji2CompensationEvent,
+  type Yiji2CompensationEventJob,
   yiji2EventsOf,
   type OrderEvent,
   orderEventsOf,
@@ -1528,6 +1531,12 @@ export interface YijiEventsDeps {
    * queue (`Yiji2CouponEventJob`). Absent = those types are ignored as before.
    */
   enqueueCouponEvent?(job: Yiji2CouponEventJob): Promise<string | null>;
+  /**
+   * YIJI V2 ONLY (owner, 18 Nov 2026): `compensation.proposed` / `.decided` /
+   * `.escalated`, handed to the workers' coupons queue
+   * (`Yiji2CompensationEventJob`). Absent = those types are ignored as before.
+   */
+  enqueueCompensationEvent?(job: Yiji2CompensationEventJob): Promise<string | null>;
 }
 
 /**
@@ -1668,6 +1677,8 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
         let incoming: Array<OrderEvent | null>;
         /* v2 coupon/customer events, handed to the coupons queue (17 Nov 2026). */
         const couponEvents: Yiji2CouponEventJob[] = [];
+        /* v2 compensation cases (18 Nov 2026), handed to the coupons queue too. */
+        const compensationEvents: Yiji2CompensationEventJob[] = [];
         if (events.format === 'yiji2') {
           const parsed = parseYiji2EventsBody(req.body);
           if (!parsed.success) {
@@ -1689,9 +1700,21 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
               if (job) couponEvents.push(job);
             }
           }
+          if (events.enqueueCompensationEvent) {
+            for (const e of all) {
+              if (!isYiji2CompensationEvent(e.type)) continue;
+              const job = compensationEventFromYiji2(e, events.vendorKey, {
+                malformed: malformed(e.type),
+              });
+              if (job) compensationEvents.push(job);
+            }
+          }
           incoming = all.map((e) => orderEventFromYiji2(e, { malformed: malformed(e.type) }));
-          /* Counted once below: a coupon event is not also "ignored". */
-          const handled = new Set(couponEvents.map((c) => c.eventId));
+          /* Counted once below: a coupon or compensation event is not also "ignored". */
+          const handled = new Set([
+            ...couponEvents.map((c) => c.eventId),
+            ...compensationEvents.map((c) => c.eventId),
+          ]);
           incoming = incoming.filter((ev, i) => ev !== null || !handled.has(all[i]!.id));
         } else {
           const parsed = parseOrderEventsBody(req.body);
@@ -1735,13 +1758,23 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
             });
           }
         }
-        for (const job of couponEvents) {
+        const sideJobs: Array<{ eventId: string; send: () => Promise<string | null> }> = [
+          ...couponEvents.map((job) => ({
+            eventId: job.eventId,
+            send: () => events.enqueueCouponEvent!(job),
+          })),
+          ...compensationEvents.map((job) => ({
+            eventId: job.eventId,
+            send: () => events.enqueueCompensationEvent!(job),
+          })),
+        ];
+        for (const job of sideJobs) {
           try {
             if (await events.seen(job.eventId)) {
               duplicates += 1;
               continue;
             }
-            const id = await events.enqueueCouponEvent!(job);
+            const id = await job.send();
             if (id === null) {
               return reply.code(503).send({
                 error: 'unavailable',

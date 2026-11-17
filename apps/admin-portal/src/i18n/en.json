@@ -1464,7 +1464,8 @@
       "manageCompensationRules": "Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)",
       "useMarketingPortal": "Open the Marketing portal",
       "manageMarketing": "Prepare marketing coupons, bulk sends, campaigns and points",
-      "approveMarketing": "Approve marketing work before it reaches customers"
+      "approveMarketing": "Approve marketing work before it reaches customers",
+      "approveCompensationCases": "Yiji V2 compensation cases: approve or reject a case, confirm photos and the camera check, log a V2 complaint from a ticket"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1891,6 +1892,15 @@
     "ownerOnly": "Only the Administrator can change this.",
     "couponsPaused": "Coupons are now under maintenance for every user.",
     "couponsResumed": "Coupons are back on for every user.",
+    "saveError": "Could not save that setting"
+  },
+  "escalation": {
+    "title": "Yiji V2 compensation escalations",
+    "hint": "When Yiji V2 escalates a case, every active user of the roles ticked here is notified. With nobody active in them, the Administrator is told.",
+    "operationsManager": "V2 “Operations Manager”",
+    "relevantManagement": "V2 “Relevant management”",
+    "save": "Save recipients",
+    "saved": "Escalation recipients saved.",
     "saveError": "Could not save that setting"
   }
 }

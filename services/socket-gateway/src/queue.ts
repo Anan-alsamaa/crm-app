@@ -20,6 +20,8 @@ import {
   LATE_ORDERS_EVENT_JOB,
   type Yiji2CouponEventJob,
   YIJI2_COUPON_EVENT_JOB,
+  type Yiji2CompensationEventJob,
+  YIJI2_COMPENSATION_EVENT_JOB,
   COUPON_REPLACE_JOB_NAME,
   COUPON_EDIT_JOB_NAME,
   ROUTING_RECLAIM_WAIT_MS,
@@ -81,6 +83,11 @@ export interface SideEffectProducer {
    */
   enqueueYiji2CouponEvent?(job: Yiji2CouponEventJob): Promise<string | null>;
   /**
+   * YIJI V2 (owner, 18 Nov 2026): one `compensation.*` event for the workers'
+   * coupons queue. Optional so test stubs need not provide it.
+   */
+  enqueueYiji2CompensationEvent?(job: Yiji2CompensationEventJob): Promise<string | null>;
+  /**
    * Tell a customer's phone an agent replied while they were away. Enqueued
    * only when no customer socket is in the conversation — somebody watching
    * the chat does not need a notification about the message on their screen.
@@ -140,6 +147,10 @@ class NoopProducer implements SideEffectProducer {
   }
   async enqueueYiji2CouponEvent(): Promise<string | null> {
     this.logger.warn('yiji2 coupon event skipped (Redis disabled)');
+    return null;
+  }
+  async enqueueYiji2CompensationEvent(): Promise<string | null> {
+    this.logger.warn('yiji2 compensation event skipped (Redis disabled)');
     return null;
   }
   async close(): Promise<void> {}
@@ -209,6 +220,16 @@ class BullProducer implements SideEffectProducer {
       ...DEFAULT_JOB_OPTIONS,
       /* No custom id (a kept id swallows retries); the event id is deduped
          by the receiver, and the job is idempotent on the row's receipt. */
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    return added.id ?? null;
+  }
+  async enqueueYiji2CompensationEvent(job: Yiji2CompensationEventJob): Promise<string | null> {
+    const added = await this.coupons.add(YIJI2_COMPENSATION_EVENT_JOB, job, {
+      ...DEFAULT_JOB_OPTIONS,
+      /* Same as the coupon events: no custom id; the receiver dedupes the
+         event id and the job is idempotent on the case row. */
       removeOnComplete: true,
       removeOnFail: true,
     });

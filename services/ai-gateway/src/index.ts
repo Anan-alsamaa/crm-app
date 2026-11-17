@@ -17,6 +17,11 @@ import { SlidingWindowLimiter, MonthlyCap, DailyQuota } from './ratelimit/index.
 import { ResponseCache } from './cache/index.js';
 import { GatewayDirectus } from './directus/index.js';
 import { registerCommerceRoutes } from './commerce/index.js';
+import {
+  DirectusCompensationCaseStore,
+  registerCompensationCaseRoutes,
+} from './commerce/compensation-cases.js';
+import { createSessionActorResolver } from './auth/session-actor.js';
 import { registerMarketingPointsRoutes } from './marketing/points.js';
 import { registerMarketingEngineProxy } from './marketing/engine.js';
 import { registerMarketingEngineRoutes } from './marketing/engine-routes.js';
@@ -289,6 +294,16 @@ async function main(): Promise<void> {
       },
     });
   }
+
+  /* Yiji v2 compensation cases (owner, 18 Nov 2026): the agent's own session
+     and the approve_compensation_cases switch decide; the v2 connector
+     (credentials in this service only) calls V2; the case rows are written
+     with svc-ai-gateway. Inactive v2 vendor = 404 unknown_vendor. */
+  await registerCompensationCaseRoutes(app, {
+    sessions: createSessionActorResolver({ directusUrl: config.DIRECTUS_INTERNAL_URL }),
+    store: new DirectusCompensationCaseStore(config.DIRECTUS_INTERNAL_URL, config.SVC_AI_TOKEN),
+    connectors,
+  });
 
   await registerCommerceRoutes(app, {
     directus,

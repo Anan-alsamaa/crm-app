@@ -23,6 +23,7 @@ import {
   CAMPAIGN_OBJECTIVES,
   CAMPAIGN_STATUSES,
   OFFER_TYPES,
+  YIJI2_CASE_STATUSES,
 } from '@yiji/shared-types';
 
 export type FieldType =
@@ -1216,6 +1217,118 @@ export const collections: CollectionSpec[] = [
       { field: 'note', type: 'text', note: 'Why this rule exists - for the next editor.' },
     ],
   },
+  /*
+   * YIJI V2 AUTOMATIC COMPENSATION (owner, 18 Nov 2026). One row per case V2
+   * computed from the owner's policy, keyed by V2's case id, linked to ONE
+   * CRM ticket (design choice 1, to confirm with the owner: V2 creates no CRM
+   * tickets, the CRM keeps its own). Written by the workers from V2's events
+   * (`compensation.proposed` / `.decided` / `.escalated`) and by the AI
+   * gateway from V2's answer to an agent's action. Nobody writes it by hand:
+   * the `approve_compensation_cases` switch grants READ only. Money is minor
+   * units + currency, never a float. Yiji v2 only; v1 never has a row here.
+   * Needs a manual `apply:fields` (staging) - see docs/YIJI-V2-COMPENSATION.md.
+   */
+  {
+    collection: 'compensation_cases',
+    note: 'Yiji V2 compensation cases (one row per V2 case, linked to its CRM ticket). Written by the workers and the AI gateway only.',
+    fields: [
+      {
+        field: 'case_id',
+        type: 'string',
+        required: true,
+        unique: true,
+        note: 'V2’s case id (int64 as text). The key: one row, and one ticket, per case.',
+      },
+      {
+        field: 'status',
+        type: 'string',
+        choices: [...YIJI2_CASE_STATUSES],
+        index: true,
+        note: 'V2’s case status. A decided status (approved, rejected, expired, failed) never goes back.',
+      },
+      { field: 'source', type: 'string', note: 'auto | app | agent' },
+      { field: 'trigger_mode', type: 'string', note: 'AUTO | AGENT' },
+      { field: 'policy_version', type: 'integer' },
+      { field: 'row_key', type: 'string', note: 'The policy row, e.g. DLY-T2 or HAIR-O1.' },
+      { field: 'rule_code', type: 'string' },
+      { field: 'counter_group', type: 'string' },
+      {
+        field: 'occurrence',
+        type: 'integer',
+        note: 'Earlier cases of the customer phone in the group within the look-back, plus one.',
+      },
+      { field: 'action_type', type: 'string' },
+      { field: 'comp_method', type: 'string' },
+      {
+        field: 'amount_minor',
+        type: 'integer',
+        note: 'The calculated amount in minor units (SAR 2 decimals, BHD 3). Null for a percentage coupon or an apology.',
+      },
+      { field: 'currency', type: 'string' },
+      { field: 'percent_bps', type: 'integer', note: 'A percentage coupon, in basis points.' },
+      { field: 'calculation', type: 'json', note: 'How V2 reached the amount, in minor units.' },
+      {
+        field: 'metric_minutes',
+        type: 'integer',
+        note: 'AUTO cases: minutes late or of extra preparation.',
+      },
+      { field: 'stacked', type: 'json' },
+      { field: 'needs_value_reason', type: 'text' },
+      { field: 'escalate_to', type: 'string' },
+      { field: 'escalated_at', type: 'dateTime' },
+      { field: 'escalation_condition', type: 'string' },
+      { field: 'escalation_condition_known', type: 'boolean' },
+      {
+        field: 'verification',
+        type: 'string',
+        note: 'VERIFY_CCTV: open | confirmed | not_confirmed',
+      },
+      { field: 'verification_note', type: 'text' },
+      {
+        field: 'expires_at',
+        type: 'dateTime',
+        index: true,
+        note: '72 hours after the case (or after its photos). After it nothing can be approved.',
+      },
+      { field: 'has_photos', type: 'boolean' },
+      { field: 'affected_items', type: 'json' },
+      { field: 'complaint_text', type: 'text' },
+      { field: 'logged_by_agent', type: 'string' },
+      { field: 'order_number', type: 'string', index: true },
+      { field: 'customer_id', type: 'string', index: true },
+      { field: 'country', type: 'string' },
+      { field: 'brand_id', type: 'string' },
+      { field: 'restaurant_id', type: 'string' },
+      { field: 'order_total_minor', type: 'integer' },
+      { field: 'order_currency', type: 'string' },
+      {
+        field: 'decided_by',
+        type: 'string',
+        note: 'The agent (CRM user id) or `system` for an expiry.',
+      },
+      { field: 'decided_at', type: 'dateTime' },
+      { field: 'decision_reason', type: 'text' },
+      { field: 'overridden', type: 'boolean' },
+      { field: 'calculated_minor', type: 'integer' },
+      { field: 'issued_minor', type: 'integer' },
+      { field: 'issued_currency', type: 'string' },
+      { field: 'wallet_entry_id', type: 'string' },
+      { field: 'coupon_id', type: 'string' },
+      { field: 'grant_id', type: 'string' },
+      { field: 'coupon_code', type: 'string' },
+      { field: 'failure', type: 'text' },
+      {
+        field: 'last_event_at',
+        type: 'dateTime',
+        note: 'The newest V2 event applied; an older one arriving late never overwrites it.',
+      },
+      {
+        field: 'agent_actions',
+        type: 'json',
+        note: 'Every agent action on the case: who, what, the reason typed, what V2 answered.',
+      },
+    ],
+  },
   {
     collection: 'store_notify_rules',
     note: 'Which complaint types are the BRANCH’s business. A ticket notifies its store only when its complaint_type has an enabled row here. Data, not a constant, because operations change the list without a deploy — and an empty table means "not set up yet", which notifies nobody rather than everybody.',
@@ -1997,6 +2110,22 @@ export const relations: RelationSpec[] = [
   { collection: 'store_notifications', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
   { collection: 'store_notifications', field: 'store', related: 'stores', onDelete: 'CASCADE' },
   { collection: 'coupon_approvals', field: 'ticket', related: 'tickets', onDelete: 'CASCADE' },
+  /* Yiji v2 compensation cases (owner, 18 Nov 2026). SET NULL: a deleted
+     ticket never takes V2's record of a decision with it. */
+  {
+    collection: 'compensation_cases',
+    field: 'ticket',
+    related: 'tickets',
+    onDelete: 'SET NULL',
+    index: true,
+  },
+  {
+    collection: 'compensation_cases',
+    field: 'vendor',
+    related: 'vendors',
+    onDelete: 'CASCADE',
+    index: true,
+  },
   { collection: 'coupon_approvals', field: 'contact', related: 'contacts', onDelete: 'SET NULL' },
   // Who asked and who decided. SET NULL rather than CASCADE: an agent leaving
   // must not erase the record of a coupon that was actually issued.

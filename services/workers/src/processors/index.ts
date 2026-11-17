@@ -38,6 +38,8 @@ import {
   LATE_ORDERS_EVENT_JOB,
   Yiji2CouponEventJob,
   YIJI2_COUPON_EVENT_JOB,
+  Yiji2CompensationEventJob,
+  YIJI2_COMPENSATION_EVENT_JOB,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -64,6 +66,7 @@ import {
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
 import { processYiji2CouponEvent } from './coupon-yiji2-events.js';
+import { processYiji2CompensationEvent } from './compensation-yiji2-events.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
 import { purgeYijiUsage, YIJI_USAGE_RETENTION_JOB } from './yiji-usage.js';
 import {
@@ -348,6 +351,30 @@ function connectorsFor(deps: Pick<ProcessorDeps, 'directus' | 'logger'>): Connec
  * (a pre-MV-1 row: v1's) or the vendor cannot be resolved (logged by the
  * registry's caller later; here it only means "not provably another platform").
  */
+/**
+ * The CRM vendor of an inbound v2 event's `yiji2:<platform id>` key: the
+ * `yiji2` row with that `yiji_vendor_id`, active or not (the receiver already
+ * refused events while it was inactive). Null when there is none.
+ */
+async function yiji2VendorOf(
+  deps: Pick<ProcessorDeps, 'directus'>,
+  vendorKey: string,
+): Promise<{ id: string } | null> {
+  const [platform, platformId] = vendorKey.split(':');
+  if (platform !== 'yiji2' || !platformId) return null;
+  const rows = (await deps.directus.request(
+    readItems(
+      'vendors' as never,
+      {
+        filter: { platform: { _eq: 'yiji2' }, yiji_vendor_id: { _eq: platformId } },
+        fields: ['id'],
+        limit: 2,
+      } as never,
+    ),
+  )) as unknown as Array<{ id: string }>;
+  return rows?.length === 1 ? { id: rows[0]!.id } : null;
+}
+
 async function couponPlatform(
   deps: Pick<ProcessorDeps, 'directus' | 'logger'>,
   couponApprovalId: string,
@@ -670,6 +697,28 @@ export const processors: Record<QueueName, Processor> = {
      * pending grant at sign-up (`coupon.granted`) or an account was created
      * (`customer.created`). Writes the CRM row only - no Yiji call.
      */
+    /*
+     * YIJI V2 COMPENSATION CASES (owner, 18 Nov 2026): compensation.proposed /
+     * .decided / .escalated. Writes the case row and its ticket, and tells
+     * the mapped roles of an escalation. No Yiji call.
+     */
+    if (job.name === YIJI2_COMPENSATION_EVENT_JOB) {
+      const parsed = Yiji2CompensationEventJob.safeParse(job.data);
+      if (!parsed.success) {
+        deps.logger.warn({ jobId: job.id }, 'yiji2 compensation event: invalid payload dropped');
+        return;
+      }
+      await processYiji2CompensationEvent(parsed.data, {
+        directus: deps.directus,
+        logger: deps.logger,
+        notificationsQueue: deps.queues[QUEUES.notifications],
+        vendorOf: (key) => yiji2VendorOf(deps, key),
+        /* Up to three tries (about 14 s) for the gateway to record an
+           agent-logged case on the agent's ticket before one is opened. */
+        mayWaitForGateway: (job.attemptsMade ?? 0) < 3,
+      });
+      return;
+    }
     if (job.name === YIJI2_COUPON_EVENT_JOB) {
       const parsed = Yiji2CouponEventJob.safeParse(job.data);
       if (!parsed.success) {
