@@ -8,6 +8,7 @@ import {
   COMPENSATION_ESCALATION_TARGETS,
   compensationEscalationRolesValue,
   parseCompensationEscalationRoles,
+  COMPENSATION_ESCALATION_ALWAYS_ROLE,
   type CompensationEscalationRoles,
 } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
@@ -21,9 +22,11 @@ import { SECTION_CARD } from '../../components/shell/Page.js';
  * V2's policy escalates some cases to "Operations Manager" or "Relevant
  * management" (`compensation.escalated`). The CRM tells every active user of
  * the CRM ROLES mapped here - by role NAME, because resolving by privilege
- * reaches nobody for the built-in Administrator (the recipients trap). The
- * default is the existing manager roles; with nobody active in the chosen
- * roles the Administrator is told. The Administrator alone edits it.
+ * reaches nobody for the built-in Administrator (the recipients trap).
+ * Defaults (owner rule, 18 Nov 2026; WeCare Agent -> WeCare Supervisor ->
+ * WeCare Admin -> Administrator): "Operations Manager" -> WeCare Supervisor,
+ * "Relevant management" -> WeCare Admin. The Administrator ALWAYS receives
+ * every escalation: shown ticked and locked. The Administrator alone edits it.
  */
 const KEY = ['app-settings', COMPENSATION_ESCALATION_SETTING_KEY] as const;
 const SERVICE_ROLE = /^svc-/i;
@@ -115,7 +118,7 @@ export function CompensationEscalationCard() {
         <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
           {t('escalation.hint', {
             defaultValue:
-              'When Yiji V2 escalates a case, every active user of the roles ticked here is notified. With nobody active in them, the Administrator is told.',
+              'When Yiji V2 escalates a case, every active user of the roles ticked here is notified. The Administrator always receives every escalation.',
           })}
         </p>
       </div>
@@ -127,16 +130,28 @@ export function CompensationEscalationCard() {
               : t('escalation.relevantManagement', { defaultValue: 'V2 “Relevant management”' })}
           </legend>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            {[...new Set([...names, ...(draft[target] ?? [])])].map((role) => (
-              <label key={role} className="flex items-center gap-1.5 text-sm text-foreground">
-                <input
-                  type="checkbox"
-                  checked={(draft[target] ?? []).includes(role)}
-                  onChange={() => toggle(target, role)}
-                />
-                {role}
-              </label>
-            ))}
+            {[...new Set([...names, ...(draft[target] ?? [])])].map((role) => {
+              /* The Administrator is told of every escalation (owner rule): locked on. */
+              const always = role === COMPENSATION_ESCALATION_ALWAYS_ROLE;
+              return (
+                <label key={role} className="flex items-center gap-1.5 text-sm text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={always || (draft[target] ?? []).includes(role)}
+                    disabled={always}
+                    title={
+                      always
+                        ? t('escalation.always', {
+                            defaultValue: 'The Administrator always receives every escalation.',
+                          })
+                        : undefined
+                    }
+                    onChange={() => toggle(target, role)}
+                  />
+                  {role}
+                </label>
+              );
+            })}
           </div>
         </fieldset>
       ))}

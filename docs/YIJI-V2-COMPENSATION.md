@@ -35,17 +35,20 @@ Each is one place in the code, so a change is small.
    `compensation = Initial` until decided). A case an agent logged from a ticket is linked to THAT
    ticket (the events job waits up to three tries, about 14 s, for the gateway to record it before
    it opens a ticket itself). To change: `openTicket` in the worker and `record` in the gateway.
-2. **`compensation.escalated` notifies the CRM roles mapped from V2's `escalate_to`.** The mapping
-   is the `app_settings` key `compensation_escalation_roles` (JSON `{ "<escalate_to>": ["<role
-name>", ...] }`), edited by the Administrator on the admin portal's Roles page ("Yiji V2
-   compensation escalations"). Default for both "Operations Manager" and "Relevant management":
-   `WeCare Admin`, `WeCare Supervisor`, `Administrator`. Recipients are resolved by role **name**
-   (never by privilege: the built-in Administrator role has no privilege list, so resolving by
-   privilege reaches nobody, the recipients trap of `docs/GENERAL-COUPON-ALERT.md`). Mapped roles
-   with no active user: the Administrator is told (logged). Still nobody: an error log. An
-   `escalate_to` the mapping does not know goes to the default roles. To change:
-   `DEFAULT_COMPENSATION_ESCALATION_ROLES` / `escalationRolesFor` in
-   `packages/shared-types/src/yiji2-compensation.ts`.
+2. **`compensation.escalated` notifies the CRM roles mapped from V2's `escalate_to`, and the
+   Administrator ALWAYS** (owner rule, 18 Nov 2026). The WeCare order is WeCare Agent -> WeCare
+   Supervisor -> WeCare Admin -> Administrator (topmost, the master user). The mapping is the
+   `app_settings` key `compensation_escalation_roles` (JSON `{ "<escalate_to>": ["<role name>",
+...] }`), edited by the Administrator on the admin portal's Roles page ("Yiji V2 compensation
+   escalations"). Defaults: "Operations Manager" -> `WeCare Supervisor`; "Relevant management" ->
+   `WeCare Admin`. The `Administrator` receives every escalation whatever the mapping says (shown
+   ticked and locked on the page). An `escalate_to` the mapping does not know goes to both WeCare
+   manager roles (and the Administrator). Recipients are resolved by role **name** (never by
+   privilege: the built-in Administrator role has no privilege list, so resolving by privilege
+   reaches nobody, the recipients trap of `docs/GENERAL-COUPON-ALERT.md`). Mapped roles with no
+   active user: logged, the Administrator is still told. Nobody active at all: an error log. To
+   change: `DEFAULT_COMPENSATION_ESCALATION_MAPPING`, `COMPENSATION_ESCALATION_ALWAYS_ROLE` and
+   `escalationRolesFor` in `packages/shared-types/src/yiji2-compensation.ts`.
 3. **Events first; no V2 list route.** Agents see cases through their tickets and the ticket queue.
    The panel can re-read one case from V2 (`GET /compensation-cases/{id}`), and the gateway does so
    after every 409 so the panel shows the case as V2 has it.
@@ -94,7 +97,7 @@ through the gateway (service account) or the workers. Mirrored in
 New collection `compensation_cases` (fields and relations in `directus/bootstrap/src/collections.ts`;
 `case_id` unique, `ticket` -> tickets SET NULL, `vendor` -> vendors CASCADE). New grants in
 `directus/bootstrap/src/roles.ts`: svc-workers create/read/update on `compensation_cases` and read
-on `app_settings`; svc-ai-gateway create/read/update on `compensation_cases` and read on `tickets`
+on the ONE `app_settings` row `compensation_escalation_roles`; svc-ai-gateway create/read/update on `compensation_cases` and read on `tickets`
 (`id`, `vendor`, `order_id`). Run on staging, in this order:
 
 1. Schema (collection, fields, its two relations):
@@ -114,17 +117,37 @@ and the panel shows nothing; v1 is not affected either way.
    complaint. The gateway and the connector already take `affectedItems`; the panel offers the
    picker once the order read carries the line id. Until then an item-paid category is refused by
    V2 with its 400 and the agent sees the reason.
-2. **Sample payloads** for the three events (as `pending-coupon-samples.md` did for pending
-   coupons), so the mapper is checked against real bodies. Built from `crm-events-v1.yaml`.
-3. **`compensation.decided` with no `order_number`?** The schema requires it; the CRM treats one
-   without it as malformed (ignored, logged).
+2. **Sample payloads: received** (`docs/integrations/crm/auto-compensation-samples.md`, V2 main,
+   printed by a V2 test run on 2026-11-18). All eleven are fixtures
+   (`packages/shared-types/tests/fixtures/yiji2-compensation-samples.json`, copied verbatim) and
+   run through the receiver and the worker job (section 7). Every one is accepted.
+3. **`compensation.decided` carries `order_number`** in the real samples. The CRM still accepts
+   one without it: the case is matched by `case_id`, and a stored `order_number` is never blanked.
 4. **The 409 body.** The CRM reads `error.data.reason`; the document says `data.reason` without
    showing the envelope. Confirm it sits inside `error`.
 5. **`agent_id` is the CRM user's UUID** (36 characters, within the 64 allowed).
 6. **`escalate_to` words.** The mapping keys are "Operations Manager" and "Relevant management" as
-   in rules.csv; any other word goes to the default roles.
+   in rules.csv; any other word goes to both WeCare manager roles; the Administrator is told of every one. The sample of 2026-11-18 uses "Operations Manager".
 
 ## 7. Tests
+
+**The real V2 samples** (2026-11-18): `services/socket-gateway/tests/yiji2-compensation-samples.test.ts`
+(each sample signed and posted to `/webhooks/yiji2/events`: accepted, queued with its `data`
+unchanged; the whole run in one batch with every key order reversed) and
+`services/workers/tests/compensation-yiji2-samples.test.ts` (each sample through the receiver's
+parser, a JSON round trip and the worker job: the case row, the ticket and the notifications; the
+whole 11-event run ends with six rows and six tickets in the right states; key order does not
+matter; a redelivery changes nothing). Also there:
+
+- **Upsert** of the three `compensation.proposed` of case 3 in all six orders: one row, one ticket,
+  ends `proposed` with SAR 15.00 and `has_photos` true. A released case never goes back to
+  `evidence_hold` (V2 sends the same `occurred_at` in its test run, so time alone cannot order
+  them), `has_photos` never goes back to false, and a decided case never moves back.
+- **Ordering** of `coupon.granted` and `compensation.decided` of a coupon case (V2 sends the grant
+  first): the same end state in both orders, the case matched by `case_id` and carrying
+  `grant_id`/`coupon_id` from the decision. A compensation grant has no `pending_grant_id`, so the
+  pending-grants job never sees it and no CRM coupon is touched (tested with a CRM coupon whose V2
+  ids collide with the sample's).
 
 `packages/shared-types/tests/yiji2-compensation.test.ts` (events mapper, row mappers, merge rule,
 override limits, money, 409 messages, escalation setting, privilege default, connector + mock state

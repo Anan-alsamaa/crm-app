@@ -95,6 +95,7 @@ const V2_VENDOR = 'vendor-v2-uuid';
 const USERS = [
   { id: 'u-admin', status: 'active', role: { name: 'Administrator' } },
   { id: 'u-wa', status: 'active', role: { name: 'WeCare Admin' } },
+  { id: 'u-ws', status: 'active', role: { name: 'WeCare Supervisor' } },
   { id: 'u-ops', status: 'active', role: { name: 'Operations' } },
   { id: 'u-agent', status: 'active', role: { name: 'WeCare Agent' } },
   { id: 'u-gone', status: 'suspended', role: { name: 'WeCare Admin' } },
@@ -390,12 +391,12 @@ describe('compensation.escalated', () => {
       order_total: { amount_minor: 25000, currency: 'SAR' },
     });
 
-  it('tells every ACTIVE user of the default manager roles, by role name, linking the ticket', async () => {
+  it('default: Operations Manager -> every ACTIVE WeCare Supervisor + the Administrator, by role name, linking the ticket', async () => {
     const { d, deps, notifications } = setup();
     const out = await processYiji2CompensationEvent(escalated('Operations Manager'), deps);
     expect(out).toBe('escalation-sent');
     const told = notifications.add.mock.calls.map((c) => (c as unknown[])[1] as Rec);
-    expect(told.map((n) => n.recipientId).sort()).toEqual(['u-admin', 'u-wa']);
+    expect(told.map((n) => n.recipientId).sort()).toEqual(['u-admin', 'u-ws']);
     const ticket = d.table('tickets')[0]!;
     expect(ticket.priority).toBe('high');
     expect(told[0]).toMatchObject({
@@ -413,7 +414,15 @@ describe('compensation.escalated', () => {
     });
   });
 
-  it('follows the Administrator’s mapping (app_settings)', async () => {
+  it('default: Relevant management -> every ACTIVE WeCare Admin + the Administrator', async () => {
+    const { deps, notifications } = setup();
+    await processYiji2CompensationEvent(escalated('Relevant management'), deps);
+    expect(
+      notifications.add.mock.calls.map((c) => ((c as unknown[])[1] as Rec).recipientId).sort(),
+    ).toEqual(['u-admin', 'u-wa']);
+  });
+
+  it('follows the Administrator’s mapping (app_settings) - and the Administrator is still told', async () => {
     const { deps, notifications } = setup({
       app_settings: [
         {
@@ -425,8 +434,8 @@ describe('compensation.escalated', () => {
     });
     await processYiji2CompensationEvent(escalated('Operations Manager'), deps);
     expect(
-      notifications.add.mock.calls.map((c) => ((c as unknown[])[1] as Rec).recipientId),
-    ).toEqual(['u-ops']);
+      notifications.add.mock.calls.map((c) => ((c as unknown[])[1] as Rec).recipientId).sort(),
+    ).toEqual(['u-admin', 'u-ops']);
   });
 
   it('mapped roles with nobody active -> the Administrator is told (never nobody)', async () => {
@@ -505,5 +514,25 @@ describe('ticket text', () => {
     expect(tx.subject).toBe('V2 compensation HAIR-O2 - order 2611000000001');
     expect(tx.description).toContain('SAR 25.00');
     expect(tx.description).toContain('occurrence 2');
+  });
+});
+
+describe('grants stay minimal (review, 18 Nov 2026)', () => {
+  it('svc-workers reads ONE app_settings key (the escalation mapping), never every setting', async () => {
+    const { roles } = await import('../../../directus/bootstrap/src/roles.js');
+    const workers = roles.find((r) => r.name === 'svc-workers')!;
+    const perms = workers.permissions ?? [];
+    const reads = perms.filter((p) => p.collection === 'app_settings' && p.action === 'read');
+    expect(reads).toEqual([
+      {
+        collection: 'app_settings',
+        action: 'read',
+        permissions: { key: { _eq: COMPENSATION_ESCALATION_SETTING_KEY } },
+      },
+    ]);
+    expect(perms.some((p) => p.collection === 'app_settings' && p.action !== 'read')).toBe(false);
+    expect(perms.some((p) => p.collection === 'compensation_cases' && p.action === 'delete')).toBe(
+      false,
+    );
   });
 });

@@ -1896,7 +1896,8 @@
   },
   "escalation": {
     "title": "Yiji V2 compensation escalations",
-    "hint": "When Yiji V2 escalates a case, every active user of the roles ticked here is notified. With nobody active in them, the Administrator is told.",
+    "hint": "When Yiji V2 escalates a case, every active user of the roles ticked here is notified. The Administrator always receives every escalation.",
+    "always": "The Administrator always receives every escalation.",
     "operationsManager": "V2 “Operations Manager”",
     "relevantManagement": "V2 “Relevant management”",
     "save": "Save recipients",

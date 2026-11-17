@@ -39,8 +39,9 @@ import { describeError } from '../lib/errors.js';
  *     expired, failed -> Not Compensated).
  *   - `compensation.escalated`: the row records it, and every active user of
  *     the CRM roles the Administrator mapped to V2's `escalate_to` is told
- *     (design choice 2, to confirm). Roles by NAME (the recipients trap);
- *     nobody reachable -> the Administrator; still nobody -> an error log.
+ *     (design choice 2), plus the Administrator on EVERY escalation (owner
+ *     rule, 18 Nov 2026). Roles by NAME (the recipients trap); nobody
+ *     active at all -> an error log.
  *
  * Idempotent: the row is found by `case_id`, the ticket by its external id,
  * notification job ids carry the case and the user. An older event arriving
@@ -73,7 +74,7 @@ export interface Yiji2CompensationEventDeps {
 
 type Row = Partial<CompensationCaseRow> & { id: string };
 
-const ROW_FIELDS = ['id', 'case_id', 'ticket', 'status', 'last_event_at', 'vendor'];
+const ROW_FIELDS = ['id', 'case_id', 'ticket', 'status', 'last_event_at', 'vendor', 'has_photos'];
 
 async function findCase(deps: Yiji2CompensationEventDeps, caseId: string): Promise<Row | null> {
   const rows = (await deps.directus.request(
@@ -219,6 +220,9 @@ function rowPatch(
     if (older && merged === incoming.status && stored?.status) out.status = stored.status;
     else out.status = merged;
   }
+  /* The customer's or the agent's word that photos exist is never taken back
+     by a late or re-delivered earlier event (1.3 of the V2 samples). */
+  if (stored?.has_photos === true && incoming.has_photos === false) out.has_photos = true;
   out.last_event_at = older ? stored!.last_event_at! : new Date(at).toISOString();
   return out;
 }
@@ -382,14 +386,17 @@ async function notifyEscalation(
   }
   const mapping = await escalationMapping(deps);
   const roles = escalationRolesFor(mapping, p.escalate_to);
-  /* Read failures throw: BullMQ retries, and the job ids keep it to one each. */
-  let recipients = await activeUsersIn(deps, roles);
-  if (!recipients.length) {
-    logger.warn(
-      { caseId, escalateTo: p.escalate_to, roles },
-      'yiji2 compensation escalated: the mapped roles have no active user - telling the Administrator',
-    );
-    recipients = await activeUsersIn(deps, COMPENSATION_ESCALATION_FALLBACK_ROLES);
+  /* Read failures throw: BullMQ retries, and the job ids keep it to one each.
+     `roles` always holds the Administrator (owner rule, 18 Nov 2026). */
+  const recipients = await activeUsersIn(deps, roles);
+  const mappedOnly = roles.filter((r) => !COMPENSATION_ESCALATION_FALLBACK_ROLES.includes(r));
+  if (mappedOnly.length && recipients.length) {
+    const mappedUsers = await activeUsersIn(deps, mappedOnly);
+    if (!mappedUsers.length)
+      logger.warn(
+        { caseId, escalateTo: p.escalate_to, roles: mappedOnly },
+        'yiji2 compensation escalated: the mapped roles have no active user - only the Administrator is told',
+      );
   }
   if (!recipients.length) {
     logger.error(

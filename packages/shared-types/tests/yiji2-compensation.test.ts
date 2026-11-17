@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   COMPENSATION_ESCALATION_TARGETS,
   DEFAULT_COMPENSATION_ESCALATION_ROLES,
+  COMPENSATION_ESCALATION_ALWAYS_ROLE,
   HttpYiji2Transport,
   MockYiji2Transport,
   YIJI2_CASE_CONFLICT_MESSAGES,
@@ -213,6 +214,13 @@ describe('the CRM row', () => {
       expect(ticketCompensationForCase(s)).toBe('Not Compensated');
     expect(ticketCompensationForCase('proposed')).toBeNull();
   });
+  it('a released case never goes back on hold (regression: same-time redelivery of the held event)', () => {
+    expect(mergeCaseStatus('proposed', 'evidence_hold')).toBe('proposed');
+    expect(mergeCaseStatus('needs_bhd_value', 'evidence_hold')).toBe('needs_bhd_value');
+    expect(mergeCaseStatus('evidence_hold', 'evidence_hold')).toBe('evidence_hold');
+    expect(mergeCaseStatus(null, 'evidence_hold')).toBe('evidence_hold');
+    expect(mergeCaseStatus('approved', 'evidence_hold')).toBe('approved');
+  });
 });
 
 describe('the amount override (contract section 3)', () => {
@@ -276,27 +284,52 @@ describe('409 reasons -> clear messages', () => {
   });
 });
 
-describe('escalation recipients setting (design choice 2)', () => {
-  it('defaults both targets to the existing manager roles', () => {
+describe('escalation recipients setting (owner rule, 18 Nov 2026)', () => {
+  it('defaults: Operations Manager -> WeCare Supervisor, Relevant management -> WeCare Admin', () => {
     const m = parseCompensationEscalationRoles(null);
-    for (const target of COMPENSATION_ESCALATION_TARGETS)
-      expect(m[target]).toEqual([...DEFAULT_COMPENSATION_ESCALATION_ROLES]);
-    expect(DEFAULT_COMPENSATION_ESCALATION_ROLES).toContain('Administrator');
+    expect(m['Operations Manager']).toEqual(['WeCare Supervisor']);
+    expect(m['Relevant management']).toEqual(['WeCare Admin']);
+    expect(Object.keys(m).sort()).toEqual([...COMPENSATION_ESCALATION_TARGETS].sort());
+  });
+  it('the Administrator ALWAYS receives every escalation, whatever the mapping', () => {
+    expect(COMPENSATION_ESCALATION_ALWAYS_ROLE).toBe('Administrator');
+    const d = parseCompensationEscalationRoles(null);
+    expect(escalationRolesFor(d, 'Operations Manager')).toEqual([
+      'WeCare Supervisor',
+      'Administrator',
+    ]);
+    expect(escalationRolesFor(d, 'Relevant management')).toEqual(['WeCare Admin', 'Administrator']);
+    /* An Administrator who maps a target to nothing still hears of it. */
+    const empty = parseCompensationEscalationRoles({ 'Operations Manager': [] });
+    expect(escalationRolesFor(empty, 'Operations Manager')).toEqual(['Administrator']);
+    /* Never twice. */
+    const withAdmin = parseCompensationEscalationRoles({
+      'Operations Manager': ['Administrator', 'WeCare Supervisor'],
+    });
+    expect(escalationRolesFor(withAdmin, 'Operations Manager')).toEqual([
+      'Administrator',
+      'WeCare Supervisor',
+    ]);
   });
   it('reads the stored JSON, keeps defaults for an unnamed target, survives garbage', () => {
     const m = parseCompensationEscalationRoles(
       compensationEscalationRolesValue({ 'Operations Manager': ['Operations', ' Operations '] }),
     );
     expect(m['Operations Manager']).toEqual(['Operations']);
-    expect(m['Relevant management']).toEqual([...DEFAULT_COMPENSATION_ESCALATION_ROLES]);
+    expect(m['Relevant management']).toEqual(['WeCare Admin']);
     expect(parseCompensationEscalationRoles('{not json')['Operations Manager']).toEqual([
-      ...DEFAULT_COMPENSATION_ESCALATION_ROLES,
+      'WeCare Supervisor',
     ]);
   });
-  it('matches escalate_to loosely; an unknown target still reaches the managers', () => {
+  it('matches escalate_to loosely; an unknown target reaches both WeCare managers and the Administrator', () => {
     const m = parseCompensationEscalationRoles({ 'Relevant management': ['CEO'] });
-    expect(escalationRolesFor(m, 'relevant  MANAGEMENT')).toEqual(['CEO']);
-    expect(escalationRolesFor(m, 'Board')).toEqual([...DEFAULT_COMPENSATION_ESCALATION_ROLES]);
+    expect(escalationRolesFor(m, 'relevant  MANAGEMENT')).toEqual(['CEO', 'Administrator']);
+    expect(DEFAULT_COMPENSATION_ESCALATION_ROLES).toEqual(['WeCare Supervisor', 'WeCare Admin']);
+    expect(escalationRolesFor(m, 'Board')).toEqual([
+      'WeCare Supervisor',
+      'WeCare Admin',
+      'Administrator',
+    ]);
   });
 });
 

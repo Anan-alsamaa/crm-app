@@ -569,6 +569,11 @@ export function mergeCaseStatus(
     if (incoming && YIJI2_CASE_TERMINAL_STATUSES.has(incoming)) return incoming;
     return stored;
   }
+  /* A released case never goes back on hold: V2 moves evidence_hold ->
+     proposed (or needs_bhd_value) and never the other way, so a held event
+     delivered late (or with the same time, as V2's test clock does) keeps
+     the released status. */
+  if (incoming === 'evidence_hold' && stored && stored !== 'evidence_hold') return stored;
   return incoming ?? stored ?? null;
 }
 
@@ -716,11 +721,14 @@ const ProposedData = z
     expires_at: dt,
   })
   .passthrough();
+/* `order_number` is optional on a decision: the case is matched by
+   `case_id` alone, so a real V2 decision is never refused for lacking it
+   (V2's samples of 2026-11-18 do carry it). */
 const DecidedData = z
   .object({
     case_id: idField,
     decision: z.enum(YIJI2_CASE_DECISIONS),
-    order_number: idField,
+    order_number: idField.optional(),
   })
   .passthrough();
 const EscalatedData = z
@@ -749,7 +757,7 @@ export type Yiji2CompensationEventJob = z.infer<typeof Yiji2CompensationEventJob
 /**
  * One V2 envelope -> the workers' job, or null when it is not a compensation
  * event. A compensation event that lacks what the CRM needs (a case id, its
- * status or decision, the order) is MALFORMED: null, and `opts.malformed` is
+ * status or decision; the order on a proposal or escalation) is MALFORMED: null, and `opts.malformed` is
  * told - never a case with a guessed field.
  */
 export function compensationEventFromYiji2(
@@ -790,27 +798,54 @@ export const COMPENSATION_ESCALATION_TARGETS = [
 ] as const;
 
 /**
- * The CRM's existing manager roles, the default for both targets. Resolved by
- * role NAME, never by privilege: the built-in Administrator role carries no
- * privilege list, so resolving by privilege reaches nobody - the
- * "notification recipients trap" (docs/GENERAL-COUPON-ALERT.md). `WeCare
- * Admin` and `Administrator` are the roles production actually has members
- * in; `WeCare Supervisor` is kept for when it does.
+ * The Administrator (the topmost role, the master user) receives EVERY
+ * escalation, whatever the mapping says (owner rule, 18 Nov 2026). Not part
+ * of the editable mapping: it cannot be unticked.
+ */
+export const COMPENSATION_ESCALATION_ALWAYS_ROLE = 'Administrator';
+
+/**
+ * The default mapping (owner rule, 18 Nov 2026). The WeCare order is
+ * WeCare Agent -> WeCare Supervisor -> WeCare Admin -> Administrator, so V2's
+ * "Operations Manager" is the WeCare Supervisor and "Relevant management" the
+ * WeCare Admin; the Administrator is added to every escalation on top
+ * (`COMPENSATION_ESCALATION_ALWAYS_ROLE`). Resolved by role NAME, never by
+ * privilege: the built-in Administrator role carries no privilege list, so
+ * resolving by privilege reaches nobody - the "notification recipients trap"
+ * (docs/GENERAL-COUPON-ALERT.md).
+ */
+export const DEFAULT_COMPENSATION_ESCALATION_MAPPING: Readonly<Record<string, readonly string[]>> =
+  {
+    'Operations Manager': ['WeCare Supervisor'],
+    'Relevant management': ['WeCare Admin'],
+  };
+
+/**
+ * An `escalate_to` the mapping does not know (V2 used a new word): both
+ * WeCare manager roles, so an escalation is never dropped. The Administrator
+ * is added as for every escalation.
  */
 export const DEFAULT_COMPENSATION_ESCALATION_ROLES: readonly string[] = [
-  'WeCare Admin',
   'WeCare Supervisor',
-  'Administrator',
+  'WeCare Admin',
 ];
 
-/** Who is told when the mapped roles have no active member: never nobody. */
-export const COMPENSATION_ESCALATION_FALLBACK_ROLES: readonly string[] = ['Administrator'];
+/**
+ * Kept for the worker's log wording: the Administrator is told on every
+ * escalation, so the mapped roles having no active member never means nobody.
+ */
+export const COMPENSATION_ESCALATION_FALLBACK_ROLES: readonly string[] = [
+  COMPENSATION_ESCALATION_ALWAYS_ROLE,
+];
 
 export type CompensationEscalationRoles = Record<string, string[]>;
 
 export function defaultCompensationEscalationRoles(): CompensationEscalationRoles {
   return Object.fromEntries(
-    COMPENSATION_ESCALATION_TARGETS.map((t) => [t, [...DEFAULT_COMPENSATION_ESCALATION_ROLES]]),
+    COMPENSATION_ESCALATION_TARGETS.map((t) => [
+      t,
+      [...(DEFAULT_COMPENSATION_ESCALATION_MAPPING[t] ?? DEFAULT_COMPENSATION_ESCALATION_ROLES)],
+    ]),
   );
 }
 
@@ -818,7 +853,7 @@ export function defaultCompensationEscalationRoles(): CompensationEscalationRole
  * The stored setting -> the mapping. A missing or unreadable value gives the
  * defaults; a target the setting does not name keeps its default. A target
  * mapped to an EMPTY list is kept empty on purpose (the Administrator chose
- * it); the sender then falls back to the Administrator and logs it.
+ * it); the Administrator is still told (always, owner rule 18 Nov 2026).
  */
 export function parseCompensationEscalationRoles(raw: unknown): CompensationEscalationRoles {
   const out = defaultCompensationEscalationRoles();
@@ -850,8 +885,9 @@ export function compensationEscalationRolesValue(m: CompensationEscalationRoles)
 }
 
 /**
- * The role names to notify for one `escalate_to`. Matched without regard to
- * case or spacing; a target the mapping does not know gets the default
+ * The role names to notify for one `escalate_to`: the mapped roles plus the
+ * Administrator, ALWAYS (owner rule, 18 Nov 2026). Matched without regard to
+ * case or spacing; a target the mapping does not know gets both WeCare
  * manager roles (an escalation is never dropped because V2 used a new word).
  */
 export function escalationRolesFor(
@@ -859,7 +895,11 @@ export function escalationRolesFor(
   escalateTo: string | null | undefined,
 ): string[] {
   const want = (escalateTo ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
+  let mapped: readonly string[] = DEFAULT_COMPENSATION_ESCALATION_ROLES;
   for (const [k, roles] of Object.entries(m))
-    if (k.trim().toLowerCase().replace(/\s+/g, ' ') === want) return [...roles];
-  return [...DEFAULT_COMPENSATION_ESCALATION_ROLES];
+    if (k.trim().toLowerCase().replace(/\s+/g, ' ') === want) {
+      mapped = roles;
+      break;
+    }
+  return [...new Set([...mapped, COMPENSATION_ESCALATION_ALWAYS_ROLE])];
 }

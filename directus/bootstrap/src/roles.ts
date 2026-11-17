@@ -972,15 +972,21 @@ export const roles: RoleSpec[] = [
        * YIJI V2 COMPENSATION CASES (owner, 18 Nov 2026). The events job keeps
        * one row per V2 case and opens its CRM ticket (tickets: crud above),
        * then notifies the roles the Administrator mapped to V2's
-       * `escalate_to` - a setting read from `app_settings`, read-only here.
-       * Without the app_settings read the job falls back to the default
-       * manager roles (logged), so an escalation is never lost. No delete: a
-       * case is V2's record of a decision about money.
+       * `escalate_to` - a setting read from `app_settings`, read-only here
+       * and that ONE key only (the other settings are not the workers' to
+       * read). Without the read the job falls back to the default mapping
+       * (logged), so an escalation is never lost; the Administrator is told
+       * of every one. No delete: a case is V2's record of a decision about
+       * money.
        */
       { collection: 'compensation_cases', action: 'create' },
       { collection: 'compensation_cases', action: 'read' },
       { collection: 'compensation_cases', action: 'update' },
-      ...readOnly('app_settings'),
+      {
+        collection: 'app_settings',
+        action: 'read',
+        permissions: { key: { _eq: 'compensation_escalation_roles' } },
+      },
     ],
   },
   {

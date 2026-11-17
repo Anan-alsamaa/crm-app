@@ -1,0 +1,329 @@
+{
+  "_source": "yiji-platform docs/integrations/crm/auto-compensation-samples.md (main, 10735e2; printed by a V2 test run on 2026-11-18). Copied verbatim; envelope ids are '<event uuid>' placeholders, tests give each a unique id.",
+  "proposed_1_1_auto_late_delivery": {
+    "id": "<event uuid>",
+    "type": "compensation.proposed",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "amount": {
+        "currency": "SAR",
+        "amount_minor": 2000
+      },
+      "source": "auto",
+      "status": "proposed",
+      "case_id": 1,
+      "country": "SA",
+      "row_key": "DLY-T2",
+      "brand_id": 1,
+      "rule_code": "DLY",
+      "expires_at": "2026-11-20T21:57:45.610701Z",
+      "has_photos": false,
+      "action_type": "FIXED",
+      "comp_method": "Monetary",
+      "customer_id": 1,
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 8000
+      },
+      "order_number": 2611000500001,
+      "metric_minutes": 16,
+      "policy_version": 1
+    }
+  },
+  "proposed_1_2_agent_complaint": {
+    "id": "<event uuid>",
+    "type": "compensation.proposed",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "amount": {
+        "currency": "SAR",
+        "amount_minor": 500
+      },
+      "source": "agent",
+      "status": "proposed",
+      "case_id": 2,
+      "country": "SA",
+      "row_key": "KID-O1",
+      "brand_id": 1,
+      "rule_code": "KID",
+      "expires_at": "2026-11-20T21:57:45.610701Z",
+      "has_photos": false,
+      "occurrence": 1,
+      "action_type": "COUPON_FIXED",
+      "comp_method": "Discount coupon",
+      "customer_id": 1,
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 5000
+      },
+      "order_number": 2611000500002,
+      "policy_version": 1,
+      "logged_by_agent": "agent-7"
+    }
+  },
+  "proposed_1_3a_held_no_photos": {
+    "id": "<event uuid>",
+    "type": "compensation.proposed",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "source": "app",
+      "status": "evidence_hold",
+      "case_id": 3,
+      "country": "SA",
+      "row_key": "PRD-1-ALL",
+      "brand_id": 1,
+      "rule_code": "PRD-1",
+      "expires_at": "2026-11-20T21:57:45.610701Z",
+      "has_photos": false,
+      "action_type": "ITEM_VALUE",
+      "comp_method": "Monetary",
+      "customer_id": 1,
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 9000
+      },
+      "order_number": 2611000500003,
+      "policy_version": 1
+    }
+  },
+  "proposed_1_3b_held_has_photos": {
+    "id": "<event uuid>",
+    "type": "compensation.proposed",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "source": "app",
+      "status": "evidence_hold",
+      "case_id": 3,
+      "country": "SA",
+      "row_key": "PRD-1-ALL",
+      "brand_id": 1,
+      "rule_code": "PRD-1",
+      "expires_at": "2026-11-20T21:57:45.610701Z",
+      "has_photos": true,
+      "action_type": "ITEM_VALUE",
+      "comp_method": "Monetary",
+      "customer_id": 1,
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 9000
+      },
+      "order_number": 2611000500003,
+      "policy_version": 1
+    }
+  },
+  "proposed_1_3c_photos_confirmed": {
+    "id": "<event uuid>",
+    "type": "compensation.proposed",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "amount": {
+        "currency": "SAR",
+        "amount_minor": 1500
+      },
+      "source": "app",
+      "status": "proposed",
+      "case_id": 3,
+      "country": "SA",
+      "row_key": "PRD-1-ALL",
+      "brand_id": 1,
+      "rule_code": "PRD-1",
+      "expires_at": "2026-11-20T21:57:45.610701Z",
+      "has_photos": true,
+      "action_type": "ITEM_VALUE",
+      "comp_method": "Monetary",
+      "customer_id": 1,
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 9000
+      },
+      "order_number": 2611000500003,
+      "policy_version": 1
+    }
+  },
+  "proposed_1_4_agent_with_photos": {
+    "id": "<event uuid>",
+    "type": "compensation.proposed",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "amount": {
+        "currency": "SAR",
+        "amount_minor": 3000
+      },
+      "source": "agent",
+      "status": "proposed",
+      "case_id": 4,
+      "country": "SA",
+      "row_key": "PRD-1-ALL",
+      "brand_id": 1,
+      "rule_code": "PRD-1",
+      "expires_at": "2026-11-20T21:57:45.610701Z",
+      "has_photos": true,
+      "action_type": "ITEM_VALUE",
+      "comp_method": "Monetary",
+      "customer_id": 1,
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 9000
+      },
+      "order_number": 2611000500004,
+      "policy_version": 1,
+      "logged_by_agent": "agent-7"
+    }
+  },
+  "decided_2_1_approved_wallet": {
+    "id": "<event uuid>",
+    "type": "compensation.decided",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "by": {
+        "id": "crm",
+        "kind": "partner_client"
+      },
+      "issued": {
+        "currency": "SAR",
+        "amount_minor": 2000
+      },
+      "reason": "checked with the branch",
+      "case_id": 1,
+      "country": "SA",
+      "row_key": "DLY-T2",
+      "agent_id": "agent-17",
+      "decision": "approved",
+      "calculated": {
+        "currency": "SAR",
+        "amount_minor": 2000
+      },
+      "overridden": false,
+      "customer_id": 1,
+      "order_number": 2611000500001,
+      "wallet_entry_id": 1
+    }
+  },
+  "decided_2_2_approved_coupon": {
+    "id": "<event uuid>",
+    "type": "compensation.decided",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "by": {
+        "id": "crm",
+        "kind": "partner_client"
+      },
+      "issued": {
+        "currency": "SAR",
+        "amount_minor": 500
+      },
+      "reason": "checked with the branch",
+      "case_id": 6,
+      "country": "SA",
+      "row_key": "CUT-O1",
+      "agent_id": "agent-17",
+      "decision": "approved",
+      "grant_id": 1,
+      "coupon_id": 1,
+      "calculated": {
+        "currency": "SAR",
+        "amount_minor": 500
+      },
+      "overridden": false,
+      "customer_id": 1,
+      "order_number": 2611000500006
+    }
+  },
+  "decided_2_3_rejected": {
+    "id": "<event uuid>",
+    "type": "compensation.decided",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "by": {
+        "id": "crm",
+        "kind": "partner_client"
+      },
+      "reason": "the toy was in the bag",
+      "case_id": 2,
+      "country": "SA",
+      "row_key": "KID-O1",
+      "agent_id": "agent-17",
+      "decision": "rejected",
+      "calculated": {
+        "currency": "SAR",
+        "amount_minor": 500
+      },
+      "overridden": false,
+      "customer_id": 1,
+      "order_number": 2611000500002
+    }
+  },
+  "proposed_3_escalating_case": {
+    "id": "<event uuid>",
+    "type": "compensation.proposed",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "amount": {
+        "currency": "SAR",
+        "amount_minor": 25000
+      },
+      "source": "app",
+      "status": "proposed",
+      "case_id": 5,
+      "country": "SA",
+      "row_key": "FOREIGN-O1",
+      "brand_id": 1,
+      "rule_code": "FOREIGN",
+      "expires_at": "2026-11-20T21:57:45.610701Z",
+      "has_photos": false,
+      "occurrence": 1,
+      "action_type": "FULL_ORDER",
+      "comp_method": "Monetary",
+      "customer_id": 1,
+      "escalate_to": "Operations Manager",
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 25000
+      },
+      "order_number": 2611000500005,
+      "policy_version": 1
+    }
+  },
+  "escalated_3": {
+    "id": "<event uuid>",
+    "type": "compensation.escalated",
+    "occurred_at": "2026-11-17T21:57:45.610701Z",
+    "environment": "dev",
+    "data": {
+      "at": "2026-11-17T21:57:45.610701Z",
+      "case_id": 5,
+      "country": "SA",
+      "row_key": "FOREIGN-O1",
+      "condition": "order_total > 200",
+      "rule_code": "FOREIGN",
+      "customer_id": 1,
+      "escalate_to": "Operations Manager",
+      "order_total": {
+        "currency": "SAR",
+        "amount_minor": 25000
+      },
+      "order_number": 2611000500005,
+      "condition_known": true
+    }
+  }
+}
