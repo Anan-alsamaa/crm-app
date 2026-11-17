@@ -1002,7 +1002,15 @@ export interface YijiCouponResponse {
   exceptionMessage?: string | null;
   errorCode?: string | null;
   errorMessages?: Record<string, unknown> | null;
-  extendedProperties?: { CouponUserId?: number | string } | null;
+  extendedProperties?: {
+    CouponUserId?: number | string;
+    /** Yiji v2 only (contract 17 Nov 2026): the PENDING grant for a phone with no account. */
+    PendingGrantId?: number | string;
+    /** Yiji v2 only: `waiting_for_signup` beside a pending grant. */
+    State?: string;
+    /** Yiji v2 only: `POST /grants` answered the EXISTING grant (200, created false). */
+    Created?: boolean;
+  } | null;
   transactionStatus?: number;
 }
 
@@ -1426,8 +1434,14 @@ async function createdForSignup(directus: YijiDirectusClient, id: string): Promi
 }
 
 type SignupCreation =
-  /** Created on Yiji, Private, assigned to nobody. */
-  | { kind: 'created'; couponId: number }
+  /**
+   * Created on Yiji, Private, assigned to nobody. On Yiji v2 (contract 17 Nov
+   * 2026) created WITH the phone, so v2 holds a PENDING grant it assigns
+   * itself at sign-up (`pendingGrantId`).
+   */
+  | { kind: 'created'; couponId: number; pendingGrantId?: string }
+  /** Yiji v2 only: the number had an account after all, so v2 granted at once. */
+  | { kind: 'granted'; couponId: number; grantId: string }
   /** Not created now - watched exactly as before 17 Nov (see the reasons). */
   | { kind: 'hold'; why: string }
   /** Settled: a refusal recorded on the row, or the Private check blocked it. */
@@ -1463,15 +1477,23 @@ async function createForSignup(args: {
   row: CouponApprovalRow;
   id: string;
   deps: CouponPushDeps;
+  /** The number the lookup used (Yiji v2: the pending grant's phone). */
+  phone?: string;
 }): Promise<SignupCreation> {
   const { row, id, deps } = args;
   const { directus, logger, postCoupon, yijiTenantId, redirectCouponsTo } = deps;
   if (!postCoupon) return { kind: 'hold', why: 'no Yiji service credential' };
-  /* v1 Yiji only: Yiji v2 is unchanged by this rule. Read loosely so this
-     compiles on release lines that predate the v2 `platform` dep. */
+  /* v1 Yiji here; Yiji v2 has its own path (pending grants, 17 Nov 2026).
+     Read loosely so this compiles on release lines that predate the v2
+     `platform` dep. */
   const platform = String((deps as { platform?: string | null }).platform ?? '')
     .trim()
     .toLowerCase();
+  if (platform === 'yiji2') {
+    return args.phone
+      ? createPendingGrantV2({ row, id, deps, phone: args.phone })
+      : { kind: 'hold', why: 'no phone for the v2 pending grant' };
+  }
   const endpoint = couponEndpointFor(yijiTenantId);
   if ((platform && platform !== 'yiji') || !endpoint || endpoint.platform !== 'yiji') {
     return { kind: 'hold', why: 'not a v1 Yiji coupon' };
@@ -1555,6 +1577,104 @@ async function createForSignup(args: {
     }
   }
   return { kind: 'created', couponId };
+}
+
+/**
+ * YIJI V2: CREATE THE COUPON WITH THE PHONE - V2 HOLDS A PENDING GRANT
+ * (contract agreed with the v2 team and the owner, 17 Nov 2026).
+ *
+ * `POST /compensation-coupons` naming a phone with no v2 account no longer
+ * refuses: v2 creates the coupon AND a pending grant for that phone
+ * (`grant_id: null`, `pending_grant_id`, state `waiting_for_signup`), and at
+ * sign-up assigns it ITSELF, in the account's own transaction, then sends
+ * `coupon.granted`. So on v2 the CRM never has to create or assign the
+ * coupon again: the row records the coupon id and the pending grant id, is
+ * watched (`awaiting_signup_at`) only as a safety net, and is completed by
+ * the `coupon.granted` event (`coupon-yiji2-events.ts`). If the safety net
+ * fires first (the sweep finds the account), the wallet read finds v2's
+ * grant, and an `AddUserCoupon` answers v2's 200 `created: false` - the same
+ * grant, never a second one.
+ *
+ * Same gates as v1's creation: Private only (a General code can be added by
+ * anyone who learns it), a code is required. Unlike v1 there is no staging
+ * hold: v2 staging is v2's own staging host, not a shared production API, and
+ * the phone is the one the lookup used (the test handset on staging).
+ */
+async function createPendingGrantV2(args: {
+  row: CouponApprovalRow;
+  id: string;
+  deps: CouponPushDeps;
+  phone: string;
+}): Promise<SignupCreation> {
+  const { row, id, deps, phone } = args;
+  const { directus, logger, postCoupon, yijiTenantId, redirectCouponsTo } = deps;
+  if (!postCoupon) return { kind: 'hold', why: 'no Yiji service credential' };
+  if (yijiCouponTypeCode(row.coupon_type) !== YIJI_PRIVATE_TYPE) {
+    return { kind: 'hold', why: 'not a Private coupon' };
+  }
+  const code = row.coupon_code?.trim();
+  if (!code) return { kind: 'hold', why: 'no coupon code' };
+
+  const refused = async (detail: string): Promise<SignupCreation> => {
+    await recordFailure(directus, id, `yiji v2 would not create the coupon: ${detail}`);
+    logger.warn({ id, code, detail }, 'yiji v2 refused the coupon for a customer with no account');
+    return { kind: 'done', outcome: 'refused' };
+  };
+  let body: YijiCouponResponse;
+  try {
+    body = await postCoupon<YijiCouponResponse>(
+      YIJI_UNASSIGNED_COUPON_PATH,
+      {
+        ...yijiCouponPayload(row, null, { redirectCouponsTo, withheld: true }),
+        /* The connector sends it as v2's E.164 `phone`: the pending grant. */
+        customerPhone: phone,
+      },
+      {
+        ...(yijiTenantId ? { tenantid: yijiTenantId } : {}),
+        /* Stable across retries: v2 answers the stored result, one coupon. */
+        'idempotency-key': `unassigned:${code}`,
+      },
+    );
+  } catch (err) {
+    if (isYijiRefused(err)) return refused(describeRefusal(err.body));
+    throw new Error(
+      `${isYijiUnavailable(err) ? 'yiji unavailable' : 'yiji coupon create failed'}: ${describeError(err)}`,
+    );
+  }
+  const couponId = readNewCouponId(body);
+  if (couponId == null) return refused(describeRefusal(body));
+  const ext = body.extendedProperties ?? {};
+  const grantId = ext.CouponUserId != null ? String(ext.CouponUserId).trim() : '';
+  if (grantId) return { kind: 'granted', couponId, grantId };
+  const pending = ext.PendingGrantId != null ? String(ext.PendingGrantId).trim() : '';
+  return { kind: 'created', couponId, ...(pending ? { pendingGrantId: pending } : {}) };
+}
+
+/**
+ * The v2 pending grant id, written APART from the hold patch: the column
+ * (`coupon_approvals.yiji_pending_grant_id`) needs a manual `apply:fields`,
+ * and a missing field 403s the whole patch. Failing it costs nothing that
+ * matters - the `coupon.granted` job also finds the row by the coupon id and
+ * by code + phone.
+ */
+async function recordPendingGrant(
+  directus: YijiDirectusClient,
+  logger: Logger,
+  id: string,
+  pendingGrantId: string,
+): Promise<void> {
+  try {
+    await directus.request(
+      updateItem('coupon_approvals' as never, id, {
+        yiji_pending_grant_id: pendingGrantId,
+      } as never),
+    );
+  } catch (err) {
+    logger.warn(
+      { id, pendingGrantId, err: describeError(err) },
+      'could not store the v2 pending grant id - is coupon_approvals.yiji_pending_grant_id applied? (the grant event still finds the row by coupon id)',
+    );
+  }
 }
 
 /**
@@ -2128,8 +2248,26 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
          * watch is stamped; nothing is created twice.
          */
         if (awaitingAssign) return await holdForSignup({ row, id, directus, logger });
-        const made = await createForSignup({ row, id, deps });
+        const made = await createForSignup({ row, id, deps, phone });
         if (made.kind === 'done') return made.outcome;
+        /* Yiji v2: the number had an account by the time v2 answered, and v2
+           granted in the same call. That grant IS the receipt. */
+        if (made.kind === 'granted') {
+          await directus.request(
+            updateItem('coupon_approvals' as never, id, {
+              status: 'assigned',
+              yiji_coupon_user_id: made.grantId,
+              yiji_coupon_id: String(made.couponId),
+              yiji_pushed_at: new Date().toISOString(),
+              yiji_push_error: null,
+            } as never),
+          );
+          logger.info(
+            { id, code: row.coupon_code, couponId: made.couponId, grantId: made.grantId },
+            'yiji v2 granted the coupon at creation - marked assigned',
+          );
+          return 'delivered';
+        }
         if (made.kind === 'hold') {
           logger.info(
             { id, code: row.coupon_code, why: made.why },
@@ -2137,7 +2275,7 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
           );
           return await holdForSignup({ row, id, directus, logger });
         }
-        return await holdForSignup({
+        const held = await holdForSignup({
           row,
           id,
           directus,
@@ -2148,6 +2286,15 @@ async function pushCouponOnce(job: Job<CouponPushJob>, deps: CouponPushDeps): Pr
             yiji_push_error: null,
           },
         });
+        /* Yiji v2: v2 assigns it at sign-up itself and says so by event. */
+        if (made.pendingGrantId) {
+          await recordPendingGrant(directus, logger, id, made.pendingGrantId);
+          logger.info(
+            { id, code: row.coupon_code, pendingGrantId: made.pendingGrantId },
+            'yiji v2 holds a pending grant for this phone - assigned by v2 at sign-up',
+          );
+        }
+        return held;
       }
       logger.warn(
         {

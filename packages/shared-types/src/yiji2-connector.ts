@@ -201,6 +201,19 @@ export interface Yiji2OrderWire {
   timeline?: Array<{ state: string; at?: string | null }> | null;
 }
 
+/**
+ * `POST /compensation-coupons` answer (contract 17 Nov 2026). A phone with no
+ * v2 account in the country: `grant_id: null`, `pending_grant_id`, state
+ * `waiting_for_signup`.
+ */
+export interface Yiji2CompensationCouponResult {
+  coupon_id?: number | string | null;
+  code?: string | null;
+  state?: string | null;
+  grant_id?: number | string | null;
+  pending_grant_id?: number | string | null;
+}
+
 export interface Yiji2GrantWire {
   grant_id?: number | string | null;
   id?: number | string | null;
@@ -842,7 +855,32 @@ export class MockYiji2Transport implements Yiji2Transport {
     customer_id: string | null;
     order_number: string | null;
     removed: boolean;
+    /** Set when v2 assigned it at sign-up from this pending grant. */
+    from_pending?: string;
   }> = [];
+  /**
+   * PENDING GRANTS (contract 17 Nov 2026): a coupon created for a phone with
+   * no account in the country. Assigned by v2 itself at sign-up
+   * (`simulateSignup`), which fills `grant_id`.
+   */
+  readonly pendingGrants: Array<{
+    pending_grant_id: string;
+    coupon_id: string;
+    code: string;
+    phone: string;
+    country: string;
+    grant_id: string | null;
+  }> = [];
+  /** Events v2 would POST to `/webhooks/yiji2/events`, in v2's envelope. */
+  readonly events: Array<{
+    id: string;
+    type: string;
+    occurred_at: string;
+    environment: string;
+    data: Record<string, unknown>;
+  }> = [];
+  /** Accounts created after start (`simulateSignup`). */
+  private readonly signedUp: MockCustomerSeed[] = [];
   readonly pushes: Array<{
     customer_id: string;
     body: Record<string, unknown>;
@@ -865,10 +903,88 @@ export class MockYiji2Transport implements Yiji2Transport {
   private nextCoupon = 500_000;
   private nextGrant = 700_000;
   private nextNotification = 0;
+  private nextPending = 800_000;
+  private nextCustomer = 2_000_000_100;
+  private nextEvent = 0;
 
   constructor(opts: MockYiji2TransportOptions = {}) {
     this.now = opts.now ?? Date.now;
     this.maxGrantPage = Math.max(1, opts.maxGrantPage ?? 100);
+  }
+
+  private customers(): MockCustomerSeed[] {
+    return [...YIJI2_MOCK_CUSTOMERS, ...this.signedUp];
+  }
+
+  private emit(type: string, data: Record<string, unknown>): void {
+    this.events.push({
+      id: `evt-${++this.nextEvent}`,
+      type,
+      occurred_at: new Date(this.now()).toISOString(),
+      environment: 'staging',
+      data,
+    });
+  }
+
+  /**
+   * TEST HELPER - the number signs up on v2 (contract 17 Nov 2026). In ONE
+   * step, as v2 does in the account's transaction: the account is created,
+   * every pending grant for that phone in that country is assigned, and the
+   * events are emitted - `coupon.granted` per grant (with `pending_grant_id`
+   * and the new `grant_id`) and `customer.created`.
+   */
+  simulateSignup(
+    phone: string,
+    opts: { country?: 'SA' | 'BH'; name?: string; device?: boolean } = {},
+  ): {
+    customer_id: string;
+    grants: Array<{ pending_grant_id: string; grant_id: string }>;
+    events: MockYiji2Transport['events'];
+  } {
+    const e164 = yiji2E164(phone, opts.country ?? 'SA') ?? phone;
+    if (this.customerByPhone(e164)) throw new Error(`mock: ${e164} already has an account`);
+    const country = opts.country ?? (e164.startsWith('+973') ? 'BH' : 'SA');
+    const customer_id = String(++this.nextCustomer);
+    this.signedUp.push({
+      id: customer_id,
+      name: opts.name ?? 'New V2 Customer',
+      phone: e164,
+      email: `${customer_id}@v2.test`,
+      country,
+      ...(opts.device === false ? { device: false } : {}),
+    });
+    const before = this.events.length;
+    const grants: Array<{ pending_grant_id: string; grant_id: string }> = [];
+    for (const p of this.pendingGrants) {
+      if (p.grant_id || p.phone !== e164 || p.country !== country) continue;
+      const grant_id = String(++this.nextGrant);
+      p.grant_id = grant_id;
+      this.grants.push({
+        grant_id,
+        coupon_id: p.coupon_id,
+        code: p.code,
+        customer_id,
+        order_number: null,
+        removed: false,
+        from_pending: p.pending_grant_id,
+      });
+      grants.push({ pending_grant_id: p.pending_grant_id, grant_id });
+      this.emit('coupon.granted', {
+        pending_grant_id: Number(p.pending_grant_id),
+        grant_id: Number(grant_id),
+        coupon_id: Number(p.coupon_id),
+        code: p.code,
+        customer_id: Number(customer_id),
+        phone: e164,
+      });
+    }
+    this.emit('customer.created', {
+      customer_id: Number(customer_id),
+      phone: e164,
+      country,
+      at: new Date(this.now()).toISOString(),
+    });
+    return { customer_id, grants, events: this.events.slice(before) };
   }
 
   /** Every grant v2 holds, the CRM's and the foreign ones (reads see all). */
@@ -957,7 +1073,7 @@ export class MockYiji2Transport implements Yiji2Transport {
   }
 
   private orderWire(s: MockOrderSeed, withItems: boolean): Yiji2OrderWire {
-    const c = YIJI2_MOCK_CUSTOMERS.find((x) => x.id === s.customerId)!;
+    const c = this.customers().find((x) => x.id === s.customerId)!;
     const items = s.items.reduce(
       (sum, i) =>
         sum + i.quantity * (i.unitMinor + i.modifiers.reduce((m, x) => m + x.unitMinor, 0)),
@@ -1028,7 +1144,7 @@ export class MockYiji2Transport implements Yiji2Transport {
   private customerByPhone(phone: string): MockCustomerSeed | undefined {
     const want = String(phone ?? '').replace(/\D/g, '');
     if (!want) return undefined;
-    return YIJI2_MOCK_CUSTOMERS.find((c) => {
+    return this.customers().find((c) => {
       const have = c.phone.replace(/\D/g, '');
       return (
         have === want || have.endsWith(want.replace(/^0/, '')) || want.endsWith(have.slice(-9))
@@ -1068,7 +1184,7 @@ export class MockYiji2Transport implements Yiji2Transport {
       return { items: c ? [this.customerWire(c)] : [] };
     }
     if (method === 'GET' && (m = /^\/customers\/(\d+)$/.exec(path))) {
-      const c = YIJI2_MOCK_CUSTOMERS.find((x) => x.id === m![1]);
+      const c = this.customers().find((x) => x.id === m![1]);
       return c ? this.customerWire(c) : null;
     }
     if (method === 'GET' && (m = /^\/customers\/(\d+)\/orders$/.exec(path))) {
@@ -1079,16 +1195,27 @@ export class MockYiji2Transport implements Yiji2Transport {
       return { items: limit ? rows.slice(0, limit) : rows };
     }
     if (method === 'GET' && (m = /^\/customers\/(\d+)\/points$/.exec(path))) {
-      return YIJI2_MOCK_CUSTOMERS.some((x) => x.id === m![1])
+      return this.customers().some((x) => x.id === m![1])
         ? { balance: 120, currency: 'SAR' }
         : null;
     }
     if (method === 'POST' && (m = /^\/customers\/(\d+)\/push$/.exec(path))) {
-      const c = YIJI2_MOCK_CUSTOMERS.find((x) => x.id === m![1]);
+      const c = this.customers().find((x) => x.id === m![1]);
       if (!c) return null;
       /* v2 refuses the data keys `topic` and `action` (contract 2026-11-17). */
       for (const k of ['topic', 'action'])
         if (k in obj(b.data)) this.invalid(`data.${k}`, 'push.data.reserved_key');
+      /* `screen`: coupon (with grant_id) | order (with order_number) | wallet. */
+      const data = obj(b.data);
+      if ('screen' in data) {
+        const screen = str(data.screen);
+        if (!screen || !(YIJI2_PUSH_SCREENS as readonly string[]).includes(screen))
+          this.invalid('data.screen', 'push.data.screen.unknown');
+        if (screen === 'coupon' && !str(data.grant_id))
+          this.invalid('data.grant_id', 'push.data.grant_id.required');
+        if (screen === 'order' && !str(data.order_number))
+          this.invalid('data.order_number', 'push.data.order_number.required');
+      }
       /* 202: `delivered` with a notification id, or `no_device`. */
       if (c.device === false) {
         this.pushes.push({ customer_id: c.id, body: b, result: 'no_device' });
@@ -1132,6 +1259,29 @@ export class MockYiji2Transport implements Yiji2Transport {
         this.grants.push({ grant_id, coupon_id, code, customer_id, order_number, removed: false });
         return { coupon_id: Number(coupon_id), grant_id: Number(grant_id), code, state: 'active' };
       }
+      /* A phone with NO account in that country (contract 17 Nov 2026): not
+         refused - the coupon is created with a PENDING grant for the phone,
+         assigned by v2 at sign-up. The phone must be E.164. */
+      const phone = str(b.phone);
+      if (phone) {
+        if (!/^\+\d{8,15}$/.test(phone)) this.invalid('phone', 'coupon.phone.e164');
+        const pending_grant_id = String(++this.nextPending);
+        this.pendingGrants.push({
+          pending_grant_id,
+          coupon_id,
+          code,
+          phone,
+          country: str(b.country)?.toUpperCase() ?? '',
+          grant_id: null,
+        });
+        return {
+          coupon_id: Number(coupon_id),
+          code,
+          grant_id: null,
+          pending_grant_id: Number(pending_grant_id),
+          state: 'waiting_for_signup',
+        };
+      }
       return { coupon_id: Number(coupon_id), code, state: 'active' };
     }
     if (method === 'PUT' && (m = /^\/coupons\/(\d+)$/.exec(path))) {
@@ -1166,6 +1316,16 @@ export class MockYiji2Transport implements Yiji2Transport {
         (g) => g.customer_id === customer_id && g.coupon_id === coupon.coupon_id,
       );
       const dup = held.find((g) => !g.removed);
+      /* Already assigned by v2 from a pending grant at sign-up (contract 17
+         Nov 2026): 200, the EXISTING grant, `created: false`. */
+      if (dup?.from_pending)
+        return {
+          grant_id: Number(dup.grant_id),
+          coupon_id: Number(dup.coupon_id),
+          customer_id: Number(dup.customer_id),
+          state: 'active',
+          created: false,
+        };
       /* Re-granting a REMOVED grant: 409 COUPON_INVALID (contract 2026-11-17). */
       if (!dup && held.some((g) => g.removed))
         throw new Yiji2RefusedError(
@@ -1193,6 +1353,7 @@ export class MockYiji2Transport implements Yiji2Transport {
         coupon_id: Number(coupon.coupon_id),
         customer_id: Number(customer_id),
         state: 'active',
+        created: true,
       };
     }
     if (method === 'DELETE' && (m = /^\/grants\/(\d+)$/.exec(path))) {
@@ -1251,6 +1412,35 @@ export function yiji2Rfc3339(s: string | undefined): string | undefined {
   return s;
 }
 
+/** Country calling codes of v2's countries. */
+const YIJI2_CALLING_CODE: Readonly<Record<string, string>> = { SA: '966', BH: '973' };
+
+/**
+ * A phone as v2 wants it: E.164 (`+9665XXXXXXXX`, `+973XXXXXXXX`). The CRM
+ * stores Saudi numbers as `05XXXXXXXX` (`normalizePhone`); v2 matches a
+ * pending grant to the account created later by the E.164 number, so the
+ * spelling must be v2's. A number already carrying a known calling code (with
+ * `+` or `00`) keeps it; a local number gets the vendor country's code; one
+ * this cannot read is sent as typed (v2 answers 400 rather than guess).
+ */
+export function yiji2E164(raw: string | undefined, country = 'SA'): string | undefined {
+  const s = str(raw);
+  if (!s) return undefined;
+  let digits = s.replace(/\D/g, '');
+  if (!digits) return s;
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  for (const code of Object.values(YIJI2_CALLING_CODE)) {
+    if ((s.startsWith('+') || s.startsWith('00') || digits.length > 10) && digits.startsWith(code))
+      return `+${code}${digits.slice(code.length).replace(/^0+/, '')}`;
+  }
+  if (s.startsWith('+')) return `+${digits}`;
+  const cc = YIJI2_CALLING_CODE[country.toUpperCase()] ?? YIJI2_CALLING_CODE.SA!;
+  const local = digits.replace(/^0+/, '');
+  if (cc === '966' && /^5\d{8}$/.test(local)) return `+966${local}`;
+  if (cc === '973' && /^\d{8}$/.test(local)) return `+973${local}`;
+  return s;
+}
+
 /**
  * The v1 coupon body as v2's `CompensationCouponCreate` (partner-v1.yaml
  * draft, agreed with the v2 session on 2026-11-16): `code` is the CRM's
@@ -1276,7 +1466,7 @@ export function v1CouponDraft(
   const isPercent = !!pct && pct > 0;
   const title = str(coupon.name) ?? str(cu.couponName) ?? str(body.couponName);
   const customerId = yiji2Id(body.userId ?? cu.userId);
-  const phone = str(body.customerPhone ?? cu.customerPhone);
+  const phone = yiji2E164(str(body.customerPhone ?? cu.customerPhone), country);
   const orderNumber = yiji2Id(body.orderId ?? cu.orderId);
   return {
     code: str(body.code) ?? str(coupon.code) ?? str(cu.couponCode) ?? str(body.couponCode),
@@ -1418,8 +1608,31 @@ export function v2PushData(b: Record<string, unknown>): Record<string, string> {
   delete out.action;
   delete out.topic;
   if (action && !out.prop1) out.prop1 = action;
+  /*
+   * WHERE THE TAP OPENS (contract 17 Nov 2026): `screen` coupon | order |
+   * wallet. The CRM sends exactly one: `{ screen: 'coupon', grant_id }` when
+   * the notification is about a coupon GRANT (v1 names it `couponUserId`, the
+   * grant id on v2), and NO screen keys otherwise - a stray `screen` /
+   * `grant_id` / `order_number` from a v1 body is dropped, never guessed.
+   */
+  const grant =
+    yiji2Id(b.couponUserId) ??
+    yiji2Id(b.grantId) ??
+    yiji2Id(obj(b.data).couponUserId) ??
+    yiji2Id(obj(b.data).grant_id);
+  delete out.screen;
+  delete out.grant_id;
+  delete out.order_number;
+  delete out.couponUserId;
+  if (grant) {
+    out.screen = 'coupon';
+    out.grant_id = grant;
+  }
   return out;
 }
+
+/** The screens v2's app opens from a push (contract 17 Nov 2026). */
+export const YIJI2_PUSH_SCREENS = ['coupon', 'order', 'wallet'] as const;
 
 /**
  * Translate ONE v1 admin call (path + body) into v2 partner calls and answer
@@ -1436,10 +1649,16 @@ export async function translateV1AdminCall(
   const cu = obj(b.couponUser);
   const idem = headers['idempotency-key'] ?? headers['Idempotency-Key'];
   const withIdem = (suffix: string) => (idem ? { idempotencyKey: `${idem}:${suffix}` } : {});
-  const grantAnswer = (g: Yiji2GrantWire | null): Yiji2V1Answer => {
+  /* `POST /grants` of a coupon v2 already assigned (a pending grant taken at
+     sign-up, contract 17 Nov 2026) answers 200 `created: false` with the
+     EXISTING grant: success, the same receipt - never a second grant. */
+  const grantAnswer = (g: (Yiji2GrantWire & { created?: unknown }) | null): Yiji2V1Answer => {
     const id = yiji2Id(g?.grant_id) ?? yiji2Id(g?.id);
     if (!id) return { result: 2, exceptionMessage: 'grant not created' };
-    return { result: 1, extendedProperties: { CouponUserId: id } };
+    return {
+      result: 1,
+      extendedProperties: { CouponUserId: id, ...(g?.created === false ? { Created: false } : {}) },
+    };
   };
   const country = opts.country ?? (opts.currency.toUpperCase() === 'BHD' ? 'BH' : 'SA');
   const draft = v1CouponDraft(b, { currency: opts.currency, country });
@@ -1458,14 +1677,33 @@ export async function translateV1AdminCall(
   }
   if (/\/api\/Coupon\/AddCoupon$/i.test(path)) {
     preflight();
-    const c = await transport.request<{ coupon_id?: unknown }>('POST', '/compensation-coupons', {
-      body: draft,
-      ...withIdem('coupon'),
-    });
+    const c = await transport.request<Yiji2CompensationCouponResult>(
+      'POST',
+      '/compensation-coupons',
+      { body: draft, ...withIdem('coupon') },
+    );
     const id = yiji2Id(c?.coupon_id);
-    return id
-      ? { result: 1, exceptionMessage: id, transactionStatus: 1 }
-      : { result: 2, exceptionMessage: 'coupon not created' };
+    if (!id) return { result: 2, exceptionMessage: 'coupon not created' };
+    /* Named a phone (contract 17 Nov 2026): v2 either granted at once (the
+       number has an account) or recorded a PENDING grant it assigns itself at
+       sign-up (`waiting_for_signup`). Both travel in v1's
+       `extendedProperties` beside the coupon id in `exceptionMessage`. */
+    const granted = yiji2Id(c?.grant_id);
+    const pending = yiji2Id(c?.pending_grant_id);
+    const extended: Record<string, unknown> =
+      granted || pending
+        ? {
+            ...(granted ? { CouponUserId: granted } : {}),
+            ...(pending ? { PendingGrantId: pending } : {}),
+            ...(str(c?.state) ? { State: str(c?.state) } : {}),
+          }
+        : {};
+    return {
+      result: 1,
+      exceptionMessage: id,
+      transactionStatus: 1,
+      ...(Object.keys(extended).length ? { extendedProperties: extended } : {}),
+    };
   }
   if (/\/api\/CouponUserOrder\/CreateCouponUserFromOrder$/i.test(path)) {
     const orderNumber = yiji2Id(b.orderId ?? cu.orderId);

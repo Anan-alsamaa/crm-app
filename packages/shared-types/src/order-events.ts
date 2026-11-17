@@ -495,3 +495,117 @@ export function orderEventFromYiji2(
   const parsed = OrderEvent.safeParse(candidate);
   return parsed.success ? parsed.data : null;
 }
+
+/* ── Yiji v2 coupon / customer events (contract of 17 Nov 2026) ─────────── */
+
+/**
+ * PENDING GRANTS (v2 contract, 17 Nov 2026). A coupon created for a phone
+ * with no v2 account is held by v2 as a PENDING grant; at sign-up v2 assigns
+ * every pending grant for that phone itself, in the same transaction as the
+ * account, and tells the CRM:
+ *   - `coupon.granted` - `data` carries `pending_grant_id` and the new
+ *     `grant_id` (plus, when v2 sends them, `coupon_id`, `code`, `phone`,
+ *     `customer_id`);
+ *   - `customer.created` - `data` `{ customer_id, phone (E.164), country, at }`.
+ * Both are handed to the workers' coupons queue as `Yiji2CouponEventJob`.
+ * A `coupon.granted` WITHOUT `pending_grant_id` is a grant the CRM made
+ * itself (it already holds the receipt) and is ignored, like every other
+ * type the CRM does not act on.
+ */
+export const YIJI2_COUPON_EVENT_TYPES = ['coupon.granted', 'customer.created'] as const;
+export type Yiji2CouponEventType = (typeof YIJI2_COUPON_EVENT_TYPES)[number];
+
+/** The coupons-queue job name for one v2 coupon/customer event. */
+export const YIJI2_COUPON_EVENT_JOB = 'yiji2-event';
+
+const couponEventBase = {
+  /** v2's event id (already de-duplicated by the receiver). */
+  eventId: z.string().min(1).max(128),
+  /** `yiji2:<platform vendor id>`. */
+  vendorKey: z.string().min(3),
+  at: isoDateTime,
+};
+export const Yiji2CouponEventJob = z.discriminatedUnion('type', [
+  z.object({
+    type: z.literal('coupon.granted'),
+    ...couponEventBase,
+    pendingGrantId: z.string().min(1).max(64),
+    grantId: z.string().min(1).max(64),
+    couponId: z.string().min(1).max(64).optional(),
+    code: z.string().min(1).max(128).optional(),
+    phone: z.string().min(1).max(32).optional(),
+    customerId: z.string().min(1).max(64).optional(),
+  }),
+  z.object({
+    type: z.literal('customer.created'),
+    ...couponEventBase,
+    customerId: z.string().min(1).max(64),
+    phone: z.string().min(1).max(32),
+    country: z.string().min(1).max(8).optional(),
+  }),
+]);
+export type Yiji2CouponEventJob = z.infer<typeof Yiji2CouponEventJob>;
+
+export function isYiji2CouponEvent(type: string): type is Yiji2CouponEventType {
+  return (YIJI2_COUPON_EVENT_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * One v2 envelope -> the workers' coupon-event job, or null when it is not a
+ * coupon/customer event the CRM acts on. A `coupon.granted` with no
+ * `pending_grant_id` is not ours to act on (null, not malformed); one with a
+ * pending id but no `grant_id`, or a `customer.created` with no customer id
+ * or phone, is MALFORMED (null, and `opts.malformed` is told).
+ */
+export function couponEventFromYiji2(
+  e: Yiji2EventEnvelope,
+  vendorKey: string,
+  opts: { malformed?: (reason: string, eventId: string) => void } = {},
+): Yiji2CouponEventJob | null {
+  if (!isYiji2CouponEvent(e.type)) return null;
+  const d = e.data;
+  const bad = (reason: string): null => {
+    opts.malformed?.(reason, e.id);
+    return null;
+  };
+  const at = v2Str(d.at) && !Number.isNaN(Date.parse(v2Str(d.at)!)) ? v2Str(d.at)! : e.occurred_at;
+  let candidate: unknown;
+  if (e.type === 'coupon.granted') {
+    const pendingGrantId = v2Id(d.pending_grant_id);
+    if (!pendingGrantId) return null;
+    const grantId = v2Id(d.grant_id) ?? v2Id(d.new_grant_id);
+    if (!grantId) return bad('coupon.granted without grant_id');
+    const couponId = v2Id(d.coupon_id);
+    const code = v2Str(d.code);
+    const phone = v2Str(d.phone);
+    const customerId = v2Id(d.customer_id);
+    candidate = {
+      type: e.type,
+      eventId: e.id,
+      vendorKey,
+      at: e.occurred_at,
+      pendingGrantId,
+      grantId,
+      ...(couponId ? { couponId } : {}),
+      ...(code ? { code } : {}),
+      ...(phone ? { phone } : {}),
+      ...(customerId ? { customerId } : {}),
+    };
+  } else {
+    const customerId = v2Id(d.customer_id);
+    const phone = v2Str(d.phone);
+    if (!customerId || !phone) return bad('customer.created without customer_id or phone');
+    const country = v2Str(d.country);
+    candidate = {
+      type: e.type,
+      eventId: e.id,
+      vendorKey,
+      at,
+      customerId,
+      phone,
+      ...(country ? { country } : {}),
+    };
+  }
+  const parsed = Yiji2CouponEventJob.safeParse(candidate);
+  return parsed.success ? parsed.data : bad('coupon/customer event does not parse');
+}
