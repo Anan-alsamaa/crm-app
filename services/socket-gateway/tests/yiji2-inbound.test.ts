@@ -221,6 +221,35 @@ describe('POST /webhooks/yiji2/events', () => {
     expect(enqueueV1.mock.calls[0]![0 as never]).toMatchObject({ vendorKey: 'yiji:1' });
   });
 
+  it('contract 2026-11-17: exactly delivered, handed_over, closed, cancelled close; arrived does not', async () => {
+    const app = build();
+    const ev = (id: string, state: string) => ({
+      id,
+      type: 'order.status_changed',
+      occurred_at: '2026-11-17T10:30:00Z',
+      data: {
+        order_number: '2611000000001',
+        state,
+        order_type: 'delivery',
+        placed_at: '2026-11-17T08:55:00Z',
+      },
+    });
+    const states = ['delivered', 'handed_over', 'closed', 'cancelled', 'arrived', 'refunded'];
+    const res = await app.inject(
+      signed(
+        '/webhooks/yiji2/events',
+        { events: states.map((s, i) => ev(`v2-close-${i}`, s)) },
+        V2_SECRET,
+      ),
+    );
+    expect(res.json()).toMatchObject({ accepted: states.length });
+    const open = enqueueV2.mock.calls.map(
+      (c) => (c[0 as never] as { event: { order: { isOpen: boolean } } }).event.order.isOpen,
+    );
+    /* `refunded` is not one of v2's 15 states: it no longer closes anything */
+    expect(open).toEqual([false, false, false, false, true, true]);
+  });
+
   it('a v2 envelope on the V1 route is a 400 (the shapes are not interchangeable)', async () => {
     const res = await build().inject(
       signed('/webhooks/yiji/events', lateEvent('v2-ev-6'), V1_SECRET),

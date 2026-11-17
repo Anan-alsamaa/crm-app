@@ -330,15 +330,48 @@ export function isHandledYiji2Event(type: string): boolean {
   return (YIJI2_ORDER_EVENT_TYPES as readonly string[]).includes(type);
 }
 
-/** v2 `state` words -> the board's status words (mirrors yiji2-connector). */
-const V2_STATE_STATUS: Record<string, string> = {
-  /* created -> handed over, as partner-v1.yaml (15 states) and
-     crm-events-v1.yaml (12) name them, 2026-11-16; both lists accepted. */
+/**
+ * V2'S ORDER STATES (contract of 2026-11-17, partner routes merged): every
+ * `order.*` event and every partner order read carries one of these 15.
+ * Exported so the connector and the events mapper can never disagree.
+ */
+export const YIJI2_ORDER_STATES = [
+  'created',
+  'awaiting_payment',
+  'accepted',
+  'sent_to_kitchen',
+  'kitchen_confirmed',
+  'preparing',
+  'ready',
+  'finding_courier',
+  'courier_assigned',
+  'out_for_delivery',
+  'delivered',
+  'arrived',
+  'handed_over',
+  'closed',
+  'cancelled',
+] as const;
+export type Yiji2OrderState = (typeof YIJI2_ORDER_STATES)[number];
+
+/**
+ * The states that CLOSE an order (contract 2026-11-17): exactly these four.
+ * `arrived` is still in delivery (the courier is at the door). Words outside
+ * the 15 (an older draft's `refunded`, `completed`, `canceled`) no longer
+ * close anything: v2 does not send them, and an `is_open` on the payload
+ * still wins over the word.
+ */
+export const YIJI2_CLOSING_STATES: ReadonlySet<string> = new Set<Yiji2OrderState>([
+  'delivered',
+  'handed_over',
+  'closed',
+  'cancelled',
+]);
+
+/** v2 `state` -> the board's status word, for exactly the 15 states. */
+export const YIJI2_STATE_STATUS: Readonly<Record<Yiji2OrderState, string>> = {
   created: 'placed',
-  placed: 'placed',
   awaiting_payment: 'placed',
-  pending_payment: 'placed',
-  paid: 'placed',
   accepted: 'received',
   sent_to_kitchen: 'in_kitchen',
   kitchen_confirmed: 'in_kitchen',
@@ -347,25 +380,14 @@ const V2_STATE_STATUS: Record<string, string> = {
   finding_courier: 'ready',
   courier_assigned: 'ready',
   out_for_delivery: 'in_delivery',
-  delivering: 'in_delivery',
   arrived: 'in_delivery',
   delivered: 'delivered',
   handed_over: 'delivered',
   closed: 'delivered',
-  completed: 'delivered',
   cancelled: 'canceled',
-  canceled: 'canceled',
-  refunded: 'refunded',
 };
-const V2_CLOSED = new Set([
-  'delivered',
-  'handed_over',
-  'closed',
-  'completed',
-  'cancelled',
-  'canceled',
-  'refunded',
-]);
+const V2_STATE_STATUS: Record<string, string> = YIJI2_STATE_STATUS;
+const V2_CLOSED = YIJI2_CLOSING_STATES;
 
 const v2Str = (v: unknown): string | undefined =>
   typeof v === 'string' && v.trim() ? v.trim() : undefined;
