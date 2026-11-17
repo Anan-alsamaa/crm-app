@@ -78,6 +78,14 @@ import {
 } from './coupon-misuse-check.js';
 import { COUPON_CUSTOMER_CHECK_JOB, runCouponCustomerCheck } from './coupon-customer-check.js';
 import {
+  alertGeneralCoupon,
+  GENERAL_COUPON_REQUEST_ALERT_JOB,
+  loadCompensationFacts,
+  runGeneralCouponRequestAlert,
+  type GeneralAlertRedis,
+  type GeneralCouponAlertDeps,
+} from './general-coupon-alert.js';
+import {
   STORE_NOTIFY_SEND_JOB,
   runStoreNotifySend,
   saraposConfigFromEnv,
@@ -425,6 +433,16 @@ const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
     },
   });
 
+/** Every General coupon alerts the Administrators, once per stage (owner, 17 Nov 2026). */
+function generalAlertDeps(deps: ProcessorDeps): GeneralCouponAlertDeps {
+  return {
+    directus: deps.directus,
+    notificationsQueue: deps.queues[QUEUES.notifications],
+    logger: deps.logger,
+    ...(deps.redis ? { redis: deps.redis as unknown as GeneralAlertRedis } : {}),
+  };
+}
+
 export const processors: Record<QueueName, Processor> = {
   [QUEUES.sla]: async (job, deps) => {
     const slaDeps: SlaDeps = {
@@ -518,6 +536,12 @@ export const processors: Record<QueueName, Processor> = {
         sarapos: saraposConfig,
         logger: deps.logger,
       });
+      return;
+    }
+    /* A General coupon requested (row created or changed to General): the
+       Administrators are told, once per coupon (owner, 17 Nov 2026). */
+    if (job.name === GENERAL_COUPON_REQUEST_ALERT_JOB) {
+      await runGeneralCouponRequestAlert(generalAlertDeps(deps));
       return;
     }
     if (job.name === COUPON_CUSTOMER_CHECK_JOB) {
@@ -775,6 +799,14 @@ export const processors: Record<QueueName, Processor> = {
           },
         );
       },
+      /* Every General coupon, approved and created on Yiji (owner, 17 Nov 2026). */
+      alertGeneralCoupon: async (stage, couponApprovalId) => {
+        await alertGeneralCoupon(
+          generalAlertDeps(deps),
+          { source: 'compensation', id: couponApprovalId, stage },
+          loadCompensationFacts(deps.directus, couponApprovalId),
+        );
+      },
       // Yiji's API is multi-tenant and routes on this header. Defaulted to the
       // tenant the captured request used rather than left blank: a missing
       // tenant is a refusal Yiji reports as a 200, which is the hardest kind
@@ -912,6 +944,10 @@ export {
   scheduleCouponCustomerCheck,
   DEFAULT_COUPON_CUSTOMER_CHECK_MS,
 } from './coupon-customer-check.js';
+export {
+  scheduleGeneralCouponRequestAlert,
+  DEFAULT_GENERAL_COUPON_REQUEST_ALERT_MS,
+} from './general-coupon-alert.js';
 export { scheduleStoreNotifySend, DEFAULT_STORE_NOTIFY_SEND_MS } from './store-notify-send.js';
 export {
   scheduleYijiUsageRetention,
