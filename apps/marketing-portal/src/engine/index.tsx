@@ -8,11 +8,11 @@ import { SampleMarketingEngine } from './sample.js';
 import { LiveMarketingEngine } from './live.js';
 
 /**
- * WHICH ENGINE (owner, 2026-11-15: "once it is built in Yiji v2, within 2
- * hours we go live"). The portal runs on the SAMPLE engine until the switch
- * is flipped: the Administrator sets `app_settings.marketing_engine` to
- * `live` (Global settings) once the gateway holds v2's URL and key. No
- * rebuild, no release - every page already talks to the same interface.
+ * WHICH ENGINE. The portal runs on the SAMPLE engine until the Administrator
+ * sets `app_settings.marketing_engine` to `live` (Global settings); live is
+ * the CRM's own engine in the AI gateway (owner, 2026-11-16), so the switch
+ * needs only the schema step and a gateway release. No portal rebuild - every
+ * page already talks to the same interface.
  * `VITE_MARKETING_ENGINE=live|sample` pins it for a build (local dev, tests).
  */
 export const MARKETING_ENGINE_SETTING_KEY = 'marketing_engine';

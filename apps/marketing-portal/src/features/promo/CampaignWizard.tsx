@@ -5,21 +5,32 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button, FormField, Input, Select, Textarea, cn, toast } from '@yiji/ui';
 import {
   AUDIENCE_CONDITIONS,
+  CAMPAIGN_FIELD_SPEC,
   CAMPAIGN_OBJECTIVES,
+  CAMPAIGN_TENANTS,
   CHANNELS,
+  COMPENSATION_REASONS,
   CampaignDraft,
+  CampaignDraftShape,
+  FUNDING_SOURCES,
+  LOYALTY_MILESTONES,
   OBJECTIVE_CATALOGUE,
   OFFER_TYPES,
   ORDER_TYPES,
   PAYMENT_METHODS,
+  bundlePriceProblem,
+  campaignDraftIssues,
   forecastCampaign,
   objectiveSpec,
   offerLabel,
+  readCampaignDraft,
   type CampaignObjective,
   type CampaignForecast,
+  type EngineProduct,
+  type OfferType,
 } from '@yiji/shared-types';
 import { useEngine } from '../../engine/index.js';
-import { CampaignDraftFromSpec } from '../../engine/sample.js';
+import { CampaignDraftFromSpec, scheduleFor } from '../../engine/sample.js';
 import { PageHeader, PAGE_BODY, SECTION_CARD } from '../../components/shell/Page.js';
 import {
   KeyValue,
@@ -41,19 +52,42 @@ import {
  * business case on the right recomputes on every change (the same function
  * the approval card uses, so the two never disagree). Save as draft at any
  * step; "Review & publish" sends it for approval with the forecast fixed.
+ *
+ * FIELD PARITY (owner, 2026-11-17): every one of the approved design's 107
+ * fields (CAMPAIGN_FIELD_SPEC, from docs/marketing/ayman-draft-fields.csv) is
+ * on its step here, labelled `promo.field.<key>` in English and Arabic; the
+ * problems on each step are the schema's own rules (campaignDraftIssues).
  */
 type Draft = CampaignDraft;
+type LoyaltyType = NonNullable<Draft['loyalty']>['type'];
 const STEPS = 7;
+const GROUP = 'sm:col-span-2 grid gap-3 rounded-xl bg-secondary/40 p-3 sm:grid-cols-3';
+/** A required field's label, the way the form has always marked it. */
+const req = (s: string) => `${s} *`;
+/** An empty number box is "not set", never 0. */
+const num = (v: string): number | undefined => (v.trim() === '' ? undefined : Number(v));
+
+const LOYALTY_DEFAULTS: NonNullable<Draft['loyalty']> = {
+  type: 'STAMP',
+  ordersRequired: 5,
+  stampExpiryDays: 60,
+  milestones: [],
+  minOrderToCountSar: 30,
+  countOrdersFrom: 'ANY',
+  repeat: true,
+  progressMessages: true,
+};
+const BIRTHDAY_DEFAULTS: NonNullable<Draft['trigger']['birthday']> = {
+  occasion: 'BIRTHDAY',
+  issueDaysBefore: 3,
+  missingDateOfBirth: 'ASK',
+};
 
 function emptyDraft(objective: CampaignObjective): Draft {
   const spec = objectiveSpec(objective);
-  const start = today();
-  const end = new Date(Date.now() + spec.recommended.validityDays * 86_400_000)
-    .toISOString()
-    .slice(0, 10);
   return CampaignDraftFromSpec(spec, {
     name: { en: '', ar: '' },
-    validity: { startDate: start, endDate: end, daysOfWeek: [0, 1, 2, 3, 4, 5, 6] },
+    schedule: scheduleFor(today(), spec.recommended.validityDays),
   });
 }
 
@@ -91,7 +125,7 @@ export function CampaignWizardPage() {
       changeLog: _cl,
       ...rest
     } = existing.data;
-    setDraft(rest as Draft);
+    setDraft(readCampaignDraft(rest));
     setLoaded(true);
   }
   const [study, setStudy] = useState({
@@ -101,7 +135,49 @@ export function CampaignWizardPage() {
   });
   const forecast: CampaignForecast = useMemo(() => forecastCampaign(draft, study), [draft, study]);
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft((d) => ({ ...d, [k]: v }));
-  const problems = useMemo(() => stepProblems(draft, t), [draft, t]);
+  const setOffer = (patch: Partial<Draft['offer']>) =>
+    setDraft((d) => ({ ...d, offer: { ...d.offer, ...patch } }));
+  const setBxgy = (patch: Partial<NonNullable<Draft['offer']['bxgy']>>) =>
+    setDraft((d) => ({
+      ...d,
+      offer: {
+        ...d.offer,
+        bxgy: { buyQty: 1, getQty: 1, productId: '', ...d.offer.bxgy, ...patch },
+      },
+    }));
+  const partial = draft.offer.partialRedemption ?? {
+    enabled: false,
+    balanceExpiry: 'SAME' as const,
+    onOrderCancel: 'RESTORE' as const,
+  };
+  const setPartial = (patch: Partial<typeof partial>) =>
+    setDraft((d) => ({
+      ...d,
+      offer: {
+        ...d.offer,
+        partialRedemption: { ...partial, ...d.offer.partialRedemption, ...patch },
+      },
+    }));
+  const birthday = draft.trigger.birthday ?? BIRTHDAY_DEFAULTS;
+  const setBirthday = (patch: Partial<typeof birthday>) =>
+    setDraft((d) => ({
+      ...d,
+      trigger: {
+        ...d.trigger,
+        birthday: { ...BIRTHDAY_DEFAULTS, ...d.trigger.birthday, ...patch },
+      },
+    }));
+  const setLoyalty = (patch: Partial<NonNullable<Draft['loyalty']>>) =>
+    setDraft((d) => ({ ...d, loyalty: { ...(d.loyalty ?? LOYALTY_DEFAULTS), ...patch } }));
+  const setSchedule = (patch: Partial<Draft['schedule']>) =>
+    setDraft((d) => ({ ...d, schedule: { ...d.schedule, ...patch } }));
+  const comm = draft.communication;
+  const setComm = (patch: Partial<Draft['communication']>) =>
+    setDraft((d) => ({ ...d, communication: { ...d.communication, ...patch } }));
+  const problems = useMemo(
+    () => stepProblems(draft, catalogue.data?.products ?? [], t),
+    [draft, catalogue.data, t],
+  );
   const save = useMutation({
     mutationFn: async (submit: boolean) => {
       const parsed = CampaignDraft.safeParse(draft);
@@ -152,6 +228,45 @@ export function CampaignWizardPage() {
   const done = problems.filter((p) => p.length === 0).length;
   const brands = catalogue.data?.brands ?? [];
   const products = catalogue.data?.products ?? [];
+  const branches = catalogue.data?.branches ?? [];
+  const categories = catalogue.data?.categories ?? [];
+  const brandName = (id: string) => brands.find((b) => b.id === id)?.name ?? id;
+  const yes = t('promo.wizard.yes', { defaultValue: 'Yes' });
+  const no = t('promo.wizard.no', { defaultValue: 'No' });
+  const productIdPlaceholder = t('promo.wizard.productIdPlaceholder', {
+    defaultValue: 'Menu product ID',
+  });
+  const dayNames = [
+    t('promo.wizard.sun', { defaultValue: 'Sun' }),
+    t('promo.wizard.mon', { defaultValue: 'Mon' }),
+    t('promo.wizard.tue', { defaultValue: 'Tue' }),
+    t('promo.wizard.wed', { defaultValue: 'Wed' }),
+    t('promo.wizard.thu', { defaultValue: 'Thu' }),
+    t('promo.wizard.fri', { defaultValue: 'Fri' }),
+    t('promo.wizard.sat', { defaultValue: 'Sat' }),
+  ];
+  const offerTypeLabels: Record<OfferType, string> = {
+    PERCENT: t('promo.wizard.typePercent', { defaultValue: 'Percentage' }),
+    FIXED: t('promo.wizard.typeFixed', { defaultValue: 'Fixed amount' }),
+    BXGY: t('promo.wizard.typeBxgy', { defaultValue: 'Buy X get Y' }),
+    FREE_ITEM: t('promo.wizard.typeFreeItem', { defaultValue: 'Free item' }),
+    BUNDLE: t('promo.wizard.typeBundle', { defaultValue: 'Bundle' }),
+    FREE_DELIVERY: t('promo.wizard.typeFreeDelivery', { defaultValue: 'Free delivery' }),
+    CASHBACK: t('promo.wizard.typeCashback', { defaultValue: 'Cashback' }),
+  };
+  const reasonLabels: Record<(typeof COMPENSATION_REASONS)[number], string> = {
+    LATE_ORDER: t('promo.wizard.reasonLate', { defaultValue: 'Late order' }),
+    MISSING_ITEM: t('promo.wizard.reasonMissing', { defaultValue: 'Missing item' }),
+    QUALITY: t('promo.wizard.reasonQuality', { defaultValue: 'Food quality' }),
+    DRIVER: t('promo.wizard.reasonDriver', { defaultValue: 'Driver' }),
+    APP_ISSUE: t('promo.wizard.reasonApp', { defaultValue: 'App issue' }),
+  };
+  const fundingLabels: Record<(typeof FUNDING_SOURCES)[number], string> = {
+    YIJI_MARKETING: t('promo.wizard.fundYiji', { defaultValue: 'Yiji marketing' }),
+    BRAND: t('promo.wizard.fundBrand', { defaultValue: 'The brand' }),
+    PARTNER: t('promo.wizard.fundPartner', { defaultValue: 'A partner' }),
+    SHARED: t('promo.wizard.fundShared', { defaultValue: 'Shared with a partner' }),
+  };
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -225,7 +340,7 @@ export function CampaignWizardPage() {
             {step === 1 && (
               <div>
                 <FormField
-                  label={t('promo.wizard.objectiveLabel', { defaultValue: 'Coupon objective *' })}
+                  label={req(t('promo.field.objective', { defaultValue: 'Coupon objective' }))}
                   hint={t('promo.wizard.objectiveHint', {
                     defaultValue: 'Pick the goal. We pre-fill sensible settings you can change.',
                   })}
@@ -268,9 +383,11 @@ export function CampaignWizardPage() {
                 </FormField>
                 <div className="mt-4 grid gap-3 sm:grid-cols-2">
                   <FormField
-                    label={t('promo.wizard.nameEn', { defaultValue: 'Campaign name (English) *' })}
-                    hint={t('promo.wizard.nameHint', {
-                      defaultValue: 'Customers see this on the coupon. Max 60.',
+                    label={req(
+                      t('promo.field.name_en', { defaultValue: 'Campaign name (English)' }),
+                    )}
+                    hint={t('promo.wizard.nameUniqueHint', {
+                      defaultValue: 'Unique; max 60 characters. Customers see it on the coupon.',
                     })}
                   >
                     <Input
@@ -280,7 +397,12 @@ export function CampaignWizardPage() {
                     />
                   </FormField>
                   <FormField
-                    label={t('promo.wizard.nameAr', { defaultValue: 'Campaign name (Arabic) *' })}
+                    label={req(
+                      t('promo.field.name_ar', { defaultValue: 'Campaign name (Arabic)' }),
+                    )}
+                    hint={t('promo.wizard.nameArHint', {
+                      defaultValue: 'Shown in the Arabic app. Max 60.',
+                    })}
                   >
                     <Input
                       dir="rtl"
@@ -289,8 +411,32 @@ export function CampaignWizardPage() {
                       onChange={(e) => set('name', { ...draft.name, ar: e.target.value })}
                     />
                   </FormField>
+                  {draft.objective === 'SERVICE_RECOVERY' && (
+                    <FormField
+                      label={req(
+                        t('promo.field.reasonCode', { defaultValue: 'Compensation reason' }),
+                      )}
+                      hint={t('promo.wizard.reasonHint', {
+                        defaultValue: 'Required for compensation; kept for audit.',
+                      })}
+                    >
+                      <Select
+                        value={draft.reasonCode ?? ''}
+                        onChange={(e) => set('reasonCode', e.target.value || undefined)}
+                      >
+                        <option value="">—</option>
+                        {COMPENSATION_REASONS.map((v) => (
+                          <option key={v} value={v}>
+                            {reasonLabels[v]}
+                          </option>
+                        ))}
+                      </Select>
+                    </FormField>
+                  )}
                   <FormField
-                    label={t('promo.wizard.funding', { defaultValue: 'Who pays for the discount' })}
+                    label={t('promo.field.funding_source', {
+                      defaultValue: 'Who pays for the discount',
+                    })}
                   >
                     <Select
                       value={draft.funding.source}
@@ -301,19 +447,27 @@ export function CampaignWizardPage() {
                         })
                       }
                     >
-                      {['YIJI_MARKETING', 'BRAND', 'PARTNER', 'SHARED'].map((v) => (
+                      {FUNDING_SOURCES.map((v) => (
                         <option key={v} value={v}>
-                          {v.replace('_', ' ')}
+                          {fundingLabels[v]}
                         </option>
                       ))}
                     </Select>
                   </FormField>
                   {(draft.funding.source === 'PARTNER' || draft.funding.source === 'SHARED') && (
                     <FormField
-                      label={t('promo.wizard.partnerShare', { defaultValue: 'Partner pays (%)' })}
+                      label={req(
+                        t('promo.field.funding_partnerSharePct', { defaultValue: 'Partner pays' }),
+                      )}
+                      hint={t('promo.wizard.partnerShareHint', {
+                        defaultValue:
+                          '% of the discount. Recorded for reconciliation with the partner.',
+                      })}
                     >
                       <Input
                         type="number"
+                        min={0}
+                        max={100}
                         value={draft.funding.partnerSharePct}
                         onChange={(e) =>
                           set('funding', {
@@ -324,34 +478,26 @@ export function CampaignWizardPage() {
                       />
                     </FormField>
                   )}
-                  {draft.objective === 'SERVICE_RECOVERY' && (
-                    <FormField
-                      label={t('promo.wizard.reasonCode', {
-                        defaultValue: 'Compensation reason *',
-                      })}
+                  <FormField label={req(t('promo.field.tenantId', { defaultValue: 'Tenant' }))}>
+                    <Select
+                      value={draft.tenantId}
+                      onChange={(e) => set('tenantId', e.target.value)}
                     >
-                      <Select
-                        value={draft.reasonCode ?? ''}
-                        onChange={(e) => set('reasonCode', e.target.value)}
-                      >
-                        <option value="">—</option>
-                        {['LATE_ORDER', 'MISSING_ITEM', 'QUALITY', 'DRIVER', 'APP_ISSUE'].map(
-                          (v) => (
-                            <option key={v} value={v}>
-                              {v.replace('_', ' ')}
-                            </option>
-                          ),
-                        )}
-                      </Select>
-                    </FormField>
-                  )}
+                      {[...new Set<string>([...CAMPAIGN_TENANTS, draft.tenantId])].map((v) => (
+                        <option key={v} value={v}>
+                          {v === 'yiji' ? 'Yiji' : v}
+                        </option>
+                      ))}
+                    </Select>
+                  </FormField>
                   <FormField
-                    label={t('promo.wizard.notes', { defaultValue: 'Internal note (optional)' })}
+                    label={t('promo.field.notes', { defaultValue: 'Internal note (optional)' })}
                     className="sm:col-span-2"
                   >
                     <Textarea
                       value={draft.notes ?? ''}
-                      onChange={(e) => set('notes', e.target.value)}
+                      maxLength={1000}
+                      onChange={(e) => set('notes', e.target.value || undefined)}
                       rows={2}
                     />
                   </FormField>
@@ -361,131 +507,143 @@ export function CampaignWizardPage() {
             {step === 2 && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <FormField
-                  label={t('promo.wizard.discountType', { defaultValue: 'Discount type *' })}
+                  label={req(t('promo.field.offer_type', { defaultValue: 'Discount type' }))}
                   className="sm:col-span-2"
                 >
-                  <div className="flex flex-wrap gap-1.5">
-                    {OFFER_TYPES.map((ty) => (
-                      <button
-                        key={ty}
-                        type="button"
-                        aria-pressed={draft.offer.type === ty}
-                        onClick={() => set('offer', { ...draft.offer, type: ty })}
-                        className={cn(
-                          'rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset',
-                          draft.offer.type === ty
-                            ? 'bg-ink text-ink-foreground ring-transparent'
-                            : 'bg-card ring-foreground/[0.08]',
-                        )}
-                      >
-                        {ty.replace('_', ' ')}
-                      </button>
-                    ))}
-                  </div>
+                  <Choice
+                    cards
+                    value={draft.offer.type}
+                    options={OFFER_TYPES.map((ty) => [ty, offerTypeLabels[ty]] as const)}
+                    onChange={(ty) => setOffer({ type: ty })}
+                  />
                 </FormField>
                 {(draft.offer.type === 'PERCENT' || draft.offer.type === 'CASHBACK') && (
                   <FormField
-                    label={t('promo.wizard.percent', { defaultValue: 'Discount percentage *' })}
+                    label={req(
+                      t('promo.field.offer_percent', { defaultValue: 'Discount percentage' }),
+                    )}
+                    hint="1–100 %"
                   >
                     <Input
                       type="number"
                       min={1}
                       max={100}
                       value={draft.offer.percent ?? ''}
-                      onChange={(e) =>
-                        set('offer', { ...draft.offer, percent: Number(e.target.value) })
-                      }
+                      onChange={(e) => setOffer({ percent: num(e.target.value) })}
                     />
                   </FormField>
                 )}
                 {draft.offer.type === 'FIXED' && (
                   <FormField
-                    label={t('promo.wizard.amount', { defaultValue: 'Discount amount (SAR) *' })}
+                    label={req(
+                      t('promo.field.offer_amountSar', { defaultValue: 'Discount amount' }),
+                    )}
+                    hint={t('promo.wizard.sarAboveZero', { defaultValue: 'SAR, greater than 0.' })}
                   >
                     <Input
                       type="number"
                       min={1}
                       value={draft.offer.amountSar ?? ''}
-                      onChange={(e) =>
-                        set('offer', { ...draft.offer, amountSar: Number(e.target.value) })
-                      }
+                      onChange={(e) => setOffer({ amountSar: num(e.target.value) })}
                     />
                   </FormField>
                 )}
                 {(draft.offer.type === 'PERCENT' || draft.offer.type === 'CASHBACK') && (
                   <FormField
-                    label={t('promo.wizard.maxDiscount', {
-                      defaultValue: 'Maximum discount (SAR) *',
-                    })}
-                    hint={t('promo.wizard.maxDiscountHint', {
-                      defaultValue: 'Caps the saving on large orders.',
+                    label={req(
+                      t('promo.field.offer_maxDiscountSar', { defaultValue: 'Maximum discount' }),
+                    )}
+                    hint={t('promo.wizard.maxDiscountHint2', {
+                      defaultValue: 'SAR. Mandatory for percentage and cashback; caps the saving.',
                     })}
                   >
                     <Input
                       type="number"
                       min={1}
                       value={draft.offer.maxDiscountSar ?? ''}
-                      onChange={(e) =>
-                        set('offer', { ...draft.offer, maxDiscountSar: Number(e.target.value) })
-                      }
+                      onChange={(e) => setOffer({ maxDiscountSar: num(e.target.value) })}
                     />
-                  </FormField>
-                )}
-                {draft.offer.type === 'FREE_ITEM' && (
-                  <FormField label={t('promo.wizard.freeItem', { defaultValue: 'Free item *' })}>
-                    <Select
-                      value={draft.offer.freeItem?.productId ?? ''}
-                      onChange={(e) => {
-                        const p = products.find((x) => x.id === e.target.value);
-                        set('offer', {
-                          ...draft.offer,
-                          freeItem: { productId: e.target.value, quantity: 1 },
-                          amountSar: p?.priceSar,
-                        });
-                      }}
-                    >
-                      <option value="">—</option>
-                      {products.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.name} · SAR {p.priceSar}
-                        </option>
-                      ))}
-                    </Select>
                   </FormField>
                 )}
                 {draft.offer.type === 'BXGY' && (
                   <>
-                    <FormField label={t('promo.wizard.buyQty', { defaultValue: 'Customer buys' })}>
+                    <FormField
+                      label={req(
+                        t('promo.field.offer_bxgy_buyQty', { defaultValue: 'Customer buys' }),
+                      )}
+                    >
                       <Input
                         type="number"
                         min={1}
                         value={draft.offer.bxgy?.buyQty ?? 1}
-                        onChange={(e) =>
-                          set('offer', {
-                            ...draft.offer,
-                            bxgy: {
-                              buyQty: Number(e.target.value),
-                              getQty: draft.offer.bxgy?.getQty ?? 1,
-                              productIds: draft.offer.bxgy?.productIds ?? [],
-                            },
-                          })
-                        }
+                        onChange={(e) => setBxgy({ buyQty: Number(e.target.value) })}
                       />
                     </FormField>
                     <FormField
-                      label={t('promo.wizard.getQty', { defaultValue: 'Customer gets free' })}
+                      label={req(
+                        t('promo.field.offer_bxgy_getQty', { defaultValue: 'Customer gets free' }),
+                      )}
                     >
                       <Input
                         type="number"
                         min={1}
                         value={draft.offer.bxgy?.getQty ?? 1}
+                        onChange={(e) => setBxgy({ getQty: Number(e.target.value) })}
+                      />
+                    </FormField>
+                    <FormField
+                      label={req(
+                        t('promo.field.offer_bxgy_productId', { defaultValue: 'Applies to item' }),
+                      )}
+                      hint={t('promo.wizard.bxgyItemHint', {
+                        defaultValue: 'The free item is the same or a cheaper one.',
+                      })}
+                      className="sm:col-span-2"
+                    >
+                      <ItemSelect
+                        products={products}
+                        value={draft.offer.bxgy?.productId ?? ''}
+                        onChange={(id) => setBxgy({ productId: id })}
+                        placeholder={productIdPlaceholder}
+                      />
+                    </FormField>
+                  </>
+                )}
+                {draft.offer.type === 'FREE_ITEM' && (
+                  <>
+                    <FormField
+                      label={req(
+                        t('promo.field.offer_freeItem_productId', { defaultValue: 'Free item' }),
+                      )}
+                    >
+                      <ItemSelect
+                        products={products}
+                        value={draft.offer.freeItem?.productId ?? ''}
+                        onChange={(id) => {
+                          const p = products.find((x) => x.id === id);
+                          setOffer({
+                            freeItem: {
+                              productId: id,
+                              quantity: draft.offer.freeItem?.quantity ?? 1,
+                            },
+                            amountSar: p?.priceSar ?? draft.offer.amountSar,
+                          });
+                        }}
+                        placeholder={productIdPlaceholder}
+                      />
+                    </FormField>
+                    <FormField
+                      label={t('promo.field.offer_freeItem_quantity', { defaultValue: 'Quantity' })}
+                    >
+                      <Input
+                        type="number"
+                        min={1}
+                        value={draft.offer.freeItem?.quantity ?? 1}
                         onChange={(e) =>
-                          set('offer', {
-                            ...draft.offer,
-                            bxgy: {
-                              buyQty: draft.offer.bxgy?.buyQty ?? 1,
-                              getQty: Number(e.target.value),
-                              productIds: draft.offer.bxgy?.productIds ?? [],
+                          setOffer({
+                            freeItem: {
+                              productId: draft.offer.freeItem?.productId ?? '',
+                              quantity: Number(e.target.value),
                             },
                           })
                         }
@@ -494,96 +652,142 @@ export function CampaignWizardPage() {
                   </>
                 )}
                 {draft.offer.type === 'BUNDLE' && (
-                  <FormField
-                    label={t('promo.wizard.bundlePrice', { defaultValue: 'Bundle price (SAR) *' })}
-                  >
-                    <Input
-                      type="number"
-                      min={1}
-                      value={draft.offer.bundle?.priceSar ?? ''}
-                      onChange={(e) =>
-                        set('offer', {
-                          ...draft.offer,
-                          bundle: {
-                            productIds: draft.offer.bundle?.productIds ?? [],
-                            priceSar: Number(e.target.value),
-                          },
-                        })
-                      }
-                    />
-                  </FormField>
+                  <>
+                    <FormField
+                      label={req(
+                        t('promo.field.offer_bundle_productIds', {
+                          defaultValue: 'Items in the bundle',
+                        }),
+                      )}
+                      hint={t('promo.wizard.bundleItemsHint', {
+                        defaultValue: 'At least 2 menu items.',
+                      })}
+                      className="sm:col-span-2"
+                    >
+                      <ItemPicker
+                        products={products}
+                        values={draft.offer.bundle?.productIds ?? []}
+                        onChange={(ids) =>
+                          setOffer({
+                            bundle: {
+                              productIds: ids,
+                              priceSar: draft.offer.bundle?.priceSar ?? 0,
+                            },
+                          })
+                        }
+                        placeholder={productIdPlaceholder}
+                        removeLabel={t('promo.wizard.remove', { defaultValue: 'Remove' })}
+                      />
+                    </FormField>
+                    <FormField
+                      label={req(
+                        t('promo.field.offer_bundle_priceSar', { defaultValue: 'Bundle price' }),
+                      )}
+                      hint={t('promo.wizard.bundlePriceHint', {
+                        defaultValue: 'SAR, below the items’ normal total.',
+                      })}
+                    >
+                      <Input
+                        type="number"
+                        min={1}
+                        value={draft.offer.bundle?.priceSar || ''}
+                        onChange={(e) =>
+                          setOffer({
+                            bundle: {
+                              productIds: draft.offer.bundle?.productIds ?? [],
+                              priceSar: Number(e.target.value),
+                            },
+                          })
+                        }
+                      />
+                    </FormField>
+                  </>
                 )}
                 {draft.offer.type === 'FREE_DELIVERY' && (
                   <FormField
-                    label={t('promo.wizard.deliveryCovered', {
+                    label={t('promo.field.offer_deliveryFeeCoveredSar', {
                       defaultValue: 'Delivery fee covered',
                     })}
                   >
                     <Select
-                      value={
-                        draft.offer.deliveryFeeCovered === 'FULL' ||
-                        draft.offer.deliveryFeeCovered === undefined
-                          ? 'FULL'
-                          : 'PART'
-                      }
+                      value={String(draft.offer.deliveryFeeCoveredSar ?? 'FULL')}
                       onChange={(e) =>
-                        set('offer', {
-                          ...draft.offer,
-                          deliveryFeeCovered: e.target.value === 'FULL' ? 'FULL' : 10,
+                        setOffer({
+                          deliveryFeeCoveredSar:
+                            e.target.value === 'FULL' ? 'FULL' : Number(e.target.value),
                         })
                       }
                     >
                       <option value="FULL">
                         {t('promo.wizard.full', { defaultValue: 'Full' })}
                       </option>
-                      <option value="PART">
-                        {t('promo.wizard.part', { defaultValue: 'SAR 10' })}
-                      </option>
+                      {[5, 10, 15].map((v) => (
+                        <option key={v} value={v}>
+                          {sar(v)}
+                        </option>
+                      ))}
                     </Select>
                   </FormField>
                 )}
+                <FormField
+                  label={req(t('promo.field.rules_minOrderSar', { defaultValue: 'Minimum order' }))}
+                  hint={t('promo.wizard.minOrderHint', {
+                    defaultValue: '0 = no minimum. Counts eligible items only.',
+                  })}
+                >
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.rules.minOrderSar}
+                    onChange={(e) =>
+                      set('rules', { ...draft.rules, minOrderSar: Number(e.target.value) })
+                    }
+                  />
+                </FormField>
                 {draft.offer.type === 'CASHBACK' && (
                   <FormField
-                    label={t('promo.wizard.creditValidity', {
-                      defaultValue: 'Credit can be used for (days)',
+                    label={t('promo.field.offer_cashback_creditValidityDays', {
+                      defaultValue: 'Credit can be used for',
                     })}
+                    hint={t('promo.wizard.daysUnit', { defaultValue: 'Days.' })}
                   >
                     <Input
                       type="number"
                       min={1}
-                      value={draft.offer.cashback?.creditValidityDays ?? 14}
-                      onChange={(e) =>
-                        set('offer', {
-                          ...draft.offer,
-                          cashback: { creditValidityDays: Number(e.target.value) },
-                        })
-                      }
+                      max={365}
+                      value={draft.offer.cashback?.creditValidityDays ?? ''}
+                      onChange={(e) => {
+                        const v = num(e.target.value);
+                        setOffer({
+                          cashback: v === undefined ? undefined : { creditValidityDays: v },
+                        });
+                      }}
                     />
                   </FormField>
                 )}
                 <FormField
-                  label={t('promo.wizard.posCode', { defaultValue: 'POS discount code' })}
+                  label={t('promo.field.offer_posDiscountCode', {
+                    defaultValue: 'POS discount code',
+                  })}
                   hint={t('promo.wizard.posCodeHint', {
                     defaultValue: 'Matches the discount line in the restaurant POS.',
                   })}
                 >
                   <Input
                     value={draft.offer.posDiscountCode ?? ''}
-                    onChange={(e) =>
-                      set('offer', { ...draft.offer, posDiscountCode: e.target.value })
-                    }
+                    maxLength={64}
+                    onChange={(e) => setOffer({ posDiscountCode: e.target.value || undefined })}
                   />
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.onRefund', { defaultValue: 'If the order is refunded' })}
+                  label={t('promo.field.offer_onRefund', {
+                    defaultValue: 'If the order is refunded',
+                  })}
                 >
                   <Select
                     value={draft.offer.onRefund}
                     onChange={(e) =>
-                      set('offer', {
-                        ...draft.offer,
-                        onRefund: e.target.value as Draft['offer']['onRefund'],
-                      })
+                      setOffer({ onRefund: e.target.value as Draft['offer']['onRefund'] })
                     }
                   >
                     <option value="RETURN_IF_VALID">
@@ -600,15 +804,14 @@ export function CampaignWizardPage() {
                   </Select>
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.onCancel', {
+                  label={t('promo.field.offer_onCancelBeforeCompletion', {
                     defaultValue: 'If the order is cancelled before delivery',
                   })}
                 >
                   <Select
                     value={draft.offer.onCancelBeforeCompletion}
                     onChange={(e) =>
-                      set('offer', {
-                        ...draft.offer,
+                      setOffer({
                         onCancelBeforeCompletion: e.target
                           .value as Draft['offer']['onCancelBeforeCompletion'],
                       })
@@ -628,44 +831,56 @@ export function CampaignWizardPage() {
                 {(draft.offer.type === 'PERCENT' ||
                   draft.offer.type === 'FIXED' ||
                   draft.offer.type === 'CASHBACK') && (
-                  <div className="sm:col-span-2 rounded-xl bg-secondary/40 p-3">
-                    <label className="flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={draft.experiment.enabled}
-                        onChange={(e) =>
-                          set('experiment', { ...draft.experiment, enabled: e.target.checked })
-                        }
-                      />{' '}
-                      {t('promo.wizard.experiment', {
+                  <div className={GROUP}>
+                    <Check
+                      className="sm:col-span-3"
+                      checked={draft.experiment.enabled}
+                      onChange={(v) => set('experiment', { ...draft.experiment, enabled: v })}
+                      label={t('promo.field.experiment_enabled', {
                         defaultValue: 'Test two discount values against each other',
                       })}
-                    </label>
+                    />
                     {draft.experiment.enabled && (
-                      <div className="mt-2 grid gap-3 sm:grid-cols-3">
+                      <>
                         <FormField
-                          label={t('promo.wizard.variantB', { defaultValue: 'Version B amount' })}
-                        >
-                          <Input
-                            type="number"
-                            value={draft.experiment.variantB?.value ?? ''}
-                            onChange={(e) =>
-                              set('experiment', {
-                                ...draft.experiment,
-                                variantB: { value: Number(e.target.value) },
-                              })
-                            }
-                          />
-                        </FormField>
-                        <FormField
-                          label={t('promo.wizard.splitA', {
-                            defaultValue: 'Share who get version A (%)',
+                          label={req(
+                            t('promo.field.experiment_variantB_value', {
+                              defaultValue: 'Version B amount',
+                            }),
+                          )}
+                          hint={t('promo.wizard.variantBHint', {
+                            defaultValue: 'Version A is the main discount value.',
                           })}
                         >
                           <Input
                             type="number"
+                            min={1}
+                            value={draft.experiment.variantB?.value ?? ''}
+                            onChange={(e) => {
+                              const v = num(e.target.value);
+                              set('experiment', {
+                                ...draft.experiment,
+                                variantB: v === undefined ? undefined : { value: v },
+                              });
+                            }}
+                          />
+                        </FormField>
+                        <FormField
+                          label={t('promo.field.experiment_splitPctA', {
+                            defaultValue: 'Share who get version A',
+                          })}
+                          hint={t('promo.wizard.splitHint', {
+                            defaultValue: '{{a}}% get A, {{b}}% get B (10–90%).',
+                            a: draft.experiment.splitPctA,
+                            b: 100 - draft.experiment.splitPctA,
+                          })}
+                        >
+                          <input
+                            type="range"
                             min={10}
                             max={90}
+                            step={5}
+                            className="w-full accent-primary"
                             value={draft.experiment.splitPctA}
                             onChange={(e) =>
                               set('experiment', {
@@ -676,7 +891,9 @@ export function CampaignWizardPage() {
                           />
                         </FormField>
                         <FormField
-                          label={t('promo.wizard.winner', { defaultValue: 'Pick the winner by' })}
+                          label={t('promo.field.experiment_winnerMetric', {
+                            defaultValue: 'Pick the winner by',
+                          })}
                         >
                           <Select
                             value={draft.experiment.winnerMetric}
@@ -687,151 +904,93 @@ export function CampaignWizardPage() {
                               })
                             }
                           >
-                            {['PROFIT', 'REDEMPTIONS', 'REVENUE'].map((v) => (
-                              <option key={v} value={v}>
-                                {v.toLowerCase()}
-                              </option>
-                            ))}
+                            <option value="PROFIT">
+                              {t('promo.wizard.byProfit', { defaultValue: 'Profit' })}
+                            </option>
+                            <option value="REDEMPTIONS">
+                              {t('promo.wizard.byRedemptions', { defaultValue: 'Redemptions' })}
+                            </option>
+                            <option value="REVENUE">
+                              {t('promo.wizard.byRevenue', { defaultValue: 'Revenue' })}
+                            </option>
                           </Select>
                         </FormField>
-                      </div>
+                        <FormField
+                          label={t('promo.field.experiment_autoWinnerAfterDays', {
+                            defaultValue: 'Send everyone the winner after',
+                          })}
+                          hint={t('promo.wizard.winnerDaysHint', {
+                            defaultValue: 'Days; 0 = choose by hand.',
+                          })}
+                        >
+                          <Input
+                            type="number"
+                            min={0}
+                            max={90}
+                            value={draft.experiment.autoWinnerAfterDays}
+                            onChange={(e) =>
+                              set('experiment', {
+                                ...draft.experiment,
+                                autoWinnerAfterDays: Number(e.target.value),
+                              })
+                            }
+                          />
+                        </FormField>
+                      </>
                     )}
                   </div>
                 )}
-                {draft.objective === 'FREQUENT_ORDER' && (
-                  <div className="sm:col-span-2 grid gap-3 rounded-xl bg-secondary/40 p-3 sm:grid-cols-3">
-                    <FormField
-                      label={t('promo.wizard.stamps', { defaultValue: 'Stamps required' })}
-                    >
-                      <Input
-                        type="number"
-                        min={2}
-                        value={draft.loyalty?.stampsRequired ?? 5}
-                        onChange={(e) =>
-                          set('loyalty', {
-                            ...(draft.loyalty ?? {
-                              stampExpiryDays: 60,
-                              milestones: [],
-                              minOrderToCountSar: 30,
-                              countOrdersFrom: 'ANY',
-                              repeat: true,
-                              progressMessages: true,
-                            }),
-                            stampsRequired: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </FormField>
-                    <FormField label={t('promo.wizard.stampReward', { defaultValue: 'Reward' })}>
-                      <Input
-                        value={draft.loyalty?.reward ?? ''}
-                        onChange={(e) =>
-                          set('loyalty', {
-                            ...(draft.loyalty ?? {
-                              stampExpiryDays: 60,
-                              milestones: [],
-                              minOrderToCountSar: 30,
-                              countOrdersFrom: 'ANY',
-                              repeat: true,
-                              progressMessages: true,
-                            }),
-                            reward: e.target.value,
-                          })
-                        }
-                      />
-                    </FormField>
-                    <FormField
-                      label={t('promo.wizard.stampExpiry', {
-                        defaultValue: 'Stamps expire after (days)',
-                      })}
-                    >
-                      <Input
-                        type="number"
-                        min={1}
-                        value={draft.loyalty?.stampExpiryDays ?? 60}
-                        onChange={(e) =>
-                          set('loyalty', {
-                            ...(draft.loyalty ?? {
-                              milestones: [],
-                              minOrderToCountSar: 30,
-                              countOrdersFrom: 'ANY',
-                              repeat: true,
-                              progressMessages: true,
-                            }),
-                            stampExpiryDays: Number(e.target.value),
-                          })
-                        }
-                      />
-                    </FormField>
-                  </div>
-                )}
                 {draft.objective === 'OCCASION' && (
-                  <div className="sm:col-span-2 grid gap-3 rounded-xl bg-secondary/40 p-3 sm:grid-cols-3">
-                    <FormField label={t('promo.wizard.occasion', { defaultValue: 'Celebrate' })}>
-                      <Select
-                        value={draft.trigger.birthday?.occasion ?? 'BIRTHDAY'}
-                        onChange={(e) =>
-                          set('trigger', {
-                            birthday: {
-                              ...(draft.trigger.birthday ?? {
-                                issueDaysBefore: 3,
-                                missingDateOfBirth: 'ASK',
-                              }),
-                              occasion: e.target.value as 'BIRTHDAY' | 'REGISTRATION_ANNIVERSARY',
-                            },
-                          })
-                        }
-                      >
-                        <option value="BIRTHDAY">
-                          {t('promo.wizard.birthday', { defaultValue: 'Birthday' })}
-                        </option>
-                        <option value="REGISTRATION_ANNIVERSARY">
-                          {t('promo.wizard.anniversary', {
-                            defaultValue: 'Registration anniversary',
-                          })}
-                        </option>
-                      </Select>
+                  <div className={GROUP}>
+                    <FormField
+                      label={t('promo.field.trigger_birthday_occasion', {
+                        defaultValue: 'Celebrate',
+                      })}
+                      className="sm:col-span-3"
+                    >
+                      <Choice
+                        value={birthday.occasion}
+                        options={[
+                          ['BIRTHDAY', t('promo.wizard.birthday', { defaultValue: 'Birthday' })],
+                          [
+                            'REGISTRATION_ANNIVERSARY',
+                            t('promo.wizard.anniversary', {
+                              defaultValue: 'Registration anniversary',
+                            }),
+                          ],
+                        ]}
+                        onChange={(v) => setBirthday({ occasion: v })}
+                      />
                     </FormField>
                     <FormField
-                      label={t('promo.wizard.issueBefore', {
-                        defaultValue: 'Send the gift (days before)',
+                      label={t('promo.field.trigger_birthday_issueDaysBefore', {
+                        defaultValue: 'Send the gift',
+                      })}
+                      hint={t('promo.wizard.issueBeforeHint', {
+                        defaultValue: 'Days before (0–30). One gift per occasion per year.',
                       })}
                     >
                       <Input
                         type="number"
                         min={0}
                         max={30}
-                        value={draft.trigger.birthday?.issueDaysBefore ?? 3}
-                        onChange={(e) =>
-                          set('trigger', {
-                            birthday: {
-                              ...(draft.trigger.birthday ?? {
-                                occasion: 'BIRTHDAY',
-                                missingDateOfBirth: 'ASK',
-                              }),
-                              issueDaysBefore: Number(e.target.value),
-                            },
-                          })
-                        }
+                        value={birthday.issueDaysBefore}
+                        onChange={(e) => setBirthday({ issueDaysBefore: Number(e.target.value) })}
                       />
                     </FormField>
                     <FormField
-                      label={t('promo.wizard.missingDob', {
+                      label={t('promo.field.trigger_birthday_missingDateOfBirth', {
                         defaultValue: 'Customers without a date of birth',
+                      })}
+                      hint={t('promo.wizard.dobHint', {
+                        defaultValue:
+                          'Date of birth can be edited only once, to stop repeated gifts.',
                       })}
                     >
                       <Select
-                        value={draft.trigger.birthday?.missingDateOfBirth ?? 'ASK'}
+                        value={birthday.missingDateOfBirth}
                         onChange={(e) =>
-                          set('trigger', {
-                            birthday: {
-                              ...(draft.trigger.birthday ?? {
-                                occasion: 'BIRTHDAY',
-                                issueDaysBefore: 3,
-                              }),
-                              missingDateOfBirth: e.target.value as 'ASK' | 'SKIP',
-                            },
-                          })
+                          setBirthday({ missingDateOfBirth: e.target.value as 'ASK' | 'SKIP' })
                         }
                       >
                         <option value="ASK">
@@ -842,6 +1001,190 @@ export function CampaignWizardPage() {
                         </option>
                       </Select>
                     </FormField>
+                    <Check
+                      checked={birthday.tierBoost?.enabled ?? false}
+                      onChange={(v) =>
+                        setBirthday({
+                          tierBoost: { enabled: v, extraSar: birthday.tierBoost?.extraSar ?? 10 },
+                        })
+                      }
+                      label={t('promo.field.trigger_birthday_tierBoost_enabled', {
+                        defaultValue: 'Give Gold and VIP members a bigger gift',
+                      })}
+                    />
+                    {birthday.tierBoost?.enabled && (
+                      <FormField
+                        label={req(
+                          t('promo.field.trigger_birthday_tierBoost_extraSar', {
+                            defaultValue: 'Extra value for Gold and VIP',
+                          }),
+                        )}
+                        hint={t('promo.wizard.sarAboveZero', {
+                          defaultValue: 'SAR, greater than 0.',
+                        })}
+                      >
+                        <Input
+                          type="number"
+                          min={1}
+                          value={birthday.tierBoost.extraSar}
+                          onChange={(e) =>
+                            setBirthday({
+                              tierBoost: { enabled: true, extraSar: Number(e.target.value) },
+                            })
+                          }
+                        />
+                      </FormField>
+                    )}
+                  </div>
+                )}
+                {(draft.objective === 'FREQUENT_ORDER' || draft.loyalty) && (
+                  <div className={GROUP}>
+                    <FormField
+                      label={req(
+                        t('promo.field.loyalty_type', {
+                          defaultValue: 'How customers earn the reward',
+                        }),
+                      )}
+                      className="sm:col-span-3"
+                    >
+                      <Choice
+                        cards
+                        value={draft.loyalty?.type ?? ''}
+                        options={[
+                          ['STAMP', t('promo.wizard.loyaltyStamp', { defaultValue: 'Stamp card' })],
+                          [
+                            'CHALLENGE',
+                            t('promo.wizard.loyaltyChallenge', { defaultValue: 'Challenge' }),
+                          ],
+                          [
+                            'MILESTONE',
+                            t('promo.wizard.loyaltyMilestone', { defaultValue: 'Milestone' }),
+                          ],
+                        ]}
+                        onChange={(v) => setLoyalty({ type: v as LoyaltyType })}
+                      />
+                    </FormField>
+                    {(draft.loyalty?.type === 'STAMP' || draft.loyalty?.type === 'CHALLENGE') && (
+                      <FormField
+                        label={req(
+                          t('promo.field.loyalty_ordersRequired', {
+                            defaultValue: 'Orders per stamp card',
+                          }),
+                        )}
+                        hint="2–50"
+                      >
+                        <Input
+                          type="number"
+                          min={2}
+                          max={50}
+                          value={draft.loyalty.ordersRequired ?? ''}
+                          onChange={(e) => setLoyalty({ ordersRequired: num(e.target.value) })}
+                        />
+                      </FormField>
+                    )}
+                    {draft.loyalty?.type === 'CHALLENGE' && (
+                      <FormField
+                        label={req(t('promo.field.loyalty_windowDays', { defaultValue: 'Within' }))}
+                        hint={t('promo.wizard.daysUnit', { defaultValue: 'Days.' })}
+                      >
+                        <Input
+                          type="number"
+                          min={1}
+                          max={365}
+                          value={draft.loyalty.windowDays ?? ''}
+                          onChange={(e) => setLoyalty({ windowDays: num(e.target.value) })}
+                        />
+                      </FormField>
+                    )}
+                    {draft.loyalty && (
+                      <>
+                        <FormField
+                          label={t('promo.field.loyalty_stampExpiryDays', {
+                            defaultValue: 'Stamps expire after',
+                          })}
+                          hint={t('promo.wizard.daysUnit', { defaultValue: 'Days.' })}
+                        >
+                          <Input
+                            type="number"
+                            min={1}
+                            max={365}
+                            value={draft.loyalty.stampExpiryDays}
+                            onChange={(e) =>
+                              setLoyalty({ stampExpiryDays: Number(e.target.value) })
+                            }
+                          />
+                        </FormField>
+                        {draft.loyalty.type === 'MILESTONE' && (
+                          <FormField
+                            label={req(
+                              t('promo.field.loyalty_milestones', {
+                                defaultValue: 'Reward on lifetime order number',
+                              }),
+                            )}
+                            className="sm:col-span-3"
+                          >
+                            <Multi
+                              values={draft.loyalty.milestones}
+                              options={LOYALTY_MILESTONES.map((m) => [m, `#${m}`] as const)}
+                              onChange={(v) => setLoyalty({ milestones: v })}
+                            />
+                          </FormField>
+                        )}
+                        <FormField
+                          label={t('promo.field.loyalty_minOrderToCountSar', {
+                            defaultValue: 'An order counts if it is at least',
+                          })}
+                          hint="SAR"
+                        >
+                          <Input
+                            type="number"
+                            min={0}
+                            value={draft.loyalty.minOrderToCountSar}
+                            onChange={(e) =>
+                              setLoyalty({ minOrderToCountSar: Number(e.target.value) })
+                            }
+                          />
+                        </FormField>
+                        <FormField
+                          label={t('promo.field.loyalty_countOrdersFrom', {
+                            defaultValue: 'Which orders count',
+                          })}
+                          className="sm:col-span-2"
+                        >
+                          <Choice
+                            value={draft.loyalty.countOrdersFrom}
+                            options={[
+                              ['ANY', t('promo.wizard.countAny', { defaultValue: 'Any brand' })],
+                              [
+                                'THIS_BRAND',
+                                t('promo.wizard.countBrand', { defaultValue: 'This brand' }),
+                              ],
+                              [
+                                'THIS_BRANCH',
+                                t('promo.wizard.countBranch', { defaultValue: 'This branch' }),
+                              ],
+                            ]}
+                            onChange={(v) => setLoyalty({ countOrdersFrom: v })}
+                          />
+                        </FormField>
+                        <Check
+                          checked={draft.loyalty.repeat}
+                          onChange={(v) => setLoyalty({ repeat: v })}
+                          label={t('promo.field.loyalty_repeat', {
+                            defaultValue: 'Start a new card after each reward',
+                          })}
+                        />
+                        <Check
+                          className="sm:col-span-2"
+                          checked={draft.loyalty.progressMessages}
+                          onChange={(v) => setLoyalty({ progressMessages: v })}
+                          label={t('promo.field.loyalty_progressMessages', {
+                            defaultValue:
+                              'Send a progress message after each order (e.g. “2 more orders to go”)',
+                          })}
+                        />
+                      </>
+                    )}
                   </div>
                 )}
               </div>
@@ -849,130 +1192,136 @@ export function CampaignWizardPage() {
             {step === 3 && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <FormField
-                  label={t('promo.wizard.audienceMode', {
-                    defaultValue: 'How do you want to choose customers? *',
-                  })}
+                  label={req(
+                    t('promo.field.audience_mode', {
+                      defaultValue: 'How do you want to choose customers?',
+                    }),
+                  )}
                   className="sm:col-span-2"
                 >
-                  <div className="flex flex-wrap gap-1.5">
-                    {(['SEGMENT', 'LIST', 'PHONES', 'ALL'] as const).map((m) => (
-                      <button
-                        key={m}
-                        type="button"
-                        aria-pressed={draft.audience.mode === m}
-                        onClick={() => set('audience', { ...draft.audience, mode: m })}
-                        className={cn(
-                          'rounded-full px-3 py-1 text-xs font-semibold ring-1 ring-inset',
-                          draft.audience.mode === m
-                            ? 'bg-ink text-ink-foreground ring-transparent'
-                            : 'bg-card ring-foreground/[0.08]',
-                        )}
-                      >
-                        {
-                          {
-                            SEGMENT: t('promo.wizard.segment', {
-                              defaultValue: 'By behaviour (segment)',
-                            }),
-                            LIST: t('promo.wizard.list', { defaultValue: 'A saved list' }),
-                            PHONES: t('promo.wizard.phones', { defaultValue: 'Phone numbers' }),
-                            ALL: t('promo.wizard.everyone', { defaultValue: 'Everyone' }),
-                          }[m]
-                        }
-                      </button>
-                    ))}
-                  </div>
+                  <Choice
+                    value={draft.audience.mode}
+                    options={[
+                      [
+                        'SEGMENT',
+                        t('promo.wizard.segment', { defaultValue: 'By behaviour (segment)' }),
+                      ],
+                      ['LIST', t('promo.wizard.list', { defaultValue: 'A saved list' })],
+                      ['PHONES', t('promo.wizard.phones', { defaultValue: 'Phone numbers' })],
+                      ['ALL', t('promo.wizard.everyone', { defaultValue: 'Everyone' })],
+                    ]}
+                    onChange={(m) => set('audience', { ...draft.audience, mode: m })}
+                  />
                 </FormField>
                 {draft.audience.mode === 'SEGMENT' && (
-                  <div className="sm:col-span-2 space-y-2">
-                    {draft.audience.conditions.map((c, i) => (
-                      <div key={i} className="flex flex-wrap items-center gap-2">
-                        <Select
-                          value={c.c}
-                          onChange={(e) => {
-                            const cs = [...draft.audience.conditions];
-                            cs[i] = { ...c, c: e.target.value as typeof c.c };
-                            set('audience', { ...draft.audience, conditions: cs });
-                          }}
-                          className="w-56"
-                        >
-                          {AUDIENCE_CONDITIONS.map((k) => (
-                            <option key={k} value={k}>
-                              {k.replace(/_/g, ' ').toLowerCase()}
-                            </option>
-                          ))}
-                        </Select>
-                        <Input
-                          value={c.p}
-                          onChange={(e) => {
-                            const cs = [...draft.audience.conditions];
-                            cs[i] = { ...c, p: e.target.value };
-                            set('audience', { ...draft.audience, conditions: cs });
-                          }}
-                          className="w-40"
-                          placeholder={t('promo.wizard.value', { defaultValue: 'value' })}
-                        />
+                  <FormField
+                    label={req(
+                      t('promo.field.audience_conditions', { defaultValue: 'Conditions' }),
+                    )}
+                    hint={t('promo.wizard.conditionsHint', {
+                      defaultValue:
+                        'Each a condition and a value; combined by Match all (AND) or any (OR).',
+                    })}
+                    className="sm:col-span-2"
+                  >
+                    <div className="space-y-2">
+                      {draft.audience.conditions.map((c, i) => (
+                        <div key={i} className="flex flex-wrap items-center gap-2">
+                          <Select
+                            value={c.c}
+                            onChange={(e) => {
+                              const cs = [...draft.audience.conditions];
+                              cs[i] = { ...c, c: e.target.value as typeof c.c };
+                              set('audience', { ...draft.audience, conditions: cs });
+                            }}
+                            className="w-56"
+                          >
+                            {AUDIENCE_CONDITIONS.map((k) => (
+                              <option key={k} value={k}>
+                                {k.replace(/_/g, ' ').toLowerCase()}
+                              </option>
+                            ))}
+                          </Select>
+                          <Input
+                            value={c.p}
+                            maxLength={200}
+                            onChange={(e) => {
+                              const cs = [...draft.audience.conditions];
+                              cs[i] = { ...c, p: e.target.value };
+                              set('audience', { ...draft.audience, conditions: cs });
+                            }}
+                            className="w-40"
+                            placeholder={t('promo.wizard.value', { defaultValue: 'value' })}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() =>
+                              set('audience', {
+                                ...draft.audience,
+                                conditions: draft.audience.conditions.filter((_, j) => j !== i),
+                              })
+                            }
+                          >
+                            {t('promo.wizard.remove', { defaultValue: 'Remove' })}
+                          </Button>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-3">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() =>
                             set('audience', {
                               ...draft.audience,
-                              conditions: draft.audience.conditions.filter((_, j) => j !== i),
+                              conditions: [
+                                ...draft.audience.conditions,
+                                { c: 'ORDERED_ONCE', p: '' },
+                              ],
                             })
                           }
                         >
-                          {t('promo.wizard.remove', { defaultValue: 'Remove' })}
+                          {t('promo.wizard.addCondition', { defaultValue: '+ Add condition' })}
                         </Button>
+                        <label className="text-xs text-muted-foreground">
+                          {t('promo.wizard.match', { defaultValue: 'Match' })}{' '}
+                          <Select
+                            value={draft.audience.match}
+                            onChange={(e) =>
+                              set('audience', {
+                                ...draft.audience,
+                                match: e.target.value as 'ALL' | 'ANY',
+                              })
+                            }
+                            className="ms-1 inline-block w-24"
+                          >
+                            <option value="ALL">
+                              {t('promo.wizard.matchAll', { defaultValue: 'all' })}
+                            </option>
+                            <option value="ANY">
+                              {t('promo.wizard.matchAny', { defaultValue: 'any' })}
+                            </option>
+                          </Select>
+                        </label>
                       </div>
-                    ))}
-                    <div className="flex items-center gap-3">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() =>
-                          set('audience', {
-                            ...draft.audience,
-                            conditions: [
-                              ...draft.audience.conditions,
-                              { c: 'ORDERED_ONCE', p: '' },
-                            ],
-                          })
-                        }
-                      >
-                        {t('promo.wizard.addCondition', { defaultValue: '+ Add condition' })}
-                      </Button>
-                      <label className="text-xs text-muted-foreground">
-                        {t('promo.wizard.match', { defaultValue: 'Match' })}{' '}
-                        <Select
-                          value={draft.audience.match}
-                          onChange={(e) =>
-                            set('audience', {
-                              ...draft.audience,
-                              match: e.target.value as 'ALL' | 'ANY',
-                            })
-                          }
-                          className="ms-1 inline-block w-24"
-                        >
-                          <option value="ALL">
-                            {t('promo.wizard.matchAll', { defaultValue: 'all' })}
-                          </option>
-                          <option value="ANY">
-                            {t('promo.wizard.matchAny', { defaultValue: 'any' })}
-                          </option>
-                        </Select>
-                      </label>
                     </div>
-                  </div>
+                  </FormField>
                 )}
                 {draft.audience.mode === 'PHONES' && (
                   <FormField
-                    label={t('promo.wizard.phoneNumbers', {
-                      defaultValue: 'Customer phone numbers (+9665…, one per line)',
+                    label={req(
+                      t('promo.field.audience_phoneNumbers', {
+                        defaultValue: 'Customer phone numbers',
+                      }),
+                    )}
+                    hint={t('promo.wizard.phonesHint', {
+                      defaultValue: 'Saudi mobile numbers +9665XXXXXXXX, one per line.',
                     })}
                     className="sm:col-span-2"
                   >
                     <Textarea
                       rows={4}
+                      dir="ltr"
                       value={draft.audience.phoneNumbers.join('\n')}
                       onChange={(e) =>
                         set('audience', {
@@ -984,18 +1333,18 @@ export function CampaignWizardPage() {
                   </FormField>
                 )}
                 {draft.audience.mode === 'LIST' && (
-                  <FormField label={t('promo.wizard.listId', { defaultValue: 'Saved list' })}>
+                  <FormField label={req(t('promo.wizard.listId', { defaultValue: 'Saved list' }))}>
                     <Input
                       value={draft.audience.listId ?? ''}
                       onChange={(e) =>
-                        set('audience', { ...draft.audience, listId: e.target.value })
+                        set('audience', { ...draft.audience, listId: e.target.value || undefined })
                       }
                       placeholder="list-…"
                     />
                   </FormField>
                 )}
                 <FormField
-                  label={t('promo.wizard.visibility', {
+                  label={t('promo.field.audience_visibility', {
                     defaultValue: 'Who can see the coupon in the app?',
                   })}
                 >
@@ -1017,16 +1366,20 @@ export function CampaignWizardPage() {
                   </Select>
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.controlGroup', { defaultValue: 'Measurement group (%)' })}
-                  hint={t('promo.wizard.controlGroupHint', {
+                  label={t('promo.field.audience_controlGroupPct', {
+                    defaultValue: 'Measurement group',
+                  })}
+                  hint={t('promo.wizard.controlGroupHint2', {
                     defaultValue:
-                      '0–20. A small share of matching customers does not get the coupon, so you can see how many extra orders it really created. 5–10% is enough.',
+                      '{{n}}% (0–20%). They do not get the coupon, so the extra orders it creates can be measured. 5–10% is enough.',
+                    n: draft.audience.controlGroupPct,
                   })}
                 >
-                  <Input
-                    type="number"
+                  <input
+                    type="range"
                     min={0}
                     max={20}
+                    className="w-full accent-primary"
                     value={draft.audience.controlGroupPct}
                     onChange={(e) =>
                       set('audience', {
@@ -1036,44 +1389,25 @@ export function CampaignWizardPage() {
                     }
                   />
                 </FormField>
-                <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                  <input
-                    type="checkbox"
-                    checked={draft.audience.excludeDiscountSensitive}
-                    onChange={(e) =>
-                      set('audience', {
-                        ...draft.audience,
-                        excludeDiscountSensitive: e.target.checked,
-                      })
-                    }
-                  />{' '}
-                  {t('promo.wizard.excludeSensitive', {
+                <Check
+                  className="sm:col-span-2"
+                  checked={draft.audience.excludeDiscountSensitive}
+                  onChange={(v) =>
+                    set('audience', { ...draft.audience, excludeDiscountSensitive: v })
+                  }
+                  label={t('promo.field.audience_excludeDiscountSensitive', {
                     defaultValue: 'Leave out customers who almost only order with coupons',
                   })}
-                </label>
+                />
               </div>
             )}
             {step === 4 && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <FormField
-                  label={t('promo.wizard.minOrder', { defaultValue: 'Minimum order (SAR) *' })}
-                  hint={t('promo.wizard.minOrderHint', {
-                    defaultValue: '0 = no minimum. Counts eligible items only.',
+                  label={t('promo.field.rules_maxOrderSar', {
+                    defaultValue: 'Maximum eligible order (optional)',
                   })}
-                >
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draft.rules.minOrderSar}
-                    onChange={(e) =>
-                      set('rules', { ...draft.rules, minOrderSar: Number(e.target.value) })
-                    }
-                  />
-                </FormField>
-                <FormField
-                  label={t('promo.wizard.maxOrder', {
-                    defaultValue: 'Maximum eligible order (SAR, optional)',
-                  })}
+                  hint={t('promo.wizard.maxOrderHint', { defaultValue: 'SAR; 0 = no maximum.' })}
                 >
                   <Input
                     type="number"
@@ -1085,7 +1419,7 @@ export function CampaignWizardPage() {
                   />
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.previousOrders', {
+                  label={t('promo.field.rules_previousOrders', {
                     defaultValue: 'Number of previous orders',
                   })}
                 >
@@ -1098,134 +1432,185 @@ export function CampaignWizardPage() {
                       })
                     }
                   >
-                    {['ANY', 'NONE', 'ONE_PLUS', 'THREE_PLUS'].map((v) => (
-                      <option key={v} value={v}>
-                        {v.replace('_', ' ').toLowerCase()}
-                      </option>
-                    ))}
+                    <option value="ANY">
+                      {t('promo.wizard.prevAny', { defaultValue: 'Any' })}
+                    </option>
+                    <option value="NONE">
+                      {t('promo.wizard.prevNone', { defaultValue: 'None yet' })}
+                    </option>
+                    <option value="ONE_PLUS">
+                      {t('promo.wizard.prevOnePlus', { defaultValue: '1 or more' })}
+                    </option>
+                    <option value="THREE_PLUS">
+                      {t('promo.wizard.prevThreePlus', { defaultValue: '3 or more' })}
+                    </option>
                   </Select>
                 </FormField>
-                <label className="flex items-center gap-2 self-end text-sm">
-                  <input
-                    type="checkbox"
-                    checked={draft.rules.firstOrderOnly}
-                    onChange={(e) =>
-                      set('rules', { ...draft.rules, firstOrderOnly: e.target.checked })
-                    }
-                  />{' '}
-                  {t('promo.wizard.firstOrderOnly', {
+                <Check
+                  className="sm:col-span-2"
+                  checked={draft.rules.firstOrderOnly}
+                  onChange={(v) =>
+                    setDraft((d) => ({
+                      ...d,
+                      rules: { ...d.rules, firstOrderOnly: v },
+                      /* the design: one per phone and device is mandatory for first-order coupons */
+                      fraud: v ? { ...d.fraud, onePerPhoneAndDevice: true } : d.fraud,
+                    }))
+                  }
+                  label={t('promo.field.rules_firstOrderOnly', {
                     defaultValue: 'Only valid on the customer’s first order',
                   })}
-                </label>
+                />
                 <FormField
-                  label={t('promo.wizard.paymentMethods', { defaultValue: 'Payment methods *' })}
+                  label={req(
+                    t('promo.field.rules_paymentMethods', { defaultValue: 'Payment methods' }),
+                  )}
                   className="sm:col-span-2"
                 >
-                  <div className="flex flex-wrap gap-1.5">
-                    {PAYMENT_METHODS.map((m) => (
-                      <Toggle
-                        key={m}
-                        on={draft.rules.paymentMethods.includes(m)}
-                        label={m.replace('_', ' ')}
-                        onClick={() =>
-                          set('rules', {
-                            ...draft.rules,
-                            paymentMethods: draft.rules.paymentMethods.includes(m)
-                              ? draft.rules.paymentMethods.filter((x) => x !== m)
-                              : [...draft.rules.paymentMethods, m],
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
+                  <Multi
+                    values={draft.rules.paymentMethods}
+                    options={PAYMENT_METHODS.map((m) => [m, m.replace('_', ' ')] as const)}
+                    onChange={(v) => set('rules', { ...draft.rules, paymentMethods: v })}
+                  />
                 </FormField>
+                <Check
+                  className="sm:col-span-2"
+                  checked={draft.scope.allBrands}
+                  onChange={(v) =>
+                    set('scope', {
+                      ...draft.scope,
+                      allBrands: v,
+                      brandIds: v ? [] : draft.scope.brandIds,
+                    })
+                  }
+                  label={t('promo.field.scope_allBrands', {
+                    defaultValue: 'All brands and branches, including future ones',
+                  })}
+                />
+                {!draft.scope.allBrands && (
+                  <FormField
+                    label={req(t('promo.field.scope_brandIds', { defaultValue: 'Brands' }))}
+                    className="sm:col-span-2"
+                  >
+                    <Multi
+                      values={draft.scope.brandIds}
+                      options={brands.map((b) => [b.id, b.name] as const)}
+                      onChange={(v) => set('scope', { ...draft.scope, brandIds: v })}
+                    />
+                  </FormField>
+                )}
                 <FormField
-                  label={t('promo.wizard.brands', { defaultValue: 'Brands (none = all)' })}
+                  label={t('promo.field.scope_branchIds', { defaultValue: 'Branches (optional)' })}
                   className="sm:col-span-2"
                 >
-                  <div className="flex flex-wrap gap-1.5">
-                    {brands.map((b) => (
-                      <Toggle
-                        key={b.id}
-                        on={draft.scope.brandIds.includes(b.id)}
-                        label={b.name}
-                        onClick={() =>
-                          set('scope', {
-                            ...draft.scope,
-                            brandIds: draft.scope.brandIds.includes(b.id)
-                              ? draft.scope.brandIds.filter((x) => x !== b.id)
-                              : [...draft.scope.brandIds, b.id],
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
+                  <Multi
+                    values={draft.scope.branchIds}
+                    options={branches
+                      .filter(
+                        (b) => draft.scope.allBrands || draft.scope.brandIds.includes(b.brandId),
+                      )
+                      .map((b) => [b.id, b.name] as const)}
+                    onChange={(v) => set('scope', { ...draft.scope, branchIds: v })}
+                    empty={t('promo.wizard.noneInMenu', { defaultValue: 'None in the catalogue.' })}
+                  />
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.orderTypes', { defaultValue: 'Order types *' })}
+                  label={t('promo.field.scope_categoryIds', {
+                    defaultValue: 'Menu categories (optional)',
+                  })}
                   className="sm:col-span-2"
                 >
-                  <div className="flex flex-wrap gap-1.5">
-                    {ORDER_TYPES.map((o) => (
-                      <Toggle
-                        key={o}
-                        on={draft.scope.orderTypes.includes(o)}
-                        label={o.replace('_', ' ').toLowerCase()}
-                        onClick={() =>
-                          set('scope', {
-                            ...draft.scope,
-                            orderTypes: draft.scope.orderTypes.includes(o)
-                              ? draft.scope.orderTypes.filter((x) => x !== o)
-                              : [...draft.scope.orderTypes, o],
-                          })
-                        }
-                      />
-                    ))}
-                  </div>
+                  <Multi
+                    values={draft.scope.categoryIds}
+                    options={categories
+                      .filter(
+                        (c) => draft.scope.allBrands || draft.scope.brandIds.includes(c.brandId),
+                      )
+                      .map((c) => [c.id, `${brandName(c.brandId)} | ${c.name}`] as const)}
+                    onChange={(v) => set('scope', { ...draft.scope, categoryIds: v })}
+                    empty={t('promo.wizard.noneInMenu', { defaultValue: 'None in the catalogue.' })}
+                  />
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.perCustomer', {
+                  label={t('promo.field.scope_productIds', {
+                    defaultValue: 'Only these items (optional)',
+                  })}
+                  className="sm:col-span-2"
+                >
+                  <ItemPicker
+                    products={products}
+                    values={draft.scope.productIds}
+                    onChange={(v) => set('scope', { ...draft.scope, productIds: v })}
+                    placeholder={productIdPlaceholder}
+                    removeLabel={t('promo.wizard.remove', { defaultValue: 'Remove' })}
+                  />
+                </FormField>
+                <FormField
+                  label={t('promo.field.scope_excludedProductIds', {
+                    defaultValue: 'Excluded items (optional)',
+                  })}
+                  className="sm:col-span-2"
+                >
+                  <ItemPicker
+                    products={products}
+                    values={draft.scope.excludedProductIds}
+                    onChange={(v) => set('scope', { ...draft.scope, excludedProductIds: v })}
+                    placeholder={productIdPlaceholder}
+                    removeLabel={t('promo.wizard.remove', { defaultValue: 'Remove' })}
+                  />
+                </FormField>
+                <FormField
+                  label={req(t('promo.field.scope_orderTypes', { defaultValue: 'Order types' }))}
+                  className="sm:col-span-2"
+                >
+                  <Multi
+                    values={draft.scope.orderTypes}
+                    options={ORDER_TYPES.map(
+                      (o) => [o, o.replace('_', ' ').toLowerCase()] as const,
+                    )}
+                    onChange={(v) => set('scope', { ...draft.scope, orderTypes: v })}
+                  />
+                </FormField>
+                <FormField
+                  label={t('promo.field.limits_perCustomerMode', {
                     defaultValue: 'Redemptions per customer',
                   })}
                 >
-                  <Select
+                  <Choice
                     value={draft.limits.perCustomerMode}
-                    onChange={(e) =>
-                      set('limits', {
-                        ...draft.limits,
-                        perCustomerMode: e.target.value as Draft['limits']['perCustomerMode'],
-                      })
-                    }
-                  >
-                    <option value="ONE">{t('promo.wizard.once', { defaultValue: 'Once' })}</option>
-                    <option value="MONTHLY">
-                      {t('promo.wizard.monthly', { defaultValue: 'Monthly limit' })}
-                    </option>
-                    <option value="UNLIMITED">
-                      {t('promo.wizard.unlimited', { defaultValue: 'Unlimited' })}
-                    </option>
-                  </Select>
+                    options={[
+                      ['ONE', t('promo.wizard.once', { defaultValue: 'Once' })],
+                      ['MONTHLY', t('promo.wizard.monthly', { defaultValue: 'Monthly limit' })],
+                      ['UNLIMITED', t('promo.wizard.unlimited', { defaultValue: 'Unlimited' })],
+                    ]}
+                    onChange={(v) => set('limits', { ...draft.limits, perCustomerMode: v })}
+                  />
                 </FormField>
                 {draft.limits.perCustomerMode === 'MONTHLY' && (
                   <FormField
-                    label={t('promo.wizard.perCustomerMax', {
-                      defaultValue: 'Maximum per customer per month',
-                    })}
+                    label={req(
+                      t('promo.field.limits_perCustomerMax', {
+                        defaultValue: 'Maximum per customer',
+                      }),
+                    )}
+                    hint={t('promo.wizard.perMonth', { defaultValue: 'Per month.' })}
                   >
                     <Input
                       type="number"
                       min={1}
-                      value={draft.limits.perCustomerMax ?? 3}
+                      value={draft.limits.perCustomerMax ?? ''}
                       onChange={(e) =>
-                        set('limits', { ...draft.limits, perCustomerMax: Number(e.target.value) })
+                        set('limits', { ...draft.limits, perCustomerMax: num(e.target.value) })
                       }
                     />
                   </FormField>
                 )}
                 <FormField
-                  label={t('promo.wizard.totalRedemptions', {
-                    defaultValue: 'Total redemption limit *',
-                  })}
+                  label={req(
+                    t('promo.field.limits_totalRedemptions', {
+                      defaultValue: 'Total redemption limit',
+                    }),
+                  )}
                   hint={t('promo.wizard.totalRedemptionsHint', {
                     defaultValue: 'Stops the campaign when reached.',
                   })}
@@ -1240,9 +1625,26 @@ export function CampaignWizardPage() {
                   />
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.budget', { defaultValue: 'Discount budget (SAR) *' })}
-                  hint={t('promo.wizard.budgetHint', {
-                    defaultValue: 'The campaign pauses when it is used up.',
+                  label={t('promo.field.limits_dailyRedemptions', {
+                    defaultValue: 'Daily redemption limit (optional)',
+                  })}
+                  hint={t('promo.wizard.zeroNone', { defaultValue: '0 = none.' })}
+                >
+                  <Input
+                    type="number"
+                    min={0}
+                    value={draft.limits.dailyRedemptions}
+                    onChange={(e) =>
+                      set('limits', { ...draft.limits, dailyRedemptions: Number(e.target.value) })
+                    }
+                  />
+                </FormField>
+                <FormField
+                  label={req(
+                    t('promo.field.limits_budgetSar', { defaultValue: 'Discount budget' }),
+                  )}
+                  hint={t('promo.wizard.budgetHint2', {
+                    defaultValue: 'SAR. The campaign pauses when it is used up.',
                   })}
                 >
                   <Input
@@ -1255,48 +1657,36 @@ export function CampaignWizardPage() {
                   />
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.daily', {
-                    defaultValue: 'Daily redemption limit (0 = none)',
-                  })}
+                  label={t('promo.field.distribution_codeType', { defaultValue: 'Coupon code' })}
+                  className="sm:col-span-2"
                 >
-                  <Input
-                    type="number"
-                    min={0}
-                    value={draft.limits.dailyRedemptions}
-                    onChange={(e) =>
-                      set('limits', { ...draft.limits, dailyRedemptions: Number(e.target.value) })
-                    }
+                  <Choice
+                    value={draft.distribution.codeType}
+                    options={[
+                      [
+                        'NONE',
+                        t('promo.wizard.noCode', { defaultValue: 'No code - added to the wallet' }),
+                      ],
+                      ['SHARED', t('promo.wizard.sharedCode', { defaultValue: 'One shared code' })],
+                      ['UNIQUE', t('promo.wizard.uniqueCodes', { defaultValue: 'Unique codes' })],
+                    ]}
+                    onChange={(v) => set('distribution', { ...draft.distribution, codeType: v })}
                   />
                 </FormField>
-                <FormField label={t('promo.wizard.codeType', { defaultValue: 'Coupon code' })}>
-                  <Select
-                    value={draft.distribution.codeType}
-                    onChange={(e) =>
-                      set('distribution', {
-                        ...draft.distribution,
-                        codeType: e.target.value as Draft['distribution']['codeType'],
-                      })
-                    }
-                  >
-                    <option value="NONE">
-                      {t('promo.wizard.noCode', { defaultValue: 'No code - added to the wallet' })}
-                    </option>
-                    <option value="SHARED">
-                      {t('promo.wizard.sharedCode', { defaultValue: 'One shared code' })}
-                    </option>
-                    <option value="UNIQUE">
-                      {t('promo.wizard.uniqueCodes', { defaultValue: 'Unique codes' })}
-                    </option>
-                  </Select>
-                </FormField>
                 {draft.distribution.codeType === 'SHARED' && (
-                  <FormField label={t('promo.wizard.code', { defaultValue: 'Shared code *' })}>
+                  <FormField
+                    label={req(t('promo.field.distribution_code', { defaultValue: 'Shared code' }))}
+                    hint={t('promo.wizard.codeHint', {
+                      defaultValue: 'Unique across live campaigns.',
+                    })}
+                  >
                     <Input
                       value={draft.distribution.code ?? ''}
+                      maxLength={32}
                       onChange={(e) =>
                         set('distribution', {
                           ...draft.distribution,
-                          code: e.target.value.toUpperCase(),
+                          code: e.target.value.toUpperCase() || undefined,
                         })
                       }
                     />
@@ -1304,165 +1694,702 @@ export function CampaignWizardPage() {
                 )}
                 {draft.distribution.codeType === 'UNIQUE' && (
                   <FormField
-                    label={t('promo.wizard.uniqueCount', {
-                      defaultValue: 'Number of unique codes',
-                    })}
+                    label={req(
+                      t('promo.field.distribution_uniqueCodeCount', {
+                        defaultValue: 'Number of unique codes',
+                      }),
+                    )}
                   >
                     <Input
                       type="number"
                       min={1}
-                      value={draft.distribution.uniqueCodeCount ?? 5000}
+                      value={draft.distribution.uniqueCodeCount ?? ''}
                       onChange={(e) =>
                         set('distribution', {
                           ...draft.distribution,
-                          uniqueCodeCount: Number(e.target.value),
+                          uniqueCodeCount: num(e.target.value),
                         })
                       }
                     />
                   </FormField>
                 )}
-                <div className="sm:col-span-2 grid gap-2 rounded-xl bg-secondary/40 p-3 sm:grid-cols-3">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={draft.stacking.combineWithOtherOffers}
-                      onChange={(e) =>
-                        set('stacking', {
-                          ...draft.stacking,
-                          combineWithOtherOffers: e.target.checked,
-                        })
-                      }
-                    />{' '}
-                    {t('promo.wizard.withOffers', {
-                      defaultValue: 'Can be used with other offers',
+                <div className={cn(GROUP, 'sm:grid-cols-1')}>
+                  <YesNo
+                    label={t('promo.field.stacking_combineWithOtherOffers', {
+                      defaultValue: 'Can this coupon be used with other offers?',
                     })}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={draft.stacking.combineWithLoyalty}
-                      onChange={(e) =>
-                        set('stacking', { ...draft.stacking, combineWithLoyalty: e.target.checked })
-                      }
-                    />{' '}
-                    {t('promo.wizard.withLoyalty', {
-                      defaultValue: 'Can be combined with loyalty benefits',
+                    hint={t('promo.wizard.offersHint', {
+                      defaultValue: 'Checked by the checkout service.',
                     })}
-                  </label>
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={draft.stacking.combineWithOtherCoupons}
-                      onChange={(e) =>
-                        set('stacking', {
-                          ...draft.stacking,
-                          combineWithOtherCoupons: e.target.checked,
-                        })
-                      }
-                    />{' '}
-                    {t('promo.wizard.withCoupons', {
-                      defaultValue: 'Can be combined with other discounts',
+                    value={draft.stacking.combineWithOtherOffers}
+                    onChange={(v) =>
+                      set('stacking', { ...draft.stacking, combineWithOtherOffers: v })
+                    }
+                    yes={yes}
+                    no={no}
+                  />
+                  <YesNo
+                    label={t('promo.field.stacking_combineWithLoyalty', {
+                      defaultValue: 'Can this coupon be combined with loyalty benefits?',
                     })}
-                  </label>
+                    hint={t('promo.wizard.loyaltyHint', {
+                      defaultValue:
+                        'Loyalty benefits: cashback redemption, points redemption, VIP benefits, loyalty discounts and promotions.',
+                    })}
+                    value={draft.stacking.combineWithLoyalty}
+                    onChange={(v) => set('stacking', { ...draft.stacking, combineWithLoyalty: v })}
+                    yes={yes}
+                    no={no}
+                  />
+                  <YesNo
+                    label={t('promo.field.stacking_combineWithOtherCoupons', {
+                      defaultValue: 'Can this coupon be combined with other discounts?',
+                    })}
+                    hint={t('promo.wizard.couponsHint', {
+                      defaultValue: 'Other coupon discounts and promo codes.',
+                    })}
+                    value={draft.stacking.combineWithOtherCoupons}
+                    onChange={(v) =>
+                      set('stacking', { ...draft.stacking, combineWithOtherCoupons: v })
+                    }
+                    yes={yes}
+                    no={no}
+                  />
+                </div>
+                {draft.offer.type === 'FIXED' && (
+                  <div className={GROUP}>
+                    <YesNo
+                      className="sm:col-span-3"
+                      label={t('promo.field.offer_partialRedemption_enabled', {
+                        defaultValue: 'Allow partial redemption?',
+                      })}
+                      hint={t('promo.wizard.partialHint', {
+                        defaultValue:
+                          'Fixed-amount coupons only. A ledger keeps the remaining balance per customer.',
+                      })}
+                      value={partial.enabled}
+                      onChange={(v) => setPartial({ enabled: v })}
+                      yes={yes}
+                      no={no}
+                    />
+                    {partial.enabled && (
+                      <>
+                        <FormField
+                          label={t('promo.field.offer_partialRedemption_maxPerOrderSar', {
+                            defaultValue: 'Maximum per order (optional)',
+                          })}
+                          hint="SAR"
+                        >
+                          <Input
+                            type="number"
+                            min={1}
+                            value={partial.maxPerOrderSar ?? ''}
+                            onChange={(e) => setPartial({ maxPerOrderSar: num(e.target.value) })}
+                          />
+                        </FormField>
+                        <FormField
+                          label={t('promo.field.offer_partialRedemption_balanceExpiry', {
+                            defaultValue: 'Remaining balance expiry',
+                          })}
+                        >
+                          <Select
+                            value={partial.balanceExpiry}
+                            onChange={(e) =>
+                              setPartial({
+                                balanceExpiry: e.target.value as typeof partial.balanceExpiry,
+                              })
+                            }
+                          >
+                            <option value="SAME">
+                              {t('promo.wizard.balanceSame', {
+                                defaultValue: 'Same as the coupon',
+                              })}
+                            </option>
+                            <option value="DAYS_30">
+                              {t('promo.wizard.balance30', { defaultValue: '30 days' })}
+                            </option>
+                            <option value="DAYS_90">
+                              {t('promo.wizard.balance90', { defaultValue: '90 days' })}
+                            </option>
+                          </Select>
+                        </FormField>
+                        <FormField
+                          label={t('promo.field.offer_partialRedemption_onOrderCancel', {
+                            defaultValue: 'If an order is cancelled or refunded',
+                          })}
+                          hint={t('promo.wizard.restoreHint', {
+                            defaultValue:
+                              'Each redemption can be restored once; a second cancellation gives no credit.',
+                          })}
+                        >
+                          <Select
+                            value={partial.onOrderCancel}
+                            onChange={(e) =>
+                              setPartial({
+                                onOrderCancel: e.target.value as typeof partial.onOrderCancel,
+                              })
+                            }
+                          >
+                            <option value="RESTORE">
+                              {t('promo.wizard.restore', { defaultValue: 'Restore the balance' })}
+                            </option>
+                            <option value="KEEP">
+                              {t('promo.wizard.keep', { defaultValue: 'Keep it used' })}
+                            </option>
+                          </Select>
+                        </FormField>
+                      </>
+                    )}
+                  </div>
+                )}
+                <FormField
+                  label={t('promo.field.rules_binRanges', {
+                    defaultValue: 'Bank card ranges (partner offers, optional)',
+                  })}
+                  hint={t('promo.wizard.binHint', {
+                    defaultValue:
+                      'The card’s first 6–8 digits, or a range such as 400000-499999. One per line.',
+                  })}
+                  className="sm:col-span-2"
+                >
+                  <Textarea
+                    rows={2}
+                    dir="ltr"
+                    value={draft.rules.binRanges.join('\n')}
+                    onChange={(e) =>
+                      set('rules', {
+                        ...draft.rules,
+                        binRanges: e.target.value.split(/[\s,]+/).filter(Boolean),
+                      })
+                    }
+                  />
+                </FormField>
+                <div className={cn(GROUP, 'sm:grid-cols-1')}>
+                  <Check
+                    checked={draft.fraud.onePerPhoneAndDevice}
+                    onChange={(v) => set('fraud', { ...draft.fraud, onePerPhoneAndDevice: v })}
+                    label={t('promo.field.fraud_onePerPhoneAndDevice', {
+                      defaultValue: 'One use per phone number and device, even across accounts',
+                    })}
+                    hint={t('promo.wizard.onePerPhoneHint', {
+                      defaultValue: 'Mandatory for first-order and new-customer coupons.',
+                    })}
+                  />
+                  <Check
+                    checked={draft.fraud.excludeStaffAndTestAccounts}
+                    onChange={(v) =>
+                      set('fraud', { ...draft.fraud, excludeStaffAndTestAccounts: v })
+                    }
+                    label={t('promo.field.fraud_excludeStaffAndTestAccounts', {
+                      defaultValue: 'Exclude staff and test accounts',
+                    })}
+                  />
+                  <Check
+                    checked={draft.fraud.blockFlaggedCustomers}
+                    onChange={(v) => set('fraud', { ...draft.fraud, blockFlaggedCustomers: v })}
+                    label={t('promo.field.fraud_blockFlaggedCustomers', {
+                      defaultValue: 'Block customers flagged for coupon abuse',
+                    })}
+                  />
                 </div>
               </div>
             )}
             {step === 5 && (
               <div className="grid gap-3 sm:grid-cols-2">
-                <FormField label={t('promo.wizard.startDate', { defaultValue: 'Start date *' })}>
-                  <Input
-                    type="date"
-                    value={draft.validity.startDate}
-                    onChange={(e) =>
-                      set('validity', { ...draft.validity, startDate: e.target.value })
-                    }
-                  />
-                </FormField>
-                <FormField label={t('promo.wizard.endDate', { defaultValue: 'End date *' })}>
-                  <Input
-                    type="date"
-                    value={draft.validity.endDate}
-                    onChange={(e) =>
-                      set('validity', { ...draft.validity, endDate: e.target.value })
-                    }
-                  />
-                </FormField>
                 <FormField
-                  label={t('promo.wizard.startTime', { defaultValue: 'From time (optional)' })}
+                  label={req(
+                    t('promo.field.schedule_startDate', { defaultValue: 'Campaign start date' }),
+                  )}
                 >
                   <Input
-                    type="time"
-                    value={draft.validity.startTime ?? ''}
-                    onChange={(e) =>
-                      set('validity', { ...draft.validity, startTime: e.target.value || undefined })
-                    }
+                    type="date"
+                    value={draft.schedule.startDate}
+                    onChange={(e) => setSchedule({ startDate: e.target.value })}
                   />
                 </FormField>
                 <FormField
-                  label={t('promo.wizard.endTime', { defaultValue: 'To time (optional)' })}
+                  label={req(
+                    t('promo.field.schedule_endDate', { defaultValue: 'Campaign end date' }),
+                  )}
                 >
                   <Input
-                    type="time"
-                    value={draft.validity.endTime ?? ''}
-                    onChange={(e) =>
-                      set('validity', { ...draft.validity, endTime: e.target.value || undefined })
-                    }
+                    type="date"
+                    value={draft.schedule.endDate}
+                    onChange={(e) => setSchedule({ endDate: e.target.value })}
                   />
                 </FormField>
-                <FormField
-                  label={t('promo.wizard.days', { defaultValue: 'Days of the week' })}
+                <Check
                   className="sm:col-span-2"
-                >
-                  <div className="flex flex-wrap gap-1.5">
-                    {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
-                      <Toggle
-                        key={d}
-                        on={draft.validity.daysOfWeek.includes(i)}
-                        label={d}
-                        onClick={() =>
-                          set('validity', {
-                            ...draft.validity,
-                            daysOfWeek: draft.validity.daysOfWeek.includes(i)
-                              ? draft.validity.daysOfWeek.filter((x) => x !== i)
-                              : [...draft.validity.daysOfWeek, i].sort(),
+                  checked={draft.schedule.allDay}
+                  onChange={(v) =>
+                    setSchedule({ allDay: v, timeWindow: v ? {} : draft.schedule.timeWindow })
+                  }
+                  label={t('promo.field.schedule_allDay', { defaultValue: 'Valid all day' })}
+                />
+                {!draft.schedule.allDay && (
+                  <>
+                    <FormField
+                      label={t('promo.field.schedule_timeWindow_from', {
+                        defaultValue: 'Start time',
+                      })}
+                    >
+                      <Input
+                        type="time"
+                        value={draft.schedule.timeWindow.from ?? ''}
+                        onChange={(e) =>
+                          setSchedule({
+                            timeWindow: {
+                              ...draft.schedule.timeWindow,
+                              from: e.target.value || undefined,
+                            },
                           })
                         }
                       />
-                    ))}
-                  </div>
+                    </FormField>
+                    <FormField
+                      label={t('promo.field.schedule_timeWindow_to', { defaultValue: 'End time' })}
+                    >
+                      <Input
+                        type="time"
+                        value={draft.schedule.timeWindow.to ?? ''}
+                        onChange={(e) =>
+                          setSchedule({
+                            timeWindow: {
+                              ...draft.schedule.timeWindow,
+                              to: e.target.value || undefined,
+                            },
+                          })
+                        }
+                      />
+                    </FormField>
+                  </>
+                )}
+                <Check
+                  className="sm:col-span-2"
+                  checked={draft.schedule.onlyDuringBranchHours}
+                  onChange={(v) => setSchedule({ onlyDuringBranchHours: v })}
+                  label={t('promo.field.schedule_onlyDuringBranchHours', {
+                    defaultValue: 'Only during each branch’s opening hours',
+                  })}
+                />
+                <FormField
+                  label={req(
+                    t('promo.field.schedule_daysOfWeek', { defaultValue: 'Days of the week' }),
+                  )}
+                  className="sm:col-span-2"
+                >
+                  <Multi
+                    values={draft.schedule.daysOfWeek}
+                    options={dayNames.map((d, i) => [i, d] as const)}
+                    onChange={(v) => setSchedule({ daysOfWeek: [...v].sort((a, b) => a - b) })}
+                  />
                 </FormField>
+                <FormField
+                  label={req(
+                    t('promo.field.schedule_expiresAfterIssueDays', {
+                      defaultValue: 'Coupon expires after it is issued',
+                    }),
+                  )}
+                  hint={t('promo.wizard.expiresHint', {
+                    defaultValue: 'Days (1–365); never later than the campaign end date.',
+                  })}
+                >
+                  <Input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={draft.schedule.expiresAfterIssueDays ?? ''}
+                    onChange={(e) =>
+                      setSchedule({ expiresAfterIssueDays: num(e.target.value) as number })
+                    }
+                  />
+                </FormField>
+                <div className={cn(GROUP, 'sm:grid-cols-2')}>
+                  <Check
+                    className="sm:col-span-2"
+                    checked={draft.schedule.limitedTime.enabled}
+                    onChange={(v) =>
+                      setSchedule({ limitedTime: { ...draft.schedule.limitedTime, enabled: v } })
+                    }
+                    label={t('promo.field.schedule_limitedTime_enabled', {
+                      defaultValue: 'Limited-time redemption (flash offer)',
+                    })}
+                  />
+                  {draft.schedule.limitedTime.enabled && (
+                    <FormField
+                      label={req(
+                        t('promo.field.schedule_limitedTime_hours', {
+                          defaultValue: 'Must be used within',
+                        }),
+                      )}
+                      hint={t('promo.wizard.hoursHint', {
+                        defaultValue: 'Hours after it is issued (1–168).',
+                      })}
+                    >
+                      <Input
+                        type="number"
+                        min={1}
+                        max={168}
+                        value={draft.schedule.limitedTime.hours ?? ''}
+                        onChange={(e) =>
+                          setSchedule({
+                            limitedTime: { enabled: true, hours: num(e.target.value) },
+                          })
+                        }
+                      />
+                    </FormField>
+                  )}
+                </div>
               </div>
             )}
             {step === 6 && (
-              <FormField
-                label={t('promo.wizard.channels', { defaultValue: 'Channels *' })}
-                hint={t('promo.wizard.channelsHint', {
-                  defaultValue:
-                    'The wallet and push are free; SMS and WhatsApp cost per message and are counted in the business case.',
-                })}
-              >
-                <div className="flex flex-wrap gap-1.5">
-                  {CHANNELS.map((c) => (
-                    <Toggle
-                      key={c}
-                      on={draft.distribution.channels.includes(c)}
-                      label={c.replace(/_/g, ' ').toLowerCase()}
-                      onClick={() =>
-                        set('distribution', {
-                          ...draft.distribution,
-                          channels: draft.distribution.channels.includes(c)
-                            ? draft.distribution.channels.filter((x) => x !== c)
-                            : [...draft.distribution.channels, c],
-                        })
-                      }
-                    />
-                  ))}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField
+                  label={req(t('promo.field.distribution_channels', { defaultValue: 'Channels' }))}
+                  hint={t('promo.wizard.channelsHint', {
+                    defaultValue:
+                      'The wallet and push are free; SMS and WhatsApp cost per message and are counted in the business case.',
+                  })}
+                  className="sm:col-span-2"
+                >
+                  <Multi
+                    cards
+                    values={draft.distribution.channels}
+                    options={CHANNELS.map((c) => [c, c.replace(/_/g, ' ').toLowerCase()] as const)}
+                    onChange={(v) => set('distribution', { ...draft.distribution, channels: v })}
+                  />
+                </FormField>
+                <FormField
+                  label={t('promo.field.distribution_addMode', {
+                    defaultValue: 'How is the coupon added to the customer?',
+                  })}
+                  className="sm:col-span-2"
+                >
+                  <Choice
+                    cards
+                    value={draft.distribution.addMode}
+                    options={[
+                      [
+                        'AUTO_WALLET',
+                        t('promo.wizard.addAuto', {
+                          defaultValue: 'Added to the wallet automatically',
+                        }),
+                      ],
+                      [
+                        'CUSTOMER_CLAIMS',
+                        t('promo.wizard.addClaim', { defaultValue: 'The customer claims it' }),
+                      ],
+                    ]}
+                    onChange={(v) => set('distribution', { ...draft.distribution, addMode: v })}
+                  />
+                </FormField>
+                <FormField
+                  label={t('promo.field.distribution_issueMode', {
+                    defaultValue: 'How is the coupon issued?',
+                  })}
+                  className="sm:col-span-2"
+                >
+                  <Choice
+                    value={draft.distribution.issueMode}
+                    options={[
+                      [
+                        'ALL_AT_ONCE',
+                        t('promo.wizard.issueAll', { defaultValue: 'To everyone at once' }),
+                      ],
+                      [
+                        'WHEN_ELIGIBLE',
+                        t('promo.wizard.issueEligible', {
+                          defaultValue: 'To each customer when they qualify',
+                        }),
+                      ],
+                    ]}
+                    onChange={(v) => set('distribution', { ...draft.distribution, issueMode: v })}
+                  />
+                </FormField>
+                {draft.distribution.channels.includes('PUSH') && (
+                  <>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_push_title_en', {
+                          defaultValue: 'Notification title (English)',
+                        }),
+                      )}
+                    >
+                      <Input
+                        value={comm.push.title.en}
+                        maxLength={65}
+                        onChange={(e) =>
+                          setComm({
+                            push: {
+                              ...comm.push,
+                              title: { ...comm.push.title, en: e.target.value },
+                            },
+                          })
+                        }
+                      />
+                    </FormField>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_push_title_ar', {
+                          defaultValue: 'Notification title (Arabic)',
+                        }),
+                      )}
+                    >
+                      <Input
+                        dir="rtl"
+                        value={comm.push.title.ar}
+                        maxLength={65}
+                        onChange={(e) =>
+                          setComm({
+                            push: {
+                              ...comm.push,
+                              title: { ...comm.push.title, ar: e.target.value },
+                            },
+                          })
+                        }
+                      />
+                    </FormField>
+                  </>
+                )}
+                <FormField
+                  label={t('promo.field.communication_sendTime', { defaultValue: 'Send' })}
+                >
+                  <Select
+                    value={comm.sendTime}
+                    onChange={(e) => setComm({ sendTime: e.target.value as typeof comm.sendTime })}
+                  >
+                    <option value="ON_ISSUE">
+                      {t('promo.wizard.sendOnIssue', { defaultValue: 'When the coupon is issued' })}
+                    </option>
+                    <option value="ON_START_DATE">
+                      {t('promo.wizard.sendOnStart', {
+                        defaultValue: 'On the campaign start date',
+                      })}
+                    </option>
+                    <option value="BEST_TIME">
+                      {t('promo.wizard.sendBestTime', {
+                        defaultValue: 'At each customer’s best time',
+                      })}
+                    </option>
+                  </Select>
+                </FormField>
+                {draft.distribution.channels.includes('PUSH') && (
+                  <>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_push_body_en', {
+                          defaultValue: 'Message (English)',
+                        }),
+                      )}
+                      className="sm:col-span-2"
+                    >
+                      <Textarea
+                        rows={2}
+                        maxLength={240}
+                        value={comm.push.body.en}
+                        onChange={(e) =>
+                          setComm({
+                            push: { ...comm.push, body: { ...comm.push.body, en: e.target.value } },
+                          })
+                        }
+                      />
+                    </FormField>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_push_body_ar', {
+                          defaultValue: 'Message (Arabic)',
+                        }),
+                      )}
+                      className="sm:col-span-2"
+                    >
+                      <Textarea
+                        rows={2}
+                        dir="rtl"
+                        maxLength={240}
+                        value={comm.push.body.ar}
+                        onChange={(e) =>
+                          setComm({
+                            push: { ...comm.push, body: { ...comm.push.body, ar: e.target.value } },
+                          })
+                        }
+                      />
+                    </FormField>
+                  </>
+                )}
+                {draft.distribution.channels.includes('IN_APP_BANNER') && (
+                  <>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_banner_text_en', {
+                          defaultValue: 'Banner headline (English)',
+                        }),
+                      )}
+                    >
+                      <Input
+                        value={comm.banner.text.en}
+                        maxLength={80}
+                        onChange={(e) =>
+                          setComm({ banner: { text: { ...comm.banner.text, en: e.target.value } } })
+                        }
+                      />
+                    </FormField>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_banner_text_ar', {
+                          defaultValue: 'Banner headline (Arabic)',
+                        }),
+                      )}
+                    >
+                      <Input
+                        dir="rtl"
+                        value={comm.banner.text.ar}
+                        maxLength={80}
+                        onChange={(e) =>
+                          setComm({ banner: { text: { ...comm.banner.text, ar: e.target.value } } })
+                        }
+                      />
+                    </FormField>
+                  </>
+                )}
+                {draft.distribution.channels.includes('SMS') && (
+                  <>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_sms_text_en', {
+                          defaultValue: 'SMS text (English)',
+                        }),
+                      )}
+                      className="sm:col-span-2"
+                    >
+                      <Textarea
+                        rows={2}
+                        maxLength={320}
+                        value={comm.sms.text.en}
+                        onChange={(e) =>
+                          setComm({ sms: { text: { ...comm.sms.text, en: e.target.value } } })
+                        }
+                      />
+                    </FormField>
+                    <FormField
+                      label={req(
+                        t('promo.field.communication_sms_text_ar', {
+                          defaultValue: 'SMS text (Arabic)',
+                        }),
+                      )}
+                      className="sm:col-span-2"
+                    >
+                      <Textarea
+                        rows={2}
+                        dir="rtl"
+                        maxLength={320}
+                        value={comm.sms.text.ar}
+                        onChange={(e) =>
+                          setComm({ sms: { text: { ...comm.sms.text, ar: e.target.value } } })
+                        }
+                      />
+                    </FormField>
+                  </>
+                )}
+                <FormField
+                  label={t('promo.field.communication_frequencyCap', {
+                    defaultValue: 'Maximum promotional messages per customer',
+                  })}
+                  hint={t('promo.wizard.capHint', {
+                    defaultValue:
+                      'Shared limit across campaigns; enforced by the notification service.',
+                  })}
+                >
+                  <Select
+                    value={comm.frequencyCap}
+                    onChange={(e) =>
+                      setComm({ frequencyCap: e.target.value as typeof comm.frequencyCap })
+                    }
+                  >
+                    <option value="ONE_PER_DAY">
+                      {t('promo.wizard.capDay', { defaultValue: '1 per day' })}
+                    </option>
+                    <option value="THREE_PER_WEEK">
+                      {t('promo.wizard.capThreeWeek', { defaultValue: '3 per week' })}
+                    </option>
+                    <option value="ONE_PER_WEEK">
+                      {t('promo.wizard.capWeek', { defaultValue: '1 per week' })}
+                    </option>
+                    <option value="NO_LIMIT">
+                      {t('promo.wizard.capNone', { defaultValue: 'No limit' })}
+                    </option>
+                  </Select>
+                </FormField>
+                <div className={cn(GROUP, 'sm:grid-cols-1')}>
+                  <Check
+                    checked={comm.quietHours}
+                    onChange={(v) => setComm({ quietHours: v })}
+                    label={t('promo.field.communication_quietHours', {
+                      defaultValue: 'No messages between 23:00 and 09:00',
+                    })}
+                  />
+                  <Check
+                    checked={comm.respectConsent}
+                    onChange={(v) => setComm({ respectConsent: v })}
+                    label={t('promo.field.communication_respectConsent', {
+                      defaultValue: 'Only message customers who agreed to marketing messages',
+                    })}
+                    hint={t('promo.wizard.consentHint', {
+                      defaultValue:
+                        'Must stay on for SMS and email (PDPL); customers can opt out at any time.',
+                    })}
+                  />
                 </div>
-              </FormField>
+              </div>
             )}
             {step === 7 && (
               <div className="grid gap-4">
                 <Preview draft={draft} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <FormField
+                    label={t('promo.field.forecast_baselineOrderRatePct', {
+                      defaultValue: 'Customers who would order anyway',
+                    })}
+                    hint={t('promo.wizard.baselineHint', {
+                      defaultValue:
+                        '% of the audience. Planning input; empty = estimated from the audience.',
+                    })}
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={draft.forecast.baselineOrderRatePct ?? ''}
+                      onChange={(e) =>
+                        set('forecast', {
+                          ...draft.forecast,
+                          baselineOrderRatePct: num(e.target.value),
+                        })
+                      }
+                    />
+                  </FormField>
+                  <FormField
+                    label={t('promo.field.forecast_expectedUpliftPts', {
+                      defaultValue: 'Extra customers the coupon brings',
+                    })}
+                    hint={t('promo.wizard.upliftHint', {
+                      defaultValue:
+                        'Percentage points. Planning input; empty = estimated from the objective.',
+                    })}
+                  >
+                    <Input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={draft.forecast.expectedUpliftPts ?? ''}
+                      onChange={(e) =>
+                        set('forecast', {
+                          ...draft.forecast,
+                          expectedUpliftPts: num(e.target.value),
+                        })
+                      }
+                    />
+                  </FormField>
+                </div>
                 <KeyValue
                   rows={[
                     [
@@ -1479,22 +2406,19 @@ export function CampaignWizardPage() {
                         : draft.audience.mode,
                     ],
                     [
-                      t('promo.wizard.minOrder', { defaultValue: 'Minimum order (SAR) *' }).replace(
-                        ' *',
-                        '',
-                      ),
+                      t('promo.field.rules_minOrderSar', { defaultValue: 'Minimum order' }),
                       sar(draft.rules.minOrderSar),
                     ],
                     [
                       t('promo.wizard.validity', { defaultValue: 'Valid' }),
-                      `${draft.validity.startDate} → ${draft.validity.endDate}`,
+                      `${draft.schedule.startDate} → ${draft.schedule.endDate}`,
                     ],
                     [
                       t('promo.wizard.limits', { defaultValue: 'Limits' }),
                       `${int(draft.limits.totalRedemptions)} · ${sar(draft.limits.budgetSar)}`,
                     ],
                     [
-                      t('promo.wizard.channels', { defaultValue: 'Channels *' }).replace(' *', ''),
+                      t('promo.field.distribution_channels', { defaultValue: 'Channels' }),
                       draft.distribution.channels.join(', '),
                     ],
                   ]}
@@ -1645,11 +2569,250 @@ function Toggle({ on, label, onClick }: { on: boolean; label: string; onClick: (
   );
 }
 
+/** One of a few (the design's "radio" and "cards"): pills, or larger cards. */
+function Choice<V extends string>({
+  value,
+  options,
+  onChange,
+  cards,
+}: {
+  value: V | '';
+  options: ReadonlyArray<readonly [V, string]>;
+  onChange: (v: V) => void;
+  cards?: boolean;
+}) {
+  return (
+    <div role="radiogroup" className={cn('flex flex-wrap gap-1.5', cards && 'grid sm:grid-cols-3')}>
+      {options.map(([v, label]) => (
+        <button
+          key={v}
+          type="button"
+          role="radio"
+          aria-checked={value === v}
+          onClick={() => onChange(v)}
+          className={cn(
+            'ring-1 ring-inset',
+            cards
+              ? 'rounded-xl px-3 py-2 text-start text-xs font-semibold'
+              : 'rounded-full px-3 py-1 text-xs font-semibold',
+            value === v
+              ? cards
+                ? 'bg-primary-tint text-foreground ring-primary/40'
+                : 'bg-ink text-ink-foreground ring-transparent'
+              : 'bg-card text-foreground/80 ring-foreground/[0.08] hover:bg-secondary',
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** Any of a set (the design's "multi" and "multicards"). */
+function Multi<V extends string | number>({
+  values,
+  options,
+  onChange,
+  cards,
+  empty,
+}: {
+  values: readonly V[];
+  options: ReadonlyArray<readonly [V, string]>;
+  onChange: (v: V[]) => void;
+  cards?: boolean;
+  empty?: string;
+}) {
+  if (!options.length && empty) return <p className="text-2xs text-muted-foreground">{empty}</p>;
+  return (
+    <div className={cn('flex flex-wrap gap-1.5', cards && 'grid sm:grid-cols-3')}>
+      {options.map(([v, label]) => (
+        <Toggle
+          key={String(v)}
+          on={values.includes(v)}
+          label={label}
+          onClick={() =>
+            onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v])
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+/** A switch with its label (the design's "bool"). */
+function Check({
+  checked,
+  onChange,
+  label,
+  hint,
+  className,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  hint?: string;
+  className?: string;
+}) {
+  return (
+    <label className={cn('flex items-start gap-2 text-sm', className)}>
+      <input
+        type="checkbox"
+        className="mt-1"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>
+        {label}
+        {hint && <span className="block text-2xs text-muted-foreground">{hint}</span>}
+      </span>
+    </label>
+  );
+}
+
+/** A question answered Yes or No (the design's "yesno"). */
+function YesNo({
+  label,
+  hint,
+  value,
+  onChange,
+  yes,
+  no,
+  className,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (v: boolean) => void;
+  yes: string;
+  no: string;
+  className?: string;
+}) {
+  return (
+    <FormField label={label} hint={hint} className={className}>
+      <Choice
+        value={value ? 'yes' : 'no'}
+        options={[
+          ['yes', yes],
+          ['no', no],
+        ]}
+        onChange={(v) => onChange(v === 'yes')}
+      />
+    </FormField>
+  );
+}
+
+/** One menu item (the design's "itemselect"); a product id box when the menu is not known. */
+function ItemSelect({
+  products,
+  value,
+  onChange,
+  placeholder,
+}: {
+  products: readonly EngineProduct[];
+  value: string;
+  onChange: (id: string) => void;
+  placeholder: string;
+}) {
+  if (!products.length)
+    return (
+      <Input
+        dir="ltr"
+        value={value}
+        maxLength={64}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value.trim())}
+      />
+    );
+  return (
+    <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">—</option>
+      {products.map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.name} · SAR {p.priceSar}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+/** Several menu items (the design's "itempicker"): the chosen ones, and one more to add. */
+function ItemPicker({
+  products,
+  values,
+  onChange,
+  placeholder,
+  removeLabel,
+}: {
+  products: readonly EngineProduct[];
+  values: readonly string[];
+  onChange: (ids: string[]) => void;
+  placeholder: string;
+  removeLabel: string;
+}) {
+  const [typed, setTyped] = useState('');
+  const name = (id: string) => products.find((p) => p.id === id)?.name ?? id;
+  const add = (id: string) => {
+    const v = id.trim();
+    if (v && !values.includes(v)) onChange([...values, v]);
+  };
+  return (
+    <div className="space-y-2">
+      {values.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {values.map((id) => (
+            <button
+              key={id}
+              type="button"
+              title={removeLabel}
+              aria-label={`${removeLabel} ${name(id)}`}
+              onClick={() => onChange(values.filter((x) => x !== id))}
+              className="rounded-full bg-ink px-3 py-1 text-xs font-semibold text-ink-foreground"
+            >
+              {name(id)} ×
+            </button>
+          ))}
+        </div>
+      )}
+      {products.length ? (
+        <Select value="" onChange={(e) => add(e.target.value)}>
+          <option value="">+</option>
+          {products
+            .filter((p) => !values.includes(p.id))
+            .map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} · SAR {p.priceSar}
+              </option>
+            ))}
+        </Select>
+      ) : (
+        <Input
+          dir="ltr"
+          value={typed}
+          placeholder={placeholder}
+          onChange={(e) => setTyped(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              add(typed);
+              setTyped('');
+            }
+          }}
+          onBlur={() => {
+            add(typed);
+            setTyped('');
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 /** What the customer sees in the app's wallet. */
 export function Preview({
   draft,
 }: {
-  draft: Pick<Draft, 'name' | 'offer' | 'rules' | 'validity'>;
+  draft: Pick<Draft, 'name' | 'offer' | 'rules' | 'schedule'>;
 }) {
   return (
     <div className="mx-auto w-full max-w-xs rounded-2xl bg-ink p-4 text-ink-foreground shadow-float">
@@ -1660,58 +2823,93 @@ export function Preview({
         {draft.name.ar || '…'}
       </div>
       <div className="mt-3 text-2xs opacity-70">
-        min. SAR {draft.rules.minOrderSar} · valid to {draft.validity.endDate}
+        min. SAR {draft.rules.minOrderSar} · valid to {draft.schedule.endDate}
       </div>
     </div>
   );
 }
 
-function stepProblems(d: Draft, t: (k: string, o: { defaultValue: string }) => string): string[][] {
+/* ── the problems on each step: the schema's own rules ─────────────────── */
+
+/** Which step a top-level section of the draft is filled in on. */
+const SECTION_STEP: Record<string, number> = {
+  objective: 1,
+  name: 1,
+  reasonCode: 1,
+  funding: 1,
+  tenantId: 1,
+  notes: 1,
+  offer: 2,
+  experiment: 2,
+  trigger: 2,
+  loyalty: 2,
+  audience: 3,
+  rules: 4,
+  scope: 4,
+  limits: 4,
+  stacking: 4,
+  fraud: 4,
+  schedule: 5,
+  distribution: 6,
+  communication: 6,
+  forecast: 7,
+};
+const SPEC_PATHS = CAMPAIGN_FIELD_SPEC.map((f) => ({
+  f,
+  p: f.path.replace(/^campaign\./, '').replace(/\[\]/g, ''),
+}));
+
+/** The design's field an issue path (`audience.phoneNumbers.0`) belongs to. */
+export function fieldForIssue(path: string) {
+  let best: (typeof SPEC_PATHS)[number] | undefined;
+  for (const x of SPEC_PATHS)
+    if ((path === x.p || path.startsWith(`${x.p}.`)) && (!best || x.p.length > best.p.length))
+      best = x;
+  return best?.f;
+}
+
+type TFn = (k: string, o: { defaultValue: string; [k: string]: unknown }) => string;
+
+/**
+ * Every rule the engine will refuse the draft on, worded for the step it is
+ * on. The field types and ranges (CampaignDraftShape) and the cross-field
+ * rules (campaignDraftIssues) are both checked, so a problem shows on its
+ * step before the engine ever sees the draft.
+ */
+export function stepProblems(
+  d: Draft,
+  products: ReadonlyArray<{ id: string; priceSar: number }>,
+  t: TFn,
+): string[][] {
   const p: string[][] = [[], [], [], [], [], [], []];
-  if (!d.name.en.trim() || !d.name.ar.trim())
-    p[0]!.push(t('promo.wizard.pName', { defaultValue: 'Both campaign names are required.' }));
-  if (d.objective === 'SERVICE_RECOVERY' && !d.reasonCode)
-    p[0]!.push(t('promo.wizard.pReason', { defaultValue: 'A compensation reason is required.' }));
-  if (
-    (d.offer.type === 'PERCENT' || d.offer.type === 'CASHBACK') &&
-    (!(d.offer.percent! > 0) || !(d.offer.maxDiscountSar! > 0))
-  )
-    p[1]!.push(
-      t('promo.wizard.pPercent', {
-        defaultValue: 'A percentage needs its percent and a maximum discount.',
-      }),
+  const seen = new Set<string>();
+  const push = (path: string, text: string) => {
+    if (seen.has(path)) return;
+    seen.add(path);
+    const f = fieldForIssue(path);
+    const step = f?.step ?? SECTION_STEP[path.split('.')[0]!] ?? 7;
+    const label = f
+      ? t(`promo.field.${f.key}`, { defaultValue: f.label })
+      : path === 'audience.listId'
+        ? t('promo.wizard.listId', { defaultValue: 'Saved list' })
+        : path;
+    p[step - 1]!.push(`${label}: ${text}`);
+  };
+  const shape = CampaignDraftShape.safeParse(d);
+  if (!shape.success)
+    for (const i of shape.error.issues)
+      push(i.path.join('.'), t('promo.rule.invalid', { defaultValue: 'Check this value.' }));
+  let issues: ReturnType<typeof campaignDraftIssues> = [];
+  try {
+    issues = campaignDraftIssues(shape.success ? shape.data : readCampaignDraft(d));
+  } catch {
+    /* a section too broken to judge: the shape problems above already name it */
+  }
+  for (const i of issues) push(i.path, t(`promo.rule.${i.rule}`, { defaultValue: i.message }));
+  if (bundlePriceProblem(d.offer, products))
+    push(
+      'offer.bundle.priceSar',
+      t('promo.rule.bundleBelowTotal', { defaultValue: 'Must be below the items’ normal total.' }),
     );
-  if (d.offer.type === 'FIXED' && !(d.offer.amountSar! > 0))
-    p[1]!.push(t('promo.wizard.pAmount', { defaultValue: 'A fixed discount needs an amount.' }));
-  if (d.offer.type === 'FREE_ITEM' && !d.offer.freeItem?.productId)
-    p[1]!.push(t('promo.wizard.pFreeItem', { defaultValue: 'Pick the free item.' }));
-  if (d.audience.mode === 'SEGMENT' && d.audience.conditions.length === 0)
-    p[2]!.push(
-      t('promo.wizard.pConditions', {
-        defaultValue: 'Add at least one condition, or choose Everyone.',
-      }),
-    );
-  if (d.audience.mode === 'PHONES' && d.audience.phoneNumbers.length === 0)
-    p[2]!.push(t('promo.wizard.pPhones', { defaultValue: 'Add the phone numbers.' }));
-  if (d.rules.paymentMethods.length === 0)
-    p[3]!.push(t('promo.wizard.pPayment', { defaultValue: 'Pick at least one payment method.' }));
-  if (d.scope.orderTypes.length === 0)
-    p[3]!.push(t('promo.wizard.pOrderTypes', { defaultValue: 'Pick at least one order type.' }));
-  if (!(d.limits.totalRedemptions > 0) || !(d.limits.budgetSar > 0))
-    p[3]!.push(
-      t('promo.wizard.pLimits', { defaultValue: 'Set the total redemption limit and the budget.' }),
-    );
-  if (d.distribution.codeType === 'SHARED' && !d.distribution.code?.trim())
-    p[3]!.push(t('promo.wizard.pCode', { defaultValue: 'Type the shared code.' }));
-  if (!d.validity.startDate || !d.validity.endDate || d.validity.endDate < d.validity.startDate)
-    p[4]!.push(
-      t('promo.wizard.pDates', {
-        defaultValue: 'The end date must be on or after the start date.',
-      }),
-    );
-  if (d.validity.daysOfWeek.length === 0)
-    p[4]!.push(t('promo.wizard.pDays', { defaultValue: 'Pick at least one day.' }));
-  if (d.distribution.channels.length === 0)
-    p[5]!.push(t('promo.wizard.pChannels', { defaultValue: 'Pick at least one channel.' }));
   return p;
 }

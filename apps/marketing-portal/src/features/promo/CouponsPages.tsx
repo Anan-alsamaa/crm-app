@@ -364,7 +364,7 @@ export function AllCouponsPage() {
                 </div>
               </div>
               <div className="text-xs text-muted-foreground">
-                {dateLabel(c.validity.startDate)} → {dateLabel(c.validity.endDate)}
+                {dateLabel(c.schedule.startDate)} → {dateLabel(c.schedule.endDate)}
               </div>
               <div className="text-xs text-muted-foreground">
                 {t('promo.coupons.by', { defaultValue: 'by {{who}}', who: c.createdBy })}

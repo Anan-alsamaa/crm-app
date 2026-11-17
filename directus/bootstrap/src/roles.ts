@@ -23,6 +23,8 @@ export interface PermissionSpec {
   /** Directus filter rule (JSON). Empty object = unrestricted. */
   fields?: string[]; // defaults to all (['*'])
   permissions?: Record<string, unknown>; // row filter
+  /** What a create/update payload must satisfy (Directus field validation). */
+  validation?: Record<string, unknown>;
 }
 
 export interface RoleSpec {
@@ -72,6 +74,14 @@ const appendOnly = (collection: string): PermissionSpec[] => [
  * service that starts reading an integration field must be granted it here in
  * the same change.
  */
+/** The Marketing engine's own collections (owner, 2026-11-16), written only by svc-ai-gateway. */
+export const MARKETING_ENGINE_COLLECTIONS = [
+  'marketing_campaigns',
+  'marketing_studies',
+  'marketing_gift_card_products',
+  'marketing_earning_rules',
+] as const;
+
 export const VENDOR_PUBLIC_FIELDS = ['id', 'name', 'logo', 'colors', 'status', 'yiji_vendor_id'];
 /** Read on `vendors` limited to the display fields, plus `extra` for a service that needs them. */
 const vendorsRead = (extra: string[] = []): PermissionSpec[] => [
@@ -962,7 +972,8 @@ export const roles: RoleSpec[] = [
   },
   {
     name: 'svc-ai-gateway',
-    description: 'Service account: AI gateway. READ-ONLY.',
+    description:
+      "Service account: AI gateway. Read-only, except its own logs and the Marketing portal's engine collections.",
     appAccess: false,
     adminAccess: false,
     serviceTokenEnv: 'SVC_AI_TOKEN',
@@ -1002,6 +1013,51 @@ export const roles: RoleSpec[] = [
        * query (a missing grant degrades only the settings to env, logged).
        */
       ...vendorsRead(VENDOR_CONNECTOR_SETTINGS_FIELDS),
+      /*
+       * THE MARKETING ENGINE (owner, 2026-11-16): the CRM owns its marketing
+       * backend and the gateway serves it. The gateway decides WHO may do
+       * WHAT from the caller's own session and privileges (manage_marketing
+       * prepares, approve_marketing decides, the Administrator both; four
+       * eyes, the live-campaign locks and the approval threshold are
+       * enforced there) and then writes with this account - so the people
+       * who use the portal get READ on these collections, never write, and
+       * the rules cannot be stepped around from the Directus app.
+       *
+       * No delete anywhere: a campaign, a study, a product or a rule keeps
+       * its history. The activity log stays append-only.
+       */
+      ...MARKETING_ENGINE_COLLECTIONS.flatMap((collection) =>
+        (['create', 'read', 'update'] as const).map((action) => ({ collection, action })),
+      ),
+      ...appendOnly('marketing_activity'),
+      /* Issuance hands a campaign's coupon to the EXISTING sender: a list
+         coupon and its queued recipients. The sender (svc-workers) creates it
+         on Yiji and records the outcome; the gateway never touches Yiji. */
+      /* Review 2026-11-16: only an engine batch - pending, linked to a
+         campaign - can be created, and only such a batch can be released or
+         cancelled. A coupon a person wrote stays theirs to approve. */
+      {
+        collection: 'marketing_coupons',
+        action: 'create',
+        validation: { _and: [{ status: { _eq: 'pending' } }, { campaign: { _nnull: true } }] },
+      },
+      { collection: 'marketing_coupons', action: 'read' },
+      {
+        collection: 'marketing_coupons',
+        action: 'update',
+        fields: ['status', 'decided_at', 'decided_by'],
+        permissions: {
+          _and: [{ status: { _eq: 'pending' } }, { campaign: { engine_code: { _nnull: true } } }],
+        },
+        validation: { status: { _in: ['approved', 'cancelled'] } },
+      },
+      { collection: 'marketing_coupon_recipients', action: 'create' },
+      { collection: 'marketing_coupon_recipients', action: 'read' },
+      /* The catalogue's branches, and a Yiji customer id -> the CRM contact's
+         phone when a campaign is issued by customer id. Those columns only. */
+      ...readOnly('brands'),
+      ...readOnly('stores'),
+      { collection: 'contacts', action: 'read', fields: ['id', 'external_customer_id', 'phone'] },
     ],
   },
 ];

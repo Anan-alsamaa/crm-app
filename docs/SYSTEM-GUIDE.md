@@ -91,7 +91,7 @@ AWS account 408568863712, region us-east-2. Staging uses **Yiji's production API
 - **Staff login** by employee ID: `4417` becomes `4417@staff.example.com` behind the scenes.
 - **Per-tab sessions**: a new browser tab starts signed out (two agents can share a PC).
 
-**Services** — static Directus tokens: `SVC_GATEWAY_TOKEN`, `SVC_WORKERS_TOKEN`, `SVC_AI_TOKEN` (ai-gateway is read-only except its `ai_calls` log).
+**Services** — static Directus tokens: `SVC_GATEWAY_TOKEN`, `SVC_WORKERS_TOKEN`, `SVC_AI_TOKEN` (ai-gateway is read-only except its `ai_calls` / `yiji_api_usage` logs and the Marketing engine's collections - see `docs/MARKETING-ENGINE-CONTRACT.md`).
 
 **Customers** — a JWT (HS256, 12 h) signed with **the claimed vendor's own secret** (Yiji: `YIJI_JWT_SECRET`; other vendors: `VENDOR_<KEY>_JWT_SECRET`). A token for vendor B signed with Yiji's secret is rejected.
 
@@ -338,6 +338,15 @@ Headers: `Authorization: Bearer <admin login>`, `tenantid: 1`, `idempotency-key:
 Note: a coupon the customer **used** disappears from their Yiji wallet — that is normal, not a loss.
 
 ---
+
+### E4. Marketing campaigns (the Marketing portal's engine, 2026-11-16)
+
+The portal's live engine is the CRM's own, in the ai-gateway (`/commerce/marketing/engine/*`,
+`services/ai-gateway/src/marketing/crm-engine.ts`), stored in Directus (`marketing_campaigns`,
+`marketing_studies`, `marketing_gift_card_products`, `marketing_earning_rules`). It enforces four
+eyes, the live-campaign locks and the approval threshold, and issues a campaign as a
+`marketing_coupons` list coupon that the workers' marketing sender delivers to Yiji (behind
+`MARKETING_COUPON_SEND`). Rules and the unsupported fields: `docs/MARKETING-ENGINE-CONTRACT.md`.
 
 ## 10. Flow F — late orders
 

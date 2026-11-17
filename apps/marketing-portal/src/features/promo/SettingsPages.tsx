@@ -452,10 +452,14 @@ export function SettingsFieldSpecPage() {
   const { t } = useTranslation();
   const tabs = useTabs();
   const copy = async () => {
+    /* The design's own columns first (docs/marketing/ayman-draft-fields.csv), then ours. */
+    const q = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
     const csv = [
-      'step,field,type,required,default,when',
+      'step,field,api_path,type,required,notes,default,when',
       ...CAMPAIGN_FIELD_SPEC.map((f) =>
-        [f.step, f.path, f.type, f.required, JSON.stringify(f.default), f.when ?? ''].join(','),
+        [f.step, f.label, f.path, f.type, f.required, f.notes, f.default, f.when ?? '']
+          .map(q)
+          .join(','),
       ),
     ].join('\n');
     try {
@@ -484,16 +488,18 @@ export function SettingsFieldSpecPage() {
       <div className={PAGE_BODY}>
         <AreaTabs tabs={tabs} />
         <div className={cn(SECTION_CARD, 'overflow-x-auto')}>
-          <table className="w-full min-w-[56rem] text-xs">
+          <table className="w-full min-w-[72rem] text-xs">
             <thead className="text-muted-foreground">
               <tr>
                 {[
                   t('promo.settings.step', { defaultValue: 'Step' }),
+                  t('promo.settings.fieldLabel', { defaultValue: 'Field' }),
                   t('promo.settings.fieldPath', { defaultValue: 'API path' }),
                   t('promo.settings.type', { defaultValue: 'Type' }),
                   t('promo.settings.required', { defaultValue: 'Required' }),
                   t('promo.settings.default', { defaultValue: 'Default' }),
                   t('promo.settings.when', { defaultValue: 'Shown when' }),
+                  t('promo.settings.notes', { defaultValue: 'Notes' }),
                 ].map((h) => (
                   <th key={h} className="px-3 py-2 text-start">
                     {h}
@@ -505,11 +511,13 @@ export function SettingsFieldSpecPage() {
               {CAMPAIGN_FIELD_SPEC.map((f) => (
                 <tr key={f.path} className="border-t border-foreground/[0.06]">
                   <td className="px-3 py-1.5">{f.step}</td>
+                  <td className="px-3">{t(`promo.field.${f.key}`, { defaultValue: f.label })}</td>
                   <td className="px-3 font-mono text-success">{f.path}</td>
                   <td className="px-3">{f.type}</td>
                   <td className="px-3">{f.required}</td>
                   <td className="px-3 font-mono">{f.default}</td>
                   <td className="px-3 text-muted-foreground">{f.when ?? ''}</td>
+                  <td className="px-3 text-muted-foreground">{f.notes}</td>
                 </tr>
               ))}
             </tbody>

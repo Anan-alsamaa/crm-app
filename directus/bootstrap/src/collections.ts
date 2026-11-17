@@ -20,6 +20,9 @@ import {
   YIJI_USAGE_OUTCOMES,
   YIJI_USAGE_SERVICES,
   COUPON_RAISED_FROM,
+  CAMPAIGN_OBJECTIVES,
+  CAMPAIGN_STATUSES,
+  OFFER_TYPES,
 } from '@yiji/shared-types';
 
 export type FieldType =
@@ -1339,6 +1342,101 @@ export const collections: CollectionSpec[] = [
         defaultValue: 'active',
         index: true,
       },
+      /* THE CRM'S MARKETING ENGINE (owner, 2026-11-16): a row with an
+         engine_code is a promotions campaign (the seven-step form), written
+         only by the AI gateway's service account after the engine's rules.
+         The columns above are kept in step for the Campaigns page; the
+         engine reads only these. */
+      {
+        field: 'engine_code',
+        type: 'string',
+        unique: true,
+        index: true,
+        note: "The engine's campaign id (CMP-YYMM-NNNN). Empty = a plain campaign from the Campaigns page.",
+      },
+      {
+        field: 'engine_status',
+        type: 'string',
+        choices: [...CAMPAIGN_STATUSES],
+        index: true,
+        note: 'draft -> waiting_approval -> approved -> live -> paused -> ended, or rejected.',
+      },
+      { field: 'objective', type: 'string', choices: [...CAMPAIGN_OBJECTIVES], index: true },
+      { field: 'offer_type', type: 'string', choices: [...OFFER_TYPES] },
+      { field: 'name_ar', type: 'string' },
+      { field: 'tenant_id', type: 'string' },
+      { field: 'study_code', type: 'string', index: true, note: 'The pre-study it came from.' },
+      {
+        field: 'prepared_by',
+        type: 'string',
+        index: true,
+        note: 'Directus user id of the person who created it - the one who may never approve it.',
+      },
+      { field: 'prepared_at', type: 'dateTime' },
+      { field: 'engine_updated_at', type: 'dateTime' },
+      {
+        field: 'draft',
+        type: 'json',
+        note: 'The whole validated campaign form (CampaignDraft): every field of the field specification.',
+      },
+      {
+        field: 'approval',
+        type: 'json',
+        note: 'requestedBy / requestedAt / decidedBy / decidedAt / note.',
+      },
+      {
+        field: 'snapshot',
+        type: 'json',
+        note: 'The business case fixed when it was sent for approval; approval reasons recomputed by the engine.',
+      },
+      { field: 'change_log', type: 'json', note: 'Who changed what, when.' },
+    ],
+  },
+  {
+    collection: 'marketing_studies',
+    note: "Pre-studies of the Marketing portal (owner, 2026-11-16): scenarios, finance review and approval before a campaign. Written only by the AI gateway's marketing engine.",
+    fields: [
+      { field: 'code', type: 'string', required: true, unique: true, index: true },
+      { field: 'name', type: 'string', required: true },
+      {
+        field: 'stage',
+        type: 'string',
+        choices: ['draft', 'finance_review', 'waiting_approval', 'approved', 'running', 'finished'],
+        defaultValue: 'draft',
+        index: true,
+      },
+      { field: 'objective', type: 'string', choices: [...CAMPAIGN_OBJECTIVES] },
+      { field: 'prepared_by', type: 'string', index: true },
+      { field: 'campaign_code', type: 'string', index: true },
+      { field: 'study', type: 'json', note: 'The whole study as the portal shows it.' },
+    ],
+  },
+  {
+    collection: 'marketing_gift_card_products',
+    note: "Gift card products of the Marketing portal (owner, 2026-11-16). Written only by the AI gateway's marketing engine.",
+    fields: [
+      { field: 'code', type: 'string', required: true, unique: true, index: true },
+      { field: 'name_en', type: 'string', required: true },
+      { field: 'name_ar', type: 'string', required: true },
+      { field: 'value_sar', type: 'decimal', required: true },
+      { field: 'price_sar', type: 'decimal', required: true },
+      { field: 'validity_days', type: 'integer', required: true, defaultValue: 365 },
+      { field: 'design', type: 'json', note: 'background / accent / message.' },
+      { field: 'active', type: 'boolean', defaultValue: true },
+      { field: 'can_combine_with_coupons', type: 'boolean', defaultValue: false },
+    ],
+  },
+  {
+    collection: 'marketing_earning_rules',
+    note: "Points earning rules of the Marketing portal (owner, 2026-11-16): cashback % per order type. Written only by the AI gateway's marketing engine.",
+    fields: [
+      { field: 'code', type: 'string', required: true, unique: true, index: true },
+      { field: 'name', type: 'string', required: true },
+      { field: 'cashback_pct', type: 'json', note: 'DELIVERY / PICKUP / CARHOP / DINE_IN, in %.' },
+      { field: 'brand_ids', type: 'json', note: 'Empty = every brand.' },
+      { field: 'active', type: 'boolean', defaultValue: true },
+      { field: 'valid_from', type: 'date', required: true },
+      { field: 'valid_to', type: 'date' },
     ],
   },
   {
