@@ -971,6 +971,21 @@ export const collections: CollectionSpec[] = [
         type: 'dateTime',
         note: 'When the customer’s number was last looked up on Yiji while the coupon waited for them to sign up.',
       },
+      /*
+       * YIJI V2 PENDING GRANT (contract with the v2 team and the owner, 17 Nov
+       * 2026). A v2 coupon created for a phone with no v2 account is held by v2
+       * as a PENDING grant, which v2 assigns itself at sign-up and reports by
+       * `coupon.granted` (pending_grant_id + grant id). The workers store the
+       * pending id here and find the row by it when the event arrives. v2 only;
+       * always null for Yiji v1. Needs a manual `apply:fields` (staging); until
+       * then the event finds the row by the v2 coupon id or code + phone.
+       */
+      {
+        field: 'yiji_pending_grant_id',
+        type: 'string',
+        index: true,
+        note: 'Yiji v2 only: the pending grant v2 holds for a customer who has not signed up yet. The grant id lands in yiji_coupon_user_id when v2 assigns it.',
+      },
       {
         field: 'yiji_push_error',
         type: 'text',

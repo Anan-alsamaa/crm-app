@@ -31,6 +31,9 @@ import {
   parseOrderEventsBody,
   parseYiji2EventsBody,
   orderEventFromYiji2,
+  couponEventFromYiji2,
+  isYiji2CouponEvent,
+  type Yiji2CouponEventJob,
   yiji2EventsOf,
   type OrderEvent,
   orderEventsOf,
@@ -1519,6 +1522,12 @@ export interface YijiEventsDeps {
   seen(eventId: string): Promise<boolean>;
   /** Hand the event to the workers; null = the queue is disabled. */
   enqueue(job: LateOrdersEventJob): Promise<string | null>;
+  /**
+   * YIJI V2 ONLY (contract 17 Nov 2026): `coupon.granted` with a
+   * `pending_grant_id` and `customer.created`, handed to the workers' coupons
+   * queue (`Yiji2CouponEventJob`). Absent = those types are ignored as before.
+   */
+  enqueueCouponEvent?(job: Yiji2CouponEventJob): Promise<string | null>;
 }
 
 /**
@@ -1657,6 +1666,8 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
         /* v2's envelope is translated to the CRM's event first; a v2 type
            the CRM does not act on (coupon.*, customer.*) is "ignored". */
         let incoming: Array<OrderEvent | null>;
+        /* v2 coupon/customer events, handed to the coupons queue (17 Nov 2026). */
+        const couponEvents: Yiji2CouponEventJob[] = [];
         if (events.format === 'yiji2') {
           const parsed = parseYiji2EventsBody(req.body);
           if (!parsed.success) {
@@ -1666,15 +1677,22 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
               fields: zodFieldErrors(parsed.error),
             });
           }
-          incoming = yiji2EventsOf(parsed.data).map((e) =>
-            orderEventFromYiji2(e, {
-              malformed: (reason, eventId) =>
-                logger.warn(
-                  { eventId, type: e.type, reason },
-                  `${label} events: malformed order event ignored`,
-                ),
-            }),
-          );
+          const all = yiji2EventsOf(parsed.data);
+          const malformed = (type: string) => (reason: string, eventId: string) =>
+            logger.warn({ eventId, type, reason }, `${label} events: malformed event ignored`);
+          if (events.enqueueCouponEvent) {
+            for (const e of all) {
+              if (!isYiji2CouponEvent(e.type)) continue;
+              const job = couponEventFromYiji2(e, events.vendorKey, {
+                malformed: malformed(e.type),
+              });
+              if (job) couponEvents.push(job);
+            }
+          }
+          incoming = all.map((e) => orderEventFromYiji2(e, { malformed: malformed(e.type) }));
+          /* Counted once below: a coupon event is not also "ignored". */
+          const handled = new Set(couponEvents.map((c) => c.eventId));
+          incoming = incoming.filter((ev, i) => ev !== null || !handled.has(all[i]!.id));
         } else {
           const parsed = parseOrderEventsBody(req.body);
           if (!parsed.success) {
@@ -1702,6 +1720,28 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
               continue;
             }
             const id = await events.enqueue({ vendorKey: events.vendorKey, event });
+            if (id === null) {
+              return reply.code(503).send({
+                error: 'unavailable',
+                message: 'The CRM cannot take events right now. Retry with the same event ids.',
+              });
+            }
+            accepted += 1;
+          } catch (err) {
+            logger.error({ err: (err as Error)?.message }, `${label} events: could not accept`);
+            return reply.code(503).send({
+              error: 'unavailable',
+              message: 'The CRM cannot take events right now. Retry with the same event ids.',
+            });
+          }
+        }
+        for (const job of couponEvents) {
+          try {
+            if (await events.seen(job.eventId)) {
+              duplicates += 1;
+              continue;
+            }
+            const id = await events.enqueueCouponEvent!(job);
             if (id === null) {
               return reply.code(503).send({
                 error: 'unavailable',

@@ -834,6 +834,11 @@ async function main(): Promise<void> {
               producer.enqueueLateOrdersEvent
                 ? producer.enqueueLateOrdersEvent(job)
                 : Promise.resolve(null),
+            /* coupon.granted (pending grant) / customer.created, 17 Nov 2026. */
+            enqueueCouponEvent: (job) =>
+              producer.enqueueYiji2CouponEvent
+                ? producer.enqueueYiji2CouponEvent(job)
+                : Promise.resolve(null),
           },
         }
       : {}),

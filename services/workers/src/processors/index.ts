@@ -36,6 +36,8 @@ import {
   type YijiUsageSink,
   LateOrdersEventJob,
   LATE_ORDERS_EVENT_JOB,
+  Yiji2CouponEventJob,
+  YIJI2_COUPON_EVENT_JOB,
 } from '@yiji/shared-types';
 import type { MailTransport } from '../mail/index.js';
 import type { YijiDirectusClient } from '@yiji/shared-config';
@@ -61,6 +63,7 @@ import {
 } from './coupon-edit.js';
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
+import { processYiji2CouponEvent } from './coupon-yiji2-events.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
 import { purgeYijiUsage, YIJI_USAGE_RETENTION_JOB } from './yiji-usage.js';
 import {
@@ -662,6 +665,26 @@ export const processors: Record<QueueName, Processor> = {
   [QUEUES.coupons]: async (job, deps) => {
     /* EMA-80: the same queue carries removals, by job NAME. */
     const lock: CouponPushLock | undefined = deps.redis ? couponPushLock(deps.redis) : undefined;
+    /*
+     * YIJI V2 COUPON / CUSTOMER EVENTS (contract 17 Nov 2026): v2 assigned a
+     * pending grant at sign-up (`coupon.granted`) or an account was created
+     * (`customer.created`). Writes the CRM row only - no Yiji call.
+     */
+    if (job.name === YIJI2_COUPON_EVENT_JOB) {
+      const parsed = Yiji2CouponEventJob.safeParse(job.data);
+      if (!parsed.success) {
+        deps.logger.warn({ jobId: job.id }, 'yiji2 coupon event: invalid payload dropped');
+        return;
+      }
+      await processYiji2CouponEvent(parsed.data, {
+        directus: deps.directus,
+        logger: deps.logger,
+        couponsQueue: deps.queues[QUEUES.coupons],
+        ...(lock ? { lock } : {}),
+        platformOf: (id) => couponPlatform(deps, id),
+      });
+      return;
+    }
     /*
      * YIJI V2 (owner, 2026-11-16): the removal and the edit processors talk to
      * Yiji v1's admin API through the workers' own v1 client, not through the

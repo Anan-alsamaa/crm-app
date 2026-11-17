@@ -18,6 +18,8 @@ import {
   type CouponEditJob,
   type LateOrdersEventJob,
   LATE_ORDERS_EVENT_JOB,
+  type Yiji2CouponEventJob,
+  YIJI2_COUPON_EVENT_JOB,
   COUPON_REPLACE_JOB_NAME,
   COUPON_EDIT_JOB_NAME,
   ROUTING_RECLAIM_WAIT_MS,
@@ -72,6 +74,12 @@ export interface SideEffectProducer {
    * id in Redis, and a BullMQ id blocks the next add. Optional for test stubs.
    */
   enqueueLateOrdersEvent?(job: LateOrdersEventJob): Promise<string | null>;
+  /**
+   * YIJI V2 (contract 17 Nov 2026): one `coupon.granted` / `customer.created`
+   * event for the workers' coupons queue. Optional so test stubs need not
+   * provide it.
+   */
+  enqueueYiji2CouponEvent?(job: Yiji2CouponEventJob): Promise<string | null>;
   /**
    * Tell a customer's phone an agent replied while they were away. Enqueued
    * only when no customer socket is in the conversation — somebody watching
@@ -128,6 +136,10 @@ class NoopProducer implements SideEffectProducer {
   }
   async enqueueLateOrdersEvent(): Promise<string | null> {
     this.logger.warn('order event skipped (Redis disabled)');
+    return null;
+  }
+  async enqueueYiji2CouponEvent(): Promise<string | null> {
+    this.logger.warn('yiji2 coupon event skipped (Redis disabled)');
     return null;
   }
   async close(): Promise<void> {}
@@ -187,6 +199,16 @@ class BullProducer implements SideEffectProducer {
     const added = await this.lateOrders.add(LATE_ORDERS_EVENT_JOB, job, {
       ...DEFAULT_JOB_OPTIONS,
       /* Transport, not the record: the live table is the record. */
+      removeOnComplete: true,
+      removeOnFail: true,
+    });
+    return added.id ?? null;
+  }
+  async enqueueYiji2CouponEvent(job: Yiji2CouponEventJob): Promise<string | null> {
+    const added = await this.coupons.add(YIJI2_COUPON_EVENT_JOB, job, {
+      ...DEFAULT_JOB_OPTIONS,
+      /* No custom id (a kept id swallows retries); the event id is deduped
+         by the receiver, and the job is idempotent on the row's receipt. */
       removeOnComplete: true,
       removeOnFail: true,
     });
