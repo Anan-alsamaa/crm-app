@@ -15,6 +15,7 @@ import {
   yiji2CaseConflictMessage,
   yiji2OverrideCurrency,
   yiji2OverrideProblem,
+  yiji2RequestKey,
   type CompensationCaseAction,
   type CompensationCasePatch,
   type CompensationCaseRow,
@@ -51,11 +52,25 @@ import {
  * finds the same values), with the action, its reason and V2's verdict in
  * `agent_actions`.
  *
+ * IDEMPOTENCY (review follow-up, 18 Nov 2026): the key sent to V2 is
+ * derived from the portal's key AND the request's material fields (case,
+ * action, the body V2 receives) - `yiji2RequestKey`. A retry of the same
+ * request reaches V2 with the same key; the same form retried with a changed
+ * amount, reason, result or category is a NEW request to V2, never answered
+ * with the first one's stored result, whatever key the caller re-sent.
+ *
+ * A complaint V2 answers with an EXISTING case linked to ANOTHER CRM ticket is
+ * refused (409 `case_on_other_ticket`): the case row is never returned, and
+ * the other ticket's id only to a caller who may read that ticket.
+ *
  * Yiji v2 only. A ticket of any other platform answers `v2: false` and every
  * action on it is refused - v1 is untouched.
  */
 
 export const APPROVE_COMPENSATION_CASES = 'approve_compensation_cases';
+
+export const CASE_ON_OTHER_TICKET_MESSAGE =
+  'This order already has a case of that category, on another ticket. Act on it from that ticket.';
 
 /** What the routes need from Directus, with the gateway's service account. */
 export interface CompensationCaseStore {
@@ -180,7 +195,7 @@ export class DirectusCompensationCaseStore implements CompensationCaseStore {
 /* ── Bodies ─────────────────────────────────────────────────────────────── */
 
 const ticketId = z.string().trim().min(1).max(64);
-/** One per click (the portal makes it when the dialog opens): a retried click never acts twice. */
+/** The portal's key; V2 receives `yiji2RequestKey(key, request)` (one per distinct request). */
 const idempotencyKey = z
   .string()
   .trim()
@@ -346,7 +361,12 @@ export async function registerCompensationCaseRoutes(
       ...(action ? { agent_actions: actions } : {}),
     };
     delete patch.case_id;
-    if (stored) return deps.store.updateCase(stored.id, patch);
+    /* A row whose ticket was deleted (SET NULL) is linked to this one. */
+    if (stored)
+      return deps.store.updateCase(stored.id, {
+        ...patch,
+        ...(stored.ticket ? {} : { ticket: link.ticket }),
+      });
     try {
       return await deps.store.createCase({
         ...patch,
@@ -378,6 +398,27 @@ export async function registerCompensationCaseRoutes(
 
   const fail = (reply: FastifyReply, status: number, error: string, extra = {}) =>
     reply.code(status).send({ error, ...extra });
+
+  /** 409 `case_on_other_ticket`: no row; the other ticket's id only if THEY may read it. */
+  async function otherTicket(
+    reply: FastifyReply,
+    req: FastifyRequest,
+    d: { actor: SessionActor; token: string },
+    otherTicketId: string,
+    category: string,
+  ) {
+    const visible = await deps.sessions
+      .canRead(d.token, 'tickets', otherTicketId)
+      .catch(() => false);
+    req.log.info(
+      { otherTicketId, by: d.actor.id, category, visible: visible === true },
+      'v2 compensation complaint: the order already has this case on another ticket',
+    );
+    return fail(reply, 409, 'case_on_other_ticket', {
+      message: CASE_ON_OTHER_TICKET_MESSAGE,
+      ...(visible === true ? { ticketId: otherTicketId } : {}),
+    });
+  }
 
   /* ── The ticket's cases (the panel; no privilege beyond the ticket) ──── */
   app.get('/commerce/compensation-cases', async (req, reply) => {
@@ -424,24 +465,33 @@ export async function registerCompensationCaseRoutes(
       if (!isYiji2OrderNumber(order)) return fail(reply, 409, 'ticket_has_no_v2_order');
       const api = await casesApi(tk.ticket.vendor);
       const b = body.data;
+      const complaint = {
+        order_number: String(order),
+        category: b.category,
+        agent_id: d.actor.id,
+        ...(b.affectedItems?.length
+          ? {
+              affected_items: b.affectedItems.map((i) => ({
+                order_item_id: i.orderItemId,
+                ...(i.quantity ? { quantity: i.quantity } : {}),
+              })),
+            }
+          : {}),
+        has_photos: b.hasPhotos === true,
+        ...(b.text ? { text: b.text } : {}),
+      };
       const wire = await api.logComplaint(
-        {
-          order_number: String(order),
-          category: b.category,
-          agent_id: d.actor.id,
-          ...(b.affectedItems?.length
-            ? {
-                affected_items: b.affectedItems.map((i) => ({
-                  order_item_id: i.orderItemId,
-                  ...(i.quantity ? { quantity: i.quantity } : {}),
-                })),
-              }
-            : {}),
-          has_photos: b.hasPhotos === true,
-          ...(b.text ? { text: b.text } : {}),
-        },
-        b.idempotencyKey,
+        complaint,
+        yiji2RequestKey(b.idempotencyKey, { action: 'log', body: complaint }),
       );
+      /* V2 may answer with the order's EXISTING case of that category. When
+         it is linked to another ticket, the caller is told so - never shown
+         the row (they may not be able to read that ticket). */
+      const existing = await deps.store.caseById(
+        caseFieldsFromWire(wire as unknown as Record<string, unknown>).case_id ?? '',
+      );
+      if (existing?.ticket && existing.ticket !== tk.ticket.id)
+        return otherTicket(reply, req, d, existing.ticket, b.category);
       const row = await record(
         wire,
         { vendor: tk.ticket.vendor, ticket: tk.ticket.id },
@@ -454,6 +504,9 @@ export async function registerCompensationCaseRoutes(
           detail: b.category,
         },
       );
+      /* Raced: the events job linked it to another ticket meanwhile. */
+      if (row.ticket && row.ticket !== tk.ticket.id)
+        return otherTicket(reply, req, d, row.ticket, b.category);
       req.log.info(
         { caseId: row.case_id, ticketId: tk.ticket.id, by: d.actor.id, category: b.category },
         'v2 compensation complaint logged',
@@ -556,22 +609,29 @@ export async function registerCompensationCaseRoutes(
       try {
         const api = await casesApi(c.vendor);
         const agent = d.actor.id;
-        const wire =
-          action === 'approve'
-            ? await api.approve(
-                caseId,
-                { agent_id: agent, reason: b.reason, ...(amount ? { amount } : {}) },
-                b.idempotencyKey,
-              )
-            : action === 'reject'
-              ? await api.reject(caseId, { agent_id: agent, reason: b.reason }, b.idempotencyKey)
-              : action === 'evidence'
-                ? await api.evidence(caseId, { agent_id: agent }, b.idempotencyKey)
-                : await api.verification(
-                    caseId,
-                    { agent_id: agent, result: b.result!, note: b.reason },
-                    b.idempotencyKey,
-                  );
+        /* The key follows the request: the reason is part of it even where V2
+           does not receive it (evidence), since the CRM records it. */
+        const keyOf = (sent: unknown) =>
+          yiji2RequestKey(b.idempotencyKey, {
+            caseId,
+            action,
+            body: sent,
+            reason: b.reason,
+          });
+        let wire: Yiji2CompensationCaseWire;
+        if (action === 'approve') {
+          const sent = { agent_id: agent, reason: b.reason, ...(amount ? { amount } : {}) };
+          wire = await api.approve(caseId, sent, keyOf(sent));
+        } else if (action === 'reject') {
+          const sent = { agent_id: agent, reason: b.reason };
+          wire = await api.reject(caseId, sent, keyOf(sent));
+        } else if (action === 'evidence') {
+          const sent = { agent_id: agent };
+          wire = await api.evidence(caseId, sent, keyOf(sent));
+        } else {
+          const sent = { agent_id: agent, result: b.result!, note: b.reason };
+          wire = await api.verification(caseId, sent, keyOf(sent));
+        }
         const saved = await record(wire, { vendor: c.vendor, ticket: row.ticket! }, base);
         req.log.info(
           { caseId, action, by: agent, status: saved.status, overridden: !!amount },

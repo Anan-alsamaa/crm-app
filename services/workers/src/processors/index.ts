@@ -66,7 +66,11 @@ import {
 import { readCouponVendor, resolveCouponConnector } from './coupon-vendor.js';
 import { processCouponRemoveJob } from './coupon-remove.js';
 import { processYiji2CouponEvent } from './coupon-yiji2-events.js';
-import { processYiji2CompensationEvent } from './compensation-yiji2-events.js';
+import {
+  COMPENSATION_GRANT_STASH_MS,
+  processYiji2CompensationEvent,
+  type CompensationGrant,
+} from './compensation-yiji2-events.js';
 import { createYijiCouponRemover } from '../lib/yiji-coupon-remover.js';
 import { purgeYijiUsage, YIJI_USAGE_RETENTION_JOB } from './yiji-usage.js';
 import {
@@ -291,6 +295,39 @@ function couponPushLock(redis: NonNullable<ProcessorDeps['redis']>) {
       const token = held.get(key);
       held.delete(key);
       if (token && (await r.get(envKey(key))) === token) await r.del(envKey(key));
+    },
+  };
+}
+
+/**
+ * Where a V2 compensation coupon's `coupon.granted` waits for the
+ * `compensation.decided` that names its case (V2 sends the grant first).
+ */
+function compensationGrantStash(redis: NonNullable<ProcessorDeps['redis']>) {
+  const r = redis as unknown as {
+    set(k: string, v: string, px: 'PX', ms: number): Promise<unknown>;
+    get(k: string): Promise<string | null>;
+  };
+  const key = (vendorKey: string, grantId: string) =>
+    envKey(`yiji2:compensation-grant:${vendorKey}:${grantId}`);
+  return {
+    put: async (vendorKey: string, grantId: string, grant: CompensationGrant) => {
+      await r.set(
+        key(vendorKey, grantId),
+        JSON.stringify(grant),
+        'PX',
+        COMPENSATION_GRANT_STASH_MS,
+      );
+    },
+    get: async (vendorKey: string, grantId: string): Promise<CompensationGrant | null> => {
+      const raw = await r.get(key(vendorKey, grantId));
+      if (!raw) return null;
+      try {
+        const g = JSON.parse(raw) as CompensationGrant;
+        return typeof g?.coupon_code === 'string' && g.coupon_code ? g : null;
+      } catch {
+        return null;
+      }
     },
   };
 }
@@ -716,6 +753,7 @@ export const processors: Record<QueueName, Processor> = {
         /* Up to three tries (about 14 s) for the gateway to record an
            agent-logged case on the agent's ticket before one is opened. */
         mayWaitForGateway: (job.attemptsMade ?? 0) < 3,
+        ...(deps.redis ? { grantStash: compensationGrantStash(deps.redis) } : {}),
       });
       return;
     }

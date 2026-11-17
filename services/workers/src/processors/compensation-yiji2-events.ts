@@ -8,6 +8,7 @@ import {
   YIJI_COMPLAINT_SOURCE,
   caseFieldsFromDecided,
   caseFieldsFromEscalated,
+  caseFieldsFromGrant,
   caseFieldsFromWire,
   compensationCaseTicketKey,
   escalationRolesFor,
@@ -43,6 +44,16 @@ import { describeError } from '../lib/errors.js';
  *     rule, 18 Nov 2026). Roles by NAME (the recipients trap); nobody
  *     active at all -> an error log.
  *
+ *   - `coupon.granted` WITHOUT `pending_grant_id` (review follow-up, 18 Nov):
+ *     a coupon case's grant. Its `code` (and `coupon_id`) go on the case row
+ *     found by `grant_id`. V2 usually sends it BEFORE `compensation.decided`,
+ *     which is the event that carries the `grant_id`; so the grant is first
+ *     held in Redis (`grantStash`, 30 days) and each side writes, then looks
+ *     for the other: whichever arrives second (or both, racing) puts the code
+ *     on the row. A grant that matches no case (a CRM coupon's own grant) only
+ *     sits in the stash until it lapses. `coupon_approvals` and the
+ *     pending-grants job are never read or written here.
+ *
  * Idempotent: the row is found by `case_id`, the ticket by its external id,
  * notification job ids carry the case and the user. An older event arriving
  * after a newer one never moves the case back (`last_event_at`,
@@ -54,7 +65,22 @@ export type Yiji2CompensationEventOutcome =
   | 'escalation-sent'
   | 'escalation-no-recipient'
   | 'no-vendor'
-  | 'waiting-for-gateway';
+  | 'waiting-for-gateway'
+  | 'coupon-recorded'
+  | 'coupon-held';
+
+/** Where a compensation grant waits for the decision that names its case. */
+export interface CompensationGrantStash {
+  put(vendorKey: string, grantId: string, grant: CompensationGrant): Promise<void>;
+  get(vendorKey: string, grantId: string): Promise<CompensationGrant | null>;
+}
+export interface CompensationGrant {
+  coupon_code: string;
+  coupon_id?: string;
+}
+
+/** How long a grant waits for its decision (V2 sends them seconds apart). */
+export const COMPENSATION_GRANT_STASH_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface Yiji2CompensationEventDeps {
   directus: YijiDirectusClient;
@@ -69,12 +95,25 @@ export interface Yiji2CompensationEventDeps {
    * ticket. Absent = never wait.
    */
   mayWaitForGateway?: boolean;
+  /** Absent = a grant that arrives before its decision is not kept (logged). */
+  grantStash?: CompensationGrantStash;
   now?: () => number;
 }
 
 type Row = Partial<CompensationCaseRow> & { id: string };
 
-const ROW_FIELDS = ['id', 'case_id', 'ticket', 'status', 'last_event_at', 'vendor', 'has_photos'];
+const ROW_FIELDS = [
+  'id',
+  'case_id',
+  'ticket',
+  'status',
+  'last_event_at',
+  'vendor',
+  'has_photos',
+  'grant_id',
+  'coupon_id',
+  'coupon_code',
+];
 
 async function findCase(deps: Yiji2CompensationEventDeps, caseId: string): Promise<Row | null> {
   const rows = (await deps.directus.request(
@@ -84,6 +123,71 @@ async function findCase(deps: Yiji2CompensationEventDeps, caseId: string): Promi
     ),
   )) as unknown as Row[];
   return rows?.[0] ?? null;
+}
+
+/** The v2 vendor's case that carries this grant (from its decision). */
+async function findCaseByGrant(
+  deps: Yiji2CompensationEventDeps,
+  vendor: string,
+  grantId: string,
+): Promise<Row | null> {
+  const rows = (await deps.directus.request(
+    readItems(
+      COMPENSATION_CASES_COLLECTION as never,
+      {
+        filter: { vendor: { _eq: vendor }, grant_id: { _eq: grantId } },
+        fields: ROW_FIELDS,
+        limit: 2,
+      } as never,
+    ),
+  )) as unknown as Row[];
+  return rows?.length === 1 ? rows[0]! : null;
+}
+
+/** The grant's code (and coupon id) on the row; nothing else is touched. */
+async function putGrantOnCase(
+  deps: Yiji2CompensationEventDeps,
+  row: Row,
+  grant: CompensationGrant,
+): Promise<boolean> {
+  if (row.coupon_code === grant.coupon_code && (!grant.coupon_id || row.coupon_id)) return false;
+  await deps.directus.request(
+    updateItem(COMPENSATION_CASES_COLLECTION as never, row.id, {
+      coupon_code: grant.coupon_code,
+      ...(grant.coupon_id && !row.coupon_id ? { coupon_id: grant.coupon_id } : {}),
+    } as never),
+  );
+  return true;
+}
+
+async function compensationGrant(
+  job: Extract<Yiji2CompensationEventJob, { type: 'coupon.granted' }>,
+  deps: Yiji2CompensationEventDeps,
+  vendor: string,
+): Promise<Yiji2CompensationEventOutcome> {
+  const f = caseFieldsFromGrant(job.data as Record<string, unknown>);
+  const grantId = f.grant_id!;
+  const grant: CompensationGrant = {
+    coupon_code: f.coupon_code!,
+    ...(f.coupon_id ? { coupon_id: f.coupon_id } : {}),
+  };
+  const log = { eventId: job.eventId, grantId };
+  /* Held FIRST, then looked for: a decision written meanwhile reads it. */
+  if (deps.grantStash) await deps.grantStash.put(job.vendorKey, grantId, grant);
+  const row = await findCaseByGrant(deps, vendor, grantId);
+  if (!row) {
+    deps.logger.info(
+      { ...log, held: !!deps.grantStash },
+      'yiji2 coupon.granted: no compensation case carries this grant yet - held for its decision',
+    );
+    return 'coupon-held';
+  }
+  const changed = await putGrantOnCase(deps, row, grant);
+  deps.logger.info(
+    { ...log, caseId: row.case_id, changed },
+    'yiji2 coupon.granted: coupon code recorded on the compensation case',
+  );
+  return 'coupon-recorded';
 }
 
 /** The ticket the CRM opened for a case before (a retried job, or a lost answer). */
@@ -241,6 +345,7 @@ export async function processYiji2CompensationEvent(
     );
     return 'no-vendor';
   }
+  if (job.type === 'coupon.granted') return compensationGrant(job, deps, vendor.id);
   const data = job.data as Record<string, unknown>;
   const incoming =
     job.type === 'compensation.proposed'
@@ -307,6 +412,28 @@ export async function processYiji2CompensationEvent(
       );
       ticketId = raced.ticket ?? ticketId;
       outcome = 'case-updated';
+    }
+  }
+
+  /* A coupon case's grant may have come first: its code is held for us. */
+  if (job.type === 'compensation.decided' && patch.grant_id && deps.grantStash) {
+    try {
+      const grant = await deps.grantStash.get(job.vendorKey, patch.grant_id);
+      const row = grant ? await findCase(deps, caseId) : null;
+      if (grant && row && row.grant_id === patch.grant_id) {
+        await putGrantOnCase(deps, row, grant);
+        logger.info(
+          { ...log, caseId, grantId: patch.grant_id },
+          'yiji2 compensation: coupon code from the earlier coupon.granted recorded',
+        );
+      }
+    } catch (err) {
+      /* The decision is recorded; BullMQ retries this job and it is idempotent. */
+      logger.warn(
+        { ...log, caseId, err: describeError(err) },
+        'yiji2 compensation: held coupon code not recorded yet - retrying',
+      );
+      throw err;
     }
   }
 

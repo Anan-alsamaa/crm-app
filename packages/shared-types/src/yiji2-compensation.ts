@@ -276,6 +276,47 @@ export function compensationCaseTicketKey(caseId: string): string {
   return `compensation-case:${caseId}`;
 }
 
+/* ── Idempotency keys that follow the request (review follow-up, 18 Nov) ── */
+
+/** Every value in a fixed key order, so the same request always reads the same. */
+export function stableJson(v: unknown): string {
+  if (v === undefined) return 'null';
+  if (v === null || typeof v !== 'object') return JSON.stringify(v) ?? 'null';
+  if (Array.isArray(v)) return `[${v.map(stableJson).join(',')}]`;
+  const o = v as Record<string, unknown>;
+  return `{${Object.keys(o)
+    .filter((k) => o[k] !== undefined)
+    .sort()
+    .map((k) => `${JSON.stringify(k)}:${stableJson(o[k])}`)
+    .join(',')}}`;
+}
+
+const FNV_PRIME = 0x100000001b3n;
+const MASK64 = 0xffffffffffffffffn;
+function fnv1a64(text: string, offset: bigint): string {
+  let h = offset;
+  for (let i = 0; i < text.length; i++) {
+    h ^= BigInt(text.charCodeAt(i));
+    h = (h * FNV_PRIME) & MASK64;
+  }
+  return h.toString(16).padStart(16, '0');
+}
+
+/**
+ * The `Idempotency-Key` of ONE request: derived from a base (the portal's
+ * per-form nonce, or the key the portal sent) and the request's material
+ * fields (case id, action and the body V2 receives). An identical retry
+ * gives the same key, so V2 answers it once; a changed amount, reason,
+ * result or category gives a NEW key, so V2 never answers a changed request
+ * with the first request's stored result. `crm-` + 32 hex (36 characters,
+ * within V2's 128 and the gateway's [A-Za-z0-9_-]{8,100}). Pure and
+ * synchronous: the portal and the gateway compute the same value.
+ */
+export function yiji2RequestKey(base: string, material: unknown): string {
+  const text = `${base}\u0000${stableJson(material)}`;
+  return `crm-${fnv1a64(text, 0xcbf29ce484222325n)}${fnv1a64(text, 0x84222325cbf29ce4n)}`;
+}
+
 /** One agent action on the case, kept on the row (who, what, why, what V2 said). */
 export interface CompensationCaseAction {
   action: 'log' | 'approve' | 'reject' | 'evidence' | 'verification' | 'refresh';
@@ -708,6 +749,29 @@ export function isYiji2CompensationEvent(type: string): type is Yiji2Compensatio
   return (YIJI2_COMPENSATION_EVENT_TYPES as readonly string[]).includes(type);
 }
 
+/**
+ * A `coupon.granted` WITHOUT `pending_grant_id`: possibly a compensation
+ * coupon's grant (its code goes on the case row). One with a pending grant id
+ * is the pending-grants path's alone.
+ */
+export function isYiji2CompensationGrant(e: {
+  type: string;
+  data?: Record<string, unknown> | null;
+}): boolean {
+  if (e.type !== 'coupon.granted') return false;
+  const p = e.data?.pending_grant_id;
+  return p === undefined || p === null || (typeof p === 'string' && p.trim() === '');
+}
+
+/** A compensation `coupon.granted` -> the case row's coupon columns. */
+export function caseFieldsFromGrant(d: Record<string, unknown>): CompensationCasePatch {
+  const out: CompensationCasePatch = {};
+  put(out, 'grant_id', idOf(d.grant_id));
+  put(out, 'coupon_id', idOf(d.coupon_id));
+  put(out, 'coupon_code', s(d.code));
+  return out;
+}
+
 const idField = z.union([z.string().trim().min(1).max(64), z.number().int()]);
 const dt = z.string().datetime({ offset: true });
 
@@ -739,6 +803,21 @@ const EscalatedData = z
   })
   .passthrough();
 
+/*
+ * A compensation coupon's `coupon.granted` (crm-events-v1.yaml `CouponEvent`):
+ * V2 sends it for a coupon case's approval, usually BEFORE
+ * `compensation.decided`. It carries no `case_id`; the case is found by
+ * `grant_id` (which the decision carries). One WITH `pending_grant_id` is a
+ * pending grant assigned at sign-up: that is the coupons job's, never this one.
+ */
+const GrantedData = z
+  .object({
+    grant_id: idField,
+    coupon_id: idField.optional(),
+    code: z.string().trim().min(1).max(128),
+  })
+  .passthrough();
+
 const jobBase = {
   /** V2's event id (already de-duplicated by the receiver). */
   eventId: z.string().min(1).max(128),
@@ -751,6 +830,7 @@ export const Yiji2CompensationEventJob = z.discriminatedUnion('type', [
   z.object({ type: z.literal('compensation.proposed'), ...jobBase, data: ProposedData }),
   z.object({ type: z.literal('compensation.decided'), ...jobBase, data: DecidedData }),
   z.object({ type: z.literal('compensation.escalated'), ...jobBase, data: EscalatedData }),
+  z.object({ type: z.literal('coupon.granted'), ...jobBase, data: GrantedData }),
 ]);
 export type Yiji2CompensationEventJob = z.infer<typeof Yiji2CompensationEventJob>;
 
@@ -765,6 +845,18 @@ export function compensationEventFromYiji2(
   vendorKey: string,
   opts: { malformed?: (reason: string, eventId: string) => void } = {},
 ): Yiji2CompensationEventJob | null {
+  if (isYiji2CompensationGrant(e)) {
+    /* Not malformed when it does not parse: before this, every grant without
+       a pending id was ignored, and a CRM coupon's grant is not ours to judge. */
+    const grant = Yiji2CompensationEventJob.safeParse({
+      type: e.type,
+      eventId: e.id,
+      vendorKey,
+      at: e.occurred_at,
+      data: e.data,
+    });
+    return grant.success ? grant.data : null;
+  }
   if (!isYiji2CompensationEvent(e.type)) return null;
   const parsed = Yiji2CompensationEventJob.safeParse({
     type: e.type,

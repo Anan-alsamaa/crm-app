@@ -35,7 +35,9 @@ vi.mock('../src/lib/compensation-cases-client.js', async (orig) => {
 
 const { V2CompensationPanel, actionsFor } =
   await import('../src/features/tickets/V2CompensationPanel.js');
-const { CaseActionError } = await import('../src/lib/compensation-cases-client.js');
+const { CaseActionError, requestKey } = await import('../src/lib/compensation-cases-client.js');
+import en from '../src/i18n/en.json';
+import ar from '../src/i18n/ar.json';
 
 const caseRow = (over: Partial<CompensationCaseRow> = {}): CompensationCaseRow =>
   ({
@@ -164,7 +166,11 @@ describe('V2CompensationPanel', () => {
     await waitFor(() =>
       expect(client.act).toHaveBeenCalledWith('900001', 'approve', {
         ticketId: 't-v2',
-        idempotencyKey: 'key-fixed-0001',
+        idempotencyKey: requestKey('key-fixed-0001', '900001', 'approve', {
+          ticketId: 't-v2',
+          reason: 'late, fair',
+          amountMinor: 1550,
+        }),
         reason: 'late, fair',
         amountMinor: 1550,
       }),
@@ -232,12 +238,144 @@ describe('V2CompensationPanel', () => {
     await waitFor(() =>
       expect(client.logComplaint).toHaveBeenCalledWith({
         ticketId: 't-v2',
-        idempotencyKey: 'key-fixed-0001',
+        idempotencyKey: requestKey('key-fixed-0001', null, 'log', {
+          ticketId: 't-v2',
+          category: 'HAIR',
+          hasPhotos: true,
+          text: 'hair',
+        }),
         category: 'HAIR',
         hasPhotos: true,
         text: 'hair',
       }),
     );
+  });
+
+  /* Review follow-up 1 (18 Nov): the form stays open after a refusal. */
+  it('a retry after a refusal: the same body keeps its key, a changed amount or reason gets a new one', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: true,
+      cases: [caseRow()],
+    });
+    client.act.mockRejectedValue(new CaseActionError(503, 'v2_unavailable', null, null, null));
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    const submit = () =>
+      fireEvent.click(screen.getAllByRole('button', { name: 'Approve' }).at(-1)!);
+    const keyOf = (n: number) =>
+      (client.act.mock.calls[n]![2] as { idempotencyKey: string }).idempotencyKey;
+    fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'late' } });
+    fireEvent.change(screen.getByLabelText('Different amount (SAR, optional)'), {
+      target: { value: '15' },
+    });
+    submit();
+    await screen.findByRole('alert');
+    submit(); // identical retry
+    await waitFor(() => expect(client.act).toHaveBeenCalledTimes(2));
+    fireEvent.change(screen.getByLabelText('Different amount (SAR, optional)'), {
+      target: { value: '12' },
+    });
+    submit(); // changed amount
+    await waitFor(() => expect(client.act).toHaveBeenCalledTimes(3));
+    fireEvent.change(screen.getByLabelText('Reason (required)'), {
+      target: { value: 'very late' },
+    });
+    submit(); // changed reason
+    await waitFor(() => expect(client.act).toHaveBeenCalledTimes(4));
+    fireEvent.change(screen.getByLabelText('Different amount (SAR, optional)'), {
+      target: { value: '15' },
+    });
+    fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'late' } });
+    submit(); // back to the first body
+    await waitFor(() => expect(client.act).toHaveBeenCalledTimes(5));
+    expect(keyOf(1)).toBe(keyOf(0));
+    expect(keyOf(2)).not.toBe(keyOf(0));
+    expect(keyOf(3)).not.toBe(keyOf(2));
+    expect(keyOf(3)).not.toBe(keyOf(0));
+    expect(keyOf(4)).toBe(keyOf(0));
+    for (let i = 0; i < 5; i++) expect(keyOf(i)).toMatch(/^[A-Za-z0-9_-]{8,100}$/);
+  });
+
+  it('log complaint: a changed category or text is a new key; the same form resent is not', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: true,
+      cases: [],
+    });
+    client.logComplaint.mockRejectedValue(
+      new CaseActionError(503, 'v2_unavailable', null, null, null),
+    );
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Log V2 complaint' }));
+    const send = () => fireEvent.click(screen.getByRole('button', { name: 'Send to Yiji V2' }));
+    const keyOf = (n: number) =>
+      (client.logComplaint.mock.calls[n]![0] as { idempotencyKey: string }).idempotencyKey;
+    fireEvent.change(screen.getByLabelText('Complaint (policy code)'), {
+      target: { value: 'HAIR' },
+    });
+    send();
+    await screen.findByRole('alert');
+    send();
+    await waitFor(() => expect(client.logComplaint).toHaveBeenCalledTimes(2));
+    fireEvent.change(screen.getByLabelText('Complaint (policy code)'), {
+      target: { value: 'CUT' },
+    });
+    send();
+    await waitFor(() => expect(client.logComplaint).toHaveBeenCalledTimes(3));
+    fireEvent.change(screen.getByLabelText('What the customer said'), { target: { value: 'x' } });
+    send();
+    await waitFor(() => expect(client.logComplaint).toHaveBeenCalledTimes(4));
+    expect(keyOf(1)).toBe(keyOf(0));
+    expect(new Set([keyOf(0), keyOf(2), keyOf(3)]).size).toBe(3);
+  });
+
+  /* Review follow-up 2 (18 Nov): the case is on another ticket. */
+  it.each([
+    [
+      't-other-7',
+      'This order already has a case of that category on ticket t-other-7. Act on it from that ticket.',
+    ],
+    [
+      null,
+      'This order already has a case of that category on another ticket, which you cannot open. Ask a supervisor.',
+    ],
+  ])(
+    'log complaint answered case_on_other_ticket (ticket %s): a clear message, no case shown',
+    async (other, text) => {
+      client.forTicket.mockResolvedValue({
+        ticketId: 't-v2',
+        v2: true,
+        orderNumber: '2611000000001',
+        canAct: true,
+        cases: [],
+      });
+      client.logComplaint.mockRejectedValue(
+        new CaseActionError(409, 'case_on_other_ticket', null, 'x', null, other),
+      );
+      wrap(<V2CompensationPanel ticketId="t-v2" />);
+      fireEvent.click(await screen.findByRole('button', { name: 'Log V2 complaint' }));
+      fireEvent.change(screen.getByLabelText('Complaint (policy code)'), {
+        target: { value: 'CUT' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Send to Yiji V2' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(text);
+      expect(screen.queryByTestId('v2-case')).toBeNull();
+    },
+  );
+
+  it('the other-ticket messages exist in English and Arabic', () => {
+    const e = (en as { v2Case: { error: Record<string, string> } }).v2Case.error;
+    const a = (ar as { v2Case: { error: Record<string, string> } }).v2Case.error;
+    expect(e.otherTicket).toContain('{{ticket}}');
+    expect(a.otherTicket).toContain('{{ticket}}');
+    expect(a.otherTicket).toMatch(/[\u0600-\u06FF]/);
+    expect(a.otherTicketHidden).toMatch(/[\u0600-\u06FF]/);
+    expect(e.otherTicketHidden).toBeTruthy();
   });
 
   it('no Log button without an order', async () => {

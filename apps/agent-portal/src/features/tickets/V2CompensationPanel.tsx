@@ -19,6 +19,7 @@ import {
   CaseActionError,
   compensationCases,
   newIdempotencyKey,
+  requestKey,
   type CaseAction,
   type TicketCases,
 } from '../../lib/compensation-cases-client.js';
@@ -103,6 +104,17 @@ function useRefusalText() {
           return en;
       }
     }
+    if (err.code === 'case_on_other_ticket')
+      return err.ticketId
+        ? t('v2Case.error.otherTicket', {
+            defaultValue:
+              'This order already has a case of that category on ticket {{ticket}}. Act on it from that ticket.',
+            ticket: err.ticketId,
+          })
+        : t('v2Case.error.otherTicketHidden', {
+            defaultValue:
+              'This order already has a case of that category on another ticket, which you cannot open. Ask a supervisor.',
+          });
     if (err.code === 'invalid_amount')
       return t('v2Case.error.amount', {
         defaultValue:
@@ -191,8 +203,9 @@ function ActionForm({
   const { t } = useTranslation();
   const qc = useQueryClient();
   const refusal = useRefusalText();
-  /* One key per opened form: a double click or a retry never acts twice. */
-  const [key] = useState(newIdempotencyKey);
+  /* One nonce per opened form; the key also follows the body, so an identical
+     retry never acts twice and a changed one is a new request to V2. */
+  const [nonce] = useState(newIdempotencyKey);
   const [reason, setReason] = useState('');
   const [amount, setAmount] = useState('');
   const [result, setResult] = useState<'confirmed' | 'not_confirmed'>('confirmed');
@@ -208,14 +221,18 @@ function ActionForm({
         : yiji2OverrideProblem(amountMinor, c);
 
   const run = useMutation({
-    mutationFn: () =>
-      compensationCases.act(c.case_id, action, {
+    mutationFn: () => {
+      const body = {
         ticketId,
-        idempotencyKey: key,
         reason: reason.trim(),
         ...(action === 'approve' && amountMinor != null ? { amountMinor } : {}),
         ...(action === 'verification' ? { result } : {}),
-      }),
+      };
+      return compensationCases.act(c.case_id, action, {
+        ...body,
+        idempotencyKey: requestKey(nonce, c.case_id, action, body),
+      });
+    },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: [V2_CASES_QUERY, ticketId] });
       toast.success(t('v2Case.done', { defaultValue: 'Sent to Yiji V2.' }));
@@ -566,20 +583,24 @@ function LogComplaintForm({ ticketId, onClose }: { ticketId: string; onClose: ()
   const { t } = useTranslation();
   const qc = useQueryClient();
   const refusal = useRefusalText();
-  const [key] = useState(newIdempotencyKey);
+  const [nonce] = useState(newIdempotencyKey);
   const [category, setCategory] = useState<Yiji2AgentComplaintCode | ''>('');
   const [hasPhotos, setHasPhotos] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const run = useMutation({
-    mutationFn: () =>
-      compensationCases.logComplaint({
+    mutationFn: () => {
+      const body = {
         ticketId,
-        idempotencyKey: key,
         category: category as Yiji2AgentComplaintCode,
         hasPhotos,
         ...(text.trim() ? { text: text.trim() } : {}),
-      }),
+      };
+      return compensationCases.logComplaint({
+        ...body,
+        idempotencyKey: requestKey(nonce, null, 'log', body),
+      });
+    },
     onSuccess: (out) => {
       void qc.invalidateQueries({ queryKey: [V2_CASES_QUERY, ticketId] });
       toast.success(
