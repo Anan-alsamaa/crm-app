@@ -34,6 +34,14 @@ import {
   yiji2IsOpen,
   yiji2Status,
   YIJI2_STATE_TO_STATUS,
+  YIJI2_CLOSING_STATES,
+  YIJI2_ORDER_STATES,
+  YIJI2_GRANTS_MAX_PAGES,
+  YIJI2_MOCK_FOREIGN_GRANT,
+  findGrantByCode,
+  v2CouponProblem,
+  v2PushData,
+  type Yiji2Transport,
   type ConnectorVendor,
   type Yiji2OrderWire,
   type Yiji2PlatformSettings,
@@ -139,7 +147,7 @@ describe('the mock transport never touches the network', () => {
     const body = {
       orderId: '2611000000001',
       couponCode: 'V2-IDEM',
-      coupon: { code: 'V2-IDEM', discount: 10 },
+      coupon: { code: 'V2-IDEM', discount: 10, reachLimit: 100 },
     };
     const a = await connector.adminPost!('/api/CouponUserOrder/CreateCouponUserFromOrder', body, {
       'idempotency-key': 'V2-IDEM',
@@ -300,7 +308,7 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
     const a = await translateV1AdminCall(
       t,
       '/api/Coupon/AddCoupon',
-      { code: 'X1', type: 0, discountPercentage: 10, maximumDiscount: 30 },
+      { code: 'X1', type: 0, discount: 30, discountPercentage: 0, limitForUser: 2, reachLimit: 60 },
       {},
       { currency: 'SAR' },
     );
@@ -308,12 +316,13 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
     expect(t.calls[0]).toMatchObject({ method: 'POST', path: '/compensation-coupons' });
     expect(t.coupons[0]?.body).toMatchObject({
       category: 'general',
-      type: 'percent',
-      percent_bps: 1000,
-      max: { amount_minor: 3000, currency: 'SAR' },
+      type: 'amount',
+      value: { amount_minor: 3000, currency: 'SAR' },
+      usage_limit: 2,
+      total_discount_limit: { amount_minor: 6000, currency: 'SAR' },
       country: 'SA',
     });
-    expect(t.coupons[0]?.body).not.toHaveProperty('value');
+    expect(t.coupons[0]?.body).not.toHaveProperty('percent_bps');
     expect(t.grants).toHaveLength(0);
   });
 
@@ -322,7 +331,7 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
     await translateV1AdminCall(
       t,
       '/api/Coupon/AddCoupon',
-      { code: 'X2', discount: 5 },
+      { code: 'X2', discount: 5, reachLimit: 100 },
       {},
       { currency: 'SAR' },
     );
@@ -350,7 +359,7 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
     await translateV1AdminCall(
       t,
       '/api/Coupon/AddCoupon',
-      { code: 'X3', discount: 5 },
+      { code: 'X3', discount: 5, reachLimit: 100 },
       {},
       { currency: 'SAR' },
     );
@@ -390,15 +399,10 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
         { currency: 'SAR' },
       ),
     ).toEqual({ result: 1 });
-    expect(
-      await translateV1AdminCall(
-        t,
-        '/api/CouponUser/RemoveUserCoupon/999',
-        {},
-        {},
-        { currency: 'SAR' },
-      ),
-    ).toMatchObject({ result: 2 });
+    /* an unknown grant is a 404 on a WRITE: a refusal, never "removed" */
+    await expect(
+      translateV1AdminCall(t, '/api/CouponUser/RemoveUserCoupon/999', {}, {}, { currency: 'SAR' }),
+    ).rejects.toMatchObject({ code: 'not_found', status: 404 });
   });
 
   it('SendCrmNotification -> POST /customers/{id}/push, by id or by phone', async () => {
@@ -411,7 +415,7 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
         {},
         { currency: 'SAR' },
       ),
-    ).toEqual({ result: 1 });
+    ).toEqual({ result: 1, extendedProperties: { NotificationId: 'ntf-1' } });
     expect(
       await translateV1AdminCall(
         t,
@@ -420,12 +424,13 @@ describe('translateV1AdminCall: v1 paths become v2 partner calls', () => {
         {},
         { currency: 'SAR' },
       ),
-    ).toEqual({ result: 1 });
+    ).toEqual({ result: 1, extendedProperties: { NotificationId: 'ntf-2' } });
     expect(t.pushes.map((p) => p.customer_id)).toEqual(['2000000001', '2000000002']);
-    expect(t.pushes[0]?.body).toMatchObject({
+    /* the agreed tap action travels as data.prop1 - never a top-level or data `action` */
+    expect(t.pushes[0]?.body).toEqual({
       title: 'Yiji Support',
       body: 'hi',
-      action: 'crm.openchat',
+      data: { prop1: 'crm.openchat' },
     });
   });
 
@@ -499,7 +504,7 @@ describe('a v2 refusal through the connector', () => {
     const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport });
     const e = await connector.adminPost!(
       '/api/Coupon/AddCoupon',
-      { code: 'X', discount: 5 },
+      { code: 'X', discount: 5, reachLimit: 100 },
       {},
     ).catch((x: unknown) => x);
     expect(isYijiRefused(e)).toBe(true);
@@ -520,7 +525,11 @@ describe('a v2 refusal through the connector', () => {
     };
     const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport });
     await expect(
-      connector.adminPost!('/api/Coupon/AddCoupon', { code: 'X', discount: 5 }, {}),
+      connector.adminPost!(
+        '/api/Coupon/AddCoupon',
+        { code: 'X', discount: 5, reachLimit: 100 },
+        {},
+      ),
     ).rejects.toBeInstanceOf(Yiji2UnavailableError);
   });
 });
@@ -794,6 +803,7 @@ describe('review fixes 2026-11-16', () => {
       {
         code: 'D1',
         discount: 5,
+        reachLimit: 100,
         activationDateTime: '2026-11-16T00:00:00',
         expirationDateTime: '2026-12-16T23:59:00',
       },
@@ -811,7 +821,7 @@ describe('review fixes 2026-11-16', () => {
     await translateV1AdminCall(
       t,
       '/api/Coupon/AddCoupon',
-      { code: 'BC-1', discount: 5 },
+      { code: 'BC-1', discount: 5, reachLimit: 100 },
       {},
       { currency: 'SAR' },
     );
@@ -832,7 +842,11 @@ describe('review fixes 2026-11-16', () => {
       { ...mockSettings, currency: 'BHD' },
       { transport: new MockYiji2Transport() },
     );
-    await bh.adminPost!('/api/Coupon/AddCoupon', { code: 'C-BH', discount: 1.5 }, {});
+    await bh.adminPost!(
+      '/api/Coupon/AddCoupon',
+      { code: 'C-BH', discount: 1.5, reachLimit: 15 },
+      {},
+    );
     expect((bh.transport as MockYiji2Transport).coupons[0]?.body).toMatchObject({
       value: { amount_minor: 1500, currency: 'BHD' },
       country: 'BH',
@@ -840,7 +854,11 @@ describe('review fixes 2026-11-16', () => {
     const named = new Yiji2Connector({ ...V2_VENDOR, name: 'Yiji V2 BH branch' }, mockSettings, {
       transport: new MockYiji2Transport(),
     });
-    await named.adminPost!('/api/Coupon/AddCoupon', { code: 'C-SA', discount: 10 }, {});
+    await named.adminPost!(
+      '/api/Coupon/AddCoupon',
+      { code: 'C-SA', discount: 10, reachLimit: 100 },
+      {},
+    );
     expect((named.transport as MockYiji2Transport).coupons[0]?.body).toMatchObject({
       value: { amount_minor: 1000, currency: 'SAR' },
       country: 'SA',
@@ -974,12 +992,10 @@ describe('v2 events -> the CRM order event', () => {
     expect(sub.isGroupMaster).toBeUndefined();
   });
 
-  it("maps v2's 15 partner states and 12 event states; only final/handed states close", () => {
+  it("maps v2's 15 states; only delivered, handed_over, closed, cancelled close", () => {
     const open = [
       'created',
       'awaiting_payment',
-      'pending_payment',
-      'paid',
       'accepted',
       'sent_to_kitchen',
       'kitchen_confirmed',
@@ -995,7 +1011,7 @@ describe('v2 events -> the CRM order event', () => {
       expect(yiji2Status(s), s).not.toBe('unknown');
       expect(yiji2Status(s), s).toBe(YIJI2_STATE_TO_STATUS[s]);
     }
-    for (const s of ['delivered', 'handed_over', 'closed', 'cancelled', 'refunded']) {
+    for (const s of ['delivered', 'handed_over', 'closed', 'cancelled']) {
       expect(yiji2IsOpen(s), s).toBe(false);
     }
     expect(yiji2Status('finding_courier')).toBe('ready');
@@ -1039,5 +1055,679 @@ describe('the connector answers no late-order poll (events feed the board)', () 
     const { connector } = mockConnector();
     expect(YIJI2_MOCK_ORDERS.some((o) => (o.minutesAgo ?? 0) > 60)).toBe(true);
     expect(await connector.getLateDeliveryOrders(60)).toEqual([]);
+  });
+});
+
+/* ── the v2 partner contract of 2026-11-17 ──────────────────────── */
+
+describe('contract 2026-11-17 (1): order states', () => {
+  it('knows exactly the 15 platform states and closes on exactly four', () => {
+    expect([...YIJI2_ORDER_STATES]).toEqual([
+      'created',
+      'awaiting_payment',
+      'accepted',
+      'sent_to_kitchen',
+      'kitchen_confirmed',
+      'preparing',
+      'ready',
+      'finding_courier',
+      'courier_assigned',
+      'out_for_delivery',
+      'delivered',
+      'arrived',
+      'handed_over',
+      'closed',
+      'cancelled',
+    ]);
+    expect([...YIJI2_CLOSING_STATES].sort()).toEqual(
+      ['cancelled', 'closed', 'delivered', 'handed_over'].sort(),
+    );
+    expect(Object.keys(YIJI2_STATE_TO_STATUS).sort()).toEqual([...YIJI2_ORDER_STATES].sort());
+    for (const s of YIJI2_ORDER_STATES)
+      expect(yiji2IsOpen(s), s).toBe(!YIJI2_CLOSING_STATES.has(s));
+    /* words outside the 15 no longer close an order */
+    expect(yiji2IsOpen('refunded')).toBe(true);
+    expect(yiji2Status('refunded')).toBe('refunded');
+  });
+
+  it('the event mapper closes on the same four and keeps arrived open', () => {
+    const ev = (state: string) =>
+      orderEventFromYiji2({
+        id: `evt-${state}`,
+        type: 'order.status_changed',
+        occurred_at: '2026-11-17T10:00:00Z',
+        data: {
+          order_number: 2611000000001,
+          state,
+          order_type: 'delivery',
+          placed_at: '2026-11-17T09:00:00Z',
+        },
+      })!;
+    for (const s of ['delivered', 'handed_over', 'closed', 'cancelled'])
+      expect(ev(s).order.isOpen, s).toBe(false);
+    for (const s of ['arrived', 'out_for_delivery', 'finding_courier', 'awaiting_payment'])
+      expect(ev(s).order.isOpen, s).toBe(true);
+    expect(ev('cancelled').order.status).toBe('canceled');
+  });
+});
+
+describe('contract 2026-11-17 (2): POST /compensation-coupons', () => {
+  const amount = (extra: Record<string, unknown> = {}) => ({
+    code: 'K1',
+    type: 1,
+    discount: 25,
+    discountPercentage: 0,
+    limitForUser: 2,
+    reachLimit: 50,
+    ...extra,
+  });
+
+  it('a percentage coupon is refused LOCALLY, before any network call', async () => {
+    const t = new MockYiji2Transport();
+    const e = await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      { code: 'P1', discount: 0, discountPercentage: 10, maximumDiscount: 30, reachLimit: 100 },
+      {},
+      { currency: 'SAR' },
+    ).catch((x: unknown) => x);
+    expect(e).toMatchObject({
+      code: 'percent_not_supported_on_v2',
+      status: 400,
+      field: 'category',
+    });
+    expect((e as Error).message).toMatch(/amount coupons only/);
+    expect(t.calls).toHaveLength(0);
+    /* the order path too */
+    await expect(
+      translateV1AdminCall(
+        t,
+        '/api/CouponUserOrder/CreateCouponUserFromOrder',
+        { orderId: '2611000000001', coupon: { code: 'P2', discountPercentage: 5, reachLimit: 9 } },
+        {},
+        { currency: 'SAR' },
+      ),
+    ).rejects.toMatchObject({ code: 'percent_not_supported_on_v2' });
+    expect(t.calls).toHaveLength(0);
+  });
+
+  it('through the connector the percentage refusal is the v1 refusal the processor records', async () => {
+    const { connector, transport } = mockConnector();
+    const e = await connector.adminPost!(
+      '/api/Coupon/AddCoupon',
+      { code: 'P3', discountPercentage: 15, reachLimit: 100 },
+      {},
+    ).catch((x: unknown) => x);
+    expect(isYijiRefused(e)).toBe(true);
+    expect(e).toMatchObject({ status: 400, body: { result: 2 } });
+    expect((e as { body: { exceptionMessage: string } }).body.exceptionMessage).toMatch(
+      /^percent_not_supported_on_v2 \[category\]: /,
+    );
+    expect(transport.calls).toHaveLength(0);
+  });
+
+  it('the mock refuses a percentage coupon like v2: 400 VALIDATION_FAILED, field category', async () => {
+    const t = new MockYiji2Transport();
+    await expect(
+      t.request('POST', '/compensation-coupons', {
+        body: {
+          code: 'P4',
+          type: 'percent',
+          percent_bps: 1000,
+          country: 'SA',
+          total_discount_limit: { amount_minor: 10000, currency: 'SAR' },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 400, field: 'category' });
+    expect(t.coupons).toHaveLength(0);
+  });
+
+  it('total_discount_limit is never raised: below value x usage_limit is refused locally', async () => {
+    const t = new MockYiji2Transport();
+    const e = await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      amount({ reachLimit: 40 }),
+      {},
+      { currency: 'SAR' },
+    ).catch((x: unknown) => x);
+    expect(e).toMatchObject({
+      code: 'total_limit_below_uses_on_v2',
+      status: 400,
+      field: 'total_discount_limit',
+    });
+    expect((e as Error).message).toContain('40 SAR');
+    expect((e as Error).message).toContain('value 25 SAR x 2 uses = 50 SAR');
+    expect(t.calls).toHaveLength(0);
+    /* a missing total is refused too: nothing is invented */
+    await expect(
+      translateV1AdminCall(
+        t,
+        '/api/Coupon/AddCoupon',
+        amount({ reachLimit: undefined }),
+        {},
+        { currency: 'SAR' },
+      ),
+    ).rejects.toMatchObject({ code: 'total_limit_missing_on_v2' });
+    expect(t.calls).toHaveLength(0);
+    /* exactly value x uses is fine, and is sent as approved */
+    await translateV1AdminCall(t, '/api/Coupon/AddCoupon', amount(), {}, { currency: 'SAR' });
+    expect(t.coupons[0]?.body).toMatchObject({
+      total_discount_limit: { amount_minor: 5000, currency: 'SAR' },
+      usage_limit: 2,
+    });
+  });
+
+  it('the mock enforces the total rule like v2', async () => {
+    const t = new MockYiji2Transport();
+    await expect(
+      t.request('POST', '/compensation-coupons', {
+        body: {
+          code: 'T1',
+          type: 'amount',
+          country: 'SA',
+          value: { amount_minor: 2500, currency: 'SAR' },
+          usage_limit: 2,
+          total_discount_limit: { amount_minor: 4000, currency: 'SAR' },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', field: 'total_discount_limit' });
+  });
+
+  it("currency is the vendor country's: a mismatch is refused locally and by the mock", async () => {
+    const t = new MockYiji2Transport();
+    await expect(
+      translateV1AdminCall(
+        t,
+        '/api/Coupon/AddCoupon',
+        amount(),
+        {},
+        {
+          currency: 'SAR',
+          country: 'BH',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'currency_not_country_on_v2', field: 'currency' });
+    expect(t.calls).toHaveLength(0);
+    expect(
+      v2CouponProblem({
+        type: 'amount',
+        country: 'BH',
+        value: { amount_minor: 1500, currency: 'BHD' },
+        total_discount_limit: { amount_minor: 1500, currency: 'BHD' },
+      }),
+    ).toBeNull();
+    await expect(
+      t.request('POST', '/compensation-coupons', {
+        body: {
+          code: 'CU1',
+          type: 'amount',
+          country: 'BH',
+          value: { amount_minor: 1000, currency: 'SAR' },
+          total_discount_limit: { amount_minor: 1000, currency: 'SAR' },
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', field: 'currency' });
+    /* BHD for BH is created */
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      amount({ discount: 1.5, reachLimit: 3 }),
+      {},
+      {
+        currency: 'BHD',
+      },
+    );
+    expect(t.coupons[0]?.body).toMatchObject({
+      country: 'BH',
+      value: { amount_minor: 1500, currency: 'BHD' },
+    });
+  });
+
+  it('the brand needs an active restaurant in the country; a restaurant must match brand and country', async () => {
+    const t = new MockYiji2Transport();
+    const send = (extra: Record<string, unknown>, currency = 'SAR') =>
+      translateV1AdminCall(t, '/api/Coupon/AddCoupon', amount(extra), {}, { currency });
+    /* brand 93 has no active restaurant anywhere */
+    await expect(send({ code: 'B1', brandId: 93 })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      status: 400,
+      field: 'brand_id',
+    });
+    /* 9201 is brand 91 in BH, not SA */
+    await expect(send({ code: 'B2', brandId: 91, restaurantId: 9201 })).rejects.toMatchObject({
+      field: 'restaurant_id',
+    });
+    /* an unknown restaurant */
+    await expect(send({ code: 'B3', restaurantId: 9999 })).rejects.toMatchObject({
+      field: 'restaurant_id',
+    });
+    expect(t.coupons).toHaveLength(0);
+    await send({ code: 'B4', brandId: 91, restaurantId: 9101 });
+    await send({ code: 'B5', brandId: 91, restaurantId: 9201, discount: 1, reachLimit: 2 }, 'BHD');
+    expect(t.coupons.map((c) => c.code)).toEqual(['B4', 'B5']);
+  });
+
+  it('the brand rule refused by v2 reaches the v1 processor as a recorded refusal', async () => {
+    const { connector } = mockConnector();
+    const e = await connector.adminPost!(
+      '/api/Coupon/AddCoupon',
+      amount({ code: 'B6', brandId: 93 }),
+      {},
+    ).catch((x: unknown) => x);
+    expect(isYijiRefused(e)).toBe(true);
+    expect((e as { body: { exceptionMessage: string } }).body.exceptionMessage).toBe(
+      'VALIDATION_FAILED [brand_id]: coupon.brand.no_active_restaurant_in_country',
+    );
+  });
+
+  it('coupons at or above SAR 200 / BHD 20 are created and only alerted, never refused', async () => {
+    const t = new MockYiji2Transport();
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      amount({ code: 'L1', discount: 200, limitForUser: 1, reachLimit: 200 }),
+      {},
+      { currency: 'SAR' },
+    );
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      amount({ code: 'L2', discount: 199.99, limitForUser: 1, reachLimit: 199.99 }),
+      {},
+      { currency: 'SAR' },
+    );
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      amount({ code: 'L3', discount: 20, limitForUser: 1, reachLimit: 20 }),
+      {},
+      { currency: 'BHD' },
+    );
+    expect(t.coupons.map((c) => c.code)).toEqual(['L1', 'L2', 'L3']);
+    expect(t.alerts).toEqual([
+      { code: 'L1', amount_minor: 20000, currency: 'SAR' },
+      { code: 'L3', amount_minor: 20000, currency: 'BHD' },
+    ]);
+  });
+
+  it('an edit (PUT /coupons/{id}) is checked only on the fields it names', async () => {
+    const t = new MockYiji2Transport();
+    await translateV1AdminCall(t, '/api/Coupon/AddCoupon', amount(), {}, { currency: 'SAR' });
+    expect(
+      await translateV1AdminCall(
+        t,
+        '/api/Coupon/UpdateCoupon',
+        { id: 500001, coupon: { code: 'K1', discount: 7 } },
+        {},
+        { currency: 'SAR' },
+      ),
+    ).toEqual({ result: 1 });
+    await expect(
+      translateV1AdminCall(
+        t,
+        '/api/Coupon/UpdateCoupon',
+        { id: 500001, coupon: { code: 'K1', discountPercentage: 7 } },
+        {},
+        { currency: 'SAR' },
+      ),
+    ).rejects.toMatchObject({ code: 'percent_not_supported_on_v2' });
+  });
+});
+
+describe('contract 2026-11-17 (3): grants the CRM did not create', () => {
+  const setup = async () => {
+    const t = new MockYiji2Transport();
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      { code: 'G1', discount: 5, reachLimit: 5, limitForUser: 1 },
+      {},
+      { currency: 'SAR' },
+    );
+    await translateV1AdminCall(
+      t,
+      '/api/CouponUser/AddUserCoupon',
+      { couponId: 500001, userId: '2000000002' },
+      {},
+      { currency: 'SAR' },
+    );
+    return t;
+  };
+
+  it("DELETE of a grant that is not the CRM's is a recorded refusal (not_found), never success", async () => {
+    const t = await setup();
+    await expect(
+      translateV1AdminCall(
+        t,
+        `/api/CouponUser/RemoveUserCoupon/${YIJI2_MOCK_FOREIGN_GRANT.grant_id}`,
+        {},
+        {},
+        { currency: 'SAR' },
+      ),
+    ).rejects.toMatchObject({ code: 'not_found', status: 404 });
+    expect(t.foreignGrants[0]?.removed).toBe(false);
+    const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport: t });
+    const e = await connector.adminPost!(
+      `/api/CouponUser/RemoveUserCoupon/${YIJI2_MOCK_FOREIGN_GRANT.grant_id}`,
+      {},
+      {},
+    ).catch((x: unknown) => x);
+    expect(isYijiRefused(e)).toBe(true);
+    expect(e).toMatchObject({ status: 404 });
+  });
+
+  it('removing twice: the second DELETE is a 404 refusal', async () => {
+    const t = await setup();
+    expect(
+      await translateV1AdminCall(
+        t,
+        '/api/CouponUser/RemoveUserCoupon/700001',
+        {},
+        {},
+        {
+          currency: 'SAR',
+        },
+      ),
+    ).toEqual({ result: 1 });
+    await expect(
+      translateV1AdminCall(
+        t,
+        '/api/CouponUser/RemoveUserCoupon/700001',
+        {},
+        {},
+        {
+          currency: 'SAR',
+        },
+      ),
+    ).rejects.toMatchObject({ code: 'not_found' });
+  });
+
+  it('re-granting a removed grant answers 409 COUPON_INVALID, a recorded refusal', async () => {
+    const t = await setup();
+    await translateV1AdminCall(
+      t,
+      '/api/CouponUser/RemoveUserCoupon/700001',
+      {},
+      {},
+      {
+        currency: 'SAR',
+      },
+    );
+    const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport: t });
+    const e = await connector.adminPost!(
+      '/api/CouponUser/AddUserCoupon',
+      { couponId: 500001, userId: '2000000002' },
+      {},
+    ).catch((x: unknown) => x);
+    expect(isYijiRefused(e)).toBe(true);
+    expect(e).toMatchObject({ status: 409 });
+    expect((e as { body: { exceptionMessage: string } }).body.exceptionMessage).toMatch(
+      /^COUPON_INVALID: /,
+    );
+  });
+
+  it('POST /grants of a coupon the CRM did not create is a 404 refusal', async () => {
+    const t = await setup();
+    await expect(
+      translateV1AdminCall(
+        t,
+        `/api/CouponUser/AddCouponToUserByCode/2000000002/${YIJI2_MOCK_FOREIGN_GRANT.code}`,
+        {},
+        {},
+        { currency: 'SAR' },
+      ),
+    ).rejects.toMatchObject({ code: 'not_found', status: 404 });
+  });
+
+  it('reads still return every grant, the foreign one included', async () => {
+    const t = await setup();
+    const all = await t.request<{ items: Array<{ grant_id: number; code: string }> }>(
+      'GET',
+      '/grants',
+      { query: { customer_id: '2000000001' } },
+    );
+    expect(all?.items.map((g) => g.code)).toEqual([YIJI2_MOCK_FOREIGN_GRANT.code]);
+    const byIds = await t.request<{ items: Array<{ grant_id: number }> }>('GET', '/grants', {
+      query: { ids: `700001,${YIJI2_MOCK_FOREIGN_GRANT.grant_id}` },
+    });
+    /* newest first */
+    expect(byIds?.items.map((g) => g.grant_id)).toEqual([700001, 600001]);
+  });
+
+  it('the HTTP transport: a 404 on a WRITE is not_found, on a READ null', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) =>
+      String(url).endsWith('/auth/token')
+        ? new Response(JSON.stringify({ access_token: 't', expires_in: 900 }), { status: 200 })
+        : new Response('', { status: 404 }),
+    );
+    const t = new HttpYiji2Transport({
+      apiBaseUrl: 'https://api.staging.yiji.app',
+      clientId: 'id',
+      clientSecret: 'secret',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => NOW,
+    });
+    expect(await t.request('GET', '/grants/1')).toBeNull();
+    for (const method of ['POST', 'PUT', 'DELETE'] as const)
+      await expect(t.request(method, '/grants/1', { body: {} })).rejects.toMatchObject({
+        code: 'not_found',
+        status: 404,
+      });
+  });
+
+  it('the HTTP transport keeps the field v2 names on a 400', async () => {
+    const fetchImpl = vi.fn(async (url: string | URL | Request) =>
+      String(url).endsWith('/auth/token')
+        ? new Response(JSON.stringify({ access_token: 't', expires_in: 900 }), { status: 200 })
+        : new Response(
+            JSON.stringify({
+              error: { code: 'VALIDATION_FAILED', message_key: 'k', field: 'category' },
+            }),
+            { status: 400 },
+          ),
+    );
+    const t = new HttpYiji2Transport({
+      apiBaseUrl: 'https://api.staging.yiji.app',
+      clientId: 'id',
+      clientSecret: 'secret',
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: () => NOW,
+    });
+    await expect(t.request('POST', '/compensation-coupons', { body: {} })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+      field: 'category',
+    });
+  });
+});
+
+describe('contract 2026-11-17 (4): POST /customers/{id}/push', () => {
+  const push = (t: Yiji2Transport, body: Record<string, unknown>) =>
+    translateV1AdminCall(
+      t,
+      'https://x/api/NotificationData/SendCrmNotification',
+      body,
+      {},
+      {
+        currency: 'SAR',
+      },
+    );
+
+  it("'delivered' with a notification id is v1's success", async () => {
+    const t = new MockYiji2Transport();
+    expect(await push(t, { userId: '2000000001', title: 'T', body: 'b' })).toEqual({
+      result: 1,
+      extendedProperties: { NotificationId: 'ntf-1' },
+    });
+    expect(t.pushes[0]?.result).toBe('delivered');
+  });
+
+  it("'no_device' is v1's 'no registered FCM device token' refusal", async () => {
+    const t = new MockYiji2Transport();
+    await expect(push(t, { userId: '2000000003', title: 'T', body: 'b' })).rejects.toMatchObject({
+      code: 'no_device',
+      message: 'Customer has no registered FCM device token.',
+    });
+    expect(t.pushes[0]?.result).toBe('no_device');
+    const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport: t });
+    const e = await connector.adminPost!(
+      'https://x/api/NotificationData/SendCrmNotification',
+      { userId: '2000000003', title: 'T', body: 'b' },
+      {},
+    ).catch((x: unknown) => x);
+    expect(isYijiRefused(e)).toBe(true);
+    expect((e as { body: { exceptionMessage: string } }).body.exceptionMessage).toMatch(
+      /no registered FCM device token/i,
+    );
+  });
+
+  it('an unknown customer is "Customer not found", the v1 words for a settled answer', async () => {
+    const t = new MockYiji2Transport();
+    await expect(push(t, { userId: '2999999999', title: 'T', body: 'b' })).rejects.toMatchObject({
+      code: 'customer_not_found',
+      message: expect.stringMatching(/customer not found/i),
+    });
+    await expect(
+      push(t, { phoneNumber: '+966511111111', title: 'T', body: 'b' }),
+    ).rejects.toMatchObject({
+      code: 'customer_not_found',
+    });
+  });
+
+  it('never sends the data keys topic or action; the mock refuses them like v2', async () => {
+    expect(
+      v2PushData({ data: { prop1: 'crm.openchat', conversationId: 'c1', source: 'sara-crm' } }),
+    ).toEqual({
+      prop1: 'crm.openchat',
+      conversationId: 'c1',
+      source: 'sara-crm',
+    });
+    expect(v2PushData({ data: { action: 'crm.openchat', topic: 7 } })).toEqual({
+      prop1: 'crm.openchat',
+    });
+    expect(v2PushData({ action: 'x', data: { prop1: 'crm.openchat', topic: '7' } })).toEqual({
+      prop1: 'crm.openchat',
+    });
+    const t = new MockYiji2Transport();
+    await push(t, {
+      userId: '2000000001',
+      title: 'T',
+      body: 'b',
+      data: { action: 'crm.openchat', topic: 3, conversationId: 'c1' },
+    });
+    expect(t.pushes[0]?.body).toEqual({
+      title: 'T',
+      body: 'b',
+      data: { prop1: 'crm.openchat', conversationId: 'c1' },
+    });
+    for (const k of ['topic', 'action'])
+      await expect(
+        t.request('POST', '/customers/2000000001/push', {
+          body: { title: 'T', body: 'b', data: { [k]: 'x' } },
+        }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED', status: 400, field: `data.${k}` });
+  });
+});
+
+describe('contract 2026-11-17 (5): GET /grants paging', () => {
+  it('findCustomerCoupon follows after_id through every page, newest first', async () => {
+    const t = new MockYiji2Transport({ maxGrantPage: 2 });
+    for (let i = 1; i <= 5; i++) {
+      await translateV1AdminCall(
+        t,
+        '/api/Coupon/AddCoupon',
+        { code: `PG-${i}`, discount: 5, reachLimit: 5, limitForUser: 1 },
+        {},
+        { currency: 'SAR' },
+      );
+      await translateV1AdminCall(
+        t,
+        '/api/CouponUser/AddUserCoupon',
+        { couponId: 500000 + i, userId: '2000000001' },
+        {},
+        { currency: 'SAR' },
+      );
+    }
+    const spy = vi.spyOn(t, 'request');
+    const connector = new Yiji2Connector(V2_VENDOR, mockSettings, { transport: t });
+    /* 6 grants (5 + the app's) at 2 a page: the oldest CRM grant is on page 3 */
+    expect(await connector.findCustomerCoupon!('2000000001', 'PG-1')).toEqual({
+      couponUserId: '700001',
+      couponId: 500001,
+    });
+    const pages = spy.mock.calls.filter(([m, p]) => m === 'GET' && p === '/grants');
+    expect(pages.map(([, , o]) => o?.query?.after_id)).toEqual([undefined, '700004', '700002']);
+    /* the newest is on page 1 */
+    spy.mockClear();
+    expect(await connector.findCustomerCoupon!('2000000001', 'PG-5')).toMatchObject({
+      couponUserId: '700005',
+    });
+    expect(spy.mock.calls.filter(([m, p]) => m === 'GET' && p === '/grants')).toHaveLength(1);
+    /* the app's grant is read too; a code nobody holds walks to the end and answers null */
+    expect(await connector.findCustomerCoupon!('2000000001', 'V2-APP-WELCOME')).toMatchObject({
+      couponUserId: '600001',
+    });
+    expect(await connector.findCustomerCoupon!('2000000001', 'NOPE')).toBeNull();
+  });
+
+  it('a removed grant is not a held coupon', async () => {
+    const t = new MockYiji2Transport();
+    await translateV1AdminCall(
+      t,
+      '/api/Coupon/AddCoupon',
+      { code: 'RM-1', discount: 5, reachLimit: 5, limitForUser: 1 },
+      {},
+      { currency: 'SAR' },
+    );
+    await translateV1AdminCall(
+      t,
+      '/api/CouponUser/AddUserCoupon',
+      { couponId: 500001, userId: '2000000002' },
+      {},
+      { currency: 'SAR' },
+    );
+    await translateV1AdminCall(
+      t,
+      '/api/CouponUser/RemoveUserCoupon/700001',
+      {},
+      {},
+      {
+        currency: 'SAR',
+      },
+    );
+    expect(await findGrantByCode(t, '2000000002', 'RM-1')).toBeNull();
+  });
+
+  it('stops at the page cap, on a cursor that does not move, and falls back when /grants is absent', async () => {
+    let calls = 0;
+    const endless: Yiji2Transport = {
+      request: async <T>() => {
+        calls++;
+        return {
+          items: [{ grant_id: 1_000_000 - calls, code: 'OTHER', state: 'active' }],
+          next_after_id: 1_000_000 - calls,
+        } as T;
+      },
+    };
+    expect(await findGrantByCode(endless, '1', 'X')).toBeNull();
+    expect(calls).toBe(YIJI2_GRANTS_MAX_PAGES);
+
+    let stuck = 0;
+    const stuckT: Yiji2Transport = {
+      request: async <T>() => {
+        stuck++;
+        return { items: [{ grant_id: 5, code: 'OTHER' }], next_after_id: 5 } as T;
+      },
+    };
+    expect(await findGrantByCode(stuckT, '1', 'X')).toBeNull();
+    expect(stuck).toBe(2);
+
+    const older: Yiji2Transport = {
+      request: async <T>(_m: string, path: string) =>
+        (path === '/grants'
+          ? null
+          : { id: 1, coupons: [{ grant_id: 9, coupon_id: 3, code: 'X', state: 'active' }] }) as T,
+    };
+    expect(await findGrantByCode(older, '1', 'X')).toMatchObject({ grant_id: 9 });
   });
 });

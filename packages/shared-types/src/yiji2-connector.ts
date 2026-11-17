@@ -54,6 +54,7 @@ import type {
   VendorConnector,
   YijiPlatformSettings,
 } from './connector.js';
+import { YIJI2_CLOSING_STATES, YIJI2_STATE_STATUS } from './order-events.js';
 import { normalizePhone } from './phone.js';
 import { YijiRefusedError } from './yiji-impl.js';
 
@@ -221,42 +222,15 @@ const str = (v: unknown): string | undefined =>
 const obj = (v: unknown): Record<string, unknown> =>
   typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
 
-/** v2 `state` -> the CRM's order status word (the board shows `in_delivery` etc.). */
-export const YIJI2_STATE_TO_STATUS: Record<string, string> = {
-  /* created -> handed over, as partner-v1.yaml (15 states) and
-     crm-events-v1.yaml (12) name them, 2026-11-16; both lists accepted. */
-  created: 'placed',
-  placed: 'placed',
-  awaiting_payment: 'placed',
-  pending_payment: 'placed',
-  paid: 'placed',
-  accepted: 'received',
-  sent_to_kitchen: 'in_kitchen',
-  kitchen_confirmed: 'in_kitchen',
-  preparing: 'in_kitchen',
-  ready: 'ready',
-  finding_courier: 'ready',
-  courier_assigned: 'ready',
-  out_for_delivery: 'in_delivery',
-  delivering: 'in_delivery',
-  arrived: 'in_delivery',
-  delivered: 'delivered',
-  handed_over: 'delivered',
-  closed: 'delivered',
-  completed: 'delivered',
-  cancelled: 'canceled',
-  canceled: 'canceled',
-  refunded: 'refunded',
-};
-const CLOSED_STATES = new Set([
-  'delivered',
-  'handed_over',
-  'closed',
-  'completed',
-  'cancelled',
-  'canceled',
-  'refunded',
-]);
+/**
+ * v2 `state` -> the CRM's order status word (the board shows `in_delivery`
+ * etc.). Exactly v2's 15 states (contract 2026-11-17), shared with the
+ * events mapper (`order-events.ts`) so the two never disagree. An unknown
+ * word passes through as itself.
+ */
+export const YIJI2_STATE_TO_STATUS: Record<string, string> = YIJI2_STATE_STATUS;
+/** delivered, handed_over, closed, cancelled - nothing else closes an order. */
+const CLOSED_STATES = YIJI2_CLOSING_STATES;
 
 export function yiji2Status(state: string | null | undefined): string {
   const s = String(state ?? '')
@@ -454,7 +428,13 @@ export interface Yiji2RequestOptions {
   idempotencyKey?: string;
 }
 
-/** The partner API, as the connector speaks to it. A 404 answers `null`. */
+/**
+ * The partner API, as the connector speaks to it. A 404 on a READ (GET)
+ * answers `null` ("no such thing"); a 404 on a WRITE (POST/PUT/DELETE) is a
+ * `Yiji2RefusedError` with code `not_found` (contract 2026-11-17: `DELETE
+ * /grants/{id}` and `POST /grants` answer 404 for grants and coupons the CRM
+ * did not create), so a write can never be mistaken for a silent success.
+ */
 export interface Yiji2Transport {
   request<T>(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
@@ -476,6 +456,8 @@ export class Yiji2RefusedError extends Error {
     message: string,
     readonly status: number,
     readonly traceId: string | null = null,
+    /** The field v2 names on a 400 VALIDATION_FAILED (e.g. `category`), when it names one. */
+    readonly field: string | null = null,
   ) {
     super(message);
     this.name = 'Yiji2RefusedError';
@@ -489,7 +471,9 @@ export class Yiji2RefusedError extends Error {
  * to that processor and BullMQ would retry it five times for the same answer.
  */
 export function yiji2RefusalAsV1(err: Yiji2RefusedError): YijiRefusedError {
-  const detail = `${err.code}: ${err.message}` + (err.traceId ? ` (trace ${err.traceId})` : '');
+  const detail =
+    `${err.code}${err.field ? ` [${err.field}]` : ''}: ${err.message}` +
+    (err.traceId ? ` (trace ${err.traceId})` : '');
   return new YijiRefusedError(detail, err.status, { result: 2, exceptionMessage: detail });
 }
 
@@ -605,7 +589,7 @@ export class HttpYiji2Transport implements Yiji2Transport {
         ...(opts.body !== undefined ? { body: JSON.stringify(opts.body) } : {}),
       });
       if (res.status === 401 && attempt === 0) continue;
-      if (res.status === 404) return null;
+      if (res.status === 404 && method === 'GET') return null;
       if (res.status === 429) {
         const ra = num(res.headers?.get?.('retry-after'));
         throw new Yiji2UnavailableError('yiji2 rate limited (429)', ra ?? null);
@@ -617,13 +601,21 @@ export class HttpYiji2Transport implements Yiji2Transport {
         /* `{ error: { code, message_key, trace_id } }`; older drafts said
            `message`. 400 VALIDATION_FAILED lands here too: refused, not retried. */
         const e = obj(obj(body).error);
-        const code = str(e.code) ?? `http_${res.status}`;
+        /* A write that answers 404 is "not found / not ours" - a refusal
+           with code not_found whatever the body says (or does not say). */
+        const code = res.status === 404 ? 'not_found' : (str(e.code) ?? `http_${res.status}`);
         const key = str(e.message_key);
         throw new Yiji2RefusedError(
           code,
-          str(e.message) ?? (key ? `${code} (${key})` : `yiji2 refused (${res.status})`),
+          str(e.message) ??
+            (key
+              ? `${code} (${key})`
+              : res.status === 404
+                ? `${method} ${path}: not found`
+                : `yiji2 refused (${res.status})`),
           res.status,
           str(e.trace_id) ?? null,
+          str(e.field) ?? null,
         );
       }
       return body as T;
@@ -647,6 +639,8 @@ interface MockCustomerSeed {
   phone: string;
   email: string;
   country: 'SA' | 'BH';
+  /** False = no registered handset: `POST /customers/{id}/push` answers `no_device`. */
+  device?: boolean;
 }
 interface MockOrderSeed {
   orderNumber: string;
@@ -692,8 +686,53 @@ export const YIJI2_MOCK_CUSTOMERS: readonly MockCustomerSeed[] = [
     phone: '+97336000203',
     email: 'bh@v2.test',
     country: 'BH',
+    device: false,
   },
 ];
+
+/**
+ * Restaurants the mock knows, for the coupon rules (contract 2026-11-17):
+ * the brand must have an ACTIVE restaurant in the coupon's country, and a
+ * named `restaurant_id` must belong to that brand and country. Brand 93 has
+ * only an inactive restaurant, so it is refused everywhere.
+ */
+export const YIJI2_MOCK_RESTAURANTS: ReadonlyArray<{
+  id: string;
+  brandId: string;
+  country: 'SA' | 'BH';
+  active: boolean;
+}> = [
+  { id: '9101', brandId: '91', country: 'SA', active: true },
+  { id: '9102', brandId: '91', country: 'SA', active: true },
+  { id: '9201', brandId: '91', country: 'BH', active: true },
+  { id: '9301', brandId: '93', country: 'SA', active: false },
+];
+
+/**
+ * A coupon and grant NOT created by the CRM (the app's welcome coupon). Reads
+ * return it like any other grant; `POST /grants` and `DELETE /grants/{id}`
+ * answer 404 for it (contract 2026-11-17: writes work only on the CRM's own).
+ */
+export const YIJI2_MOCK_FOREIGN_GRANT = {
+  grant_id: '600001',
+  coupon_id: '400001',
+  code: 'V2-APP-WELCOME',
+  customer_id: '2000000001',
+  order_number: null,
+  removed: false,
+} as const;
+
+/** The country's own currency (contract 2026-11-17): SA -> SAR, BH -> BHD. */
+export const YIJI2_COUNTRY_CURRENCY: Readonly<Record<string, 'SAR' | 'BHD'>> = {
+  SA: 'SAR',
+  BH: 'BHD',
+};
+
+/**
+ * At or above this many MINOR units v2 raises an alert on its side (SAR 200 =
+ * 20000 halalas, BHD 20 = 20000 fils). Never a refusal.
+ */
+export const YIJI2_LARGE_COUPON_ALERT_MINOR = 20_000;
 
 export const YIJI2_MOCK_ORDERS: readonly MockOrderSeed[] = [
   {
@@ -779,6 +818,8 @@ const MOCK_DELIVERY_FEE_MINOR = { SAR: 800, BHD: 800 } as const;
 
 export interface MockYiji2TransportOptions {
   now?: () => number;
+  /** Largest page `GET /grants` answers (v2's own cap is 100); small in paging tests. */
+  maxGrantPage?: number;
 }
 
 /**
@@ -802,14 +843,97 @@ export class MockYiji2Transport implements Yiji2Transport {
     order_number: string | null;
     removed: boolean;
   }> = [];
-  readonly pushes: Array<{ customer_id: string; body: Record<string, unknown> }> = [];
+  readonly pushes: Array<{
+    customer_id: string;
+    body: Record<string, unknown>;
+    result: 'delivered' | 'no_device';
+  }> = [];
+  /** Coupons at or above SAR 200 / BHD 20: v2 alerts on its side, never refuses. */
+  readonly alerts: Array<{ code: string; amount_minor: number; currency: string }> = [];
+  /** Grants that exist on v2 but were not created by the CRM (read-only to the CRM). */
+  readonly foreignGrants: Array<{
+    grant_id: string;
+    coupon_id: string | null;
+    code: string | null;
+    customer_id: string | null;
+    order_number: string | null;
+    removed: boolean;
+  }> = [{ ...YIJI2_MOCK_FOREIGN_GRANT }];
   private readonly idem = new Map<string, unknown>();
   private readonly now: () => number;
+  private readonly maxGrantPage: number;
   private nextCoupon = 500_000;
   private nextGrant = 700_000;
+  private nextNotification = 0;
 
   constructor(opts: MockYiji2TransportOptions = {}) {
     this.now = opts.now ?? Date.now;
+    this.maxGrantPage = Math.max(1, opts.maxGrantPage ?? 100);
+  }
+
+  /** Every grant v2 holds, the CRM's and the foreign ones (reads see all). */
+  private allGrants() {
+    return [...this.foreignGrants, ...this.grants];
+  }
+
+  private grantWire(g: MockYiji2Transport['grants'][number]): Yiji2GrantWire {
+    return {
+      grant_id: Number(g.grant_id),
+      coupon_id: g.coupon_id ? Number(g.coupon_id) : null,
+      code: g.code,
+      customer_id: g.customer_id ? Number(g.customer_id) : null,
+      state: g.removed ? 'removed' : 'active',
+    };
+  }
+
+  /** v2's 400 VALIDATION_FAILED, naming the field. */
+  private invalid(field: string, messageKey: string): never {
+    throw new Yiji2RefusedError('VALIDATION_FAILED', messageKey, 400, null, field);
+  }
+
+  /**
+   * The `POST /compensation-coupons` rules as v2 states them (2026-11-17):
+   * AMOUNT only (400, field category); `total_discount_limit` >= value x
+   * usage_limit; every money pair in the country's currency; the brand has an
+   * active restaurant in the country and a named restaurant belongs to brand
+   * and country. A large coupon is created and only alerted.
+   */
+  private checkCouponCreate(b: Record<string, unknown>): void {
+    if (str(b.type) !== 'amount' || b.percent_bps !== undefined)
+      this.invalid('category', 'coupon.category.amount_only');
+    const country = str(b.country)?.toUpperCase() ?? '';
+    const currency = YIJI2_COUNTRY_CURRENCY[country];
+    if (!currency) this.invalid('country', 'coupon.country.unknown');
+    for (const k of ['value', 'total_discount_limit', 'max']) {
+      if (b[k] === undefined) continue;
+      if (str(obj(b[k]).currency)?.toUpperCase() !== currency)
+        this.invalid('currency', 'coupon.currency.not_country_currency');
+    }
+    const value = num(obj(b.value).amount_minor);
+    if (value === undefined || value <= 0) this.invalid('value', 'coupon.value.required');
+    const total = num(obj(b.total_discount_limit).amount_minor);
+    if (total === undefined)
+      this.invalid('total_discount_limit', 'coupon.total_discount_limit.required');
+    const uses = num(b.usage_limit) ?? 1;
+    if (total < value * Math.max(1, uses))
+      this.invalid('total_discount_limit', 'coupon.total_discount_limit.below_value_times_usage');
+    const restaurantId = yiji2Id(b.restaurant_id);
+    const restaurant = restaurantId
+      ? YIJI2_MOCK_RESTAURANTS.find((r) => r.id === restaurantId)
+      : undefined;
+    if (restaurantId && !restaurant) this.invalid('restaurant_id', 'coupon.restaurant.not_found');
+    const brandId = yiji2Id(b.brand_id) ?? restaurant?.brandId;
+    if (
+      brandId &&
+      !YIJI2_MOCK_RESTAURANTS.some(
+        (r) => r.brandId === brandId && r.country === country && r.active,
+      )
+    )
+      this.invalid('brand_id', 'coupon.brand.no_active_restaurant_in_country');
+    if (restaurant && (restaurant.brandId !== brandId || restaurant.country !== country))
+      this.invalid('restaurant_id', 'coupon.restaurant.not_in_brand_and_country');
+    if (value >= YIJI2_LARGE_COUPON_ALERT_MINOR)
+      this.alerts.push({ code: str(b.code) ?? '', amount_minor: value, currency: currency! });
   }
 
   private placedAt(s: MockOrderSeed): string {
@@ -825,14 +949,9 @@ export class MockYiji2Transport implements Yiji2Transport {
       phone: c.phone,
       email: c.email,
       country: c.country,
-      coupons: this.grants
+      coupons: this.allGrants()
         .filter((g) => g.customer_id === c.id && !g.removed)
-        .map((g) => ({
-          grant_id: Number(g.grant_id),
-          coupon_id: g.coupon_id ? Number(g.coupon_id) : null,
-          code: g.code,
-          state: 'active',
-        })),
+        .map((g) => this.grantWire(g)),
       points: { balance: 120 },
     };
   }
@@ -925,6 +1044,9 @@ export class MockYiji2Transport implements Yiji2Transport {
     const key = opts.idempotencyKey ? `${method} ${path} ${opts.idempotencyKey}` : null;
     if (key && this.idem.has(key)) return this.idem.get(key) as T;
     const out = this.answer(method, path, opts) as T | null;
+    /* Same rule as the HTTP transport: a 404 on a READ is null, on a WRITE a refusal. */
+    if (out === null && method !== 'GET')
+      throw new Yiji2RefusedError('not_found', `${method} ${path}: not found`, 404);
     if (key) this.idem.set(key, out);
     return out;
   }
@@ -962,9 +1084,18 @@ export class MockYiji2Transport implements Yiji2Transport {
         : null;
     }
     if (method === 'POST' && (m = /^\/customers\/(\d+)\/push$/.exec(path))) {
-      if (!YIJI2_MOCK_CUSTOMERS.some((x) => x.id === m![1])) return null;
-      this.pushes.push({ customer_id: m[1]!, body: b });
-      return { delivered: true };
+      const c = YIJI2_MOCK_CUSTOMERS.find((x) => x.id === m![1]);
+      if (!c) return null;
+      /* v2 refuses the data keys `topic` and `action` (contract 2026-11-17). */
+      for (const k of ['topic', 'action'])
+        if (k in obj(b.data)) this.invalid(`data.${k}`, 'push.data.reserved_key');
+      /* 202: `delivered` with a notification id, or `no_device`. */
+      if (c.device === false) {
+        this.pushes.push({ customer_id: c.id, body: b, result: 'no_device' });
+        return { result: 'no_device' };
+      }
+      this.pushes.push({ customer_id: c.id, body: b, result: 'delivered' });
+      return { result: 'delivered', notification_id: `ntf-${++this.nextNotification}` };
     }
     if (method === 'GET' && (m = /^\/orders\/(\d+)$/.exec(path))) {
       const o = YIJI2_MOCK_ORDERS.find((x) => x.orderNumber === m![1]);
@@ -982,6 +1113,7 @@ export class MockYiji2Transport implements Yiji2Transport {
         : null;
     }
     if (method === 'POST' && path === '/compensation-coupons') {
+      this.checkCouponCreate(b);
       const coupon_id = String(++this.nextCoupon);
       const code = str(b.code) ?? `V2-${coupon_id}`;
       this.coupons.push({ coupon_id, code, body: b, status: 'active' });
@@ -1018,7 +1150,10 @@ export class MockYiji2Transport implements Yiji2Transport {
       const coupon_id = yiji2Id(b.coupon_id) ?? null;
       const byCode = str(b.code) ? this.coupons.find((c) => c.code === str(b.code)) : undefined;
       const coupon = coupon_id ? this.coupons.find((c) => c.coupon_id === coupon_id) : byCode;
-      if (!coupon) throw new Yiji2RefusedError('coupon_not_found', 'No such coupon.', 404);
+      /* Only coupons the CRM created through the partner API; any other
+         (an app coupon, an unknown id) answers 404. */
+      if (!coupon)
+        throw new Yiji2RefusedError('not_found', 'No such coupon created by this partner.', 404);
       let customer_id = yiji2Id(b.customer_id) ?? null;
       const order_number = yiji2Id(b.order_number) ?? null;
       if (!customer_id && order_number)
@@ -1026,10 +1161,18 @@ export class MockYiji2Transport implements Yiji2Transport {
           YIJI2_MOCK_ORDERS.find((o) => o.orderNumber === order_number)?.customerId ?? null;
       if (!customer_id && str(b.phone))
         customer_id = this.customerByPhone(str(b.phone)!)?.id ?? null;
-      if (!customer_id) throw new Yiji2RefusedError('customer_not_found', 'No such customer.', 404);
-      const dup = this.grants.find(
-        (g) => g.customer_id === customer_id && g.coupon_id === coupon.coupon_id && !g.removed,
+      if (!customer_id) throw new Yiji2RefusedError('not_found', 'No such customer.', 404);
+      const held = this.grants.filter(
+        (g) => g.customer_id === customer_id && g.coupon_id === coupon.coupon_id,
       );
+      const dup = held.find((g) => !g.removed);
+      /* Re-granting a REMOVED grant: 409 COUPON_INVALID (contract 2026-11-17). */
+      if (!dup && held.some((g) => g.removed))
+        throw new Yiji2RefusedError(
+          'COUPON_INVALID',
+          'This grant was removed and cannot be granted again.',
+          409,
+        );
       if (dup)
         throw new Yiji2RefusedError(
           'already_granted',
@@ -1053,10 +1196,33 @@ export class MockYiji2Transport implements Yiji2Transport {
       };
     }
     if (method === 'DELETE' && (m = /^\/grants\/(\d+)$/.exec(path))) {
-      const g = this.grants.find((x) => x.grant_id === m![1]);
+      /* Only the CRM's own, still active grants; a foreign, unknown or
+         already removed grant answers 404. */
+      const g = this.grants.find((x) => x.grant_id === m![1] && !x.removed);
       if (!g) return null;
       g.removed = true;
       return {};
+    }
+    if (method === 'GET' && path === '/grants') {
+      /* A customer's grants, or by ids; newest first; paged by after_id. */
+      const q = opts.query ?? {};
+      const customer = yiji2Id(q.customer_id);
+      const ids = String(q.ids ?? '')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean);
+      const after = num(q.after_id);
+      const limit = Math.min(this.maxGrantPage, Math.max(1, num(q.limit) ?? this.maxGrantPage));
+      const rows = this.allGrants()
+        .filter((g) => (customer ? g.customer_id === customer : true))
+        .filter((g) => (ids.length ? ids.includes(g.grant_id) : true))
+        .filter((g) => (after !== undefined ? Number(g.grant_id) < after : true))
+        .sort((a, b) => Number(b.grant_id) - Number(a.grant_id));
+      const page = rows.slice(0, limit);
+      return {
+        items: page.map((g) => this.grantWire(g)),
+        next_after_id: rows.length > limit ? Number(page.at(-1)!.grant_id) : null,
+      };
     }
     throw new Yiji2RefusedError('not_found', `No such route: ${method} ${path}`, 404);
   }
@@ -1144,6 +1310,118 @@ export function v1CouponDraft(
 }
 
 /**
+ * THE V2 COUPON RULES, CHECKED HERE BEFORE ANY NETWORK CALL (contract of
+ * 2026-11-17). Each failure is a `Yiji2RefusedError` - status 400, a code
+ * naming the rule - which `adminPost` hands to the v1 processor as the
+ * refusal it RECORDS on the row and never retries. Refusing locally gives the
+ * supervisor a clear reason instead of v2's bare VALIDATION_FAILED, and
+ * spends no call on an answer known in advance.
+ *
+ *  - `percent_not_supported_on_v2`: v2 creates AMOUNT coupons only (a
+ *    percentage coupon is refused by v2 with 400, field `category`).
+ *  - `total_limit_missing_on_v2` / `total_limit_below_uses_on_v2`: v2 wants
+ *    `total_discount_limit` >= value x usage_limit. The CRM's total
+ *    (`reachLimit`, the agent's / approver's "Total given discount limit") is
+ *    the most the coupon may EVER give. Raising it to fit v2's rule would
+ *    send a coupon MORE GENEROUS than the CRM approved, so it is never
+ *    raised: the coupon is refused with the numbers in the reason and an
+ *    admin re-approves it with a total that covers every use.
+ *  - `currency_not_country_on_v2`: every money pair is in the vendor country's
+ *    currency (SA -> SAR, BH -> BHD).
+ *
+ * Not checked here (v2 knows its restaurants, the CRM does not): the brand
+ * must have an active restaurant in the country and `restaurant_id` must
+ * belong to that brand and country - v2 answers 400 and that refusal is
+ * recorded the same way. Coupons at or above SAR 200 / BHD 20 are created
+ * and only alerted on v2's side, so nothing here caps the value.
+ *
+ * `partial` is for `PUT /coupons/{id}` (an edit may name only what changes):
+ * only rules whose fields are present are checked.
+ */
+export function v2CouponProblem(
+  draft: Record<string, unknown>,
+  opts: { partial?: boolean } = {},
+): Yiji2RefusedError | null {
+  const refuse = (code: string, message: string, field: string) =>
+    new Yiji2RefusedError(code, message, 400, null, field);
+  if (draft.type === 'percent' || draft.percent_bps !== undefined) {
+    return refuse(
+      'percent_not_supported_on_v2',
+      'Yiji v2 creates amount coupons only; a percentage coupon is refused by v2 (field category). Approve it as an amount coupon.',
+      'category',
+    );
+  }
+  const country = String(draft.country ?? '').toUpperCase();
+  const currency = YIJI2_COUNTRY_CURRENCY[country];
+  if (!currency) {
+    return refuse(
+      'currency_not_country_on_v2',
+      `Yiji v2 coupons are for SA (SAR) or BH (BHD); the vendor country "${country}" is neither.`,
+      'currency',
+    );
+  }
+  for (const k of ['value', 'total_discount_limit', 'max']) {
+    const m = draft[k];
+    if (m === undefined) continue;
+    const cur = String(obj(m).currency ?? '').toUpperCase();
+    if (cur !== currency)
+      return refuse(
+        'currency_not_country_on_v2',
+        `Yiji v2 wants ${country} coupons in ${currency}; this coupon's ${k} is in ${cur || 'no currency'}.`,
+        'currency',
+      );
+  }
+  const value = num(obj(draft.value).amount_minor);
+  const total = num(obj(draft.total_discount_limit).amount_minor);
+  const uses = num(draft.usage_limit);
+  if (total === undefined) {
+    if (opts.partial) return null;
+    return refuse(
+      'total_limit_missing_on_v2',
+      'Yiji v2 needs a total discount limit on every coupon; this coupon has none.',
+      'total_discount_limit',
+    );
+  }
+  if (value !== undefined && uses !== undefined && uses > 0 && total < value * uses) {
+    const units = yiji2MinorUnits(currency);
+    return refuse(
+      'total_limit_below_uses_on_v2',
+      `Yiji v2 needs the total discount limit (${total / units} ${currency}) to cover every use: ` +
+        `value ${value / units} ${currency} x ${uses} uses = ${(value * uses) / units} ${currency}. ` +
+        'The CRM never raises an approved limit; re-approve with a total that covers every use.',
+      'total_discount_limit',
+    );
+  }
+  return null;
+}
+
+/**
+ * The `data` of a v2 push. v2 REFUSES the keys `topic` and `action`
+ * (contract 2026-11-17). The v1 CRM payload carries the agreed tap action in
+ * `data.prop1` (`crm.openchat`, from `openChatAction`) plus `conversationId`
+ * and `source` - none of them refused, so they travel as they are. `notifyTopic`
+ * belongs to v1's template endpoint (`SendNotification`), which v2 does not
+ * map, so no topic ever reaches here from the CRM; a `topic` that does is
+ * dropped (a v1 template number means nothing on v2), and an `action` is
+ * renamed to `prop1` (the key the app reads) unless `prop1` is already set.
+ * Values are sent as strings.
+ */
+export function v2PushData(b: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  const put = (k: string, v: unknown) => {
+    if (v === undefined || v === null || v === '') return;
+    out[k] = typeof v === 'string' ? v : JSON.stringify(v);
+  };
+  for (const [k, v] of Object.entries(obj(b.data))) put(k, v);
+  for (const [k, v] of Object.entries(b)) if (/^prop\d+$/.test(k) || k === 'url') put(k, v);
+  const action = out.action ?? (typeof b.action === 'string' ? b.action : undefined);
+  delete out.action;
+  delete out.topic;
+  if (action && !out.prop1) out.prop1 = action;
+  return out;
+}
+
+/**
  * Translate ONE v1 admin call (path + body) into v2 partner calls and answer
  * in v1's shape. Exported so the mapping is tested on its own.
  */
@@ -1165,6 +1443,11 @@ export async function translateV1AdminCall(
   };
   const country = opts.country ?? (opts.currency.toUpperCase() === 'BHD' ? 'BH' : 'SA');
   const draft = v1CouponDraft(b, { currency: opts.currency, country });
+  /** Refused locally (never sent) when it breaks a v2 coupon rule. */
+  const preflight = (partial = false) => {
+    const problem = v2CouponProblem(draft, { partial });
+    if (problem) throw problem;
+  };
 
   if (/\/api\/CouponUser\/AddCompensationCoupon\b/i.test(path)) {
     throw new Yiji2RefusedError(
@@ -1174,6 +1457,7 @@ export async function translateV1AdminCall(
     );
   }
   if (/\/api\/Coupon\/AddCoupon$/i.test(path)) {
+    preflight();
     const c = await transport.request<{ coupon_id?: unknown }>('POST', '/compensation-coupons', {
       body: draft,
       ...withIdem('coupon'),
@@ -1185,6 +1469,7 @@ export async function translateV1AdminCall(
   }
   if (/\/api\/CouponUserOrder\/CreateCouponUserFromOrder$/i.test(path)) {
     const orderNumber = yiji2Id(b.orderId ?? cu.orderId);
+    preflight();
     const c = await transport.request<{ coupon_id?: unknown; grant_id?: unknown }>(
       'POST',
       '/compensation-coupons',
@@ -1243,25 +1528,29 @@ export async function translateV1AdminCall(
   if ((m = /\/api\/CouponUser\/RemoveUserCoupon\/?(\d+)?/i.exec(path))) {
     const id = m[1] ?? yiji2Id(b.couponUserId ?? b.id);
     if (!id) return { result: 2, exceptionMessage: 'no grant id' };
-    const r = await transport.request('DELETE', `/grants/${id}`);
-    return r === null ? { result: 2, exceptionMessage: 'grant not found' } : { result: 1 };
+    /* 404 = not found OR not the CRM's (v2 deletes only grants the CRM
+       created): the transport throws `not_found`, recorded as a refusal -
+       never read as "removed". */
+    await transport.request('DELETE', `/grants/${id}`);
+    return { result: 1 };
   }
   if (/\/api\/Coupon\/UpdateStatusCoupon/i.test(path)) {
     const id = yiji2Id(b.id ?? b.couponId);
     if (!id) return { result: 2, exceptionMessage: 'no coupon id' };
     const status = num(b.status);
-    const r = await transport.request('PUT', `/coupons/${id}/status`, {
+    await transport.request('PUT', `/coupons/${id}/status`, {
       body: {
         status: status === 1 ? 'active' : status === 0 ? 'inactive' : (str(b.status) ?? 'inactive'),
       },
     });
-    return r === null ? { result: 2, exceptionMessage: 'coupon not found' } : { result: 1 };
+    return { result: 1 };
   }
   if (/\/api\/Coupon\/UpdateCoupon/i.test(path)) {
     const id = yiji2Id(b.id ?? obj(b.coupon).id);
     if (!id) return { result: 2, exceptionMessage: 'no coupon id' };
-    const r = await transport.request('PUT', `/coupons/${id}`, { body: draft });
-    return r === null ? { result: 2, exceptionMessage: 'coupon not found' } : { result: 1 };
+    preflight(true);
+    await transport.request('PUT', `/coupons/${id}`, { body: draft });
+    return { result: 1 };
   }
   if ((m = /\/api\/Coupon\/GetCoupon\/id\/(\d+)/i.exec(path))) {
     const c = await transport.request<Record<string, unknown>>('GET', `/coupons/${m[1]}`);
@@ -1279,28 +1568,105 @@ export async function translateV1AdminCall(
       });
       target = yiji2Id(found?.items?.[0]?.id);
     }
-    if (!target)
-      throw new Yiji2RefusedError('customer_not_found', 'No v2 customer for this push.', 404);
-    const r = await transport.request('POST', `/customers/${target}/push`, {
-      body: {
-        title: str(b.title),
-        body: str(b.body),
-        action: str(b.prop1) ?? str(b.action),
-        data: Object.fromEntries(
-          Object.entries(b).filter(([k]) => /^prop\d+$/.test(k) || k === 'url'),
-        ),
-      },
-      ...withIdem('push'),
-    });
-    if (r === null)
-      throw new Yiji2RefusedError('customer_not_found', 'No v2 customer for this push.', 404);
-    return { result: 1 };
+    /* "Customer not found" is the phrase the v1 push processor treats as a
+       settled fact about the person (`isTerminalRefusal`): not retried. */
+    const noCustomer = () =>
+      new Yiji2RefusedError(
+        'customer_not_found',
+        'Customer not found (no v2 customer for this push).',
+        404,
+      );
+    if (!target) throw noCustomer();
+    let r: { result?: unknown; notification_id?: unknown } | null;
+    try {
+      r = await transport.request<{ result?: unknown; notification_id?: unknown }>(
+        'POST',
+        `/customers/${target}/push`,
+        {
+          /* No top-level `action` and no `data.topic` / `data.action`: v2
+             refuses those keys (contract 2026-11-17); see v2PushData. */
+          body: { title: str(b.title), body: str(b.body), data: v2PushData(b) },
+          ...withIdem('push'),
+        },
+      );
+    } catch (err) {
+      if (err instanceof Yiji2RefusedError && err.status === 404) throw noCustomer();
+      throw err;
+    }
+    /* 202 `no_device`: the customer has no registered handset. Answered in
+       the words of v1's own refusal ("Customer has no registered FCM device
+       token."), which the v1 push processor records on the conversation as
+       unreachable and never retries - exactly as for a v1 customer without
+       an FCM token. */
+    if (str(r?.result) === 'no_device')
+      throw new Yiji2RefusedError('no_device', 'Customer has no registered FCM device token.', 422);
+    /* 202 `delivered` (with `notification_id`) is v1's success. */
+    const notificationId = str(r?.notification_id) ?? yiji2Id(r?.notification_id);
+    return notificationId
+      ? { result: 1, extendedProperties: { NotificationId: notificationId } }
+      : { result: 1 };
   }
   throw new Yiji2RefusedError(
     'unsupported_call',
     `The v2 connector has no mapping for ${path}.`,
     400,
   );
+}
+
+/** `GET /grants` page size asked for (v2's own maximum). */
+export const YIJI2_GRANTS_PAGE_SIZE = 100;
+/** At most this many pages per lookup (5,000 grants): a cursor that never ends cannot spin. */
+export const YIJI2_GRANTS_MAX_PAGES = 50;
+
+const grantIsActive = (g: Yiji2GrantWire) => (str(g.state) ?? 'active') !== 'removed';
+
+/**
+ * A customer's ACTIVE grant of `code`, found by paging `GET /grants`
+ * (contract 2026-11-17: a customer's grants, newest first, paged by
+ * `after_id`). Follows `next_after_id` - or, when v2 sends none, the last id
+ * of a FULL page - until a page comes back short or empty, at most
+ * `YIJI2_GRANTS_MAX_PAGES` pages, and stops if the cursor does not move.
+ * Reads see every grant (the CRM's and the app's). Where `GET /grants`
+ * answers 404 (an older v2), the customer's embedded `coupons` are read.
+ */
+export async function findGrantByCode(
+  t: Yiji2Transport,
+  customerId: string,
+  code: string,
+): Promise<Yiji2GrantWire | null> {
+  let after: string | undefined;
+  for (let page = 0; page < YIJI2_GRANTS_MAX_PAGES; page++) {
+    const r = await t.request<{ items?: Yiji2GrantWire[]; next_after_id?: unknown }>(
+      'GET',
+      '/grants',
+      {
+        query: {
+          customer_id: customerId,
+          limit: YIJI2_GRANTS_PAGE_SIZE,
+          ...(after ? { after_id: after } : {}),
+        },
+      },
+    );
+    if (r === null) {
+      if (page > 0) return null;
+      const c = await t.request<Yiji2CustomerWire>(
+        'GET',
+        `/customers/${encodeURIComponent(customerId)}`,
+      );
+      return (c?.coupons ?? []).find((g) => str(g.code) === code && grantIsActive(g)) ?? null;
+    }
+    const items = r.items ?? [];
+    const hit = items.find((g) => str(g.code) === code && grantIsActive(g));
+    if (hit) return hit;
+    const next =
+      yiji2Id(r.next_after_id) ??
+      (r.next_after_id === undefined && items.length >= YIJI2_GRANTS_PAGE_SIZE
+        ? (yiji2Id(items.at(-1)?.grant_id) ?? yiji2Id(items.at(-1)?.id))
+        : undefined);
+    if (!next || next === after || items.length === 0) return null;
+    after = next;
+  }
+  return null;
 }
 
 /* ── The connector ───────────────────────────────────────────────── */
@@ -1398,13 +1764,7 @@ export class Yiji2Connector implements VendorConnector {
       : null;
     this.findCustomerCoupon = t
       ? async (customerId, code): Promise<CrmCustomerCoupon | null> => {
-          const c = await t.request<Yiji2CustomerWire>(
-            'GET',
-            `/customers/${encodeURIComponent(customerId)}`,
-          );
-          const held = (c?.coupons ?? []).find(
-            (g) => str(g.code) === code && (str(g.state) ?? 'active') !== 'removed',
-          );
+          const held = await findGrantByCode(t, customerId, code);
           if (!held) return null;
           const grant = yiji2Id(held.grant_id) ?? yiji2Id(held.id);
           if (!grant) return null;
