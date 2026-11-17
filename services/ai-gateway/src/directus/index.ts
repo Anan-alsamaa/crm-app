@@ -4,6 +4,7 @@ import { createServiceClient, type YijiDirectusClient } from '@yiji/shared-confi
 import {
   DEFAULT_LATE_DELIVERY_MINUTES,
   LATE_DELIVERY_MINUTES_KEY,
+  lateDeliveryMinutesKeyFor,
   lateDeliveryMinutes,
   VENDOR_INTEGRATION_READ_FIELDS,
   type VendorIntegrationRow,
@@ -93,6 +94,8 @@ export class GatewayDirectus {
   // Small caches so we don't hit Directus on every AI request.
   private adminRoleCache: { ids: Set<string>; at: number } | null = null;
   private lateThresholdCache: { minutes: number; at: number } | null = null;
+  /** Other platforms' thresholds, by setting key (v2: late_delivery_minutes_yiji2). */
+  private readonly lateThresholdByKey = new Map<string, { minutes: number; at: number }>();
   private readonly whoCache = new Map<
     string,
     { who: { id: string; role: string | null }; at: number }
@@ -184,24 +187,36 @@ export class GatewayDirectus {
    * typo, negative, absurd — resolve to the documented default, so a setting
    * nobody can break is one operations can be trusted with.
    */
-  async lateDeliveryThreshold(): Promise<number> {
+  /**
+   * PER PLATFORM (owner, 2026-11-16): a second tenant keeps its own threshold
+   * under `late_delivery_minutes_<platform>` (`lateDeliveryMinutesKeyFor`);
+   * v1's key and value are exactly what they were. A platform whose row does
+   * not exist yet gets the default, never v1's number.
+   */
+  async lateDeliveryThreshold(platform?: string | null): Promise<number> {
     const now = Date.now();
-    if (this.lateThresholdCache && now - this.lateThresholdCache.at < 60_000) {
-      return this.lateThresholdCache.minutes;
+    const key = lateDeliveryMinutesKeyFor(platform);
+    const cached =
+      key === LATE_DELIVERY_MINUTES_KEY
+        ? this.lateThresholdCache
+        : this.lateThresholdByKey.get(key);
+    if (cached && now - cached.at < 60_000) {
+      return cached.minutes;
     }
     try {
       const rows = (await this.client.request(
         readItems(
           'app_settings' as never,
           {
-            filter: { key: { _eq: LATE_DELIVERY_MINUTES_KEY } },
+            filter: { key: { _eq: key } },
             fields: ['value'],
             limit: 1,
           } as never,
         ),
       )) as unknown as Array<{ value: string | null }>;
       const minutes = lateDeliveryMinutes(rows[0]?.value);
-      this.lateThresholdCache = { minutes, at: now };
+      if (key === LATE_DELIVERY_MINUTES_KEY) this.lateThresholdCache = { minutes, at: now };
+      else this.lateThresholdByKey.set(key, { minutes, at: now });
       return minutes;
     } catch (err) {
       /*
@@ -215,9 +230,9 @@ export class GatewayDirectus {
        * Logged at WARN with the value being used, so the next time this falls
        * back there is a line to find rather than a plausible number.
        */
-      const minutes = this.lateThresholdCache?.minutes ?? DEFAULT_LATE_DELIVERY_MINUTES;
+      const minutes = cached?.minutes ?? DEFAULT_LATE_DELIVERY_MINUTES;
       console.warn(
-        `[late-orders] could not read ${LATE_DELIVERY_MINUTES_KEY}; using ${minutes} min`,
+        `[late-orders] could not read ${key}; using ${minutes} min`,
         err instanceof Error ? err.message : err,
       );
       return minutes;

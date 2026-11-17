@@ -176,7 +176,9 @@
     "saved": "تم حفظ بيانات العميل.",
     "withEmail": "لديها بريد إلكتروني",
     "withPhone": "لديها هاتف",
-    "withVendor": "مرتبطة ببائع"
+    "withVendor": "مرتبطة ببائع",
+    "vendorLabel": "البائع",
+    "anyVendor": "كل البائعين"
   },
   "commerce": {
     "groupOrder": "طلب جماعي",

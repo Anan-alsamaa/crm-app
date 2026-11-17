@@ -58,6 +58,8 @@ export interface CrmCouponRow {
   yiji_pushed_at?: string | null;
   /** Stamped when Yiji shows the coupon used (2026-11-11). */
   yiji_used_order?: string | null;
+  /** The row's vendor: this check reads Yiji v1 and must skip other platforms. */
+  vendor?: { platform?: string | null } | null;
 }
 
 export interface MisuseFinding {
@@ -177,6 +179,7 @@ export async function runCouponMisuseCheck(deps: CouponMisuseDeps): Promise<Coup
             'yiji_coupon_id',
             'yiji_pushed_at',
             'yiji_used_order',
+            { vendor: ['platform'] },
           ],
           limit: -1,
         } as never,
@@ -186,6 +189,13 @@ export async function runCouponMisuseCheck(deps: CouponMisuseDeps): Promise<Coup
     logger.warn({ err: errorText(err) }, 'coupon misuse check: CRM coupons could not be read');
     return { status: 'failed', orders: 0, findings: 0 };
   }
+  /* The readers below are Yiji v1's admin API: a coupon on another platform
+     (Yiji v2) has ids that mean a stranger's coupon on v1 - never checked
+     here (review 2026-11-16). A row with no vendor is a legacy v1 row. */
+  rows = rows.filter((r) => {
+    const p = r.vendor?.platform?.trim();
+    return !p || p === 'yiji' || p === 'mock';
+  });
   if (!rows.length) return { status: 'clean', orders: 0, findings: 0 };
 
   /* Today and yesterday, Yiji's local days: a run just after midnight still

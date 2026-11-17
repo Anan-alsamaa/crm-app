@@ -252,7 +252,7 @@ describe('the registry picks the connector by vendor.platform', () => {
   });
 
   it('platform list matches the schema choices', () => {
-    expect([...COMMERCE_PLATFORMS]).toEqual(['yiji', 'mock']);
+    expect([...COMMERCE_PLATFORMS]).toEqual(['yiji', 'yiji2', 'mock']);
   });
 });
 

@@ -14,7 +14,7 @@
 import { createHmac } from 'node:crypto';
 
 /** Platforms with a connector. Mirrors COMMERCE_PLATFORMS in shared-types connector.ts. */
-export const KNOWN_PLATFORMS = ['yiji', 'mock'];
+export const KNOWN_PLATFORMS = ['yiji', 'yiji2', 'mock'];
 
 /** An order and a customer that exist in MockConnector's fixtures (and never on Yiji). */
 export const MOCK_PROBE_ORDER_ID = 'MOCK-1001';

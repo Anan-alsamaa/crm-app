@@ -50,7 +50,13 @@ import {
   type YijiUserProfile,
 } from './yiji-impl.js';
 import { MockConnector } from './mock-connector.js';
-import { YIJI_VENDOR_KEY, vendorCredentialsFromEnv, type SecretEnv } from './vendor-secrets.js';
+import { Yiji2Connector, type Yiji2PlatformSettings } from './yiji2-connector.js';
+import {
+  YIJI_VENDOR_KEY,
+  vendorCredentialsFromEnv,
+  vendorOAuthFromEnv,
+  type SecretEnv,
+} from './vendor-secrets.js';
 
 /* ── The CRM's standard commerce shapes ──────────────────────────── */
 
@@ -91,10 +97,17 @@ export type PlatformAdminPoster = YijiAdminPoster;
  * usable only where `ALLOW_MOCK_VENDORS=true` (never production) - see
  * `mockVendorsAllowed` and `MockConnector`.
  */
-export type CommercePlatform = 'yiji' | 'mock';
+export type CommercePlatform = 'yiji' | 'yiji2' | 'mock';
 
-/** The platforms a `vendors.platform` value may name (the schema's choices). */
-export const COMMERCE_PLATFORMS: readonly CommercePlatform[] = ['yiji', 'mock'];
+/**
+ * The platforms a `vendors.platform` value may name (the schema's choices).
+ *
+ * `yiji2` (owner, 2026-11-16) is Yiji v2, the SECOND TENANT: its own vendor
+ * row, credentials, webhook key, cache keys and settings, served by
+ * `Yiji2Connector` (yiji2-connector.ts) and refused everywhere until that row
+ * exists and is active - never answered by v1's connector.
+ */
+export const COMMERCE_PLATFORMS: readonly CommercePlatform[] = ['yiji', 'yiji2', 'mock'];
 
 /**
  * A vendor as the registry knows it.
@@ -156,7 +169,10 @@ export interface MockPlatformSettings {
 }
 
 /** One entry per platform. */
-export type VendorPlatformSettings = YijiPlatformSettings | MockPlatformSettings;
+export type VendorPlatformSettings =
+  | YijiPlatformSettings
+  | Yiji2PlatformSettings
+  | MockPlatformSettings;
 
 /* ── The connector contract ──────────────────────────────────────── */
 
@@ -524,10 +540,16 @@ export class EnvVendorSettingsSource implements VendorSettingsSource {
   constructor(
     private readonly yiji: YijiPlatformSettings,
     /** MV-6: answer `mock` vendors (no settings needed). Off = refused. */
-    private readonly opts: { allowMock?: boolean } = {},
+    private readonly opts: { allowMock?: boolean; yiji2?: Yiji2PlatformSettings } = {},
   ) {}
   async settingsFor(vendor: ConnectorVendor): Promise<VendorPlatformSettings> {
     if (vendor.platform === 'yiji') return this.yiji;
+    /* v2 has no env settings of its own (they live on its record): only a
+       caller that hands them over - tests, a fixture - gets a v2 answer here. */
+    if (vendor.platform === 'yiji2') {
+      if (this.opts.yiji2) return this.opts.yiji2;
+      throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
+    }
     if (vendor.platform === 'mock') {
       if (this.opts.allowMock) return { platform: 'mock' };
       throw new UnknownVendorError(vendor.platformVendorId, 'mock_not_allowed');
@@ -657,7 +679,7 @@ export class RecordVendorSettingsSource implements VendorSettingsSource {
       if (this.opts.allowMock) return { platform: 'mock' };
       throw new UnknownVendorError(vendor.platformVendorId, 'mock_not_allowed');
     }
-    if (vendor.platform !== 'yiji') {
+    if (vendor.platform !== 'yiji' && vendor.platform !== 'yiji2') {
       throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
     }
     const rows = await this.rows();
@@ -665,7 +687,53 @@ export class RecordVendorSettingsSource implements VendorSettingsSource {
       rows?.find((r) => vendor.crmId && r.id === vendor.crmId) ??
       rows?.find((r) => str(r.yiji_vendor_id) === vendor.platformVendorId) ??
       null;
+    if (vendor.platform === 'yiji2') return this.mergeYiji2(vendor, rec);
     return this.merge(vendor, rec);
+  }
+
+  /**
+   * YIJI V2 (owner, 2026-11-16): everything from ITS OWN record and ITS OWN
+   * env names - never a v1 value. Non-secret: `api_base_url` (the partner
+   * host), `tenant_id`, `brand_id`, `notify_settings`. Secret:
+   * `VENDOR_<KEY>_CLIENT_ID` / `VENDOR_<KEY>_CLIENT_SECRET` from the webhook
+   * key. No key or no credential = a connector whose capabilities are null
+   * (nothing is sent anywhere). The in-memory transport is used ONLY where
+   * mock vendors are allowed (staging) and the record names no API URL.
+   */
+  private mergeYiji2(
+    vendor: ConnectorVendor,
+    rec: VendorIntegrationRow | null,
+  ): Yiji2PlatformSettings {
+    const key = str(rec?.webhook_path_key)?.toLowerCase();
+    const creds = key ? vendorOAuthFromEnv(this.opts.credentialEnv ?? {}, key) : {};
+    const apiBaseUrl = str(rec?.api_base_url);
+    const tenantId = str(rec?.tenant_id);
+    const brandId = str(rec?.brand_id);
+    const n =
+      rec?.notify_settings && typeof rec.notify_settings === 'object' ? rec.notify_settings : {};
+    const push =
+      Object.keys(n).length > 0
+        ? {
+            notifyUrl: str(n.notifyUrl),
+            notifyTopic: str(n.notifyTopic),
+            notifyTitle: str(n.notifyTitle),
+            openChatAction: str(n.openChatAction),
+          }
+        : undefined;
+    /* The in-memory transport only for a ROW that names no API URL. A failed
+       integration read (rec null) must leave the vendor unconfigured - never
+       "delivered" into memory (review 2026-11-16). */
+    const mock = Boolean(this.opts.allowMock) && rec !== null && !apiBaseUrl;
+    return {
+      platform: 'yiji2',
+      ...(apiBaseUrl ? { apiBaseUrl } : {}),
+      ...(creds.clientId ? { clientId: creds.clientId } : {}),
+      ...(creds.clientSecret ? { clientSecret: creds.clientSecret } : {}),
+      ...(tenantId ? { tenantId } : {}),
+      ...(brandId ? { brandId } : {}),
+      ...(push ? { push } : {}),
+      ...(mock ? { mock: true } : {}),
+    };
   }
 
   private merge(vendor: ConnectorVendor, rec: VendorIntegrationRow | null): YijiPlatformSettings {
@@ -759,6 +827,13 @@ const DEFAULT_FACTORIES: Partial<Record<CommercePlatform, ConnectorFactory>> = {
       throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
     }
     return new YijiConnector(vendor, settings);
+  },
+  /* Yiji v2 (owner, 2026-11-16): its own connector, its own settings. */
+  yiji2: (vendor, settings) => {
+    if (settings.platform !== 'yiji2') {
+      throw new UnknownVendorError(vendor.platformVendorId, 'unsupported_platform');
+    }
+    return new Yiji2Connector(vendor, settings);
   },
 };
 
@@ -892,13 +967,18 @@ export function asYijiConnector(connector: VendorConnector): YijiConnector {
 /**
  * A connector whose admin transport speaks the Yiji coupon/push protocol: Yiji
  * itself, or the mock (which answers in Yiji's shapes, in memory). The workers'
- * coupon and push processors build Yiji payloads, so they take only these. A
- * real second platform is refused here until it has its own coupon/push code.
+ * coupon and push processors build Yiji payloads, so they take only these -
+ * and Yiji v2, whose `adminPost` TRANSLATES v1's paths and bodies to the v2
+ * partner routes and answers in v1's shapes (yiji2-connector.ts). Any other
+ * platform is refused here until it has its own coupon/push code.
  */
-export type CouponPushConnector = YijiConnector | MockConnector;
+export type CouponPushConnector = YijiConnector | Yiji2Connector | MockConnector;
 
 export function asCouponPushConnector(connector: VendorConnector): CouponPushConnector {
   if (connector.platform === 'yiji') return asYijiConnector(connector);
+  if (connector instanceof Yiji2Connector || connector.platform === 'yiji2') {
+    return connector as Yiji2Connector;
+  }
   if (connector instanceof MockConnector || connector.platform === 'mock') {
     return connector as MockConnector;
   }

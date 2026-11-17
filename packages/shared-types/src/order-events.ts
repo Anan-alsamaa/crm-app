@@ -286,3 +286,212 @@ export function parseLiveOrders(raw: Record<string, string>): LiveOrder[] {
   }
   return out;
 }
+
+/* ── Yiji v2 events (owner, 2026-11-16) ─────────────────────────────────── */
+
+/**
+ * WHAT V2 SENDS: `POST /webhooks/<v2 key>/events`, signed like v1's inbound,
+ * envelope `{ id, type, occurred_at, environment, data }`, at-least-once
+ * (de-duplicated on `id`). The CRM acts on `order.late` (sent once when the
+ * order crosses v2's threshold, replacing the poll) and `order.status_changed`
+ * (every change, incl. the close); `order.created` is taken too when sent.
+ * Coupon, customer and campaign types are accepted and ignored here.
+ */
+export const YIJI2_ORDER_EVENT_TYPES = [
+  'order.created',
+  'order.status_changed',
+  'order.late',
+] as const;
+
+export const Yiji2EventEnvelope = z.object({
+  id: z.string().trim().min(1).max(128),
+  type: z.string().trim().min(1).max(64),
+  occurred_at: isoDateTime,
+  environment: z.string().trim().max(32).optional(),
+  data: z.record(z.unknown()),
+});
+export type Yiji2EventEnvelope = z.infer<typeof Yiji2EventEnvelope>;
+
+export const Yiji2EventsBatch = z.object({ events: z.array(Yiji2EventEnvelope).min(1).max(100) });
+
+/** Parse one v2 envelope or a batch of them (same batch rule as v1's route). */
+export function parseYiji2EventsBody(body: unknown) {
+  const isBatch = !!body && typeof body === 'object' && 'events' in (body as object);
+  return isBatch ? Yiji2EventsBatch.safeParse(body) : Yiji2EventEnvelope.safeParse(body);
+}
+
+export function yiji2EventsOf(
+  parsed: Yiji2EventEnvelope | { events: Yiji2EventEnvelope[] },
+): Yiji2EventEnvelope[] {
+  return 'events' in parsed ? parsed.events : [parsed];
+}
+
+export function isHandledYiji2Event(type: string): boolean {
+  return (YIJI2_ORDER_EVENT_TYPES as readonly string[]).includes(type);
+}
+
+/**
+ * V2'S ORDER STATES (contract of 2026-11-17, partner routes merged): every
+ * `order.*` event and every partner order read carries one of these 15.
+ * Exported so the connector and the events mapper can never disagree.
+ */
+export const YIJI2_ORDER_STATES = [
+  'created',
+  'awaiting_payment',
+  'accepted',
+  'sent_to_kitchen',
+  'kitchen_confirmed',
+  'preparing',
+  'ready',
+  'finding_courier',
+  'courier_assigned',
+  'out_for_delivery',
+  'delivered',
+  'arrived',
+  'handed_over',
+  'closed',
+  'cancelled',
+] as const;
+export type Yiji2OrderState = (typeof YIJI2_ORDER_STATES)[number];
+
+/**
+ * The states that CLOSE an order (contract 2026-11-17): exactly these four.
+ * `arrived` is still in delivery (the courier is at the door). Words outside
+ * the 15 (an older draft's `refunded`, `completed`, `canceled`) no longer
+ * close anything: v2 does not send them, and an `is_open` on the payload
+ * still wins over the word.
+ */
+export const YIJI2_CLOSING_STATES: ReadonlySet<string> = new Set<Yiji2OrderState>([
+  'delivered',
+  'handed_over',
+  'closed',
+  'cancelled',
+]);
+
+/** v2 `state` -> the board's status word, for exactly the 15 states. */
+export const YIJI2_STATE_STATUS: Readonly<Record<Yiji2OrderState, string>> = {
+  created: 'placed',
+  awaiting_payment: 'placed',
+  accepted: 'received',
+  sent_to_kitchen: 'in_kitchen',
+  kitchen_confirmed: 'in_kitchen',
+  preparing: 'in_kitchen',
+  ready: 'ready',
+  finding_courier: 'ready',
+  courier_assigned: 'ready',
+  out_for_delivery: 'in_delivery',
+  arrived: 'in_delivery',
+  delivered: 'delivered',
+  handed_over: 'delivered',
+  closed: 'delivered',
+  cancelled: 'canceled',
+};
+const V2_STATE_STATUS: Record<string, string> = YIJI2_STATE_STATUS;
+const V2_CLOSED = YIJI2_CLOSING_STATES;
+
+const v2Str = (v: unknown): string | undefined =>
+  typeof v === 'string' && v.trim() ? v.trim() : undefined;
+const v2Id = (v: unknown): string | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? String(v) : v2Str(v);
+const v2Num = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+const v2Obj = (v: unknown): Record<string, unknown> =>
+  typeof v === 'object' && v !== null ? (v as Record<string, unknown>) : {};
+
+/**
+ * v2's order types (crm-events-v1.yaml, confirmed by the v2 session
+ * 2026-11-16) as the CRM's. A food-court PARENT is the order that is
+ * delivered (the board shows it, grouped); a SUB names its parent and is
+ * hidden behind it. Unknown values are kept off the delivery board.
+ */
+const V2_ORDER_TYPE: Record<string, OrderEventOrderType> = {
+  delivery: 'delivery',
+  pickup: 'pickup',
+  carhop: 'carhop',
+  dine_in: 'dine_in',
+  takeaway: 'takeout',
+  food_court_parent: 'delivery',
+  food_court_sub: 'other',
+  catering: 'other',
+};
+
+/**
+ * One v2 envelope as the CRM's `OrderEvent`, or null when it is not an order
+ * event the CRM acts on. v2 guarantees `order_type`, `state`, `order_number`
+ * and `at`/`occurred_at` on every order event, so an envelope WITHOUT one of
+ * them is malformed: null, and `opts.malformed` is told (never defaulted -
+ * a defaulted order type would put a pickup on the delivery board).
+ * `order.late` carries `elapsed_seconds` and `placed_at`; when `placed_at`
+ * is missing it is derived from `occurred_at - elapsed_seconds` so the clock
+ * still runs from the right moment. Money is `{ amount_minor, currency }`
+ * at `data.total` -> SAR/BHD major units.
+ */
+export function orderEventFromYiji2(
+  e: Yiji2EventEnvelope,
+  opts: { malformed?: (reason: string, eventId: string) => void } = {},
+): OrderEvent | null {
+  if (!isHandledYiji2Event(e.type)) return null;
+  const d = e.data;
+  const bad = (reason: string): null => {
+    opts.malformed?.(reason, e.id);
+    return null;
+  };
+  const orderId = v2Id(d.order_number) ?? v2Id(d.order_id);
+  if (!orderId) return bad('no order_number');
+  const state = v2Str(d.state) ?? v2Str(d.status);
+  if (!state) return bad('no state');
+  const typeRaw = v2Str(d.order_type)?.toLowerCase();
+  if (!typeRaw) return bad('no order_type');
+  const placedAt =
+    v2Str(d.placed_at) ??
+    (typeof d.elapsed_seconds === 'number'
+      ? new Date(Date.parse(e.occurred_at) - d.elapsed_seconds * 1000).toISOString()
+      : undefined);
+  if (!placedAt || Number.isNaN(Date.parse(placedAt)))
+    return bad('no placed_at or elapsed_seconds');
+  const lower = state.toLowerCase();
+  const status = V2_STATE_STATUS[lower] ?? lower;
+  const isOpen = typeof d.is_open === 'boolean' ? d.is_open : !V2_CLOSED.has(lower);
+  const orderType: OrderEventOrderType = V2_ORDER_TYPE[typeRaw] ?? 'other';
+  const groupMaster = d.is_group_master === true || typeRaw === 'food_court_parent';
+  const customer = v2Obj(d.customer);
+  const money = v2Obj(d.total);
+  const minor = v2Num(money.amount_minor);
+  const currency = v2Str(money.currency)?.toUpperCase();
+  const total = minor !== undefined ? minor / (currency === 'BHD' ? 1000 : 100) : undefined;
+  const parent = v2Id(d.parent_order_number);
+  const subs = Array.isArray(d.sub_orders) ? d.sub_orders.length : 0;
+  const customerId = v2Id(d.customer_id) ?? v2Id(customer.id);
+  const customerName = v2Str(customer.name);
+  const customerPhone = v2Str(customer.phone);
+  const candidate = {
+    id: e.id,
+    type: e.type === 'order.late' ? 'order.status_changed' : e.type,
+    at: e.occurred_at,
+    order: {
+      orderId,
+      status,
+      isOpen,
+      orderType,
+      placedAt,
+      ...(v2Id(d.restaurant_id) ? { restaurantId: v2Id(d.restaurant_id) } : {}),
+      ...(v2Str(d.restaurant_name) ? { restaurantName: v2Str(d.restaurant_name) } : {}),
+      ...(v2Id(d.brand_id) ? { brandId: v2Id(d.brand_id) } : {}),
+      ...(v2Str(d.brand_name) ? { brandName: v2Str(d.brand_name) } : {}),
+      ...(customerId || customerName || customerPhone
+        ? {
+            customer: {
+              ...(customerId ? { id: customerId } : {}),
+              ...(customerName ? { name: customerName } : {}),
+              ...(customerPhone ? { phone: customerPhone } : {}),
+            },
+          }
+        : {}),
+      ...(total !== undefined ? { total } : {}),
+      ...(subs > 0 || groupMaster ? { isGroupMaster: true } : {}),
+      ...(parent ? { parentOrderId: parent } : {}),
+    },
+  };
+  const parsed = OrderEvent.safeParse(candidate);
+  return parsed.success ? parsed.data : null;
+}

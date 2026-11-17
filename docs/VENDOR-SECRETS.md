@@ -31,6 +31,11 @@ no-fallback rule:
 | Yiji (key `yiji`) | `YIJI_API_KEY`           | `YIJI_ADMIN_EMAIL`         | `YIJI_ADMIN_PASSWORD`         |
 | any other `<key>` | `VENDOR_<KEY>_API_KEY`   | `VENDOR_<KEY>_ADMIN_EMAIL` | `VENDOR_<KEY>_ADMIN_PASSWORD` |
 
+**Yiji v2 (key `yiji2`)** uses client credentials instead of an admin login: `VENDOR_YIJI2_CLIENT_ID`
+and `VENDOR_YIJI2_CLIENT_SECRET` on ai-gateway and workers (`vendorOAuthEnvNames`), plus the usual
+`VENDOR_YIJI2_JWT_SECRET` / `VENDOR_YIJI2_WEBHOOK_SECRET` on the socket-gateway. See
+`docs/YIJI-V2-TENANT.md`.
+
 The env vendor (`yiji_vendor_id` = the service's vendor, `1`) always keeps the `YIJI_*` values
 the service already has, whatever its `webhook_path_key`. A vendor without its variables has no
 credential: its admin-API capabilities (coupon delivery, push, phone lookup, status history) are

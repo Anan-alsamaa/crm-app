@@ -106,6 +106,9 @@ export interface LateOrdersPollResult {
  * answering it as before.
  */
 function canAskPlatform(connector: VendorConnector): boolean {
+  /* YIJI V2 (owner, 2026-11-16): no poller. v2 pushes order.late and
+     order.status_changed; the board is the CRM's own live table. */
+  if (connector.platform === 'yiji2') return false;
   if (connector.platform !== 'yiji') return true;
   const settings = connector.settings;
   if (settings.platform !== 'yiji') return false;
@@ -241,6 +244,21 @@ async function pollVendor(
           );
         }
       }
+      const { changed } = await rebuildLiveSnapshot(
+        { redis, logger, notify: deps.notify, now: () => now },
+        vendorKey,
+        now,
+      );
+      if (changed) result.changed.push(vendorKey);
+      return;
+    }
+    /*
+     * A v2 vendor is fed by events ONLY: its board is rebuilt from the live
+     * table on every poll, in or out of events mode. Events mode expires
+     * after a quiet quarter hour, and an order late at 10:00 is still late
+     * at 10:20 with no new event (review 2026-11-16).
+     */
+    if (connector.platform === 'yiji2') {
       const { changed } = await rebuildLiveSnapshot(
         { redis, logger, notify: deps.notify, now: () => now },
         vendorKey,

@@ -20,6 +20,20 @@ export const DEFAULT_LATE_DELIVERY_MINUTES = 60;
 export const LATE_DELIVERY_MINUTES_KEY = 'late_delivery_minutes';
 
 /**
+ * SETTINGS PER PLATFORM (owner, 2026-11-16, Yiji v2 as a second tenant):
+ * `app_settings` has no vendor column, so a second platform's value lives
+ * under the same key WITH A PLATFORM SUFFIX - `late_delivery_minutes_yiji2`.
+ * The v1 key is exactly what it was, and a v2 row that does not exist yet
+ * resolves to the documented default (60), never to v1's number.
+ */
+export function lateDeliveryMinutesKeyFor(platform: string | null | undefined): string {
+  const p = String(platform ?? '')
+    .trim()
+    .toLowerCase();
+  return !p || p === 'yiji' ? LATE_DELIVERY_MINUTES_KEY : `${LATE_DELIVERY_MINUTES_KEY}_${p}`;
+}
+
+/**
  * Read the threshold from whatever `app_settings` holds, falling back to 60.
  *
  * Deliberately total: a blank row, a typo, a negative or a wild number all

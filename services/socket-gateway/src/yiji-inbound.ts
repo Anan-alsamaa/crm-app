@@ -29,6 +29,10 @@ import {
   isPercentageCategory,
   isGeneralCouponType,
   parseOrderEventsBody,
+  parseYiji2EventsBody,
+  orderEventFromYiji2,
+  yiji2EventsOf,
+  type OrderEvent,
   orderEventsOf,
   isHandledOrderEvent,
   type LateOrdersEventJob,
@@ -1492,11 +1496,25 @@ export interface YijiInboundRouteDeps {
    * answers 503 (no Redis to dedupe with, no queue to hand the workers).
    */
   events?: YijiEventsDeps;
+  /**
+   * YIJI V2 (owner, 2026-11-16): mount the same API for the second tenant
+   * under its own prefix (`/webhooks/yiji2`), with its own secret, store and
+   * events. Default: v1's `/webhooks/yiji`.
+   */
+  prefix?: string;
+  /** A name for the log lines (default `yiji`). */
+  label?: string;
 }
 
 export interface YijiEventsDeps {
   /** The late-orders vendor key the events belong to (`yiji:<vendor id>`). */
   vendorKey: string;
+  /**
+   * How the body is shaped: v1's `{ id, type, at, order }` (default) or v2's
+   * `{ id, type, occurred_at, environment, data }` (translated by
+   * `orderEventFromYiji2`; coupon/customer types are accepted and ignored).
+   */
+  format?: 'yiji' | 'yiji2';
   /** True when this event id was already accepted (a retry): nothing is queued twice. */
   seen(eventId: string): Promise<boolean>;
   /** Hand the event to the workers; null = the queue is disabled. */
@@ -1511,6 +1529,7 @@ export interface YijiEventsDeps {
  */
 export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRouteDeps): void {
   const { logger } = deps;
+  const label = deps.label ?? 'yiji';
   const rate = deps.rate ?? { capacity: 30, perSec: 2 };
   const buckets = new Map<string, TokenBucket>();
 
@@ -1635,19 +1654,45 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
             message: 'Order events are not set up on this server.',
           });
         }
-        const parsed = parseOrderEventsBody(req.body);
-        if (!parsed.success) {
-          return reply.code(400).send({
-            error: 'invalid_request',
-            message: 'The event is invalid.',
-            fields: zodFieldErrors(parsed.error),
-          });
+        /* v2's envelope is translated to the CRM's event first; a v2 type
+           the CRM does not act on (coupon.*, customer.*) is "ignored". */
+        let incoming: Array<OrderEvent | null>;
+        if (events.format === 'yiji2') {
+          const parsed = parseYiji2EventsBody(req.body);
+          if (!parsed.success) {
+            return reply.code(400).send({
+              error: 'invalid_request',
+              message: 'The event is invalid.',
+              fields: zodFieldErrors(parsed.error),
+            });
+          }
+          incoming = yiji2EventsOf(parsed.data).map((e) =>
+            orderEventFromYiji2(e, {
+              malformed: (reason, eventId) =>
+                logger.warn(
+                  { eventId, type: e.type, reason },
+                  `${label} events: malformed order event ignored`,
+                ),
+            }),
+          );
+        } else {
+          const parsed = parseOrderEventsBody(req.body);
+          if (!parsed.success) {
+            return reply.code(400).send({
+              error: 'invalid_request',
+              message: 'The event is invalid.',
+              fields: zodFieldErrors(parsed.error),
+            });
+          }
+          incoming = orderEventsOf(parsed.data).map((e) =>
+            isHandledOrderEvent(e.type) ? e : null,
+          );
         }
         let accepted = 0;
         let duplicates = 0;
         let ignored = 0;
-        for (const event of orderEventsOf(parsed.data)) {
-          if (!isHandledOrderEvent(event.type)) {
+        for (const event of incoming) {
+          if (!event) {
             ignored += 1;
             continue;
           }
@@ -1665,7 +1710,7 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
             }
             accepted += 1;
           } catch (err) {
-            logger.error({ err: (err as Error)?.message }, 'yiji events: could not accept');
+            logger.error({ err: (err as Error)?.message }, `${label} events: could not accept`);
             return reply.code(503).send({
               error: 'unavailable',
               message: 'The CRM cannot take events right now. Retry with the same event ids.',
@@ -1674,11 +1719,11 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
         }
         logger.info(
           { accepted, duplicates, ignored, vendorKey: events.vendorKey },
-          'yiji events accepted',
+          `${label} events accepted`,
         );
         return reply.code(202).send({ ok: true, accepted, duplicates, ignored });
       });
     },
-    { prefix: YIJI_INBOUND_PREFIX },
+    { prefix: deps.prefix ?? YIJI_INBOUND_PREFIX },
   );
 }

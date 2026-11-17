@@ -200,6 +200,19 @@ sweep picks up everything approved and undelivered, so the first tick after it
 goes live sends all of them at once. Turning it on is a decision, taken
 deliberately, not a side effect of a deploy.
 
+### Yiji v2 is staging-only (production guard)
+
+The owner approved the Yiji v2 tenant (platform `yiji2`) for **staging only** (17 Nov 2026).
+Every production run of `deploy-ecs.yml` (a `v*` tag or a manual prod deploy) starts with the
+step **Guard: Yiji v2 must not reach production (owner, 17 Nov)** in the `plan` job: it fails,
+listing the files, if the release tree — and main's tree when the release promotes `:main` —
+contains the v2 connector or anything under `services/` / `packages/` that mentions `yiji2`.
+Nothing is built, promoted or registered after it fails. The deploy job re-checks each prod task
+definition for `VENDOR_YIJI2_*` / `YIJI2_*` variables before registering it, and the prod
+release checks re-check the running `crm-prod` task definitions. Staging is not affected. The
+only override is the repository variable `ALLOW_YIJI2_ON_PROD=true` (not set; the owner's call).
+Details: `docs/YIJI-V2-TENANT.md` §4a.
+
 ---
 
 ## 6. Schema and data changes

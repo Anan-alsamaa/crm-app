@@ -84,6 +84,37 @@ export function vendorCredentialEnvNames(vendorKey: string): {
 }
 
 /** A vendor's platform credentials from env by the convention above; blanks are absent. */
+/**
+ * YIJI V2 (owner, 2026-11-16): the partner API uses client credentials, not
+ * an admin login. Same `KEY` rule, its own names, and NEVER Yiji v1's: the
+ * `yiji` key has no client credentials at all.
+ */
+export function vendorOAuthEnvNames(vendorKey: string): {
+  clientId: string;
+  clientSecret: string;
+} {
+  const seg = vendorEnvSegment(vendorKey.trim().toLowerCase());
+  return { clientId: `VENDOR_${seg}_CLIENT_ID`, clientSecret: `VENDOR_${seg}_CLIENT_SECRET` };
+}
+
+/** The v2 client credentials for a vendor key; each is absent when unset or the key is invalid. */
+export function vendorOAuthFromEnv(
+  env: SecretEnv,
+  vendorKey: string,
+): { clientId?: string; clientSecret?: string } {
+  if (typeof vendorKey !== 'string' || !VENDOR_KEY_PATTERN.test(vendorKey.trim().toLowerCase())) {
+    return {};
+  }
+  if (vendorKey.trim().toLowerCase() === YIJI_VENDOR_KEY) return {};
+  const names = vendorOAuthEnvNames(vendorKey);
+  const out: { clientId?: string; clientSecret?: string } = {};
+  const id = env[names.clientId]?.trim();
+  const secret = env[names.clientSecret]?.trim();
+  if (id) out.clientId = id;
+  if (secret) out.clientSecret = secret;
+  return out;
+}
+
 export function vendorCredentialsFromEnv(
   env: SecretEnv,
   vendorKey: string,

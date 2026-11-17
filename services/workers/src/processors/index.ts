@@ -1,6 +1,6 @@
 import type { Job, Queue } from 'bullmq';
 import type { Logger } from 'pino';
-import { readItems } from '@directus/sdk';
+import { readItem, readItems } from '@directus/sdk';
 import {
   QUEUES,
   asCouponPushConnector,
@@ -330,6 +330,37 @@ function connectorsFor(deps: Pick<ProcessorDeps, 'directus' | 'logger'>): Connec
   registry ??= buildConnectors(deps);
   return registry;
 }
+
+/**
+ * The platform of a coupon row's vendor, or null when the row has no vendor
+ * (a pre-MV-1 row: v1's) or the vendor cannot be resolved (logged by the
+ * registry's caller later; here it only means "not provably another platform").
+ */
+async function couponPlatform(
+  deps: Pick<ProcessorDeps, 'directus' | 'logger'>,
+  couponApprovalId: string,
+): Promise<string | null> {
+  if (!couponApprovalId) return null;
+  const vendor = await readCouponVendor(deps.directus, couponApprovalId, deps.logger);
+  if (!vendor) return null;
+  /* The ROW, not the registry: an inactive v2 vendor (the morning state) is
+     invisible to the registry, and its coupon must still never reach v1. */
+  try {
+    const row = (await deps.directus.request(
+      readItem('vendors' as never, vendor, { fields: ['platform'] } as never),
+    )) as unknown as { platform?: string | null };
+    return row?.platform?.trim() || 'yiji';
+  } catch (err) {
+    /* FAIL CLOSED: an unknown platform must never fall through to v1's
+       admin API (a v2 grant id would delete some v1 customer's coupon).
+       Throwing lets BullMQ retry when Directus answers again. */
+    deps.logger.warn(
+      { id: couponApprovalId, vendor, err: errorText(err) },
+      'could not read the coupon vendor platform - not sent anywhere, retried',
+    );
+    throw new Error(`coupon vendor platform unreadable: ${errorText(err)}`);
+  }
+}
 const buildConnectors = (deps: Pick<ProcessorDeps, 'directus' | 'logger'>) =>
   createEnvConnectorRegistry({
     vendorId: process.env.YIJI_VENDOR_ID,
@@ -597,6 +628,24 @@ export const processors: Record<QueueName, Processor> = {
   [QUEUES.coupons]: async (job, deps) => {
     /* EMA-80: the same queue carries removals, by job NAME. */
     const lock: CouponPushLock | undefined = deps.redis ? couponPushLock(deps.redis) : undefined;
+    /*
+     * YIJI V2 (owner, 2026-11-16): the removal and the edit processors talk to
+     * Yiji v1's admin API through the workers' own v1 client, not through the
+     * row's connector. A coupon that belongs to another platform must never
+     * reach v1's API, so it is refused here, logged, and left as it is until
+     * the v2 removal/edit path is wired (docs/YIJI-V2-TENANT.md, open items).
+     */
+    if (job.name === COUPON_REMOVE_JOB_NAME || job.name === COUPON_EDIT_JOB_NAME) {
+      const id = (job.data as { couponApprovalId?: string })?.couponApprovalId ?? '';
+      const platform = await couponPlatform(deps, id);
+      if (platform && platform !== 'yiji' && platform !== 'mock') {
+        deps.logger.error(
+          { id, platform, job: job.name },
+          'coupon change for a non-v1 platform - not sent to Yiji v1 (v2 removal/edit not wired)',
+        );
+        return;
+      }
+    }
     if (job.name === COUPON_REMOVE_JOB_NAME) {
       /* One change per coupon at a time (owner, 2026-11-12): a removal waits
          for a send or an edit of the same coupon (BullMQ retries). */
@@ -675,9 +724,15 @@ export const processors: Record<QueueName, Processor> = {
     if (!connector) return;
     /* Yiji, or the mock (answers Yiji's shapes in memory, MV-6). */
     const yiji = asCouponPushConnector(connector);
+    /* The coupon reader and the group-order reader are v1's admin API, built
+       from the workers' v1 env: only a v1 (or mock) job may use them. A v2
+       coupon id or order number read on v1 is a stranger's row. */
+    const v1Readers = yiji.platform !== 'yiji2';
     await processCouponPushJob(job as Job<CouponPushJob>, {
       directus: deps.directus,
       logger: deps.logger,
+      /* v2's tenant id is not '1': the platform picks the endpoint. */
+      platform: yiji.platform,
       /*
        * Signed in as the service account, with the SAME credential the
        * status-history integration already uses against this host — the coupon
@@ -692,7 +747,7 @@ export const processors: Record<QueueName, Processor> = {
       postCoupon: (couponDeliveryEnabled ? yiji.adminPost : null) ?? undefined,
       readOrder: yiji.readCouponOrderContext ?? undefined,
       /* Group orders (owner, 2026-11-11): read only when coupons are delivered. */
-      readOrderGroup: (couponDeliveryEnabled ? orderGroupReader : null) ?? undefined,
+      readOrderGroup: (couponDeliveryEnabled && v1Readers ? orderGroupReader : null) ?? undefined,
       /* One push per coupon at a time (2026-11-11): two at once gave one
          coupon two grants on staging. Per environment - Redis is shared. */
       ...(lock ? { lock } : {}),
@@ -701,8 +756,10 @@ export const processors: Record<QueueName, Processor> = {
          must not start resolving customers either. */
       findCustomer: (couponDeliveryEnabled ? yiji.findCustomerIdByPhone : null) ?? undefined,
       findUserCoupon: (couponDeliveryEnabled ? yiji.findCustomerCoupon : null) ?? undefined,
-      /* The Private check on every new coupon (owner, 2026-11-02). */
-      readCoupon: (couponDeliveryEnabled ? couponReader : null) ?? undefined,
+      /* The Private check on every new coupon (owner, 2026-11-02). The reader
+         is v1's admin API: handed ONLY to a v1 job (a v2 coupon id read on v1
+         would park the coupon on a stranger's coupon type). */
+      readCoupon: (couponDeliveryEnabled && v1Readers ? couponReader : null) ?? undefined,
       alertNotPrivate: async (code, detail) => {
         await alertAdministrators(
           {

@@ -62,7 +62,10 @@ export interface CommerceDeps {
    * narrowest thing that works: the routes get two named capabilities, not a
    * Directus client they could write through.
    */
-  directus: CallerVerifierDeps & { lateDeliveryThreshold(): Promise<number> };
+  directus: CallerVerifierDeps & {
+    /** The late threshold; per platform since Yiji v2 (undefined = v1's key). */
+    lateDeliveryThreshold(platform?: string | null): Promise<number>;
+  };
   /**
    * Resolves the `vendorId` each request names (the vendor's `yiji_vendor_id`,
    * or its CRM UUID) to that vendor's commerce connector. An unknown vendor is
@@ -144,6 +147,16 @@ export async function registerCommerceRoutes(
   /* The cache key gains the vendor ONLY when one is named, so an old bundle's
      request keeps hitting the entry it always did. */
   const vendorKeyPart = (vendorId: string): string[] => (vendorId ? ['v', vendorId] : []);
+  /*
+   * YIJI V2 (owner, 2026-11-16): every cache key carries the PLATFORM as
+   * well as the vendor. Two vendors never share a platform id today
+   * (`yiji_vendor_id` is unique), but a key that names only the id would
+   * let a v2 vendor numbered like a v1 one read v1's cached answers the day
+   * that uniqueness is relaxed; the platform in the key makes that impossible.
+   * v1's keys are unchanged: its segment is the bare id it always was.
+   */
+  const platformKey = (connector: VendorConnector, vendorId: string): string =>
+    connector.platform === 'yiji' ? vendorId : `${connector.platform}:${vendorId}`;
 
   /**
    * One limiter's verdict for this caller; replies 429 and returns false when
@@ -248,12 +261,16 @@ export async function registerCommerceRoutes(
     customerId: string,
     limit: number,
   ) =>
-    cached(['orders', vendorId, customerId, String(limit)], COMMERCE_TTL.orders, () =>
-      connector.getOrders(customerId, { limit }),
+    cached(
+      ['orders', platformKey(connector, vendorId), customerId, String(limit)],
+      COMMERCE_TTL.orders,
+      () => connector.getOrders(customerId, { limit }),
     );
 
   const orderDetail = (connector: VendorConnector, vendorId: string, orderId: string) =>
-    cached(['order', vendorId, orderId], COMMERCE_TTL.order, () => connector.getOrder(orderId));
+    cached(['order', platformKey(connector, vendorId), orderId], COMMERCE_TTL.order, () =>
+      connector.getOrder(orderId),
+    );
 
   app.get('/commerce/activity', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
@@ -263,8 +280,10 @@ export async function registerCommerceRoutes(
     if (!vendorId || !customerId) return reply.code(400).send({ error: 'missing_params' });
     return answering(reply, { route: 'activity', vendorId, customerId }, async () => {
       const connector = await connectorFor(vendorId);
-      return cached(['activity', vendorId, customerId], COMMERCE_TTL.activity, () =>
-        connector.getPurchaseActivity(customerId),
+      return cached(
+        ['activity', platformKey(connector, vendorId), customerId],
+        COMMERCE_TTL.activity,
+        () => connector.getPurchaseActivity(customerId),
       );
     });
   });
@@ -449,8 +468,10 @@ export async function registerCommerceRoutes(
     if (!vendorId || !orderId) return reply.code(400).send({ error: 'missing_params' });
     return answering(reply, { route: 'tracking', vendorId, orderId }, async () => {
       const connector = await connectorFor(vendorId);
-      return cached(['tracking', vendorId, orderId], COMMERCE_TTL.order, () =>
-        connector.getOrderTimeline(orderId),
+      return cached(
+        ['tracking', platformKey(connector, vendorId), orderId],
+        COMMERCE_TTL.order,
+        () => connector.getOrderTimeline(orderId),
       );
     });
   });
@@ -472,7 +493,17 @@ export async function registerCommerceRoutes(
   app.get('/commerce/late-orders', async (req, reply) => {
     if (!(await requireAgent(req, reply))) return;
     const q = req.query as Record<string, string | undefined>;
-    const thresholdMinutes = await deps.directus.lateDeliveryThreshold();
+    /* The threshold is the PLATFORM's (v2 keeps its own setting); a request
+       that names no vendor is v1's, as before. */
+    let thresholdPlatform: string | undefined;
+    if (str(q.vendorId)) {
+      try {
+        thresholdPlatform = (await connectorFor(str(q.vendorId))).platform;
+      } catch {
+        /* an unknown vendor is answered 404 below, by the same resolve */
+      }
+    }
+    const thresholdMinutes = await deps.directus.lateDeliveryThreshold(thresholdPlatform);
     /*
      * A DATE RANGE turns the queue into a register.
      *
@@ -568,7 +599,7 @@ export async function registerCommerceRoutes(
             from || 'today',
             to || 'today',
             live ? 'live' : 'hist',
-            ...vendorKeyPart(vendorId),
+            ...(vendorId ? ['v', platformKey(connector, vendorId)] : []),
           ],
           ttl,
           () => connector.getLateDeliveryOrders(thresholdMinutes, opts),
@@ -607,8 +638,10 @@ export async function registerCommerceRoutes(
     if (!orderId) return reply.code(400).send({ error: 'missing_params' });
     return answering(reply, { route: 'cart', orderId, vendorId }, async () => {
       const connector = await connectorForOptional(vendorId);
-      return cached(['cart', orderId, ...vendorKeyPart(vendorId)], COMMERCE_TTL.order, () =>
-        connector.getOrderCart(orderId),
+      return cached(
+        ['cart', orderId, ...(vendorId ? ['v', platformKey(connector, vendorId)] : [])],
+        COMMERCE_TTL.order,
+        () => connector.getOrderCart(orderId),
       );
     });
   });

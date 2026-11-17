@@ -397,7 +397,7 @@ POST /suggest-reply {"conversationId":"<uuid>","draft":"sorry for delay","locale
 
 ## 14. Multi-vendor
 
-- **Connector per platform**: every Yiji call goes through a `VendorConnector` chosen from the record's vendor (`vendors.platform`: `yiji`, or `mock` on staging only). Unknown/unsupported → refused, never sent to Yiji.
+- **Connector per platform**: every Yiji call goes through a `VendorConnector` chosen from the record's vendor (`vendors.platform`: `yiji`, `yiji2` = Yiji v2 the second tenant (`docs/YIJI-V2-TENANT.md`, implemented 2026-11-16, inactive until the owner activates it), or `mock` on staging only). Unknown/unsupported/inactive → refused, never sent to another platform.
 - **Settings** (non-secret) come from the vendor record (API URLs, tenant, brand, notify settings), falling back to service settings; **secrets stay in service configuration**: Yiji `YIJI_*`; others `VENDOR_<KEY>_JWT_SECRET`, `_WEBHOOK_SECRET`, `_API_KEY`, `_ADMIN_EMAIL`, `_ADMIN_PASSWORD` (`docs/VENDOR-SECRETS.md`).
 - **Webhooks**: `POST /webhooks/<webhook_path_key>` with headers `x-yiji-signature` (HMAC-SHA256) + `x-yiji-timestamp`, verified with that vendor's own secret → 202; wrong signature 401; unknown vendor 404; no secret 503.
 - **Isolation**: every record carries its vendor; customers are unique per vendor; one agent receives every vendor's chats, a customer never sees another vendor's events; quick replies and SLA policies can be per vendor; AI limits/settings follow the chat's vendor.
