@@ -22,9 +22,10 @@ const base = CampaignDraft.parse({
   name: { en: 'Second order', ar: 'الطلب الثاني' },
   offer: { type: 'PERCENT', percent: 20, maxDiscountSar: 15 },
   limits: { totalRedemptions: 1000, budgetSar: 5000 },
-  validity: { startDate: '2026-11-16', endDate: '2026-12-16' },
+  schedule: { startDate: '2026-11-16', endDate: '2026-12-16', expiresAfterIssueDays: 31 },
   scope: { orderTypes: ['DELIVERY'] },
   distribution: { channels: ['APP_WALLET'] },
+  audience: { mode: 'ALL' },
 });
 
 describe('discountPerOrder', () => {
@@ -38,7 +39,7 @@ describe('discountPerOrder', () => {
   });
   it('covers the full delivery fee or the SAR amount chosen', () => {
     expect(discountPerOrder({ type: 'FREE_DELIVERY' }, 80)).toBe(12);
-    expect(discountPerOrder({ type: 'FREE_DELIVERY', deliveryFeeCovered: 10 }, 80)).toBe(10);
+    expect(discountPerOrder({ type: 'FREE_DELIVERY', deliveryFeeCoveredSar: 10 }, 80)).toBe(10);
   });
 });
 
@@ -115,7 +116,7 @@ describe('the objective catalogue and field specification', () => {
   });
 
   it('lists every field once, across the seven steps, with a type and a default', () => {
-    expect(CAMPAIGN_FIELD_SPEC.length).toBeGreaterThanOrEqual(80);
+    expect(CAMPAIGN_FIELD_SPEC).toHaveLength(107);
     const paths = CAMPAIGN_FIELD_SPEC.map((f) => f.path);
     expect(new Set(paths).size).toBe(paths.length);
     expect(new Set(CAMPAIGN_FIELD_SPEC.map((f) => f.step))).toEqual(new Set([1, 2, 3, 4, 5, 6, 7]));
@@ -140,7 +141,10 @@ describe('the objective catalogue and field specification', () => {
       'limits',
       'distribution',
       'stacking',
-      'validity',
+      'fraud',
+      'schedule',
+      'communication',
+      'forecast',
       'studyId',
     ]);
   });

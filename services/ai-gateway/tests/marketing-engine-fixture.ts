@@ -167,7 +167,9 @@ export function issuableDraft(over: Partial<CampaignDraft> = {}): CampaignDraft 
     audience: { mode: 'LIST', listId: 'list-1', controlGroupPct: 0 },
     rules: { minOrderSar: 50 },
     limits: { totalRedemptions: 3000, budgetSar: 5000 },
-    validity: { startDate: '2026-11-10', endDate: '2026-12-10' },
+    schedule: { startDate: '2026-11-10', endDate: '2026-12-10', expiresAfterIssueDays: 31 },
+    /* No paid message channel: the wallet only, so no message copy is needed. */
+    distribution: { channels: ['APP_WALLET'] },
     ...over,
   });
 }

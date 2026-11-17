@@ -6,6 +6,7 @@ import {
   rowToCampaign,
   rowToEarningRule,
   rowToGiftCard,
+  rowToStudy,
 } from '../src/marketing/engine-store.js';
 import { issuableDraft } from './marketing-engine-fixture.js';
 import type { Campaign } from '@yiji/shared-types';
@@ -92,6 +93,102 @@ describe('the engine store: rows', () => {
       cashbackPct: { DELIVERY: 0 },
     });
     expect(rowToCampaign({ engine_code: 'CMP-1', draft: '{bad' }).approval.decidedBy).toBeNull();
+  });
+});
+
+/** A row exactly as the engine stored it before field parity (2026-11-16 build). */
+const OLD_DRAFT = {
+  objective: 'FREQUENT_ORDER',
+  name: { en: 'Stamp card', ar: 'بطاقة' },
+  funding: { source: 'YIJI_MARKETING', partnerSharePct: 0 },
+  tenantId: 'yiji',
+  offer: {
+    type: 'BXGY',
+    bxgy: { buyQty: 2, getQty: 1, productIds: ['CA-019', 'CA-020'] },
+    deliveryFeeCovered: 'FULL',
+    onRefund: 'RETURN_IF_VALID',
+    onCancelBeforeCompletion: 'REISSUE_IF_VALID',
+  },
+  loyalty: {
+    stampsRequired: 5,
+    reward: 'Free pasta',
+    stampExpiryDays: 60,
+    milestones: [],
+    minOrderToCountSar: 30,
+    countOrdersFrom: 'ANY',
+    repeat: true,
+    progressMessages: true,
+  },
+  audience: { mode: 'ALL', conditions: [], match: 'ALL', phoneNumbers: [] },
+  rules: { minOrderSar: 30, maxOrderSar: 0, previousOrders: 'ANY', firstOrderOnly: false },
+  scope: { brandIds: ['3'], orderTypes: ['DELIVERY'] },
+  limits: { perCustomerMode: 'ONE', totalRedemptions: 100, budgetSar: 1000 },
+  distribution: { codeType: 'NONE', channels: ['APP_WALLET', 'PUSH'] },
+  validity: {
+    startDate: '2026-11-01',
+    endDate: '2026-11-30',
+    startTime: '14:00',
+    endTime: '17:00',
+    daysOfWeek: [0, 1, 2],
+  },
+};
+
+describe('the engine store: rows stored before field parity still open', () => {
+  it("reads the old shape in the design's shape, losing nothing", () => {
+    const c = rowToCampaign({ engine_code: 'CMP-OLD', engine_status: 'live', draft: OLD_DRAFT });
+    expect(c.schedule).toEqual({
+      startDate: '2026-11-01',
+      endDate: '2026-11-30',
+      allDay: false,
+      timeWindow: { from: '14:00', to: '17:00' },
+      onlyDuringBranchHours: false,
+      daysOfWeek: [0, 1, 2],
+      expiresAfterIssueDays: 30,
+      limitedTime: { enabled: false },
+    });
+    expect((c as unknown as Record<string, unknown>).validity).toBeUndefined();
+    expect(c.offer.bxgy).toEqual({ buyQty: 2, getQty: 1, productId: 'CA-019' });
+    expect(c.offer.deliveryFeeCoveredSar).toBe('FULL');
+    expect(c.loyalty).toMatchObject({ type: 'STAMP', ordersRequired: 5 });
+    expect(c.notes).toBe('Loyalty reward: Free pasta');
+    expect(c.scope).toMatchObject({ allBrands: false, brandIds: ['3'] });
+    /* the sections it never had come back with their defaults */
+    expect(c.fraud).toEqual({
+      onePerPhoneAndDevice: false,
+      excludeStaffAndTestAccounts: false,
+      blockFlaggedCustomers: false,
+    });
+    expect(c.communication.respectConsent).toBe(true);
+    expect(c.distribution).toMatchObject({ addMode: 'AUTO_WALLET', issueMode: 'ALL_AT_ONCE' });
+    /* written back, it is in the new shape only */
+    const again = campaignToRow(c);
+    expect(again.draft).not.toHaveProperty('validity');
+    expect(again.start_date).toBe('2026-11-01');
+  });
+
+  it('a first-order coupon stored before the fraud rules gets its mandatory one-per-phone rule', () => {
+    const c = rowToCampaign({
+      engine_code: 'CMP-OLD2',
+      draft: { ...OLD_DRAFT, objective: 'FIRST_ORDER', loyalty: undefined },
+    });
+    expect(c.fraud.onePerPhoneAndDevice).toBe(true);
+  });
+
+  it("an old row that breaks today's rules still opens, as stored", () => {
+    /* PUSH with no message copy is refused on save today, but must still read */
+    const c = rowToCampaign({
+      engine_code: 'CMP-OLD3',
+      draft: { ...OLD_DRAFT, loyalty: undefined },
+    });
+    expect(c.distribution.channels).toEqual(['APP_WALLET', 'PUSH']);
+    expect(c.communication.push.title).toEqual({ en: '', ar: '' });
+  });
+
+  it("a study's scenario drafts are read in the new shape too", () => {
+    const s = rowToStudy({
+      study: { id: 'STU-1', scenarios: [{ id: 's1', draft: OLD_DRAFT }] },
+    });
+    expect(s.scenarios[0]!.draft.schedule.startDate).toBe('2026-11-01');
   });
 });
 
