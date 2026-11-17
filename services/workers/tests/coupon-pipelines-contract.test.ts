@@ -22,7 +22,9 @@ import {
  *                               (owner, 2026-10-11)
  *   1b  assign, no order        AddCoupon (create) -> AddUserCoupon (give it)
  *   2   create, don't assign    AddCoupon only, assignee [], never given
- *   3   customer not on Yiji    nothing created; held until they sign up
+ *   3   customer not on Yiji    AddCoupon only NOW (Private, assignee []);
+ *                               AddUserCoupon with THAT id once they sign
+ *                               up - never created twice (owner, 17 Nov 2026)
  *
  * The live counterpart is the COUPON-1a/1b/2 release checks, which read the
  * newest real coupon of each path back from Yiji.
@@ -186,15 +188,36 @@ describe("2 — create, don't assign: AddCoupon only", () => {
   });
 });
 
-describe('3 — customer not on Yiji yet: held', () => {
-  it('creates nothing on Yiji and starts the wait', async () => {
+describe('3 — customer not on Yiji yet: created now, assigned on signup', () => {
+  it('creates it on Yiji with every owner value, assigned to nobody, and starts the wait', async () => {
     const { outcome, calls, patches } = await run(ROW, null);
     expect(outcome).toBe('awaiting-signup');
-    expect(calls).toEqual([]);
-    expect(patches.at(-1)).toMatchObject({ signup_checked_at: expect.any(String) });
+    expect(calls.map((c) => c.path)).toEqual([YIJI_UNASSIGNED_COUPON_PATH]);
+    expectOwnerValues(calls[0]!.body);
+    expect(calls[0]!.body.assignee).toEqual([]);
+    expect(calls[0]!.body).not.toHaveProperty('userId');
+    expect(patches.at(-1)).toMatchObject({
+      yiji_coupon_id: '73900',
+      awaiting_signup_at: expect.any(String),
+      signup_checked_at: expect.any(String),
+    });
+    expect(patches.some((p) => p.status === 'assigned')).toBe(false);
   });
 
-  it('once they have signed up, goes through 1b exactly', async () => {
+  it('once they have signed up, ASSIGNS the coupon already created - no second AddCoupon', async () => {
+    const created = {
+      ...ROW,
+      awaiting_signup_at: '2026-10-07T08:00:00Z',
+      yiji_coupon_id: '73900',
+    } as unknown as CouponApprovalRow;
+    const { outcome, calls, patches } = await run(created);
+    expect(outcome).toBe('delivered');
+    expect(calls.map((c) => c.path)).toEqual([YIJI_COMPENSATION_COUPON_PATH]);
+    expect(calls[0]!.body).toMatchObject({ couponId: 73900, userId: 'yiji-user-1' });
+    expect(patches.at(-1)).toMatchObject({ status: 'assigned', yiji_coupon_user_id: '21500' });
+  });
+
+  it('a row held before 17 Nov (no Yiji id) that resolves goes through 1b exactly', async () => {
     const waiting = {
       ...ROW,
       awaiting_signup_at: '2026-10-07T08:00:00Z',

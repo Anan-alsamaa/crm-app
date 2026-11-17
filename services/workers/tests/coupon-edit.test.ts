@@ -455,6 +455,50 @@ describe('not on Yiji yet', () => {
   });
 });
 
+/* OWNER, 17 Nov 2026: a customer with no Yiji account gets the coupon CREATED
+   on Yiji at once (Private, assigned to nobody) and assigned on signup. Until
+   then it has a coupon id but no grant - and it is edited on Yiji by that id. */
+describe('created on Yiji, not yet assigned (customer has no account yet)', () => {
+  const unassigned = {
+    status: 'approved',
+    yiji_coupon_id: '89126',
+    yiji_coupon_user_id: null,
+    awaiting_signup_at: '2026-11-17T08:00:00Z',
+  };
+
+  it('is edited ON YIJI by its coupon id - no grant, no customer lookup needed', async () => {
+    const t = setup({ row: unassigned, yijiOverride: { assignee: [] } });
+    expect(await t.run()).toBe('edited');
+    expect(t.calls).toEqual(['OFF', 'update(status 5)', 'ON']);
+    expect(t.yiji).toMatchObject({ id: 89126, discount: 5, maximumDiscount: 5, status: 0 });
+    expect(t.yiji.assignee).toEqual([]); // still nobody's
+    expect(t.remover.couponIdOfGrant).not.toHaveBeenCalled();
+    expect(t.remover.findCustomer).not.toHaveBeenCalled();
+    expect(t.remover.removeGrant).not.toHaveBeenCalled();
+    expect(t.row).toMatchObject({
+      coupon_value: 5,
+      edit_state: 'done',
+      yiji_coupon_id: '89126',
+      yiji_coupon_user_id: null,
+      status: 'approved',
+    });
+  });
+
+  it('a stuck edit of it is recovered by its coupon id too', async () => {
+    const t = setup({
+      row: { ...unassigned, edit_state: EDIT_FROZEN, edited_at: '2020-01-01T00:00:00Z' },
+      yijiOverride: { assignee: [], status: 5 },
+    });
+    const out = await recoverStuckCouponEdits({
+      directus: t.directus as never,
+      logger,
+      remover: t.remover as never,
+    });
+    expect(out).toEqual({ recovered: 1, failed: 0 });
+    expect(t.yiji.status).toBe(0);
+  });
+});
+
 describe('yijiMismatch', () => {
   it('compares numbers as numbers and dates by day', () => {
     expect(
