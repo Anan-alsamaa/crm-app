@@ -580,7 +580,11 @@ async function applyRoles(client: AnyClient): Promise<void> {
           JSON.stringify([...(current.fields ?? [])].sort()) ===
           JSON.stringify([...wantFields].sort());
         const sameFilter = JSON.stringify(current.permissions ?? {}) === JSON.stringify(wantFilter);
-        if (sameFields && sameFilter) {
+        const wantValidation = p.validation ?? {};
+        const sameValidation =
+          JSON.stringify((current as { validation?: unknown }).validation ?? {}) ===
+          JSON.stringify(wantValidation);
+        if (sameFields && sameFilter && sameValidation) {
           console.log(`  = perm ${role.name} ${p.action} ${p.collection} (exists)`);
           continue;
         }
@@ -589,6 +593,7 @@ async function applyRoles(client: AnyClient): Promise<void> {
             updatePermission(current.id, {
               fields: wantFields,
               permissions: wantFilter,
+              validation: wantValidation,
             } as never),
           ),
         );
@@ -602,7 +607,7 @@ async function applyRoles(client: AnyClient): Promise<void> {
             action: p.action,
             fields: p.fields ?? ['*'],
             permissions: p.permissions ?? {},
-            validation: {},
+            validation: p.validation ?? {},
           } as never),
         ),
       );

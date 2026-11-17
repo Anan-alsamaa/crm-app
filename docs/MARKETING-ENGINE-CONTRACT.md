@@ -58,6 +58,34 @@ and shapes, which did not change.
 4. The Administrator sets `marketing_engine` = `live`. The sample engine stays for local
    development and tests.
 
+### Review fixes (2026-11-16, independent cloud review of PR #38)
+
+- **The live lock covers every money field.** `LOCKED_WHEN_LIVE` now holds objective, tenant,
+  offer, experiment, trigger, loyalty, audience, rules, scope, limits, distribution, stacking,
+  validity and study. A live, paused or ended campaign keeps its approval, so only its name,
+  notes, reason code and funding can change. A bigger budget means ending it and approving a
+  new campaign (re-approval of a live campaign is not built).
+- **Four eyes covers editors.** Whoever created, edited or submitted a campaign cannot decide
+  it. For a study, its creator and submitter can neither do the finance review nor decide, and
+  its name, objective, period, data and scenarios freeze once it is submitted.
+- **One issuance per campaign at a time**, through a Redis lock across gateway tasks
+  (`marketing:lock:issue:<id>`; a call waits up to 15 s, then 409 `issuance_in_progress`).
+- **A PHONES campaign reaches only its approved numbers.** LIST and SEGMENT have no list or
+  segment store yet: the person issuing chooses, bounded by the approved ceilings.
+- **A batch that broke halfway is cancelled**, never left pending in the coupon queue, and its
+  customers count as holding nothing, so a retry reaches them.
+- **The engine writes as `svc-ai-gateway` only** (`SVC_AI_TOKEN`, never `DIRECTUS_AI_TOKEN`).
+  Its `marketing_coupons` grant creates only pending, campaign-linked batches and releases or
+  cancels only pending engine batches (row filter + validation), so a coupon a person wrote is
+  never approved by the gateway.
+- **`app-roles-sync` skips grants on collections an environment does not have yet**, so a
+  Directus restart before the schema step does not break role saves.
+- **Still open:** the `svc-ai-gateway` grants have no fields-only command (they are part of the
+  full bootstrap `apply`), and `check-permission-drift.mjs` gets the gateway's marketing entries
+  once they are applied; customer ids are not yet matched per vendor; a SHARED code covers the
+  first batch only; an `admin_access` user on a role other than Administrator is refused by the
+  gateway (the safe side).
+
 ---
 
 ## How the CRM calls you

@@ -67,7 +67,7 @@ describe('the sample engine locks a live campaign', () => {
     user = 'maha';
   });
 
-  it('refuses a change to the discount once live, but still allows the budget to grow', async () => {
+  it('refuses a change to the discount or the budget once live; the name stays editable', async () => {
     const c = await waiting();
     user = 'nada';
     await engine().decideCampaign(c.id, 'approve', 'ok');
@@ -81,8 +81,14 @@ describe('the sample engine locks a live campaign', () => {
       ...live,
       limits: { ...live.limits, budgetSar: live.limits.budgetSar + 1000 },
     };
-    const saved = await engine().saveCampaign(biggerBudget, c.id);
-    expect(saved.limits.budgetSar).toBe(live.limits.budgetSar + 1000);
+    /* review 2026-11-16: a live campaign keeps its approval, so its money
+       fields are locked too - a bigger budget = a new, approved campaign */
+    await expect(engine().saveCampaign(biggerBudget, c.id)).rejects.toThrow(
+      /locked while live: limits/,
+    );
+    const renamed = { ...live, name: { ...live.name, en: 'Renamed' } };
+    const saved = await engine().saveCampaign(renamed, c.id);
+    expect(saved.name.en).toBe('Renamed');
     expect(saved.status).toBe('live');
   });
 });

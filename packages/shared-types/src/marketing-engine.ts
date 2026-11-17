@@ -269,13 +269,29 @@ export const CampaignDraft = z.object({
 });
 export type CampaignDraft = z.infer<typeof CampaignDraft>;
 
-/** Once customers hold the coupon these never change (Ayman's "live campaigns" rule). */
+/**
+ * Once customers hold the coupon these never change (Ayman's "live campaigns"
+ * rule). Review 2026-11-16: the lock covers EVERY field that decides what a
+ * customer can get or how much it can cost - limits, validity, scope,
+ * stacking included - because a live campaign keeps its approval; only the
+ * name, notes, reason code and funding stay editable. A bigger budget on a
+ * live campaign = end it and approve a new one.
+ */
 export const LOCKED_WHEN_LIVE: readonly string[] = [
+  'objective',
+  'tenantId',
   'offer',
+  'experiment',
+  'trigger',
+  'loyalty',
   'audience',
-  'distribution.code',
   'rules',
-  'validity.startDate',
+  'scope',
+  'limits',
+  'distribution',
+  'stacking',
+  'validity',
+  'studyId',
 ];
 
 export interface CampaignApproval {
@@ -1421,11 +1437,21 @@ export function campaignCode(prefix = 'CMP'): string {
 
 /** Ayman's rule: the person who created a campaign cannot approve it. */
 export function canApproveCampaign(
-  c: Pick<Campaign, 'createdBy' | 'status'>,
+  c: Pick<Campaign, 'createdBy' | 'status'> & Partial<Pick<Campaign, 'changeLog' | 'approval'>>,
   userId: string,
 ): { ok: boolean; reason?: 'own' | 'status' } {
   if (c.status !== 'waiting_approval') return { ok: false, reason: 'status' };
   if (c.createdBy === userId) return { ok: false, reason: 'own' };
+  /* Four eyes means the decider wrote NONE of it (review 2026-11-16): whoever
+     edited or submitted this campaign cannot approve it either. A decision
+     they made on an earlier round does not count as writing it. */
+  if (c.approval?.requestedBy === userId) return { ok: false, reason: 'own' };
+  if (
+    (c.changeLog ?? []).some(
+      (e) => e.by === userId && /^(created|edited|sent for approval)/.test(e.what),
+    )
+  )
+    return { ok: false, reason: 'own' };
   return { ok: true };
 }
 

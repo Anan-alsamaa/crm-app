@@ -93,8 +93,17 @@ export class MemoryEngineStore implements EngineStore {
     return rowToEarningRule(row);
   }
   async campaignRecipients(rowId: string): Promise<RecipientRow[]> {
-    const mine = new Set(this.coupons.filter((c) => c.row.campaign === rowId).map((c) => c.id));
-    return this.recipients.filter((r) => mine.has(r.coupon));
+    const mine = new Map(
+      this.coupons.filter((c) => c.row.campaign === rowId).map((c) => [c.id, c] as const),
+    );
+    return this.recipients
+      .filter((r) => mine.has(r.coupon))
+      .map((r) => ({ ...r, couponStatus: String(mine.get(r.coupon)!.row.status ?? '') }));
+  }
+  /** Tests: what a broken release leaves behind. */
+  setCouponStatus(id: string, status: string): void {
+    const c = this.coupons.find((x) => x.id === id);
+    if (c) c.row = { ...c.row, status };
   }
   async createListCoupon(
     coupon: Record<string, unknown>,

@@ -99,6 +99,40 @@ describe('campaigns: who may do what', () => {
     );
   });
 
+  it('whoever edited or submitted it cannot approve it - four eyes covers editors, not only the creator', async () => {
+    const { engine } = setup();
+    const both = {
+      id: 'user-both',
+      isAdmin: false,
+      privileges: { use_marketing_portal: true, manage_marketing: true, approve_marketing: true },
+    };
+    const c = await engine.saveCampaign(maker, issuableDraft());
+    const d = issuableDraft();
+    await engine.saveCampaign(both, { ...d, offer: { ...d.offer, amountSar: 200 } }, c.id);
+    await engine.submitForApproval(both, c.id, { forecast: forecastFor() });
+    expect((await refusal(engine.decideCampaign(both, c.id, { decision: 'approve' }))).code).toBe(
+      'own_campaign',
+    );
+    /* someone who only submitted it is barred too */
+    const c2 = await engine.saveCampaign(maker, issuableDraft());
+    await engine.submitForApproval(both, c2.id, { forecast: forecastFor() });
+    expect((await refusal(engine.decideCampaign(both, c2.id, { decision: 'approve' }))).code).toBe(
+      'own_campaign',
+    );
+    /* an untouched approver still decides */
+    expect((await engine.decideCampaign(checker, c.id, { decision: 'approve' })).status).toBe(
+      'approved',
+    );
+    /* and a rejection on an earlier round does not bar the same person later */
+    const c3 = await engine.saveCampaign(maker, issuableDraft());
+    await engine.submitForApproval(maker, c3.id, { forecast: forecastFor() });
+    await engine.decideCampaign(checker, c3.id, { decision: 'reject', note: 'fix it' });
+    await engine.submitForApproval(maker, c3.id, { forecast: forecastFor() });
+    expect((await engine.decideCampaign(checker, c3.id, { decision: 'approve' })).status).toBe(
+      'approved',
+    );
+  });
+
   it('decides only a campaign waiting for approval (409)', async () => {
     const { engine } = setup();
     const c = await engine.saveCampaign(maker, issuableDraft());
@@ -225,12 +259,40 @@ describe('LOCKED_WHEN_LIVE and edits after approval', () => {
       ),
     );
     expect((r2.detail as { fields: string[] }).fields).toEqual(['audience', 'rules']);
+    /* review 2026-11-16: the money fields are locked too - a live campaign
+       keeps its approval, so it can never grow past what was approved */
+    for (const more of [
+      { limits: { ...draft.limits, budgetSar: 9000 } },
+      { limits: { ...draft.limits, totalRedemptions: 100000 } },
+      { validity: { ...draft.validity, endDate: '2027-12-31' } },
+      { scope: { ...draft.scope, brandIds: ['999'] } },
+    ]) {
+      const r3 = await refusal(engine.saveCampaign(maker, { ...draft, ...more }, c.id));
+      expect(r3).toMatchObject({ status: 422, code: 'locked_while_live' });
+    }
     const ok = await engine.saveCampaign(
       maker,
-      { ...draft, limits: { ...draft.limits, budgetSar: 9000 } },
+      { ...draft, name: { ...draft.name, en: 'Renamed' }, notes: 'checked' },
       c.id,
     );
-    expect(ok).toMatchObject({ status: 'live', limits: { budgetSar: 9000 } });
+    expect(ok).toMatchObject({ status: 'live', name: { en: 'Renamed' } });
+    expect(ok.approval.decidedBy).toBe('user-checker');
+  });
+
+  it('a paused campaign cannot be widened and set live again either', async () => {
+    const { engine } = setup();
+    const c = await approved(engine);
+    await engine.setCampaignStatus(maker, c.id, { status: 'live' });
+    await engine.setCampaignStatus(maker, c.id, { status: 'paused' });
+    const d = issuableDraft();
+    const r = await refusal(
+      engine.saveCampaign(maker, { ...d, limits: { ...d.limits, budgetSar: 1_000_000 } }, c.id),
+    );
+    expect(r).toMatchObject({
+      status: 422,
+      code: 'locked_while_live',
+      detail: { fields: ['limits'] },
+    });
   });
 
   it('the same lock holds while paused and once ended', async () => {
@@ -403,6 +465,61 @@ describe('issuance through the existing marketing coupon pipeline', () => {
       (await engine.issue(maker, { campaignId: c2.id, customerIds: ['0551000001', '0551000002'] }))
         .issued,
     ).toBe(1);
+  });
+
+  it('two issue calls at the same moment never pass the ceiling together', async () => {
+    const { engine, store } = setup();
+    const d = issuableDraft();
+    const c = await approved(
+      engine,
+      issuableDraft({ limits: { ...d.limits, totalRedemptions: 3 } }),
+    );
+    const phones = ['0551000001', '0551000002', '0551000003'];
+    const [a, b] = await Promise.all([
+      engine.issue(maker, { campaignId: c.id, customerIds: phones }),
+      engine.issue(maker, { campaignId: c.id, customerIds: phones }),
+    ]);
+    expect(a.issued + b.issued).toBe(3);
+    const rowId = (await store.getCampaign(c.id))!.rowId;
+    const held = (await store.campaignRecipients(rowId)).map((r) => r.phone);
+    expect(held.sort()).toEqual(phones);
+  });
+
+  it('a PHONES campaign reaches only the approved numbers', async () => {
+    const { engine } = setup();
+    const c = await approved(
+      engine,
+      issuableDraft({
+        audience: { ...issuableDraft().audience, mode: 'PHONES', phoneNumbers: ['+966551111111'] },
+      }),
+    );
+    const res = await engine.issue(maker, {
+      campaignId: c.id,
+      customerIds: ['0551111111', '0552222222', '0553333333'],
+    });
+    expect(res.issued).toBe(1);
+    expect(res.skipped.map((x) => x.reason)).toEqual([
+      'not in the approved list of numbers',
+      'not in the approved list of numbers',
+    ]);
+  });
+
+  it('a batch that broke halfway holds nobody: a retry reaches those customers', async () => {
+    const { engine, store } = setup();
+    const c = await approved(engine);
+    const real = store.createListCoupon.bind(store);
+    store.createListCoupon = async (coupon, phones, decision) => {
+      /* the coupon and its recipients were written, the release failed */
+      const { couponId } = await real(coupon, phones, decision);
+      store.setCouponStatus(couponId, 'cancelled');
+      throw new Error('directus went away');
+    };
+    await expect(
+      engine.issue(maker, { campaignId: c.id, customerIds: ['0551000001'] }),
+    ).rejects.toThrow('directus went away');
+    store.createListCoupon = real;
+    const retry = await engine.issue(maker, { campaignId: c.id, customerIds: ['0551000001'] });
+    expect(retry.issued).toBe(1);
   });
 
   it('holds back the control group, the same people every time', async () => {
@@ -766,12 +883,65 @@ describe('pre-studies: stamped by the server, four eyes on approval', () => {
     expect((await engine.listStudies()).map((s) => s.id)).toEqual([s0.id]);
   });
 
+  it('whoever submitted a study cannot review or decide it, and its content freezes on submission', async () => {
+    const { engine, store } = setup();
+    const both = {
+      id: 'user-both',
+      isAdmin: false,
+      privileges: { use_marketing_portal: true, manage_marketing: true, approve_marketing: true },
+    };
+    const created = await engine.saveStudy(
+      both,
+      study({ chosenScenarioId: 's1' }),
+      'STU-2611-0009',
+    );
+    const submitted = await engine.saveStudy(
+      both,
+      {
+        ...created,
+        stage: 'finance_review',
+      } as never,
+      'STU-2611-0009',
+    );
+    expect(
+      (
+        await refusal(
+          engine.saveStudy(
+            both,
+            { ...submitted, stage: 'waiting_approval' } as never,
+            'STU-2611-0009',
+          ),
+        )
+      ).code,
+    ).toBe('own_study');
+    const reviewed = await engine.saveStudy(
+      checker,
+      {
+        ...submitted,
+        stage: 'waiting_approval',
+        name: 'renamed after submission',
+        period: { from: '2020-01-01', to: '2020-02-01' },
+      } as never,
+      'STU-2611-0009',
+    );
+    expect(reviewed.name).toBe('Okashi lunch push');
+    expect(reviewed.period).toEqual({ from: '2026-05-01', to: '2026-11-01' });
+    expect(
+      (
+        await refusal(
+          engine.saveStudy(both, { ...reviewed, stage: 'approved' } as never, 'STU-2611-0009'),
+        )
+      ).code,
+    ).toBe('own_study');
+    void store;
+  });
+
   it('the creator never approves their own study', async () => {
     const { engine } = setup();
     const both = { ...maker, privileges: { ...maker.privileges, approve_marketing: true } };
     const s0 = await engine.saveStudy(both, study(), 'STU-2611-0009');
     await engine.saveStudy(both, { ...s0, stage: 'finance_review', chosenScenarioId: 's1' }, s0.id);
-    const s2 = await engine.saveStudy(both, { ...s0, stage: 'waiting_approval' }, s0.id);
+    const s2 = await engine.saveStudy(checker, { ...s0, stage: 'waiting_approval' }, s0.id);
     expect((await refusal(engine.saveStudy(both, { ...s2, stage: 'approved' }, s0.id))).code).toBe(
       'own_study',
     );

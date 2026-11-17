@@ -40,7 +40,7 @@ describe('lockedFieldChanges', () => {
         validity: { ...draft.validity, startDate: '2026-11-02', endDate: '2026-12-30' },
         limits: { ...draft.limits, budgetSar: 9000 },
       };
-      expect(lockedFieldChanges(prev, next)).toEqual(['offer', 'validity.startDate']);
+      expect(lockedFieldChanges(prev, next)).toEqual(['offer', 'limits', 'validity']);
     },
   );
   it('reads dotted paths', () => {

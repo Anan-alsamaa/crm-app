@@ -39,6 +39,8 @@ export interface RecipientRow {
   status: 'queued' | 'sent' | 'no_account' | 'failed' | string;
   sent_at: string | null;
   date_created: string | null;
+  /** The batch's coupon status: 'pending' / 'cancelled' = never released. */
+  couponStatus?: string | null;
 }
 
 export interface CatalogueStore {
@@ -397,10 +399,14 @@ export class DirectusEngineStore implements EngineStore {
 
   /* issuance, through the existing marketing coupon sender */
   async campaignRecipients(rowId: string): Promise<RecipientRow[]> {
-    return this.list<RecipientRow>('marketing_coupon_recipients', {
-      filter: { coupon: { campaign: { _eq: rowId } } },
-      fields: ['phone', 'status', 'sent_at', 'date_created'],
-    });
+    const rows = await this.list<RecipientRow & { coupon?: { status?: string | null } | null }>(
+      'marketing_coupon_recipients',
+      {
+        filter: { coupon: { campaign: { _eq: rowId } } },
+        fields: ['phone', 'status', 'sent_at', 'date_created', 'coupon.status'],
+      },
+    );
+    return rows.map(({ coupon, ...r }) => ({ ...r, couponStatus: coupon?.status ?? null }));
   }
   async createListCoupon(
     coupon: Record<string, unknown>,
@@ -413,13 +419,25 @@ export class DirectusEngineStore implements EngineStore {
     });
     const couponId = String(row.id);
     let latest = '';
-    for (let i = 0; i < phones.length; i += CHUNK) {
-      const made = await this.create<Array<{ date_created?: string | null }>>(
-        'marketing_coupon_recipients',
-        phones.slice(i, i + CHUNK).map((phone) => ({ coupon: couponId, phone, status: 'queued' })),
+    try {
+      for (let i = 0; i < phones.length; i += CHUNK) {
+        const made = await this.create<Array<{ date_created?: string | null }>>(
+          'marketing_coupon_recipients',
+          phones
+            .slice(i, i + CHUNK)
+            .map((phone) => ({ coupon: couponId, phone, status: 'queued' })),
+        );
+        for (const m of Array.isArray(made) ? made : [])
+          if (m?.date_created && m.date_created > latest) latest = m.date_created;
+      }
+    } catch (err) {
+      /* A batch that broke halfway is CANCELLED, never left pending where a
+         person could approve it in the coupon queue (review 2026-11-16); its
+         recipients count as holding nothing, so a retry reaches them. */
+      await this.update('marketing_coupons', couponId, { status: 'cancelled' }).catch(
+        () => undefined,
       );
-      for (const m of Array.isArray(made) ? made : [])
-        if (m?.date_created && m.date_created > latest) latest = m.date_created;
+      throw err;
     }
     /* The decision time is never before the last recipient was written, by
        either clock: the sender reads `date_created <= decided_at`. */

@@ -21,6 +21,7 @@ import { registerMarketingPointsRoutes } from './marketing/points.js';
 import { registerMarketingEngineProxy } from './marketing/engine.js';
 import { registerMarketingEngineRoutes } from './marketing/engine-routes.js';
 import { DirectusEngineStore } from './marketing/engine-store.js';
+import { redisLock, type LockRedis } from './marketing/crm-engine.js';
 import { CommerceCache } from './commerce/cache.js';
 import { RedisLateOrdersLiveStore } from './commerce/late-orders-live.js';
 import { Registry } from './metrics.js';
@@ -280,10 +281,12 @@ async function main(): Promise<void> {
   } else {
     await registerMarketingEngineRoutes(app, {
       directusUrl: config.DIRECTUS_INTERNAL_URL,
-      store: new DirectusEngineStore(
-        config.DIRECTUS_INTERNAL_URL,
-        config.DIRECTUS_AI_TOKEN || config.SVC_AI_TOKEN,
-      ),
+      /* The engine writes as svc-ai-gateway ONLY - the account its grants
+         are written for (review 2026-11-16), never DIRECTUS_AI_TOKEN. */
+      store: new DirectusEngineStore(config.DIRECTUS_INTERNAL_URL, config.SVC_AI_TOKEN),
+      engineOptions: {
+        withLock: redisLock(redis as unknown as LockRedis, { prefix: envKey('marketing:lock:') }),
+      },
     });
   }
 

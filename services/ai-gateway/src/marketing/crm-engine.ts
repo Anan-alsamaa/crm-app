@@ -257,18 +257,83 @@ const STATUS_MOVES: Record<'live' | 'paused' | 'ended', CampaignStatus[]> = {
 export interface CrmEngineOptions {
   now?: () => Date;
   random?: () => number;
+  /**
+   * Runs `fn` alone for `key` (one issuance per campaign at a time, review
+   * 2026-11-16: two simultaneous issue calls both passed the ceiling check).
+   * Production passes a Redis lock (every gateway task); the default only
+   * serialises within this process.
+   */
+  withLock?: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
+}
+
+/** One promise chain per key: calls for the same key run one after another. */
+export function processLock(): <T>(key: string, fn: () => Promise<T>) => Promise<T> {
+  const tails = new Map<string, Promise<unknown>>();
+  return async (key, fn) => {
+    const prev = tails.get(key) ?? Promise.resolve();
+    const run = prev.catch(() => undefined).then(fn);
+    tails.set(key, run);
+    try {
+      return await run;
+    } finally {
+      if (tails.get(key) === run) tails.delete(key);
+    }
+  };
+}
+
+/** The Redis client calls a lock needs (ioredis shape). */
+export interface LockRedis {
+  set(key: string, value: string, px: 'PX', ms: number, nx: 'NX'): Promise<unknown>;
+  eval(script: string, keys: number, ...args: string[]): Promise<unknown>;
+}
+
+/**
+ * A lock across gateway tasks: SET NX with an expiry, released only by its
+ * owner. Waits up to `waitMs`, then refuses (409) rather than issue twice.
+ */
+export function redisLock(
+  redis: LockRedis,
+  opts: { ttlMs?: number; waitMs?: number; prefix?: string } = {},
+): <T>(key: string, fn: () => Promise<T>) => Promise<T> {
+  const ttl = opts.ttlMs ?? 120_000;
+  const wait = opts.waitMs ?? 15_000;
+  const prefix = opts.prefix ?? 'marketing:lock:';
+  return async (key, fn) => {
+    const k = prefix + key;
+    const token = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const until = Date.now() + wait;
+    for (;;) {
+      if ((await redis.set(k, token, 'PX', ttl, 'NX')) === 'OK') break;
+      if (Date.now() > until) throw new EngineRefusal(409, 'issuance_in_progress');
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    try {
+      return await fn();
+    } finally {
+      await redis
+        .eval(
+          "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end",
+          1,
+          k,
+          token,
+        )
+        .catch(() => undefined);
+    }
+  };
 }
 
 export class CrmMarketingEngine {
   readonly kind = 'live' as const;
   private readonly now: () => Date;
   private readonly random: () => number;
+  private readonly withLock: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
   constructor(
     private readonly store: EngineStore,
     opts: CrmEngineOptions = {},
   ) {
     this.now = opts.now ?? (() => new Date());
     this.random = opts.random ?? Math.random;
+    this.withLock = opts.withLock ?? processLock();
   }
   private iso() {
     return this.now().toISOString();
@@ -537,19 +602,41 @@ export class CrmMarketingEngine {
     const today = dayOf(this.now());
     const blockers = issuanceBlockers(c, today);
     if (blockers.length) throw new EngineRefusal(422, 'not_issuable', { fields: blockers });
+    return this.withLock(`issue:${c.id}`, () => this.issueLocked(actor, rowId, c, b.data));
+  }
+
+  private async issueLocked(
+    actor: Actor,
+    rowId: string,
+    c: Campaign,
+    input: { campaignId: string; customerIds: string[] },
+  ): Promise<IssuanceResult> {
+    /* A PHONES campaign was approved for THOSE numbers (review 2026-11-16):
+       nobody else may receive it. */
+    const approvedPhones =
+      c.audience.mode === 'PHONES'
+        ? new Set(c.audience.phoneNumbers.map((p) => normalizePhone(p)))
+        : null;
 
     const skipped: IssuanceResult['skipped'] = [];
-    const requested = b.data.customerIds.length;
+    const requested = input.customerIds.length;
     /* Who each id is: a Saudi mobile as given, or the CRM contact that
        carries this Yiji customer id. */
-    const raw = b.data.customerIds.map((s) => s.trim()).filter(Boolean);
+    const raw = input.customerIds.map((s) => s.trim()).filter(Boolean);
     const unresolved = raw.filter((id) => !/^05\d{8}$/.test(normalizePhone(id)));
     const known = unresolved.length
       ? await this.store.phonesForCustomers(unresolved)
       : new Map<string, string>();
+    /* Holders are recipients of a batch that was really released: a batch
+       whose write broke halfway (coupon still pending, or cancelled) holds
+       nobody, so a retry reaches those customers (review 2026-11-16). */
     const already = new Set(
       (await this.store.campaignRecipients(rowId))
-        .filter((r) => r.status !== 'failed')
+        .filter(
+          (r) =>
+            r.status !== 'failed' &&
+            !['pending', 'cancelled', 'rejected', 'draft'].includes(r.couponStatus ?? 'approved'),
+        )
         .map((r) => r.phone),
     );
     const each = usesPerCustomer(c) ?? 1;
@@ -570,6 +657,10 @@ export class CrmMarketingEngine {
       }
       if (seen.has(phone)) {
         skipped.push({ customerId: id, reason: 'listed twice' });
+        continue;
+      }
+      if (approvedPhones && !approvedPhones.has(phone)) {
+        skipped.push({ customerId: id, reason: 'not in the approved list of numbers' });
         continue;
       }
       seen.add(phone);
@@ -906,9 +997,18 @@ export class CrmMarketingEngine {
       approval: prev.approval,
       campaignId: prev.campaignId,
       /* What was submitted is what is reviewed and approved. */
+      /* What was submitted is what is reviewed, approved and run (review
+         2026-11-16): after the draft stage the content is the submitted one. */
       ...(from === 'draft'
         ? {}
-        : { scenarios: prev.scenarios, chosenScenarioId: prev.chosenScenarioId }),
+        : {
+            name: prev.name,
+            objective: prev.objective,
+            period: prev.period,
+            data: prev.data,
+            scenarios: prev.scenarios,
+            chosenScenarioId: prev.chosenScenarioId,
+          }),
     };
     let next: Study;
     let action = 'edited';
@@ -936,13 +1036,16 @@ export class CrmMarketingEngine {
         break;
       case 'finance_review>waiting_approval':
         requireDecide(actor);
+        if (prev.createdBy === actor.id || prev.approval.requestedBy === actor.id)
+          throw new EngineRefusal(403, 'own_study');
         next = { ...base, review: { by: actor.id, at: now, note: s.review.note ?? null } };
         action = 'reviewed';
         break;
       case 'waiting_approval>approved':
       case 'waiting_approval>draft': {
         requireDecide(actor);
-        if (prev.createdBy === actor.id) throw new EngineRefusal(403, 'own_study');
+        if (prev.createdBy === actor.id || prev.approval.requestedBy === actor.id)
+          throw new EngineRefusal(403, 'own_study');
         const approve = to === 'approved';
         next = {
           ...base,

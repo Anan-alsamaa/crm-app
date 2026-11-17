@@ -23,6 +23,8 @@ export interface PermissionSpec {
   /** Directus filter rule (JSON). Empty object = unrestricted. */
   fields?: string[]; // defaults to all (['*'])
   permissions?: Record<string, unknown>; // row filter
+  /** What a create/update payload must satisfy (Directus field validation). */
+  validation?: Record<string, unknown>;
 }
 
 export interface RoleSpec {
@@ -1031,12 +1033,23 @@ export const roles: RoleSpec[] = [
       /* Issuance hands a campaign's coupon to the EXISTING sender: a list
          coupon and its queued recipients. The sender (svc-workers) creates it
          on Yiji and records the outcome; the gateway never touches Yiji. */
-      { collection: 'marketing_coupons', action: 'create' },
+      /* Review 2026-11-16: only an engine batch - pending, linked to a
+         campaign - can be created, and only such a batch can be released or
+         cancelled. A coupon a person wrote stays theirs to approve. */
+      {
+        collection: 'marketing_coupons',
+        action: 'create',
+        validation: { _and: [{ status: { _eq: 'pending' } }, { campaign: { _nnull: true } }] },
+      },
       { collection: 'marketing_coupons', action: 'read' },
       {
         collection: 'marketing_coupons',
         action: 'update',
         fields: ['status', 'decided_at', 'decided_by'],
+        permissions: {
+          _and: [{ status: { _eq: 'pending' } }, { campaign: { engine_code: { _nnull: true } } }],
+        },
+        validation: { status: { _in: ['approved', 'cancelled'] } },
       },
       { collection: 'marketing_coupon_recipients', action: 'create' },
       { collection: 'marketing_coupon_recipients', action: 'read' },

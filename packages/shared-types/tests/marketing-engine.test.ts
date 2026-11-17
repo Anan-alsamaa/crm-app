@@ -126,12 +126,22 @@ describe('the objective catalogue and field specification', () => {
   });
 
   it('locks the fields a live campaign cannot change', () => {
+    /* review 2026-11-16: every money field, not only the offer */
     expect(LOCKED_WHEN_LIVE).toEqual([
+      'objective',
+      'tenantId',
       'offer',
+      'experiment',
+      'trigger',
+      'loyalty',
       'audience',
-      'distribution.code',
       'rules',
-      'validity.startDate',
+      'scope',
+      'limits',
+      'distribution',
+      'stacking',
+      'validity',
+      'studyId',
     ]);
   });
 

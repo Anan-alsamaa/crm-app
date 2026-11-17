@@ -1177,7 +1177,15 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
      * exist yet must never be what makes a role save fail. Named, not
      * inferred - a schema-cache miss must not quietly drop real grants.
      */
-    const NEWER_THAN_SCHEMA = ['compensation_rules'];
+    /* Grants on collections an environment may not have yet (the schema step
+       runs separately): skipped until the collection exists, so a role save
+       never fails on a missing collection (review 2026-11-16). */
+    const NEWER_THAN_SCHEMA = [
+      'compensation_rules',
+      'marketing_studies',
+      'marketing_gift_card_products',
+      'marketing_earning_rules',
+    ];
     const desired = grants
       .filter(
         (grant) =>

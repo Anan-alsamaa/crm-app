@@ -1,6 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { effectivePrivileges } from '@yiji/shared-types';
-import { CrmMarketingEngine, EngineRefusal, type Actor } from './crm-engine.js';
+import {
+  CrmMarketingEngine,
+  EngineRefusal,
+  type Actor,
+  type CrmEngineOptions,
+} from './crm-engine.js';
 import { StoreError, type EngineStore } from './engine-store.js';
 
 /**
@@ -32,6 +37,8 @@ export interface MarketingEngineRoutesDeps {
   /** Per signed-in user per minute. */
   perUserPerMin?: number;
   engine?: CrmMarketingEngine;
+  /** Engine options (production: a Redis lock across gateway tasks). */
+  engineOptions?: CrmEngineOptions;
 }
 
 /** Roles that hold every marketing switch (mirrors the portal's ADMIN_ROLES). */
@@ -46,7 +53,7 @@ export async function registerMarketingEngineRoutes(
   const f = deps.fetchImpl ?? fetch;
   const now = deps.now ?? Date.now;
   const limit = deps.perUserPerMin ?? 120;
-  const engine = deps.engine ?? new CrmMarketingEngine(deps.store);
+  const engine = deps.engine ?? new CrmMarketingEngine(deps.store, deps.engineOptions ?? {});
   const base = deps.directusUrl.replace(/\/+$/, '');
   const actorCache = new Map<string, { actor: Actor | null; at: number }>();
   const recent = new Map<string, number[]>();
