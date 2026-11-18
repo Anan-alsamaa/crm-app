@@ -327,6 +327,16 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     'use_directus_app',
   ];
   const isAdministratorOnlyPrivilege = (k) => ADMINISTRATOR_ONLY_PRIVILEGES.includes(k);
+  /**
+   * MIRROR of ROLE_ASSIGNMENT in packages/shared-types/src/role-assignment.ts
+   * (owner, 2026-11-18): which roles a manage_users holder WITHOUT
+   * manage_roles may give a person. Lowercased names. A role not listed may
+   * give only its own role; a manage_roles holder any non-protected role.
+   * `role-assignment-mirror.test.ts` fails if the two disagree.
+   */
+  const ROLE_ASSIGNMENT = {
+    'wecare supervisor': ['wecare agent', 'wecare supervisor'],
+  };
   /** A key only the Administrator may set: the owner's fine-grained ones and the major shared ones. */
   const isProtectedPrivilege = (k) => isOwnerPrivilege(k) || isAdministratorOnlyPrivilege(k);
 
@@ -902,7 +912,40 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     return Array.from(new Set([...admin, ...svc]));
   }
 
-  function buildGrants(privileges, brandIds, storeIds, protectedRoles = []) {
+  /**
+   * The role ids a manage_users holder WITHOUT manage_roles may assign
+   * (ROLE_ASSIGNMENT, resolved by name, case-insensitively, at sync time like
+   * protectedRoleIds). Never a protected role. A role the map does not name -
+   * or whose named roles do not exist here - keeps its own role only, which
+   * is all its Users page could ever offer.
+   */
+  async function assignableRoleIds(roleName, ownRoleId, protectedRoles = []) {
+    const names =
+      ROLE_ASSIGNMENT[
+        String(roleName ?? '')
+          .trim()
+          .toLowerCase()
+      ];
+    let ids = [];
+    if (names && names.length) {
+      ids = await database('directus_roles')
+        .whereRaw(`LOWER(TRIM(name)) IN (${names.map(() => '?').join(', ')})`, names)
+        .pluck('id');
+    }
+    ids = ids.filter((id) => id && !protectedRoles.includes(id));
+    if (ids.length === 0) {
+      if (names) warn(`'${roleName}': none of its assignable roles exist; own role only`);
+      ids = ownRoleId && !protectedRoles.includes(ownRoleId) ? [ownRoleId] : [];
+    }
+    return Array.from(new Set(ids)).sort();
+  }
+
+  /**
+   * @param userScope null for "any non-protected role" (a manage_roles
+   *   holder, or a role without manage_users); otherwise
+   *   `{ assignable: roleId[], ownRole: roleId }` - see assignableRoleIds.
+   */
+  function buildGrants(privileges, brandIds, storeIds, protectedRoles = [], userScope = null) {
     const grants = [];
     const seen = new Set();
     const add = (grant) => {
@@ -930,19 +973,37 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       blocks.forEach(add);
     }
 
-    if (protectedRoles.length > 0) {
-      const notProtected = { role: { _nin: protectedRoles } };
+    /*
+     * A ROLE THAT MANAGES PEOPLE BUT NOT ROLES (owner, 2026-11-18): it may
+     * give - and touch people holding - only the roles ROLE_ASSIGNMENT names
+     * for it (a WeCare Supervisor: WeCare Agent, WeCare Supervisor). Without
+     * this its Users page could offer nothing but its own role, while the API
+     * let it make someone a WeCare Admin. The assignable ids already exclude
+     * the protected roles, so this fence only ever narrows the not-protected one.
+     */
+    const fence = userScope
+      ? { role: { _in: userScope.assignable } }
+      : protectedRoles.length > 0
+        ? { role: { _nin: protectedRoles } }
+        : null;
+    if (fence) {
       for (const grant of grants) {
         if (grant.collection !== 'directus_users') continue;
         if (grant.action === 'create' || grant.action === 'update') {
-          grant.validation = notProtected;
+          grant.validation = fence;
         }
         if (grant.action === 'update' || grant.action === 'delete') {
-          grant.filter = isWide(grant.filter)
-            ? notProtected
-            : { _and: [grant.filter, notProtected] };
+          grant.filter = isWide(grant.filter) ? fence : { _and: [grant.filter, fence] };
         }
       }
+    }
+    if (userScope) {
+      // It reads those roles (id + name) so the Users page can offer them,
+      // plus its own so the profile still shows it.
+      const readable = Array.from(
+        new Set([...userScope.assignable, userScope.ownRole].filter(Boolean)),
+      ).sort();
+      add(g('directus_roles', 'read', { id: { _in: readable } }, ['id', 'name']));
     }
 
     /**
@@ -1183,12 +1244,17 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
      */
     // EFFECTIVE, not stored: a fine-grained key nobody has set grants what its
     // default says, which is what the role could already do.
-    const grants = buildGrants(
-      effectivePrivileges(row.privileges, row.name),
-      row.brands,
-      row.stores,
-      await protectedRoleIds(),
-    );
+    const effective = effectivePrivileges(row.privileges, row.name);
+    const protectedRoles = await protectedRoleIds();
+    // Manages people but not roles: only the roles ROLE_ASSIGNMENT allows it.
+    const userScope =
+      effective.manage_users === true && effective.manage_roles !== true
+        ? {
+            assignable: await assignableRoleIds(row.name, roleId, protectedRoles),
+            ownRole: roleId,
+          }
+        : null;
+    const grants = buildGrants(effective, row.brands, row.stores, protectedRoles, userScope);
     /*
      * A COLLECTION NEWER THAN THIS ENVIRONMENT'S SCHEMA is skipped, not
      * granted: `compensation_rules` (2026-10-27) reaches an environment by a

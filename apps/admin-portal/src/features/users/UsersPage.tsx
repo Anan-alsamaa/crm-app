@@ -91,6 +91,9 @@ const schema = z.object({
 });
 type FormValues = z.infer<typeof schema>;
 
+/** Stands in for a role this person cannot see; never sent (see `lockedRole`). */
+const LOCKED_ROLE = '__locked__';
+
 const PAGE_SIZE = 20;
 
 export function UsersPage() {
@@ -133,6 +136,18 @@ export function UsersPage() {
     });
     setOpen(true);
   };
+  /*
+   * THE PICKER OFFERS WHAT YOU MAY ASSIGN (owner, 2026-11-18). Directus
+   * returns exactly the roles this person may give (a WeCare Supervisor:
+   * WeCare Agent and WeCare Supervisor; a manage_roles holder: all of them).
+   * Someone whose role is outside that set - a WeCare Admin, seen by a
+   * Supervisor - shows their role read-only and the save never sends it, so
+   * it cannot be changed by accident. A role that came back empty is one this
+   * person cannot read, unless they can read every role.
+   */
+  const lockedRole = (u: AdminUser | null): boolean =>
+    !!u &&
+    (u.role ? !!roles.data && !roles.data.some((r) => r.id === u.role?.id) : !can('manage_roles'));
   const openEdit = (u: AdminUser) => {
     setEditing(u);
     reset({
@@ -144,7 +159,8 @@ export function UsersPage() {
       password: '',
       first_name: u.first_name ?? '',
       last_name: u.last_name ?? '',
-      role: u.role?.id ?? '',
+      // A locked role is never sent; this only satisfies the form's schema.
+      role: u.role?.id || (lockedRole(u) ? LOCKED_ROLE : ''),
       team: u.team?.id ?? '',
       status: (u.status as 'active' | 'inactive') ?? 'active',
     });
@@ -178,6 +194,7 @@ export function UsersPage() {
   const roleOptions = (roles.data ?? [])
     .filter((r) => r.name.toLowerCase() !== 'administrator' || isOwner)
     .map((r) => ({ value: r.id, label: r.name }));
+  const roleLocked = lockedRole(editing);
 
   const onSubmit = handleSubmit(async (values) => {
     /*
@@ -210,7 +227,7 @@ export function UsersPage() {
           ...(dirtyFields.login_name && signInIdentity ? { email: signInIdentity } : {}),
           first_name: values.first_name || null,
           last_name: values.last_name || null,
-          role: values.role,
+          ...(roleLocked ? {} : { role: values.role }),
           team: values.team || null,
           status: values.status ?? 'active',
         };
@@ -655,22 +672,33 @@ export function UsersPage() {
                   'Admin can open this admin portal and manage settings, users, and every conversation. Agent handles only their own assigned queue in the agent portal.',
               })}
             >
-              <Controller
-                control={control}
-                name="role"
-                defaultValue=""
-                render={({ field }) => (
-                  <SelectMenu
-                    fullWidth
-                    value={field.value ?? ''}
-                    onChange={field.onChange}
-                    invalid={!!errors.role}
-                    aria-label={t('users.role')}
-                    placeholder="—"
-                    options={roleOptions}
-                  />
-                )}
-              />
+              {roleLocked ? (
+                <div className="space-y-1" data-testid="role-locked">
+                  <Input value={editing?.role?.name ?? '—'} readOnly aria-label={t('users.role')} />
+                  <p className="text-xs text-muted-foreground">
+                    {t('users.roleLocked', {
+                      defaultValue: "You can't change this person's role.",
+                    })}
+                  </p>
+                </div>
+              ) : (
+                <Controller
+                  control={control}
+                  name="role"
+                  defaultValue=""
+                  render={({ field }) => (
+                    <SelectMenu
+                      fullWidth
+                      value={field.value ?? ''}
+                      onChange={field.onChange}
+                      invalid={!!errors.role}
+                      aria-label={t('users.role')}
+                      placeholder="—"
+                      options={roleOptions}
+                    />
+                  )}
+                />
+              )}
             </FormField>
             <FormField label={t('users.team')}>
               <Controller

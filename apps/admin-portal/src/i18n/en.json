@@ -458,6 +458,7 @@
     "lastName": "Last name",
     "role": "Role",
     "roleHint": "Admin can open this admin portal and manage settings, users, and every chat. Agent handles only their own assigned queue in the agent portal.",
+    "roleLocked": "You can't change this person's role.",
     "team": "Team",
     "locale": "Locale",
     "status": "Status",

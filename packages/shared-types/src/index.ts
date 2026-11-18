@@ -41,6 +41,7 @@ export * from './late-orders-live.js';
 export * from './order-events.js';
 export * from './marketing-engine.js';
 export * from './privileges.js';
+export * from './role-assignment.js';
 export * from './releases.js';
 
 export const SHARED_TYPES_VERSION = '0.0.0';
