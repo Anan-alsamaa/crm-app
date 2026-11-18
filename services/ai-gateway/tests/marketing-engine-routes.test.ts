@@ -89,12 +89,40 @@ describe('the CRM marketing engine routes: the door', () => {
     });
   });
 
-  it('lets the Administrator in without an app_roles row, and caches who is asking', async () => {
+  it('lets the Administrator in without an app_roles row, and asks who is asking on EVERY request', async () => {
     const { call, calls } = setup();
     expect((await call('tok-admin', 'GET', '/money-model')).statusCode).toBe(200);
     await call('tok-admin', 'GET', '/money-model');
-    expect(calls.filter((u) => u.includes('/users/me'))).toHaveLength(1);
+    /* No actor cache (owner, 18 Nov 2026: privilege changes apply instantly). */
+    expect(calls.filter((u) => u.includes('/users/me'))).toHaveLength(2);
     expect(calls.some((u) => u.includes('/items/app_roles'))).toBe(false);
+  });
+
+  it('a privilege revoked on the Roles page applies to the very next request (no lag)', async () => {
+    const { call } = setup();
+    const maker = PEOPLE['tok-maker']!;
+    const before = maker.privileges;
+    try {
+      expect((await call('tok-maker', 'GET', '/home')).statusCode).toBe(200);
+      maker.privileges = { manage_marketing: true, use_marketing_portal: false };
+      expect((await call('tok-maker', 'GET', '/home')).statusCode).toBe(403);
+      maker.privileges = before;
+      expect((await call('tok-maker', 'GET', '/home')).statusCode).toBe(200);
+    } finally {
+      maker.privileges = before;
+    }
+  });
+
+  it('a session signed out (or moved off the role) is refused on the very next request', async () => {
+    const { call } = setup();
+    expect((await call('tok-checker', 'GET', '/home')).statusCode).toBe(200);
+    const was = PEOPLE['tok-checker']!;
+    delete PEOPLE['tok-checker'];
+    try {
+      expect((await call('tok-checker', 'GET', '/home')).statusCode).toBe(401);
+    } finally {
+      PEOPLE['tok-checker'] = was;
+    }
   });
 
   it('a person, not a script: rate limited per user', async () => {

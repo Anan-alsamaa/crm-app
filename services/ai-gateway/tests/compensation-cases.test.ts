@@ -2,15 +2,18 @@ import { describe, expect, it, vi } from 'vitest';
 import Fastify from 'fastify';
 import {
   MockYiji2Transport,
+  OWN_CASE_MESSAGE,
   UnknownVendorError,
   Yiji2Connector,
   yiji2RequestKey,
   type CompensationCasePatch,
   type CompensationCaseRow,
   type VendorConnector,
+  effectivePrivileges,
 } from '@yiji/shared-types';
 import {
   APPROVE_COMPENSATION_CASES,
+  LOG_COMPENSATION_CASES,
   registerCompensationCaseRoutes,
   type CompensationCaseStore,
 } from '../src/commerce/compensation-cases.js';
@@ -31,13 +34,21 @@ const NOW = Date.parse('2026-11-18T10:00:00Z');
 const V2 = 'vendor-v2';
 const V1 = 'vendor-v1';
 
+/** Each role at its DEFAULTS (nothing stored but the shared ticket switches). */
+const asRole = (id: string, role: string): SessionActor => ({
+  id,
+  isAdmin: false,
+  privileges: effectivePrivileges({ view_tickets: true, create_tickets: true }, role),
+});
+
 const ACTORS: Record<string, SessionActor> = {
-  'tok-agent': { id: 'u-agent', isAdmin: false, privileges: { view_tickets: true } },
-  'tok-approver': {
-    id: 'u-approver',
-    isAdmin: false,
-    privileges: { view_tickets: true, [APPROVE_COMPENSATION_CASES]: true },
-  },
+  /* Owner, 18 Nov 2026: WeCare Agent -> WeCare Supervisor -> WeCare Admin ->
+     Administrator. Agents log; supervisors and WeCare admins approve. */
+  'tok-agent': asRole('u-agent', 'WeCare Agent'),
+  'tok-agent2': asRole('u-agent2', 'WeCare Agent'),
+  'tok-approver': asRole('u-approver', 'WeCare Supervisor'),
+  'tok-wcadmin': asRole('u-wcadmin', 'WeCare Admin'),
+  'tok-ceo': asRole('u-ceo', 'CEO'),
   'tok-admin': { id: 'u-admin', isAdmin: true, privileges: {} },
 };
 
@@ -82,7 +93,9 @@ function memoryStore(): CompensationCaseStore & { rows: CompensationCaseRow[] } 
   };
 }
 
-function build(opts: { hidden?: string[]; inactive?: boolean } = {}) {
+function build(
+  opts: { hidden?: string[]; inactive?: boolean; sessions?: SessionActorResolver } = {},
+) {
   const transport = new MockYiji2Transport({ now: () => NOW });
   /* Every write's key as V2 receives it, replays included (the mock answers a
      known key from its store without noting a call). */
@@ -104,7 +117,7 @@ function build(opts: { hidden?: string[]; inactive?: boolean } = {}) {
   const store = memoryStore();
   const app = Fastify();
   void registerCompensationCaseRoutes(app, {
-    sessions: sessions(opts.hidden),
+    sessions: opts.sessions ?? sessions(opts.hidden),
     store,
     connectors: { connectorFor },
     now: () => NOW,
@@ -181,8 +194,8 @@ describe('GET /commerce/compensation-cases (the ticket panel)', () => {
   });
 });
 
-describe('the privilege: approve_compensation_cases', () => {
-  const routes = (caseId: string) => [
+describe('who logs, who decides (owner, 18 Nov 2026)', () => {
+  const decisions = (caseId: string) => [
     { url: `/commerce/compensation-cases/${caseId}/approve`, body: { reason: 'ok' } },
     { url: `/commerce/compensation-cases/${caseId}/reject`, body: { reason: 'no' } },
     { url: `/commerce/compensation-cases/${caseId}/evidence`, body: { reason: 'seen' } },
@@ -190,44 +203,249 @@ describe('the privilege: approve_compensation_cases', () => {
       url: `/commerce/compensation-cases/${caseId}/verification`,
       body: { reason: 'cams', result: 'confirmed' },
     },
-    { url: '/commerce/compensation-cases', body: { category: 'CUT' } },
   ];
+  const post = (
+    b: ReturnType<typeof build>,
+    tok: string,
+    url: string,
+    body: Record<string, unknown>,
+    ticket = 't-v2',
+  ) =>
+    b.app.inject({
+      method: 'POST',
+      url,
+      headers: auth(tok),
+      payload: { ticketId: ticket, idempotencyKey: key('x'), ...body },
+    });
+  const logAs = (b: ReturnType<typeof build>, tok: string, category = 'CUT') =>
+    post(b, tok, '/commerce/compensation-cases', { category });
 
-  it('every action is 403 without it, and nothing reaches V2', async () => {
+  it('a WeCare Agent (no approve privilege) may LOG a V2 complaint', async () => {
+    expect(ACTORS['tok-agent']!.privileges[APPROVE_COMPENSATION_CASES]).toBe(false);
+    expect(ACTORS['tok-agent']!.privileges[LOG_COMPENSATION_CASES]).toBe(true);
+    const b = build();
+    const res = await logAs(b, 'tok-agent');
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.case).toMatchObject({ ticket: 't-v2', logged_by_agent: 'u-agent' });
+    expect(b.transport.calls.at(-1)).toMatchObject({
+      path: '/compensation-cases',
+      body: { agent_id: 'u-agent' },
+    });
+  });
+
+  it('a WeCare Agent is 403 on approve / reject / evidence / verification; nothing reaches V2', async () => {
     const b = build();
     const id = await seeded(b);
-    for (const r of routes(id)) {
-      const res = await b.app.inject({
-        method: 'POST',
-        url: r.url,
-        headers: auth('tok-agent'),
-        payload: { ticketId: 't-v2', idempotencyKey: key('x'), ...r.body },
-      });
+    for (const r of decisions(id)) {
+      const res = await post(b, 'tok-agent', r.url, r.body);
       expect(res.statusCode, r.url).toBe(403);
       expect(res.json().error).toBe('approve_compensation_cases_required');
     }
     expect(b.transport.calls).toHaveLength(0);
   });
 
-  it('a role holding it may act; so may the Administrator', async () => {
+  it('a role with neither switch (CEO) cannot log either: 403, nothing reaches V2', async () => {
+    const b = build();
+    const res = await logAs(b, 'tok-ceo');
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error).toBe('log_compensation_cases_required');
+    expect(b.transport.calls).toHaveLength(0);
+  });
+
+  it('a WeCare Supervisor and a WeCare Admin may approve and reject; so may the Administrator', async () => {
     const b = build();
     const id = await seeded(b);
-    const res = await b.app.inject({
-      method: 'POST',
-      url: `/commerce/compensation-cases/${id}/approve`,
-      headers: auth('tok-approver'),
-      payload: { ticketId: 't-v2', idempotencyKey: key('a'), reason: 'late, fair' },
+    const res = await post(b, 'tok-approver', `/commerce/compensation-cases/${id}/approve`, {
+      reason: 'late, fair',
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().data.case).toMatchObject({ status: 'approved', issued_minor: 2000 });
     const id2 = await seeded(b);
-    const admin = await b.app.inject({
-      method: 'POST',
-      url: `/commerce/compensation-cases/${id2}/reject`,
-      headers: auth('tok-admin'),
-      payload: { ticketId: 't-v2', idempotencyKey: key('b'), reason: 'not our fault' },
+    const wc = await post(b, 'tok-wcadmin', `/commerce/compensation-cases/${id2}/approve`, {
+      reason: 'fair',
+    });
+    expect(wc.statusCode).toBe(200);
+    const id3 = await seeded(b);
+    const admin = await post(b, 'tok-admin', `/commerce/compensation-cases/${id3}/reject`, {
+      reason: 'not our fault',
     });
     expect(admin.statusCode).toBe(200);
+  });
+
+  it('an agent logs, a supervisor approves the same case (the whole flow)', async () => {
+    const b = build();
+    const logged = await logAs(b, 'tok-agent', 'CUT');
+    const caseId = logged.json().data.case.case_id as string;
+    const res = await post(b, 'tok-approver', `/commerce/compensation-cases/${caseId}/approve`, {
+      reason: 'checked the order',
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().data.case.status).toBe('approved');
+  });
+
+  describe('four eyes: the person who logged a case never decides it', () => {
+    it('own case: approve and reject are 403 own_case (EN and AR); nothing reaches V2', async () => {
+      const b = build();
+      const logged = await logAs(b, 'tok-approver', 'CUT');
+      expect(logged.statusCode).toBe(200);
+      const caseId = logged.json().data.case.case_id as string;
+      const calls = b.transport.calls.length;
+      for (const action of ['approve', 'reject'] as const) {
+        const res = await post(
+          b,
+          'tok-approver',
+          `/commerce/compensation-cases/${caseId}/${action}`,
+          {
+            reason: 'mine',
+          },
+        );
+        expect(res.statusCode, action).toBe(403);
+        expect(res.json()).toEqual({
+          error: 'own_case',
+          message: OWN_CASE_MESSAGE.en,
+          message_ar: OWN_CASE_MESSAGE.ar,
+        });
+      }
+      expect(b.transport.calls.length).toBe(calls);
+      /* Another approver may. */
+      const other = await post(b, 'tok-wcadmin', `/commerce/compensation-cases/${caseId}/approve`, {
+        reason: 'second pair of eyes',
+      });
+      expect(other.statusCode).toBe(200);
+    });
+
+    it('judged from V2 (logged_by_agent) as well as from the CRM log', async () => {
+      const b = build();
+      const id = await seeded(b);
+      b.store.rows.find((r) => r.case_id === id)!.logged_by_agent = 'u-wcadmin';
+      const res = await post(b, 'tok-wcadmin', `/commerce/compensation-cases/${id}/reject`, {
+        reason: 'mine',
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.json().error).toBe('own_case');
+    });
+
+    it('photos received and the camera check are not decisions: the logger may still do them', async () => {
+      const b = build();
+      const logged = await logAs(b, 'tok-approver', 'HAIR');
+      const caseId = logged.json().data.case.case_id as string;
+      expect(logged.json().data.case.status).toBe('evidence_hold');
+      const res = await post(b, 'tok-approver', `/commerce/compensation-cases/${caseId}/evidence`, {
+        reason: 'photos ok',
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('the Administrator may decide a case they logged', async () => {
+      const b = build();
+      const logged = await logAs(b, 'tok-admin', 'CUT');
+      const caseId = logged.json().data.case.case_id as string;
+      const res = await post(b, 'tok-admin', `/commerce/compensation-cases/${caseId}/approve`, {
+        reason: 'owner',
+      });
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('the panel answer names the caller’s own cases (none for the Administrator)', async () => {
+      const b = build();
+      const logged = await logAs(b, 'tok-agent', 'CUT');
+      const caseId = logged.json().data.case.case_id as string;
+      const panel = async (tok: string) =>
+        (
+          await b.app.inject({
+            url: '/commerce/compensation-cases?ticketId=t-v2',
+            headers: auth(tok),
+          })
+        ).json().data;
+      expect(await panel('tok-agent')).toMatchObject({
+        canAct: false,
+        canLog: true,
+        ownCases: [caseId],
+      });
+      expect(await panel('tok-approver')).toMatchObject({
+        canAct: true,
+        canLog: true,
+        ownCases: [],
+      });
+      expect(await panel('tok-ceo')).toMatchObject({ canAct: false, canLog: false });
+      expect(await panel('tok-admin')).toMatchObject({ canAct: true, canLog: true, ownCases: [] });
+    });
+  });
+
+  describe('instant privileges: no cache between the Roles page and the next request', () => {
+    /** A Directus that answers the CURRENT app_roles row on every call. */
+    function liveDirectus() {
+      const role = { privileges: { approve_compensation_cases: true } as Record<string, boolean> };
+      const calls: string[] = [];
+      const fetchImpl = vi.fn(async (url: string | URL | Request) => {
+        const u = String(url);
+        calls.push(u);
+        if (u.includes('/users/me'))
+          return new Response(
+            JSON.stringify({
+              data: { id: 'u-sup', role: { id: 'r-sup', name: 'WeCare Supervisor' } },
+            }),
+            { status: 200 },
+          );
+        if (u.includes('/items/app_roles'))
+          return new Response(JSON.stringify({ data: [{ privileges: role.privileges }] }), {
+            status: 200,
+          });
+        if (u.includes('/items/tickets/'))
+          return new Response(JSON.stringify({ data: { id: 't-v2' } }), { status: 200 });
+        return new Response('{}', { status: 403 });
+      });
+      const resolver = createSessionActorResolver({
+        directusUrl: 'http://directus.invalid',
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+      });
+      return { role, calls, resolver };
+    }
+
+    it('a privilege revoked takes effect on the very next request; granted again, the next one', async () => {
+      const live = liveDirectus();
+      const b = build({ sessions: live.resolver });
+      const id1 = await seeded(b);
+      const id2 = await seeded(b);
+      const id3 = await seeded(b);
+      const approve = (id: string) =>
+        post(b, 'tok-sup', `/commerce/compensation-cases/${id}/approve`, { reason: 'ok' });
+      expect((await approve(id1)).statusCode).toBe(200);
+      live.role.privileges = { approve_compensation_cases: false };
+      const revoked = await approve(id2);
+      expect(revoked.statusCode).toBe(403);
+      expect(revoked.json().error).toBe('approve_compensation_cases_required');
+      live.role.privileges = { approve_compensation_cases: true };
+      expect((await approve(id3)).statusCode).toBe(200);
+    });
+
+    it('the resolver asks Directus on every call (no per-token cache)', async () => {
+      const live = liveDirectus();
+      await live.resolver.resolve('tok-sup');
+      await live.resolver.resolve('tok-sup');
+      expect(live.calls.filter((u) => u.includes('/users/me'))).toHaveLength(2);
+      expect(live.calls.filter((u) => u.includes('/items/app_roles'))).toHaveLength(2);
+    });
+
+    it('the per-user rate limit still applies', async () => {
+      const b = build();
+      const app = Fastify();
+      void registerCompensationCaseRoutes(app, {
+        sessions: sessions(),
+        store: b.store,
+        connectors: { connectorFor: b.connectorFor },
+        now: () => NOW,
+        perUserPerMin: 2,
+      });
+      const get = () =>
+        app.inject({
+          url: '/commerce/compensation-cases?ticketId=t-v2',
+          headers: auth('tok-agent'),
+        });
+      expect((await get()).statusCode).toBe(200);
+      expect((await get()).statusCode).toBe(200);
+      expect((await get()).statusCode).toBe(429);
+    });
   });
 });
 
@@ -550,7 +768,7 @@ describe('POST /commerce/compensation-cases (Log V2 complaint)', () => {
     const res = await b.app.inject({
       method: 'POST',
       url: '/commerce/compensation-cases',
-      headers: auth('tok-approver'),
+      headers: auth('tok-agent'),
       payload: {
         ticketId: 't-v2',
         idempotencyKey: key('log'),
@@ -568,7 +786,7 @@ describe('POST /commerce/compensation-cases (Log V2 complaint)', () => {
     const sent = {
       order_number: '2611000000001',
       category: 'HAIR',
-      agent_id: 'u-approver',
+      agent_id: 'u-agent',
       has_photos: false,
       text: 'hair in the burger',
     };

@@ -26,6 +26,9 @@ import { StoreError, type EngineStore } from './engine-store.js';
  *     does; the Administrator role holds everything;
  *   - the door is `use_marketing_portal`; preparing and deciding are checked
  *     per call by the engine.
+ * Asked FRESH on every request - no actor cache (owner, 18 Nov 2026:
+ * privilege changes take effect instantly, no lag). The per-user rate limit
+ * below stays and bounds the cost.
  * The engine then reads and writes with the gateway's service account only.
  */
 
@@ -55,7 +58,6 @@ export async function registerMarketingEngineRoutes(
   const limit = deps.perUserPerMin ?? 120;
   const engine = deps.engine ?? new CrmMarketingEngine(deps.store, deps.engineOptions ?? {});
   const base = deps.directusUrl.replace(/\/+$/, '');
-  const actorCache = new Map<string, { actor: Actor | null; at: number }>();
   const recent = new Map<string, number[]>();
 
   async function asCaller<T>(token: string, path: string): Promise<{ status: number; data?: T }> {
@@ -69,17 +71,12 @@ export async function registerMarketingEngineRoutes(
   }
 
   async function resolveActor(token: string): Promise<Actor | null | 'unavailable'> {
-    const hit = actorCache.get(token);
-    if (hit && now() - hit.at < 60_000) return hit.actor;
     const me = await asCaller<{ id?: string; role?: { id?: string; name?: string } | null }>(
       token,
       '/users/me?fields=id,role.id,role.name',
     );
     if (me.status >= 500) return 'unavailable';
-    if (me.status === 401 || me.status === 403 || !me.data?.id) {
-      actorCache.set(token, { actor: null, at: now() });
-      return null;
-    }
+    if (me.status === 401 || me.status === 403 || !me.data?.id) return null;
     const roleId = me.data.role?.id ?? null;
     const roleName = me.data.role?.name ?? '';
     const isAdmin = MARKETING_ADMIN_ROLES.includes(roleName);
@@ -103,8 +100,6 @@ export async function registerMarketingEngineRoutes(
       isAdmin,
       privileges: isAdmin ? {} : effectivePrivileges(stored, roleName),
     };
-    actorCache.set(token, { actor, at: now() });
-    if (actorCache.size > 2000) actorCache.delete(actorCache.keys().next().value as string);
     return actor;
   }
 

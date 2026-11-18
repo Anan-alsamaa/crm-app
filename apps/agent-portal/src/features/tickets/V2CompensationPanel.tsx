@@ -32,8 +32,18 @@ import {
  * expires 72 hours after it was proposed. This panel shows a case the way the
  * contract's section 2 lists it and carries the four actions (Approve with an
  * optional amount, Reject, Photos received, Camera check done), each with a
- * reason, for whoever holds `approve_compensation_cases`. From a v2 ticket
- * with an order, the same people may "Log V2 complaint".
+ * reason, for whoever holds `approve_compensation_cases` (WeCare Supervisor,
+ * WeCare Admin, the Administrator). From a v2 ticket with an order, whoever
+ * holds `log_compensation_cases` (every WeCare role) may "Log V2 complaint".
+ * Four eyes: the person who logged a case is not offered Approve or Reject
+ * on it (the gateway refuses it anyway, 403 `own_case`).
+ *
+ * NO STALE BUTTONS (owner, 18 Nov 2026: privilege changes apply instantly).
+ * Which buttons show comes from the gateway's answer, which reads the
+ * caller's privileges fresh on every request - never from a snapshot. The
+ * answer is re-read whenever the window regains focus (staleTime 0), and at
+ * once after any 403, so a revoked or granted switch shows on the next focus,
+ * refusal or page load.
  *
  * RENDERS NOTHING for a ticket that is not a Yiji v2 ticket (every v1 ticket),
  * or when the gateway cannot be asked - a v1 ticket looks exactly as before.
@@ -123,6 +133,15 @@ function useRefusalText() {
     if (err.code === 'approve_compensation_cases_required')
       return t('v2Case.error.forbidden', {
         defaultValue: 'You do not have the permission to act on V2 compensation cases.',
+      });
+    if (err.code === 'log_compensation_cases_required')
+      return t('v2Case.error.forbiddenLog', {
+        defaultValue: 'You do not have the permission to log V2 complaints.',
+      });
+    if (err.code === 'own_case')
+      return t('v2Case.error.ownCase', {
+        defaultValue:
+          'You logged this case, so another person must approve or reject it (a WeCare Supervisor, a WeCare Admin or the Administrator).',
       });
     if (err.code === 'v2_unavailable')
       return t('v2Case.error.unavailable', {
@@ -240,7 +259,8 @@ function ActionForm({
     },
     onError: (err) => {
       setError(refusal(err));
-      if (err instanceof CaseActionError && err.fresh)
+      /* A 403 means the buttons were stale (a switch changed): re-ask. */
+      if (err instanceof CaseActionError && (err.fresh || err.status === 403))
         void qc.invalidateQueries({ queryKey: [V2_CASES_QUERY, ticketId] });
     },
   });
@@ -368,15 +388,20 @@ function CaseCard({
   c,
   ticketId,
   canAct,
+  ownCase = false,
 }: {
   c: CompensationCaseRow;
   ticketId: string;
   canAct: boolean;
+  /** The caller logged this case: no Approve / Reject (four eyes). */
+  ownCase?: boolean;
 }): JSX.Element {
   const { t } = useTranslation();
   const statusLabel = useStatusLabel();
   const [open, setOpen] = useState<CaseAction | null>(null);
-  const actions = canAct ? actionsFor(c) : [];
+  const all = canAct ? actionsFor(c) : [];
+  const actions = ownCase ? all.filter((a) => a !== 'approve' && a !== 'reject') : all;
+  const decisionHidden = ownCase && all.some((a) => a === 'approve' || a === 'reject');
   const amount =
     c.amount_minor != null
       ? formatCaseMoney(c.amount_minor, c.currency)
@@ -549,6 +574,14 @@ function CaseCard({
         </p>
       )}
 
+      {decisionHidden && (
+        <p data-testid="v2-case-own" className="text-xs text-muted-foreground">
+          {t('v2Case.ownCase', {
+            defaultValue:
+              'You logged this case: a WeCare Supervisor, a WeCare Admin or the Administrator approves or rejects it.',
+          })}
+        </p>
+      )}
       {actions.length > 0 && !open && (
         <div className="flex flex-wrap gap-2">
           {actions.map((a) => (
@@ -612,7 +645,11 @@ function LogComplaintForm({ ticketId, onClose }: { ticketId: string; onClose: ()
       );
       onClose();
     },
-    onError: (err) => setError(refusal(err)),
+    onError: (err) => {
+      setError(refusal(err));
+      if (err instanceof CaseActionError && err.status === 403)
+        void qc.invalidateQueries({ queryKey: [V2_CASES_QUERY, ticketId] });
+    },
   });
   return (
     <form
@@ -686,7 +723,9 @@ export function useTicketV2Cases(ticketId: string) {
     queryKey: [V2_CASES_QUERY, ticketId],
     enabled: !!ticketId,
     retry: false,
-    staleTime: 30_000,
+    /* Always re-asked on focus / mount: the buttons follow the caller's
+       privileges as the gateway reads them NOW (no lag). */
+    staleTime: 0,
     queryFn: async () => {
       try {
         return await compensationCases.forTicket(ticketId);
@@ -719,7 +758,8 @@ export function V2CompensationPanel({
     [data],
   );
   if (!data || !data.v2) return null;
-  const canLog = data.canAct && !!data.orderNumber;
+  const canLog = (data.canLog ?? data.canAct) && !!data.orderNumber;
+  const own = new Set(data.ownCases ?? []);
   if (sorted.length === 0 && !canLog) return null;
 
   return (
@@ -743,7 +783,13 @@ export function V2CompensationPanel({
       </div>
       {logging && <LogComplaintForm ticketId={ticketId} onClose={() => setLogging(false)} />}
       {sorted.map((c) => (
-        <CaseCard key={c.case_id} c={c} ticketId={ticketId} canAct={data.canAct} />
+        <CaseCard
+          key={c.case_id}
+          c={c}
+          ticketId={ticketId}
+          canAct={data.canAct}
+          ownCase={own.has(c.case_id)}
+        />
       ))}
     </section>
   );

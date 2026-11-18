@@ -10,7 +10,8 @@ import { auth } from './directus.js';
  * YIJI V2 COMPENSATION CASES - the agent portal's client (owner, 18 Nov 2026).
  *
  * Calls the AI gateway (never V2): the gateway checks the agent's own session,
- * the ticket and the `approve_compensation_cases` switch, then calls V2 with
+ * the ticket and the `log_compensation_cases` / `approve_compensation_cases`
+ * switch (read fresh on every call), then calls V2 with
  * the partner credential it alone holds. Every write carries an
  * Idempotency-Key derived from the dialog's nonce AND the request's material
  * fields (`requestKey`): a double click or an identical retry never acts
@@ -32,6 +33,13 @@ export interface TicketCases {
   orderNumber: string | null;
   /** The caller holds approve_compensation_cases (or is the Administrator). */
   canAct: boolean;
+  /**
+   * The caller holds log_compensation_cases (or is the Administrator). Absent
+   * from an older gateway, where logging followed `canAct`.
+   */
+  canLog?: boolean;
+  /** Four eyes: the case ids THIS caller logged - they may not approve or reject them. */
+  ownCases?: string[];
   cases: CompensationCaseRow[];
 }
 
