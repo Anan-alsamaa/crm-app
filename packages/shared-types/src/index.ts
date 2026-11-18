@@ -3,6 +3,7 @@
  */
 
 export * from './enums.js';
+export * from './role-assignment.js';
 export * from './coupon-request.js';
 export * from './coupons-maintenance.js';
 export * from './staff-identity.js';
