@@ -765,6 +765,30 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
    * edit or delete a user who already holds it). Read at sync time so it
    * follows whatever the roles currently are.
    */
+  /**
+   * WHICH ROLES A USER MANAGER MAY HAND OUT (owner, 18 Nov 2026) - mirrors
+   * ROLE_ASSIGNABLE_ROLES in packages/shared-types/src/role-assignment.ts
+   * (role-assignment.test.ts fails if they drift). Only a role that manages
+   * users WITHOUT managing roles is fenced; one not listed here may assign
+   * only its own role (what its Users page could always offer).
+   */
+  const ROLE_ASSIGNABLE_ROLES = {
+    'wecare supervisor': ['wecare agent', 'wecare supervisor'],
+  };
+
+  /** Role ids `row` may assign, or null when it is not fenced. */
+  async function assignableRoleIds(row, effective) {
+    if (effective?.manage_users !== true || effective?.manage_roles === true) return null;
+    const own = String(row?.name ?? '')
+      .trim()
+      .toLowerCase();
+    const names = ROLE_ASSIGNABLE_ROLES[own] ?? (own ? [own] : []);
+    if (names.length === 0) return [];
+    return database('directus_roles')
+      .whereRaw(`LOWER(name) IN (${names.map(() => '?').join(',')})`, names)
+      .pluck('id');
+  }
+
   async function protectedRoleIds() {
     const admin = await database('directus_roles as r')
       .join('directus_access as a', 'a.role', 'r.id')
@@ -776,7 +800,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     return Array.from(new Set([...admin, ...svc]));
   }
 
-  function buildGrants(privileges, brandIds, storeIds, protectedRoles = []) {
+  function buildGrants(
+    privileges,
+    brandIds,
+    storeIds,
+    protectedRoles = [],
+    assignableRoles = null,
+  ) {
     const grants = [];
     const seen = new Set();
     const add = (grant) => {
@@ -817,6 +847,29 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
             : { _and: [grant.filter, notProtected] };
         }
       }
+    }
+
+    /*
+     * THE ROLE FENCE (owner, 18 Nov 2026): a role that manages users without
+     * managing roles may hand out, and touch users of, only the roles it may
+     * assign (WeCare Supervisor -> WeCare Agent and WeCare Supervisor). It can
+     * READ those roles, so the Users page offers them. A payload that does not
+     * set a role (a profile edit) still passes: `role _null` covers the
+     * absent field.
+     */
+    if (Array.isArray(assignableRoles) && privileges?.manage_users === true) {
+      const inSet = { role: { _in: assignableRoles } };
+      const valid = { _or: [{ role: { _null: true } }, inSet] };
+      for (const grant of grants) {
+        if (grant.collection !== 'directus_users') continue;
+        if (grant.action === 'create' || grant.action === 'update') {
+          grant.validation = grant.validation ? { _and: [grant.validation, valid] } : valid;
+        }
+        if (grant.action === 'update' || grant.action === 'delete') {
+          grant.filter = isWide(grant.filter) ? inSet : { _and: [grant.filter, inSet] };
+        }
+      }
+      add(g('directus_roles', 'read', { id: { _in: assignableRoles } }, ['id', 'name']));
     }
 
     /**
@@ -1057,11 +1110,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
      */
     // EFFECTIVE, not stored: a fine-grained key nobody has set grants what its
     // default says, which is what the role could already do.
+    const effective = effectivePrivileges(row.privileges, row.name);
     const grants = buildGrants(
-      effectivePrivileges(row.privileges, row.name),
+      effective,
       row.brands,
       row.stores,
       await protectedRoleIds(),
+      await assignableRoleIds(row, effective),
     );
     /*
      * A COLLECTION NEWER THAN THIS ENVIRONMENT'S SCHEMA is skipped, not

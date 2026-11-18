@@ -178,6 +178,15 @@ export function UsersPage() {
   const roleOptions = (roles.data ?? [])
     .filter((r) => r.name.toLowerCase() !== 'administrator' || isOwner)
     .map((r) => ({ value: r.id, label: r.name }));
+  /*
+   * A user whose role the viewer may not assign (owner, 18 Nov 2026: a WeCare
+   * Supervisor assigns WeCare Agent and WeCare Supervisor only): their role is
+   * still SHOWN, never silently swapped for one in the list. Saving such a
+   * user is refused by the database, which is the real boundary.
+   */
+  if (editing?.role?.id && !roleOptions.some((o) => o.value === editing.role!.id)) {
+    roleOptions.push({ value: editing.role.id, label: editing.role.name ?? '—' });
+  }
 
   const onSubmit = handleSubmit(async (values) => {
     /*
