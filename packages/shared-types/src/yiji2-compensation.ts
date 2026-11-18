@@ -56,6 +56,86 @@ export function isYiji2AgentComplaintCode(v: unknown): v is Yiji2AgentComplaintC
   return typeof v === 'string' && (YIJI2_AGENT_COMPLAINT_CODES as readonly string[]).includes(v);
 }
 
+/**
+ * The AGENT categories PAID ON THE AFFECTED ITEMS from their first occurrence
+ * (V2 policy `rules.csv`, action ITEM_VALUE / ITEM_PCT on the ALL, O1 and O2
+ * rows): V2 answers `400` "a category paid on items without items"
+ * (auto-compensation-contract.md section 3). The CRM asks for at least one
+ * line before it sends one of these.
+ */
+export const YIJI2_ITEM_PAID_CATEGORIES: readonly Yiji2AgentComplaintCode[] = [
+  'PRD-1',
+  'PRD-2',
+  'ACC-1',
+  'ACC-2',
+  'MIS',
+  'REM',
+];
+
+/**
+ * Paid on the items only from the SECOND occurrence (rules.csv HAIR-O2,
+ * FOREIGN-O2: ITEM_VALUE; O1 is the full order). The CRM cannot know the
+ * occurrence before V2 counts it, so items are optional here and the form
+ * advises naming them; V2 refuses an O2 without items with its 400.
+ */
+export const YIJI2_ITEM_PAID_FROM_SECOND: readonly Yiji2AgentComplaintCode[] = ['HAIR', 'FOREIGN'];
+
+export function isYiji2ItemPaidCategory(v: unknown): boolean {
+  return typeof v === 'string' && (YIJI2_ITEM_PAID_CATEGORIES as readonly string[]).includes(v);
+}
+
+/** One order line as the picker and the gateway see it (from the v2 order read). */
+export interface Yiji2PickableLine {
+  /** `OrderItem.order_item_id`: the order line id. */
+  orderItemId: string;
+  quantity: number;
+}
+
+/** One picked line: `affected_items[]` in the CRM's words. */
+export interface Yiji2PickedItem {
+  orderItemId: string;
+  /** Affected units, 1..the line's quantity; absent = the whole line. */
+  quantity?: number;
+}
+
+export type Yiji2AffectedItemsProblem =
+  | 'items_required'
+  | 'too_many_items'
+  | 'item_not_on_order'
+  | 'item_twice'
+  | 'item_quantity';
+
+/**
+ * The affected items against the order's lines, before anything reaches V2
+ * (V2 checks the same and answers 400): every id a line of THIS order (never
+ * the catalogue id, never another order's line), each once, the quantity
+ * 1..the line's quantity; at least one for a category paid on items. `null`
+ * when the pick is fine. `index` names the first bad entry.
+ */
+export function yiji2AffectedItemsProblem(
+  category: string,
+  picked: readonly Yiji2PickedItem[] | null | undefined,
+  lines: readonly Yiji2PickableLine[],
+): { problem: Yiji2AffectedItemsProblem; index?: number } | null {
+  const list = picked ?? [];
+  if (list.length === 0)
+    return isYiji2ItemPaidCategory(category) ? { problem: 'items_required' } : null;
+  if (list.length > 50) return { problem: 'too_many_items' };
+  const seen = new Set<string>();
+  for (const [index, p] of list.entries()) {
+    const line = lines.find((l) => l.orderItemId === String(p.orderItemId).trim());
+    if (!line) return { problem: 'item_not_on_order', index };
+    if (seen.has(line.orderItemId)) return { problem: 'item_twice', index };
+    seen.add(line.orderItemId);
+    if (
+      p.quantity !== undefined &&
+      (!Number.isInteger(p.quantity) || p.quantity < 1 || p.quantity > line.quantity)
+    )
+      return { problem: 'item_quantity', index };
+  }
+  return null;
+}
+
 export const YIJI2_CASE_STATUSES = [
   'evidence_hold',
   'proposed',
@@ -161,7 +241,14 @@ export const Yiji2CaseComplaintBody = z
       .array(
         z
           .object({
-            order_item_id: z.string().trim().min(1).max(32),
+            /* partner-v1.yaml `ID`: an int64 line id (sent to V2 as a JSON number). */
+            order_item_id: z.union([
+              z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
+              z
+                .string()
+                .trim()
+                .regex(/^[1-9]\d{0,14}$/),
+            ]),
             quantity: z.number().int().min(1).optional(),
           })
           .strict(),

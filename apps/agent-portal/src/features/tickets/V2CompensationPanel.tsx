@@ -5,12 +5,15 @@ import { Button, cn, FormField, Input, Pill, Select, Textarea, toast, useNow } f
 import {
   YIJI2_AGENT_COMPLAINT_CODES,
   YIJI2_CASE_TERMINAL_STATUSES,
+  YIJI2_ITEM_PAID_FROM_SECOND,
   caseTimeLeft,
   formatCaseMoney,
   formatPercentBps,
+  isYiji2ItemPaidCategory,
   parseCaseAmount,
   yiji2CaseConflictMessage,
   yiji2OverrideCurrency,
+  yiji2AffectedItemsProblem,
   yiji2OverrideProblem,
   type CompensationCaseRow,
   type Yiji2AgentComplaintCode,
@@ -23,6 +26,7 @@ import {
   type CaseAction,
   type TicketCases,
 } from '../../lib/compensation-cases-client.js';
+import { AffectedItemsPicker, pickQuantity, type ItemPicks } from './AffectedItemsPicker.js';
 
 /**
  * YIJI V2 COMPENSATION ON THE TICKET (owner, 18 Nov 2026).
@@ -50,6 +54,7 @@ import {
  */
 
 export const V2_CASES_QUERY = 'v2-compensation-cases';
+export const V2_ORDER_LINES_QUERY = 'v2-compensation-order-lines';
 
 type Tone = 'neutral' | 'primary' | 'success' | 'highlight' | 'warning' | 'destructive' | 'muted';
 
@@ -125,6 +130,29 @@ function useRefusalText() {
             defaultValue:
               'This order already has a case of that category on another ticket, which you cannot open. Ask a supervisor.',
           });
+    if (err.code === 'invalid_affected_items')
+      switch (err.problem) {
+        case 'items_required':
+          return t('v2Case.picker.required', {
+            defaultValue: 'Choose at least one item for this category.',
+          });
+        case 'item_quantity':
+          return t('v2Case.picker.errorQuantity', {
+            defaultValue: 'An item’s quantity must be from 1 to the quantity on the order.',
+          });
+        case 'item_twice':
+          return t('v2Case.picker.errorTwice', {
+            defaultValue: 'An item is named twice. Name each line once.',
+          });
+        default:
+          return t('v2Case.picker.errorNotOnOrder', {
+            defaultValue: 'An item is not a line of this ticket’s order. Choose the items again.',
+          });
+      }
+    if (err.code === 'order_not_found_on_v2')
+      return t('v2Case.picker.errorNoOrder', {
+        defaultValue: 'Yiji V2 no longer answers this ticket’s order, so items cannot be named.',
+      });
     if (err.code === 'invalid_amount')
       return t('v2Case.error.amount', {
         defaultValue:
@@ -618,14 +646,31 @@ function LogComplaintForm({ ticketId, onClose }: { ticketId: string; onClose: ()
   const refusal = useRefusalText();
   const [nonce] = useState(newIdempotencyKey);
   const [category, setCategory] = useState<Yiji2AgentComplaintCode | ''>('');
+  const [picks, setPicks] = useState<ItemPicks>({});
   const [hasPhotos, setHasPhotos] = useState(false);
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
+  /* The order's lines, as the gateway reads them from V2 (the same read it
+     checks the pick against). */
+  const order = useQuery({
+    queryKey: [V2_ORDER_LINES_QUERY, ticketId],
+    queryFn: () => compensationCases.orderLines(ticketId),
+    retry: false,
+    staleTime: 60_000,
+  });
+  const lines = order.data?.lines ?? null;
+  const required = isYiji2ItemPaidCategory(category);
+  const affectedItems = Object.entries(picks).map(([orderItemId, q]) => ({
+    orderItemId,
+    quantity: pickQuantity(q),
+  }));
+  const problem = category ? yiji2AffectedItemsProblem(category, affectedItems, lines ?? []) : null;
   const run = useMutation({
     mutationFn: () => {
       const body = {
         ticketId,
         category: category as Yiji2AgentComplaintCode,
+        ...(affectedItems.length ? { affectedItems } : {}),
         hasPhotos,
         ...(text.trim() ? { text: text.trim() } : {}),
       };
@@ -656,7 +701,7 @@ function LogComplaintForm({ ticketId, onClose }: { ticketId: string; onClose: ()
       className="space-y-3 rounded-2xl bg-foreground/[0.04] p-3.5 ring-1 ring-inset ring-foreground/[0.06]"
       onSubmit={(e) => {
         e.preventDefault();
-        if (category && !run.isPending) {
+        if (category && !problem && !run.isPending) {
           setError(null);
           run.mutate();
         }
@@ -675,6 +720,17 @@ function LogComplaintForm({ ticketId, onClose }: { ticketId: string; onClose: ()
           ))}
         </Select>
       </FormField>
+      <AffectedItemsPicker
+        lines={lines}
+        currency={order.data?.currency ?? null}
+        picks={picks}
+        onChange={setPicks}
+        required={required}
+        adviseItems={(YIJI2_ITEM_PAID_FROM_SECOND as readonly string[]).includes(category)}
+        loading={order.isPending}
+        failed={order.isError}
+        showRequired={problem?.problem === 'items_required'}
+      />
       <label className="flex items-center gap-2 text-sm text-foreground">
         <input
           type="checkbox"
@@ -692,12 +748,6 @@ function LogComplaintForm({ ticketId, onClose }: { ticketId: string; onClose: ()
           onChange={(e) => setText(e.target.value)}
         />
       </FormField>
-      <p className="text-xs text-muted-foreground">
-        {t('v2Case.itemsLater', {
-          defaultValue:
-            'Item prices come from the order. Picking the affected items follows when V2 sends order line ids.',
-        })}
-      </p>
       {error && (
         <p
           role="alert"
@@ -707,7 +757,7 @@ function LogComplaintForm({ ticketId, onClose }: { ticketId: string; onClose: ()
         </p>
       )}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="sm" disabled={!category || run.isPending}>
+        <Button type="submit" size="sm" disabled={!category || !!problem || run.isPending}>
           {t('v2Case.logSubmit', { defaultValue: 'Send to Yiji V2' })}
         </Button>
         <Button type="button" size="sm" variant="ghost" onClick={onClose}>

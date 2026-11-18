@@ -12,8 +12,11 @@ import {
   caseLoggedBy,
   compensationCasesOf,
   isUnknownVendor,
+  isYiji2ItemPaidCategory,
   isYiji2OrderNumber,
   mergeCaseStatus,
+  yiji2AffectedItemsProblem,
+  yiji2MinorUnits,
   yiji2CaseConflictMessage,
   yiji2OverrideCurrency,
   yiji2OverrideProblem,
@@ -22,6 +25,7 @@ import {
   type CompensationCasePatch,
   type CompensationCaseRow,
   type ConnectorRegistry,
+  type CrmOrderItem,
   type Yiji2CompensationCaseWire,
   type Yiji2CompensationCases,
 } from '@yiji/shared-types';
@@ -38,6 +42,7 @@ import {
  *
  *   GET  /commerce/compensation-cases?ticketId=          the ticket's cases
  *   GET  /commerce/compensation-cases/:caseId?ticketId=  re-read one from V2
+ *   GET  /commerce/compensation-cases/order-items?ticketId=  the order's lines (the item picker)
  *   POST /commerce/compensation-cases                    log a V2 complaint
  *   POST /commerce/compensation-cases/:caseId/approve    | reject | evidence | verification
  *
@@ -85,6 +90,30 @@ export const LOG_COMPENSATION_CASES = 'log_compensation_cases';
 
 export const CASE_ON_OTHER_TICKET_MESSAGE =
   'This order already has a case of that category, on another ticket. Act on it from that ticket.';
+
+/**
+ * One line of the ticket's order as the "Log V2 complaint" picker shows it
+ * (`GET /commerce/compensation-cases/order-items`), read from V2 through the
+ * connector. `orderItemId` is V2's `order_item_id` (the order line id).
+ */
+export interface V2OrderLine {
+  orderItemId: string;
+  name: string;
+  nameAr: string | null;
+  modifiers: string[];
+  quantity: number;
+  /** Minor units of the order's currency (`currency` on the answer). */
+  unitPriceMinor: number;
+  lineTotalMinor: number | null;
+}
+
+export const AFFECTED_ITEMS_MESSAGES = {
+  items_required: 'This category is paid on the affected items. Choose at least one item.',
+  too_many_items: 'At most 50 items can be named on one complaint.',
+  item_not_on_order: 'An item is not a line of this ticket’s order. Choose the items again.',
+  item_twice: 'An item is named twice. Name each line once.',
+  item_quantity: 'An item’s quantity must be from 1 to the quantity on the order.',
+} as const;
 
 /** What the routes need from Directus, with the gateway's service account. */
 export interface CompensationCaseStore {
@@ -362,6 +391,36 @@ export async function registerCompensationCaseRoutes(
     return api;
   }
 
+  /**
+   * The order's lines with their V2 line ids, read through the connector
+   * (the same read the picker shows). `null` when V2 has no such order.
+   * A line without a line id cannot be named, so it is left out.
+   */
+  async function orderLines(
+    vendor: string,
+    orderNumber: string,
+  ): Promise<{ currency: string; lines: V2OrderLine[] } | null> {
+    const connector = await deps.connectors.connectorFor(vendor);
+    const order = await connector.getOrder(orderNumber);
+    if (!order) return null;
+    const unit = yiji2MinorUnits(order.currency);
+    const minor = (major: number) => Math.round(major * unit);
+    return {
+      currency: order.currency,
+      lines: order.items
+        .filter((i): i is CrmOrderItem & { orderItemId: string } => !!i.orderItemId)
+        .map((i) => ({
+          orderItemId: i.orderItemId,
+          name: i.name,
+          nameAr: i.nameAr ?? null,
+          modifiers: i.modifiers ?? [],
+          quantity: i.qty,
+          unitPriceMinor: minor(i.price),
+          lineTotalMinor: i.lineTotal !== undefined ? minor(i.lineTotal) : null,
+        })),
+    };
+  }
+
   /** V2's answer -> the case row (created on the ticket when it is new). */
   async function record(
     wire: Yiji2CompensationCaseWire,
@@ -473,6 +532,29 @@ export async function registerCompensationCaseRoutes(
     }
   });
 
+  /* ── The order's lines for the "Log V2 complaint" picker ─────────────── */
+  app.get('/commerce/compensation-cases/order-items', async (req, reply) => {
+    const d = await door(req, LOG_COMPENSATION_CASES);
+    if (!d.ok) return fail(reply, d.status, d.error);
+    const id = ticketId.safeParse((req.query as { ticketId?: unknown })?.ticketId);
+    if (!id.success) return fail(reply, 400, 'ticketId_required');
+    try {
+      const tk = await v2Ticket(d.token, id.data);
+      if (!tk.ok) return fail(reply, tk.status, tk.error);
+      const order = tk.ticket.order_id;
+      if (!isYiji2OrderNumber(order)) return fail(reply, 409, 'ticket_has_no_v2_order');
+      const read = await orderLines(tk.ticket.vendor, String(order));
+      if (!read) return fail(reply, 404, 'order_not_found_on_v2');
+      return reply.send({
+        data: { ticketId: tk.ticket.id, orderNumber: String(order), ...read },
+      });
+    } catch (err) {
+      const r = refusalOf(err);
+      if (r) return reply.code(r.status).send(r.body);
+      throw err;
+    }
+  });
+
   /* ── Log a V2 complaint from a v2 ticket that has an order ──────────── */
   app.post('/commerce/compensation-cases', async (req, reply) => {
     const d = await door(req, LOG_COMPENSATION_CASES);
@@ -487,6 +569,32 @@ export async function registerCompensationCaseRoutes(
       if (!isYiji2OrderNumber(order)) return fail(reply, 409, 'ticket_has_no_v2_order');
       const api = await casesApi(tk.ticket.vendor);
       const b = body.data;
+      /* AFFECTED ITEMS (2026-11-18): checked against the ticket's order AS
+         READ THROUGH THE CONNECTOR before anything reaches V2 - a line id of
+         another order (or the catalogue id) is refused here, the quantity is
+         1..the line's quantity, and a category paid on items needs one. */
+      const picked = b.affectedItems ?? [];
+      if (picked.length === 0 && isYiji2ItemPaidCategory(b.category))
+        return fail(reply, 400, 'invalid_affected_items', {
+          problem: 'items_required',
+          message: AFFECTED_ITEMS_MESSAGES.items_required,
+        });
+      if (picked.length > 0) {
+        const read = await orderLines(tk.ticket.vendor, String(order));
+        if (!read) return fail(reply, 404, 'order_not_found_on_v2');
+        const p = yiji2AffectedItemsProblem(b.category, picked, read.lines);
+        if (p) {
+          req.log.info(
+            { ticketId: tk.ticket.id, by: d.actor.id, problem: p.problem, index: p.index },
+            'v2 compensation complaint: affected items refused before V2',
+          );
+          return fail(reply, 400, 'invalid_affected_items', {
+            problem: p.problem,
+            ...(p.index !== undefined ? { index: p.index } : {}),
+            message: AFFECTED_ITEMS_MESSAGES[p.problem],
+          });
+        }
+      }
       const complaint = {
         order_number: String(order),
         category: b.category,

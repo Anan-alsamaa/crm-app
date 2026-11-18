@@ -1,0 +1,31 @@
+{
+  "item_id": 301,
+  "line_total": {
+    "amount_minor": 5000,
+    "currency": "SAR"
+  },
+  "modifiers": [
+    {
+      "modifier_id": 401,
+      "name": {
+        "ar": "جبن",
+        "en": "Cheese"
+      },
+      "price": {
+        "amount_minor": 0,
+        "currency": "SAR"
+      },
+      "quantity": 1
+    }
+  ],
+  "name": {
+    "ar": "برجر",
+    "en": "Burger"
+  },
+  "order_item_id": 7001,
+  "quantity": 2,
+  "unit_price": {
+    "amount_minor": 2500,
+    "currency": "SAR"
+  }
+}

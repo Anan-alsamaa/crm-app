@@ -1191,7 +1191,6 @@
     "expiresPassed": "72 hours passed",
     "hasPhotos": "The customer sent photos",
     "items": "Affected items",
-    "itemsLater": "Item prices come from the order. Picking the affected items follows when V2 sends order line ids.",
     "log": "Log V2 complaint",
     "logSubmit": "Send to Yiji V2",
     "logged": "Complaint logged. Yiji V2 proposed a case.",
@@ -1227,6 +1226,24 @@
     "verificationLabel": "Camera check",
     "verificationResult": "What the cameras show",
     "yes": "Yes",
-    "ownCase": "You logged this case: a WeCare Supervisor, a WeCare Admin or the Administrator approves or rejects it."
+    "ownCase": "You logged this case: a WeCare Supervisor, a WeCare Admin or the Administrator approves or rejects it.",
+    "picker": {
+      "legendRequired": "Affected items (required)",
+      "legendOptional": "Affected items (optional)",
+      "hintRequired": "This category is paid on the items. Choose the items the complaint is about and how many of each.",
+      "hintSecond": "From the second time, this category is paid on the items. Choose them if the customer named any.",
+      "hintOptional": "Item prices come from the order. Choose items only if they matter.",
+      "failed": "The order’s items could not be read from Yiji V2. Try again shortly.",
+      "none": "This order has no items to choose.",
+      "lineMeta": "Quantity {{quantity}} · {{price}} each",
+      "quantityLabel": "Affected quantity of {{name}}",
+      "ofQuantity": "of {{quantity}}",
+      "quantityRange": "Enter a whole number from 1 to {{max}}.",
+      "required": "Choose at least one item for this category.",
+      "errorQuantity": "An item’s quantity must be from 1 to the quantity on the order.",
+      "errorTwice": "An item is named twice. Name each line once.",
+      "errorNotOnOrder": "An item is not a line of this ticket’s order. Choose the items again.",
+      "errorNoOrder": "Yiji V2 no longer answers this ticket’s order, so items cannot be named."
+    }
   }
 }
