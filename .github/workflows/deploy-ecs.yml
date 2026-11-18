@@ -685,9 +685,26 @@ jobs:
             for (const k of ["taskDefinitionArn","revision","status","requiresAttributes",
                              "compatibilities","registeredAt","registeredBy","deregisteredAt"]) delete td[k];
             td.containerDefinitions[0].image = process.argv[1];
+            /*
+             * DIRECTUS PERMISSION CACHE ON A REDIS CLUSTER (18 Nov 2026).
+             * Directus caches each policy permissions in Redis (namespace
+             * "permissions", no expiry) and empties it by SCAN + UNLINK of
+             * several keys at once. Our Redis is cluster-mode: a multi-key
+             * UNLINK across hash slots fails with CROSSSLOT, and Directus
+             * discards that error. So a privilege change could stay invisible
+             * for good (a WeCare Supervisor kept an old role list through a
+             * restart). A {hash tag} puts every key in one slot, so the clear
+             * works; one namespace per environment, as the Redis is shared.
+             */
+            if (process.argv[2] === "directus") {
+              const c = td.containerDefinitions[0];
+              c.environment = (c.environment || []).filter((e) => e.name !== "REDIS_PERMISSIONS_NAMESPACE");
+              c.environment.push({ name: "REDIS_PERMISSIONS_NAMESPACE", value: "{" + process.argv[3] + "-permissions}" });
+              console.log("REDIS_PERMISSIONS_NAMESPACE ->", "{" + process.argv[3] + "-permissions}");
+            }
             fs.writeFileSync("/tmp/taskdef.json", JSON.stringify(td, null, 2));
             console.log("image ->", process.argv[1]);
-          ' "$IMAGE"
+          ' "$IMAGE" "${{ matrix.service }}" "$ENVIRONMENT"
 
       # An unsubstituted placeholder must never reach ECS again. This is the
       # check that would have caught the 28P01 failure at the door.
