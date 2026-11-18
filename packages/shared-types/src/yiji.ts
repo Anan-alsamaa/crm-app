@@ -29,6 +29,17 @@ export interface YijiOrderItem {
   modifiers?: string[];
   /** The same choices, grouped and priced, for a line-by-line breakdown. */
   modifierGroups?: YijiModifierGroup[];
+  /**
+   * YIJI V2 ONLY (2026-11-18): the order LINE id (`OrderItem.order_item_id`
+   * of partner-v1.yaml), the id `POST /compensation-cases` takes in
+   * `affected_items[].order_item_id`. Not the catalogue id (`sku` may be
+   * that). Absent on every v1 order.
+   */
+  orderItemId?: string;
+  /** YIJI V2 ONLY: the line's Arabic name (`name.ar`), when V2 sent one. */
+  nameAr?: string;
+  /** YIJI V2 ONLY: the line's total as charged (`line_total`), major units. */
+  lineTotal?: number;
 }
 
 /**

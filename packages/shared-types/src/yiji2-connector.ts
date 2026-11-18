@@ -45,6 +45,7 @@ import type {
   CrmLateOrderQuery,
   CrmOrder,
   CrmOrderCart,
+  CrmOrderItem,
   CrmOrderTimeline,
   CrmPaymentStatus,
   CrmPurchaseActivity,
@@ -64,6 +65,7 @@ import {
   Yiji2CaseVerificationBody,
   YIJI2_CASE_LIFETIME_MS,
   isYiji2AgentComplaintCode,
+  isYiji2ItemPaidCategory,
   type Yiji2CompensationCaseWire,
 } from './yiji2-compensation.js';
 
@@ -161,17 +163,31 @@ export interface Yiji2CustomerWire {
   points?: { balance?: number | null } | null;
 }
 
+/** partner-v1.yaml `LocalText`: `{ ar, en }`. Older payloads send a plain string. */
+export type Yiji2LocalText = string | { en?: string | null; ar?: string | null };
+
+/**
+ * partner-v1.yaml `OrderItem`. `order_item_id` (required since 2026-11-18) is
+ * the order LINE id - what `affected_items[].order_item_id` takes; `item_id`
+ * is the catalogue id and never names a line.
+ */
 export interface Yiji2OrderItemWire {
+  order_item_id?: number | string | null;
   item_id?: number | string | null;
   sku?: string | null;
-  name: string;
+  pos_key?: string | null;
+  name: Yiji2LocalText;
   quantity: number;
   unit_price: Yiji2Money;
+  line_total?: Yiji2Money | null;
   category?: string | null;
   modifiers?: Array<{
+    modifier_id?: number | string | null;
     group?: string | null;
-    name: string;
+    name: Yiji2LocalText;
     quantity?: number | null;
+    /** partner-v1.yaml `OrderItemModifier.price`; older payloads say `unit_price`. */
+    price?: Yiji2Money | null;
     unit_price?: Yiji2Money | null;
   }> | null;
 }
@@ -301,23 +317,38 @@ const deliveryType = (t: string | null | undefined): string | undefined => {
   return s;
 };
 
-function mapItems(items: Yiji2OrderItemWire[] | null | undefined) {
+/** A `LocalText` in English (Arabic when there is no English); a plain string as is. */
+export function yiji2TextEn(v: Yiji2LocalText | null | undefined): string {
+  if (typeof v === 'string') return v;
+  return str(v?.en) ?? str(v?.ar) ?? '';
+}
+
+/** The Arabic of a `LocalText`, when there is one. */
+export function yiji2TextAr(v: Yiji2LocalText | null | undefined): string | undefined {
+  return typeof v === 'object' && v !== null ? str(v.ar) : undefined;
+}
+
+function mapItems(items: Yiji2OrderItemWire[] | null | undefined): CrmOrderItem[] {
   return (items ?? []).map((i) => {
     const groups = new Map<string, Array<{ name: string; qty: number; price: number }>>();
     for (const m of i.modifiers ?? []) {
       const g = str(m.group) ?? 'Options';
       const list = groups.get(g) ?? [];
       list.push({
-        name: m.name,
+        name: yiji2TextEn(m.name),
         qty: num(m.quantity) ?? 1,
-        price: yiji2Amount(m.unit_price ?? undefined) ?? 0,
+        price: yiji2Amount(m.unit_price ?? m.price ?? undefined) ?? 0,
       });
       groups.set(g, list);
     }
-    const modifiers = (i.modifiers ?? []).map((m) => m.name);
+    const modifiers = (i.modifiers ?? []).map((m) => yiji2TextEn(m.name));
+    const name = yiji2TextEn(i.name);
+    const nameAr = yiji2TextAr(i.name);
+    const orderItemId = yiji2Id(i.order_item_id);
+    const lineTotal = yiji2Amount(i.line_total ?? undefined);
     return {
-      sku: str(i.sku) ?? yiji2Id(i.item_id) ?? i.name,
-      name: i.name,
+      sku: str(i.sku) ?? str(i.pos_key) ?? yiji2Id(i.item_id) ?? name,
+      name,
       qty: num(i.quantity) ?? 1,
       price: yiji2Amount(i.unit_price) ?? 0,
       ...(str(i.category) ? { category: str(i.category) } : {}),
@@ -325,6 +356,9 @@ function mapItems(items: Yiji2OrderItemWire[] | null | undefined) {
       ...(groups.size
         ? { modifierGroups: [...groups].map(([name, options]) => ({ name, options })) }
         : {}),
+      ...(orderItemId ? { orderItemId } : {}),
+      ...(nameAr ? { nameAr } : {}),
+      ...(lineTotal !== undefined ? { lineTotal } : {}),
     };
   });
 }
@@ -684,6 +718,8 @@ interface MockOrderSeed {
   brandName: string;
   currency: 'SAR' | 'BHD';
   items: Array<{
+    /** The order LINE id V2 answers as `order_item_id` (unique across orders, as V2's identity column). */
+    orderItemId: string;
     sku: string;
     name: string;
     quantity: number;
@@ -777,6 +813,7 @@ export const YIJI2_MOCK_ORDERS: readonly MockOrderSeed[] = [
     currency: 'SAR',
     items: [
       {
+        orderItemId: '7001',
         sku: 'V2-BG-01',
         name: 'Classic burger',
         quantity: 2,
@@ -788,6 +825,7 @@ export const YIJI2_MOCK_ORDERS: readonly MockOrderSeed[] = [
         ],
       },
       {
+        orderItemId: '7002',
         sku: 'V2-FR-02',
         name: 'Fries',
         quantity: 1,
@@ -810,6 +848,7 @@ export const YIJI2_MOCK_ORDERS: readonly MockOrderSeed[] = [
     currency: 'SAR',
     items: [
       {
+        orderItemId: '7101',
         sku: 'V2-SH-03',
         name: 'Shawarma platter',
         quantity: 1,
@@ -832,6 +871,7 @@ export const YIJI2_MOCK_ORDERS: readonly MockOrderSeed[] = [
     currency: 'BHD',
     items: [
       {
+        orderItemId: '7201',
         sku: 'V2-PZ-04',
         name: 'Margherita pizza',
         quantity: 1,
@@ -1180,11 +1220,26 @@ export class MockYiji2Transport implements Yiji2Transport {
       if (!str(b.agent_id)) this.invalid('agent_id', 'case.agent_id.required');
       if (!order) return null;
       const items = Array.isArray(b.affected_items) ? (b.affected_items as unknown[]) : [];
+      /* V2 (contract section 3): a number that is not a line id of THIS order
+         - the catalogue id, another order's line, nothing at all - is the
+         same 400; a quantity is 1..the line's quantity; a line once. */
+      const lineOf = (it: unknown) =>
+        order.items.find((x) => x.orderItemId === String(obj(it).order_item_id ?? ''));
+      const seen = new Set<string>();
       for (const it of items) {
-        const line = Number(obj(it).order_item_id);
-        if (!Number.isInteger(line) || line < 1 || line > order.items.length)
-          this.invalid('affected_items', 'case.item.not_on_order');
+        const seed = lineOf(it);
+        if (!seed) this.invalid('affected_items', 'case.item.not_on_order');
+        if (seen.has(seed.orderItemId)) this.invalid('affected_items', 'case.item.twice');
+        seen.add(seed.orderItemId);
+        const q = obj(it).quantity;
+        if (
+          q !== undefined &&
+          (!Number.isInteger(q) || (q as number) < 1 || (q as number) > seed.quantity)
+        )
+          this.invalid('affected_items', 'case.item.quantity');
       }
+      if (items.length === 0 && isYiji2ItemPaidCategory(b.category))
+        this.invalid('affected_items', 'case.items.required');
       const existing = [...this.cases.values()].find(
         (c) => String(c.order_number) === order.orderNumber && c.rule_code === b.category,
       );
@@ -1227,11 +1282,10 @@ export class MockYiji2Transport implements Yiji2Transport {
         counter_group: category,
         occurrence,
         affected_items: items.map((it) => {
-          const line = Number(obj(it).order_item_id);
-          const seed = order.items[line - 1]!;
+          const seed = lineOf(it)!;
           const qty = num(obj(it).quantity) ?? seed.quantity;
           return {
-            order_item_id: line,
+            order_item_id: Number(seed.orderItemId),
             quantity: qty,
             line_quantity: seed.quantity,
             unit_price_minor: seed.unitMinor,
@@ -1506,10 +1560,14 @@ export class MockYiji2Transport implements Yiji2Transport {
       ...(withItems
         ? {
             items: s.items.map((i) => ({
+              order_item_id: Number(i.orderItemId),
               sku: i.sku,
               name: i.name,
               quantity: i.quantity,
               unit_price: money(i.unitMinor),
+              line_total: money(
+                i.quantity * (i.unitMinor + i.modifiers.reduce((m, x) => m + x.unitMinor, 0)),
+              ),
               category: i.category,
               modifiers: i.modifiers.map((m) => ({
                 group: m.group,
@@ -2588,8 +2646,18 @@ export class Yiji2CompensationCases {
     idempotencyKey: string,
   ): Promise<Yiji2CompensationCaseWire> {
     const b = checked(Yiji2CaseComplaintBody, body);
+    /* partner-v1.yaml `ID` is an integer: the line id goes as a JSON number. */
+    const wire = b.affected_items
+      ? {
+          ...b,
+          affected_items: b.affected_items.map((i) => ({
+            ...i,
+            order_item_id: Number(i.order_item_id),
+          })),
+        }
+      : b;
     const out = await this.t.request<Yiji2CompensationCaseWire>('POST', '/compensation-cases', {
-      body: b,
+      body: wire,
       idempotencyKey: requireKey(idempotencyKey),
     });
     if (!out) throw new Yiji2UnavailableError('yiji2 answered no case');

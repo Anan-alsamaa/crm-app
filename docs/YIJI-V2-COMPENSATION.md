@@ -167,11 +167,9 @@ and the panel shows nothing; v1 is not affected either way.
 
 ## 6. What V2 must add or confirm
 
-1. **`order_item_id` on the partner order read.** `OrderItem` in `partner-v1.yaml` has `item_id`
-   (the catalogue id) but no line id, so the CRM cannot name `affected_items` when it logs a
-   complaint. The gateway and the connector already take `affectedItems`; the panel offers the
-   picker once the order read carries the line id. Until then an item-paid category is refused by
-   V2 with its 400 and the agent sees the reason.
+1. **`order_item_id` on the partner order read: received** (yiji-platform `790070e`, 2026-11-18;
+   `OrderItem.order_item_id` is required on `GET /orders/{order_number}`, `GET /orders?v1_id=` and
+   `/orders/export`). The CRM uses it for the affected-items picker (section 8).
 2. **Sample payloads: received** (`docs/integrations/crm/auto-compensation-samples.md`, V2 main,
    printed by a V2 test run on 2026-11-18). All eleven are fixtures
    (`packages/shared-types/tests/fixtures/yiji2-compensation-samples.json`, copied verbatim) and
@@ -214,3 +212,38 @@ mock), `services/ai-gateway/tests/compensation-cases.test.ts` (each route, the p
 visibility, v1 refusal, inactive vendor, override limits, 409 mapping and refresh, session
 resolver), `apps/agent-portal/tests/v2-compensation-panel.test.tsx` (fields, actions, override,
 409 text, Log V2 complaint, nothing on a v1 ticket).
+
+## 8. Affected items: the picker (2026-11-18)
+
+V2 now sends the order line id (`OrderItem.order_item_id`) on its order reads. It is the id
+`POST /compensation-cases` takes in `affected_items[].order_item_id`; `item_id` is the catalogue
+id and never names a line. Yiji v2 only; nothing changes for v1.
+
+| Piece        | Where                                                                                       | What it does                                                                                                                                                                                                                                                                              |
+| ------------ | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CRM type     | `packages/shared-types/src/yiji.ts` (`YijiOrderItem`)                                       | Optional `orderItemId`, `nameAr`, `lineTotal`. Set for yiji2 orders only; a v1 order never has them.                                                                                                                                                                                      |
+| Connector    | `packages/shared-types/src/yiji2-connector.ts` (`mapItems`)                                 | `order_item_id` -> `orderItemId` (string). Reads `LocalText` names (`{ en, ar }`) and the modifier `price` as the contract has them; a plain string name still works. `logComplaint` sends the line id as a JSON number (partner-v1.yaml `ID` is an integer).                             |
+| Mock         | same file, `MockYiji2Transport`                                                             | Every mock line has its own line id (7001, 7002, 7101, 7201). `POST /compensation-cases` refuses, with V2's 400: an id that is not a line of that order, a quantity outside 1..line quantity, a line twice, a category paid on items without items.                                       |
+| Shared rules | `packages/shared-types/src/yiji2-compensation.ts`                                           | `YIJI2_ITEM_PAID_CATEGORIES`, `YIJI2_ITEM_PAID_FROM_SECOND`, `yiji2AffectedItemsProblem` (the portal and the gateway use the same check).                                                                                                                                                 |
+| Gateway      | `services/ai-gateway/src/commerce/compensation-cases.ts`                                    | `GET /commerce/compensation-cases/order-items?ticketId=` (needs `log_compensation_cases`): the ticket order's lines from the connector. `POST /commerce/compensation-cases` checks `affectedItems` against the same read BEFORE calling V2 (400 `invalid_affected_items` with `problem`). |
+| Agent portal | `apps/agent-portal/src/features/tickets/AffectedItemsPicker.tsx`, `V2CompensationPanel.tsx` | "Log V2 complaint" lists the lines (name, add-ons, quantity, unit price); the agent ticks lines and sets 1..line quantity. Required for a category paid on items; optional otherwise. English and Arabic (Arabic item name when V2 sends one).                                            |
+
+**Which categories need items.** From V2's policy (`internal/compensation/policy/data/rules.csv`,
+action `ITEM_VALUE` or `ITEM_PCT`): PRD-1, PRD-2, ACC-1, ACC-2, MIS and REM are paid on the items
+from their first occurrence, so the CRM asks for at least one line. HAIR and FOREIGN are paid on
+the items only on the second occurrence (O1 pays the full order). The CRM cannot know the
+occurrence before V2 counts it, so for those two items are optional and the form advises naming
+them; V2 answers its 400 if an O2 arrives without items. MEL, SID, GRP and BOGO use the menu price
+of named items when there are any; items are optional for them.
+
+**Refusals before V2** (`problem`): `items_required`, `item_not_on_order` (the catalogue id, a line
+of another order, an unknown id), `item_twice`, `item_quantity`, `too_many_items` (over 50). An order
+V2 no longer answers is 404 `order_not_found_on_v2`. Each has an English and Arabic sentence in the
+panel.
+
+**Tests.** `packages/shared-types/tests/yiji2-order-item-id.test.ts` (V2's real sample item from
+`docs/reviews/run2-helpers/order-item-id.md` section 7, `tests/fixtures/yiji2-order-item-sample.json`;
+the mock's line ids; the mock's refusals; the shared check),
+`services/ai-gateway/tests/compensation-cases-items.test.ts` (the lines route; refusals before V2;
+a whole log with items against the mock), `apps/agent-portal/tests/v2-compensation-item-picker.test.tsx`
+(select, quantity limits, required for the category, Arabic).

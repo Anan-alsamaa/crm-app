@@ -27,6 +27,7 @@ const client = vi.hoisted(() => ({
   act: vi.fn(),
   logComplaint: vi.fn(),
   refresh: vi.fn(),
+  orderLines: vi.fn(),
 }));
 vi.mock('../src/lib/compensation-cases-client.js', async (orig) => {
   const real = await orig<typeof import('../src/lib/compensation-cases-client.js')>();
@@ -86,6 +87,13 @@ beforeEach(() => {
   client.forTicket.mockReset();
   client.act.mockReset();
   client.logComplaint.mockReset();
+  client.orderLines.mockReset();
+  client.orderLines.mockResolvedValue({
+    ticketId: 't-v2',
+    orderNumber: '2611000000001',
+    currency: 'SAR',
+    lines: [],
+  });
 });
 
 describe('V2CompensationPanel', () => {

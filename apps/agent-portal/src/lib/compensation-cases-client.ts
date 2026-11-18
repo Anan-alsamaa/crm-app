@@ -54,6 +54,8 @@ export class CaseActionError extends Error {
     readonly fresh: CompensationCaseRow | null,
     /** `case_on_other_ticket`: that ticket, only when the caller may read it. */
     readonly ticketId: string | null = null,
+    /** `invalid_affected_items`: which rule the pick broke (`items_required`, ...). */
+    readonly problem: string | null = null,
   ) {
     super(code);
     this.name = 'CaseActionError';
@@ -86,6 +88,7 @@ async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Pr
             : null,
       (json.case as CompensationCaseRow | undefined) ?? null,
       typeof json.ticketId === 'string' ? json.ticketId : null,
+      typeof json.problem === 'string' ? json.problem : null,
     );
   }
   return (json as { data: T }).data;
@@ -112,6 +115,34 @@ export function requestKey(
 }
 
 export type CaseAction = 'approve' | 'reject' | 'evidence' | 'verification';
+
+/**
+ * One line of the ticket's V2 order, for the affected-items picker
+ * (`GET /commerce/compensation-cases/order-items`). `orderItemId` is V2's
+ * order LINE id (`order_item_id`), never the catalogue id.
+ */
+export interface V2OrderLine {
+  orderItemId: string;
+  name: string;
+  nameAr: string | null;
+  modifiers: string[];
+  quantity: number;
+  unitPriceMinor: number;
+  lineTotalMinor: number | null;
+}
+
+export interface V2OrderLines {
+  ticketId: string;
+  orderNumber: string;
+  currency: string;
+  lines: V2OrderLine[];
+}
+
+/** One picked line as the gateway takes it; `quantity` is 1..the line's quantity. */
+export interface AffectedItemPick {
+  orderItemId: string;
+  quantity: number;
+}
 
 export const compensationCases = {
   forTicket: (ticketId: string) =>
@@ -140,10 +171,16 @@ export const compensationCases = {
       `/commerce/compensation-cases/${encodeURIComponent(caseId)}/${action}`,
       body,
     ),
+  orderLines: (ticketId: string) =>
+    call<V2OrderLines>(
+      'GET',
+      `/commerce/compensation-cases/order-items?ticketId=${encodeURIComponent(ticketId)}`,
+    ),
   logComplaint: (body: {
     ticketId: string;
     idempotencyKey: string;
     category: Yiji2AgentComplaintCode;
+    affectedItems?: AffectedItemPick[];
     hasPhotos: boolean;
     text?: string;
   }) =>
