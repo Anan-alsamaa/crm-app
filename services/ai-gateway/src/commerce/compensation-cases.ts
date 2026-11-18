@@ -7,7 +7,9 @@ import {
   YIJI2_VERIFICATION_RESULTS,
   Yiji2RefusedError,
   Yiji2UnavailableError,
+  OWN_CASE_MESSAGE,
   caseFieldsFromWire,
+  caseLoggedBy,
   compensationCasesOf,
   isUnknownVendor,
   isYiji2OrderNumber,
@@ -42,9 +44,20 @@ import {
  * Same shape as every vendor action the gateway proxies: the caller's OWN
  * Directus session says who they are and what they hold (`/users/me` + their
  * `app_roles` privileges); the ticket must be one THEY can read (their token);
- * the V2 partner credential never leaves this service. Every action needs the
- * `approve_compensation_cases` privilege (off for every role by default; the
- * Administrator always). Reading the ticket's cases needs only the ticket.
+ * the V2 partner credential never leaves this service.
+ *
+ * WHO MAY DO WHAT (owner, 18 Nov 2026, binding): WeCare Agent -> WeCare
+ * Supervisor -> WeCare Admin -> Administrator. Logging a V2 complaint needs
+ * `log_compensation_cases` (the three WeCare roles by default); approve,
+ * reject, photos received and camera check - and re-reading a case from V2 -
+ * need `approve_compensation_cases` (WeCare Supervisor and WeCare Admin by
+ * default); the Administrator always holds both. FOUR EYES: whoever logged a
+ * case may not approve or reject it (403 `own_case`), the Administrator
+ * excepted. Reading the ticket's cases needs only the ticket.
+ *
+ * PRIVILEGES ARE READ FRESH ON EVERY REQUEST (owner, 18 Nov 2026: "no lag"):
+ * the session resolver keeps no cache, so a switch the owner flips on the
+ * Roles page applies to the very next call.
  *
  * WHO acted comes from the session, never the body: `agent_id` sent to V2 is
  * the CRM user id. A case is acted on only from the ticket it is linked to.
@@ -68,6 +81,7 @@ import {
  */
 
 export const APPROVE_COMPENSATION_CASES = 'approve_compensation_cases';
+export const LOG_COMPENSATION_CASES = 'log_compensation_cases';
 
 export const CASE_ON_OTHER_TICKET_MESSAGE =
   'This order already has a case of that category, on another ticket. Act on it from that ticket.';
@@ -303,14 +317,17 @@ export async function registerCompensationCaseRoutes(
     | { ok: true; actor: SessionActor; token: string }
     | { ok: false; status: number; error: string };
 
-  async function door(req: FastifyRequest, needsPrivilege: boolean): Promise<Door> {
+  async function door(
+    req: FastifyRequest,
+    needs: typeof APPROVE_COMPENSATION_CASES | typeof LOG_COMPENSATION_CASES | null,
+  ): Promise<Door> {
     const token = bearerOf(req.headers.authorization);
     if (!token) return { ok: false, status: 401, error: 'unauthenticated' };
     const actor = await deps.sessions.resolve(token);
     if (actor === 'unavailable') return { ok: false, status: 503, error: 'directus_unavailable' };
     if (!actor) return { ok: false, status: 401, error: 'unauthenticated' };
-    if (needsPrivilege && !actorHolds(actor, APPROVE_COMPENSATION_CASES))
-      return { ok: false, status: 403, error: 'approve_compensation_cases_required' };
+    if (needs && !actorHolds(actor, needs))
+      return { ok: false, status: 403, error: `${needs}_required` };
     const times = (recent.get(actor.id) ?? []).filter((t) => now() - t < 60_000);
     if (times.length >= limit) return { ok: false, status: 429, error: 'rate_limited' };
     times.push(now());
@@ -422,7 +439,7 @@ export async function registerCompensationCaseRoutes(
 
   /* ── The ticket's cases (the panel; no privilege beyond the ticket) ──── */
   app.get('/commerce/compensation-cases', async (req, reply) => {
-    const d = await door(req, false);
+    const d = await door(req, null);
     if (!d.ok) return fail(reply, d.status, d.error);
     const id = ticketId.safeParse((req.query as { ticketId?: unknown })?.ticketId);
     if (!id.success) return fail(reply, 400, 'ticketId_required');
@@ -441,6 +458,11 @@ export async function registerCompensationCaseRoutes(
           v2,
           orderNumber: v2 && isYiji2OrderNumber(t.order_id) ? t.order_id : null,
           canAct: actorHolds(d.actor, APPROVE_COMPENSATION_CASES),
+          canLog: actorHolds(d.actor, LOG_COMPENSATION_CASES),
+          /* Four eyes: the cases THIS caller logged (never for the Administrator). */
+          ownCases: d.actor.isAdmin
+            ? []
+            : cases.filter((c) => caseLoggedBy(c, d.actor.id)).map((c) => c.case_id),
           cases,
         },
       });
@@ -453,7 +475,7 @@ export async function registerCompensationCaseRoutes(
 
   /* ── Log a V2 complaint from a v2 ticket that has an order ──────────── */
   app.post('/commerce/compensation-cases', async (req, reply) => {
-    const d = await door(req, true);
+    const d = await door(req, LOG_COMPENSATION_CASES);
     if (!d.ok) return fail(reply, d.status, d.error);
     const body = LogBody.safeParse(req.body);
     if (!body.success)
@@ -541,7 +563,7 @@ export async function registerCompensationCaseRoutes(
 
   /* ── Re-read one case from V2 ─────────────────────────────────────────── */
   app.get('/commerce/compensation-cases/:caseId', async (req, reply) => {
-    const d = await door(req, true);
+    const d = await door(req, APPROVE_COMPENSATION_CASES);
     if (!d.ok) return fail(reply, d.status, d.error);
     const { caseId } = req.params as { caseId: string };
     const id = ticketId.safeParse((req.query as { ticketId?: unknown })?.ticketId);
@@ -563,7 +585,7 @@ export async function registerCompensationCaseRoutes(
   /* ── Approve / reject / photos received / camera check done ──────────── */
   for (const action of Object.keys(ActionBodies) as ActionName[]) {
     app.post(`/commerce/compensation-cases/:caseId/${action}`, async (req, reply) => {
-      const d = await door(req, true);
+      const d = await door(req, APPROVE_COMPENSATION_CASES);
       if (!d.ok) return fail(reply, d.status, d.error);
       const { caseId } = req.params as { caseId: string };
       const parsed = ActionBodies[action].safeParse(req.body);
@@ -586,6 +608,19 @@ export async function registerCompensationCaseRoutes(
       }
       if (!c.ok) return fail(reply, c.status, c.error);
       const row = c.row;
+
+      /* Four eyes: the person who logged the case never decides it. */
+      if (
+        (action === 'approve' || action === 'reject') &&
+        !d.actor.isAdmin &&
+        caseLoggedBy(row, d.actor.id)
+      ) {
+        req.log.info({ caseId, action, by: d.actor.id }, 'v2 case: own case refused');
+        return fail(reply, 403, 'own_case', {
+          message: OWN_CASE_MESSAGE.en,
+          message_ar: OWN_CASE_MESSAGE.ar,
+        });
+      }
 
       /* The override is checked here first (V2 checks it again). */
       let amount: { amount_minor: number; currency: string } | undefined;

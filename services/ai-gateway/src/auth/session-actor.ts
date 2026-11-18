@@ -7,7 +7,11 @@ import { effectivePrivileges } from '@yiji/shared-types';
  *   - their role's `app_roles` row (every role may read its own) gives the
  *     privileges, filled in by `effectivePrivileges` exactly as the portals
  *     do; the Administrator role holds everything.
- * Cached per token for a minute. `unavailable` = Directus could not say.
+ * NO CACHE (owner, 18 Nov 2026: privilege changes take effect INSTANTLY):
+ * every call asks Directus again, so a switch flipped on the Roles page - or
+ * a user moved to another role, or signed out - applies to the very next
+ * request. The routes keep their per-user rate limit, which bounds the cost.
+ * `unavailable` = Directus could not say.
  */
 export interface SessionActor {
   id: string;
@@ -39,12 +43,9 @@ function safeJson(raw: string): unknown {
 export function createSessionActorResolver(opts: {
   directusUrl: string;
   fetchImpl?: typeof fetch;
-  now?: () => number;
 }): SessionActorResolver {
   const f = opts.fetchImpl ?? fetch;
-  const now = opts.now ?? Date.now;
   const base = opts.directusUrl.replace(/\/+$/, '');
-  const cache = new Map<string, { actor: SessionActor | null; at: number }>();
 
   async function asCaller<T>(token: string, path: string): Promise<{ status: number; data?: T }> {
     const res = await f(`${base}${path}`, {
@@ -58,18 +59,13 @@ export function createSessionActorResolver(opts: {
 
   return {
     async resolve(token) {
-      const hit = cache.get(token);
-      if (hit && now() - hit.at < 60_000) return hit.actor;
       try {
         const me = await asCaller<{ id?: string; role?: { id?: string; name?: string } | null }>(
           token,
           '/users/me?fields=id,role.id,role.name',
         );
         if (me.status >= 500) return 'unavailable';
-        if (me.status === 401 || me.status === 403 || !me.data?.id) {
-          cache.set(token, { actor: null, at: now() });
-          return null;
-        }
+        if (me.status === 401 || me.status === 403 || !me.data?.id) return null;
         const roleId = me.data.role?.id ?? null;
         const roleName = me.data.role?.name ?? '';
         const isAdmin = SESSION_ADMIN_ROLES.includes(roleName);
@@ -96,8 +92,6 @@ export function createSessionActorResolver(opts: {
           isAdmin,
           privileges: isAdmin ? {} : effectivePrivileges(stored, roleName),
         };
-        cache.set(token, { actor, at: now() });
-        if (cache.size > 2000) cache.delete(cache.keys().next().value as string);
         return actor;
       } catch {
         return 'unavailable';

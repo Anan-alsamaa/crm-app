@@ -55,16 +55,16 @@ Each is one place in the code, so a change is small.
 
 ## 3. Pieces
 
-| Piece           | Where                                                                             | What it does                                                                                                                                                                                                      |
-| --------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Shared contract | `packages/shared-types/src/yiji2-compensation.ts`                                 | AGENT codes, statuses, 409 reasons and their messages, the event job + mapper, the CRM row and its mappers, the override limits, money formatting, the escalation setting.                                        |
-| Connector       | `packages/shared-types/src/yiji2-connector.ts` (`Yiji2CompensationCases`)         | `logComplaint`, `get`, `approve`, `reject`, `evidence`, `verification`; bodies checked locally first; `Idempotency-Key` required on every write; a 409's `error.data.reason` lands on `Yiji2RefusedError.reason`. |
-| Mock            | same file, `MockYiji2Transport`                                                   | The case routes and state machine (fixed mock rules, not the owner's policy), emitting the three events in `events`. Helpers `seedCase`, `expireCase`, `failOnApprove`. Zero network.                             |
-| Inbound         | `services/socket-gateway/src/yiji-inbound.ts`, `queue.ts`, `index.ts`             | `/webhooks/yiji2/events` accepts the three types (same signature and de-dup as every event); malformed = ignored and logged; unknown types still ignored.                                                         |
-| Worker          | `services/workers/src/processors/compensation-yiji2-events.ts`                    | proposed -> row + ticket; decided -> decision, issued amount, wallet / coupon / grant ids, failure, ticket Compensation; escalated -> notifications. Idempotent; an older event never moves a decided case back.  |
-| Gateway         | `services/ai-gateway/src/commerce/compensation-cases.ts`, `auth/session-actor.ts` | The caller's own Directus session decides who and what; the ticket must be readable with THEIR token; the case must be linked to that ticket; the v2 vendor must be active (else 404 `unknown_vendor`).           |
-| Agent portal    | `apps/agent-portal/src/features/tickets/V2CompensationPanel.tsx`                  | On a v2 ticket: status, rule/occurrence, action type, amount or percent, calculation, minutes late, escalation banner, verification, countdown, photos/items/text; actions with reasons; "Log V2 complaint".      |
-| Admin portal    | `apps/admin-portal/src/features/app-roles/CompensationEscalation.tsx`             | The escalation mapping (Administrator only).                                                                                                                                                                      |
+| Piece           | Where                                                                             | What it does                                                                                                                                                                                                                         |
+| --------------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Shared contract | `packages/shared-types/src/yiji2-compensation.ts`                                 | AGENT codes, statuses, 409 reasons and their messages, the event job + mapper, the CRM row and its mappers, the override limits, money formatting, the escalation setting.                                                           |
+| Connector       | `packages/shared-types/src/yiji2-connector.ts` (`Yiji2CompensationCases`)         | `logComplaint`, `get`, `approve`, `reject`, `evidence`, `verification`; bodies checked locally first; `Idempotency-Key` required on every write; a 409's `error.data.reason` lands on `Yiji2RefusedError.reason`.                    |
+| Mock            | same file, `MockYiji2Transport`                                                   | The case routes and state machine (fixed mock rules, not the owner's policy), emitting the three events in `events`. Helpers `seedCase`, `expireCase`, `failOnApprove`. Zero network.                                                |
+| Inbound         | `services/socket-gateway/src/yiji-inbound.ts`, `queue.ts`, `index.ts`             | `/webhooks/yiji2/events` accepts the three types (same signature and de-dup as every event); malformed = ignored and logged; unknown types still ignored.                                                                            |
+| Worker          | `services/workers/src/processors/compensation-yiji2-events.ts`                    | proposed -> row + ticket; decided -> decision, issued amount, wallet / coupon / grant ids, failure, ticket Compensation; escalated -> notifications. Idempotent; an older event never moves a decided case back.                     |
+| Gateway         | `services/ai-gateway/src/commerce/compensation-cases.ts`, `auth/session-actor.ts` | The caller's own Directus session decides who and what; the ticket must be readable with THEIR token; the case must be linked to that ticket; the v2 vendor must be active (else 404 `unknown_vendor`).                              |
+| Agent portal    | `apps/agent-portal/src/features/tickets/V2CompensationPanel.tsx`                  | On a v2 ticket: status, rule/occurrence, action type, amount or percent, calculation, minutes late, escalation banner, verification, countdown, photos/items/text; actions with reasons (not on one's own case); "Log V2 complaint". |
+| Admin portal    | `apps/admin-portal/src/features/app-roles/CompensationEscalation.tsx`             | The escalation mapping (Administrator only).                                                                                                                                                                                         |
 
 ### Review follow-ups (18 Nov 2026)
 
@@ -105,13 +105,47 @@ Approve only; wallet and amount-coupon cases only (a calculated `amount`, no `pe
 APOLOGY_ONLY or VERIFY_CCTV); the order's currency; whole minor units above 0; not above the order
 total. Checked in the portal, again in the gateway before any call, and by V2.
 
-## 4. The new privilege
+## 4. Who logs, who decides (owner, 18 Nov 2026, binding)
 
-`approve_compensation_cases` (owner-only list, Coupons group, Agent portal). Off for every role by
-default (`never`); the Administrator always holds it. It gates every action route and the
-"Log V2 complaint" button. Its Directus grant is READ on `compensation_cases` only; every write goes
-through the gateway (service account) or the workers. Mirrored in
-`directus/extensions/app-roles-sync/index.js` (pinned by `privileges-mirror.test.ts`).
+Role order: **WeCare Agent -> WeCare Supervisor -> WeCare Admin -> Administrator** (topmost, the
+master user). Agents LOG; the WeCare Supervisor and the WeCare Admin APPROVE; the Administrator
+always can.
+
+| Privilege                    | What it gates                                                                                                | Default ON for                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| `log_compensation_cases`     | "Log V2 complaint" (`POST /commerce/compensation-cases`) from a v2 ticket the person can read                | WeCare Agent, WeCare Supervisor, WeCare Admin (+ Administrator) |
+| `approve_compensation_cases` | approve, reject, photos received, camera check, re-read a case from V2 (`/commerce/compensation-cases/:id*`) | WeCare Supervisor, WeCare Admin (+ Administrator)               |
+
+Both are owner-only switches (Coupons group, Agent portal) with code defaults in
+`OWNER_PRIVILEGE_DEFAULTS` (`packages/shared-types/src/privileges.ts`), mirrored in
+`directus/extensions/app-roles-sync/index.js` (pinned by `privileges-mirror.test.ts`). Every other
+role is off for both. A tick stored on the Roles page still wins over the default, either way.
+`approve_compensation_cases` grants READ on `compensation_cases` in Directus; `log_compensation_cases`
+grants nothing there (the panel reads cases through the gateway). Every write goes through the
+gateway (service account) or the workers.
+
+**Four eyes.** The person who logged a case never approves or rejects it: the gateway answers
+403 `own_case` (`message` in English, `message_ar` in Arabic; `OWN_CASE_MESSAGE`). "Logged" is
+V2's `logged_by_agent` or a successful `log` in the row's `agent_actions` (`caseLoggedBy`). Photos
+received and the camera check are not decisions and stay open to them. The Administrator is
+exempt. The panel hides Approve / Reject on the caller's own cases (`ownCases` in the panel
+answer) and says why.
+
+**Instant privileges.** The gateway keeps no actor or privilege cache - neither the compensation
+routes' session resolver (`auth/session-actor.ts`) nor the marketing engine
+(`marketing/engine-routes.ts`): every request asks Directus for `/users/me` and the role's
+`app_roles` row, so a switch flipped on the Roles page applies to the very next request. The
+per-user rate limits stay. In the agent portal the panel's buttons come from the gateway's answer
+(never from a client-side snapshot); the answer is re-read on window focus and page load
+(`staleTime: 0`) and at once after any 403. The portal's own `can()` privileges live in memory
+(not sessionStorage) and are re-read on every page load.
+
+**Staging data step (owner).** Nothing to run if no role has these switches stored: the defaults
+apply at once. On the Roles page, check that no role carries an explicit tick that contradicts the
+decision (e.g. `approve_compensation_cases` ticked on for WeCare Agent while testing): a stored
+value wins over the default. The Directus READ grant that `approve_compensation_cases` carries is
+applied to a role when its `app_roles` row is next saved (or by the bootstrap apply); the panel
+does not need it.
 
 ## 5. Schema step (owner, staging)
 

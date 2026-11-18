@@ -478,9 +478,12 @@ export function RolesPage() {
       defaultValue:
         'Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)',
     }),
+    log_compensation_cases: t('roles.p.logCompensationCases', {
+      defaultValue: 'Yiji V2 compensation cases: log a V2 complaint from a ticket',
+    }),
     approve_compensation_cases: t('roles.p.approveCompensationCases', {
       defaultValue:
-        'Yiji V2 compensation cases: approve or reject a case, confirm photos and the camera check, log a V2 complaint from a ticket',
+        'Yiji V2 compensation cases: approve or reject a case, confirm photos and the camera check (never a case the same person logged)',
     }),
     view_agent_reports: t('roles.p.viewAgentReports', {
       defaultValue:

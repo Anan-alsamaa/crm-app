@@ -26,7 +26,9 @@ import {
   ticketCompensationForCase,
   yiji2CaseConflictMessage,
   yiji2OverrideProblem,
+  caseLoggedBy,
   effectivePrivileges,
+  OWN_CASE_MESSAGE,
   OWNER_PRIVILEGES,
   caseFieldsFromGrant,
   isYiji2CompensationGrant,
@@ -337,17 +339,56 @@ describe('escalation recipients setting (owner rule, 18 Nov 2026)', () => {
   });
 });
 
-describe('the new privilege', () => {
-  it('approve_compensation_cases is off for every role by default', () => {
+describe('the privileges: agents log, supervisors and WeCare admins approve (owner, 18 Nov 2026)', () => {
+  const defaults = (role: string) => effectivePrivileges({ approve_coupons: true }, role);
+
+  it('approve_compensation_cases: ON for WeCare Supervisor, WeCare Admin, Administrator; OFF for everyone else', () => {
     expect(OWNER_PRIVILEGES).toContain('approve_compensation_cases');
-    for (const role of ['WeCare Admin', 'WeCare Supervisor', 'WeCare Agent', 'CEO', 'Operations'])
-      expect(effectivePrivileges({ approve_coupons: true }, role).approve_compensation_cases).toBe(
-        false,
-      );
+    for (const role of ['WeCare Supervisor', 'WeCare Admin', 'Administrator', 'wecare admin'])
+      expect(defaults(role).approve_compensation_cases, role).toBe(true);
+    for (const role of ['WeCare Agent', 'CEO', 'Operations', 'Marketing', 'Agent', 'Admin', ''])
+      expect(defaults(role).approve_compensation_cases, role).toBe(false);
+  });
+
+  it('log_compensation_cases: ON for the three WeCare roles and the Administrator; OFF for everyone else', () => {
+    expect(OWNER_PRIVILEGES).toContain('log_compensation_cases');
+    for (const role of ['WeCare Agent', 'WeCare Supervisor', 'WeCare Admin', 'Administrator'])
+      expect(defaults(role).log_compensation_cases, role).toBe(true);
+    for (const role of ['CEO', 'Operations', 'Marketing', 'Agent', ''])
+      expect(defaults(role).log_compensation_cases, role).toBe(false);
+  });
+
+  it('a stored tick still wins over the default, either way', () => {
     expect(
       effectivePrivileges({ approve_compensation_cases: true }, 'WeCare Agent')
         .approve_compensation_cases,
     ).toBe(true);
+    expect(
+      effectivePrivileges({ approve_compensation_cases: false }, 'WeCare Supervisor')
+        .approve_compensation_cases,
+    ).toBe(false);
+    expect(
+      effectivePrivileges({ log_compensation_cases: false }, 'WeCare Agent').log_compensation_cases,
+    ).toBe(false);
+  });
+
+  it('four eyes: caseLoggedBy reads V2 (logged_by_agent) and the CRM log', () => {
+    const row = { logged_by_agent: null, agent_actions: null };
+    expect(caseLoggedBy(row, 'u-1')).toBe(false);
+    expect(caseLoggedBy({ ...row, logged_by_agent: 'u-1' }, 'u-1')).toBe(true);
+    expect(caseLoggedBy({ ...row, logged_by_agent: 'u-1' }, 'u-2')).toBe(false);
+    const log = (by: string, outcome: 'ok' | 'refused') => ({
+      action: 'log' as const,
+      by,
+      at: '2026-11-18T10:00:00Z',
+      outcome,
+    });
+    expect(caseLoggedBy({ ...row, agent_actions: [log('u-1', 'ok')] }, 'u-1')).toBe(true);
+    /* A refused log never made them the logger. */
+    expect(caseLoggedBy({ ...row, agent_actions: [log('u-1', 'refused')] }, 'u-1')).toBe(false);
+    expect(caseLoggedBy({ ...row, agent_actions: [log('u-1', 'ok')] }, null)).toBe(false);
+    expect(OWN_CASE_MESSAGE.en).toMatch(/another person/);
+    expect(OWN_CASE_MESSAGE.ar.length).toBeGreaterThan(10);
   });
 });
 

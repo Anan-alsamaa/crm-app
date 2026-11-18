@@ -392,6 +392,132 @@ describe('V2CompensationPanel', () => {
   });
 });
 
+describe('agents log, supervisors approve, four eyes (owner, 18 Nov 2026)', () => {
+  it('a WeCare Agent (canLog, not canAct) sees "Log V2 complaint" but no Approve / Reject', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: false,
+      canLog: true,
+      ownCases: [],
+      cases: [caseRow()],
+    });
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    expect(await screen.findByRole('button', { name: 'Log V2 complaint' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+  });
+
+  it('a supervisor without log (canAct, canLog false) sees the decisions but no Log button', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: true,
+      canLog: false,
+      ownCases: [],
+      cases: [caseRow()],
+    });
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    expect(await screen.findByRole('button', { name: 'Approve' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Log V2 complaint' })).toBeNull();
+  });
+
+  it('own case: Approve and Reject are not offered, with a note; photos received still is', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: true,
+      canLog: true,
+      ownCases: ['900001', '900002'],
+      cases: [caseRow(), caseRow({ id: 'row-2', case_id: '900002', status: 'evidence_hold' })],
+    });
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    expect(await screen.findAllByTestId('v2-case-own')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Reject' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Photos received' })).toBeInTheDocument();
+  });
+
+  it('a 403 own_case reads in plain words and re-asks the gateway (no stale buttons)', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: true,
+      canLog: true,
+      ownCases: [],
+      cases: [caseRow()],
+    });
+    client.act.mockRejectedValue(new CaseActionError(403, 'own_case', null, null, null));
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'ok' } });
+    const calls = client.forTicket.mock.calls.length;
+    fireEvent.click(screen.getAllByRole('button', { name: 'Approve' }).at(-1)!);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'You logged this case, so another person must approve or reject it',
+    );
+    await waitFor(() => expect(client.forTicket.mock.calls.length).toBeGreaterThan(calls));
+  });
+
+  it('a 403 for a revoked privilege re-asks the gateway too', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: true,
+      canLog: true,
+      ownCases: [],
+      cases: [caseRow()],
+    });
+    client.act.mockRejectedValue(
+      new CaseActionError(403, 'approve_compensation_cases_required', null, null, null),
+    );
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Reject' }));
+    fireEvent.change(screen.getByLabelText('Reason (required)'), { target: { value: 'no' } });
+    const calls = client.forTicket.mock.calls.length;
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: false,
+      canLog: true,
+      ownCases: [],
+      cases: [caseRow()],
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reject' }).at(-1)!);
+    expect(await screen.findByRole('alert')).toHaveTextContent('You do not have the permission');
+    await waitFor(() => expect(client.forTicket.mock.calls.length).toBeGreaterThan(calls));
+  });
+
+  it('an older gateway without canLog: logging follows canAct as before', async () => {
+    client.forTicket.mockResolvedValue({
+      ticketId: 't-v2',
+      v2: true,
+      orderNumber: '2611000000001',
+      canAct: true,
+      cases: [],
+    });
+    wrap(<V2CompensationPanel ticketId="t-v2" />);
+    expect(await screen.findByRole('button', { name: 'Log V2 complaint' })).toBeInTheDocument();
+  });
+
+  it('the own-case and log messages exist in English and Arabic', () => {
+    const e = (en as { v2Case: { error: Record<string, string>; ownCase: string } }).v2Case;
+    const a = (ar as { v2Case: { error: Record<string, string>; ownCase: string } }).v2Case;
+    for (const k of ['ownCase', 'forbiddenLog']) {
+      expect(e.error[k], k).toBeTruthy();
+      expect(a.error[k], k).toMatch(/[\u0600-\u06FF]/);
+    }
+    expect(a.ownCase).toMatch(/[\u0600-\u06FF]/);
+    expect(e.ownCase).toBeTruthy();
+  });
+});
+
 describe('actionsFor (which buttons a status offers)', () => {
   it('follows the contract', () => {
     expect(actionsFor({ status: 'proposed', verification: null })).toEqual(['approve', 'reject']);

@@ -329,6 +329,30 @@ export interface CompensationCaseAction {
   detail?: string;
 }
 
+/**
+ * FOUR EYES (owner, 18 Nov 2026): the person who LOGGED a case never approves
+ * or rejects it - the Administrator excepted. "Logged" is what V2 recorded
+ * (`logged_by_agent`, the CRM user id the gateway sent) or a successful `log`
+ * in the CRM's own `agent_actions`; either is enough. The AI gateway enforces
+ * it (403 `own_case`); the agent portal only hides the two buttons.
+ */
+export function caseLoggedBy(
+  row: Pick<CompensationCaseRow, 'logged_by_agent' | 'agent_actions'>,
+  userId: string | null | undefined,
+): boolean {
+  if (!userId) return false;
+  if (row.logged_by_agent === userId) return true;
+  return (row.agent_actions ?? []).some(
+    (a) => a?.action === 'log' && a.outcome === 'ok' && a.by === userId,
+  );
+}
+
+/** The 403 `own_case` refusal, in both portal languages. */
+export const OWN_CASE_MESSAGE = {
+  en: 'You logged this case, so another person must approve or reject it (a WeCare Supervisor, a WeCare Admin or the Administrator).',
+  ar: 'أنت من سجّل هذه الحالة، لذا يجب أن يعتمدها أو يرفضها شخص آخر (مشرف WeCare أو مدير WeCare أو مدير النظام).',
+} as const;
+
 /** Every column the workers and the gateway write; all nullable but `case_id`. */
 export interface CompensationCaseRow {
   id: string;

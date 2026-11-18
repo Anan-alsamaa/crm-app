@@ -158,11 +158,20 @@ export const OWNER_PRIVILEGES = [
    */
   'manage_compensation_rules',
   /**
-   * YIJI V2 COMPENSATION CASES (owner, 18 Nov 2026): approve, reject, confirm
-   * photos and close the camera check of a case V2 computed from the owner's
-   * policy, and log a V2 complaint from a ticket. Every case needs this one
-   * approval before V2 issues anything. OFF for every role until the owner
-   * ticks it; the Administrator always holds it.
+   * YIJI V2 COMPENSATION CASES - LOGGING (owner, 18 Nov 2026, second
+   * decision): "Log V2 complaint" from a v2 ticket the person can read. Agents
+   * LOG, they do not decide. The three WeCare roles by default (the
+   * Administrator always).
+   */
+  'log_compensation_cases',
+  /**
+   * YIJI V2 COMPENSATION CASES - DECIDING (owner, 18 Nov 2026): approve,
+   * reject, confirm photos and close the camera check of a case V2 computed
+   * from the owner's policy. Every case needs this one approval before V2
+   * issues anything. WeCare Supervisor and WeCare Admin by default (the
+   * Administrator always); off for the WeCare Agent and every other role.
+   * Four eyes: whoever logged a case never decides it (the Administrator
+   * excepted) - enforced by the AI gateway.
    */
   'approve_compensation_cases',
   // ── reporting ───────────────────────────────────────────────────────────
@@ -327,8 +336,16 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
   // Owner, 2026-10-27: the Administrator and WeCare Admin until ticked for another.
   manage_compensation_rules: nameIn('administrator', 'wecare admin'),
-  // New (owner, 18 Nov 2026): nobody until the owner ticks it for a role.
-  approve_compensation_cases: never,
+  /* Owner, 18 Nov 2026 (binding): WeCare Agent -> WeCare Supervisor ->
+     WeCare Admin -> Administrator. Agents LOG a V2 complaint; the WeCare
+     Supervisor and the WeCare Admin APPROVE; the Administrator always can. */
+  log_compensation_cases: nameIn(
+    'wecare agent',
+    'wecare supervisor',
+    'wecare admin',
+    'administrator',
+  ),
+  approve_compensation_cases: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
   // The Dashboard page showed its Agent tab to whoever could open the page
   // AND see all chats.
   view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
@@ -445,6 +462,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_coupon_spend: 'coupons',
   delete_compensation: 'coupons',
   manage_ticket_compensation: 'coupons',
+  log_compensation_cases: 'coupons',
   approve_compensation_cases: 'coupons',
   edit_approved_coupons: 'coupons',
   manage_compensation_rules: 'coupons',
@@ -616,6 +634,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   view_order_details: 'agent',
   request_coupons: 'agent',
   manage_ticket_compensation: 'agent',
+  log_compensation_cases: 'agent',
   approve_compensation_cases: 'agent',
   // Offered on the admin Coupon approvals card only (owner, 2026-11-15);
   // listed with the coupon queue it changes.

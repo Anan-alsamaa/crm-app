@@ -1181,7 +1181,9 @@
       "refused": "Yiji V2 refused it: {{detail}}",
       "unavailable": "Yiji V2 is not answering. Nothing was changed; try again shortly.",
       "otherTicket": "This order already has a case of that category on ticket {{ticket}}. Act on it from that ticket.",
-      "otherTicketHidden": "This order already has a case of that category on another ticket, which you cannot open. Ask a supervisor."
+      "otherTicketHidden": "This order already has a case of that category on another ticket, which you cannot open. Ask a supervisor.",
+      "forbiddenLog": "You do not have the permission to log V2 complaints.",
+      "ownCase": "You logged this case, so another person must approve or reject it (a WeCare Supervisor, a WeCare Admin or the Administrator)."
     },
     "escalated": "Escalated: {{role}} was notified{{condition}}.",
     "evidenceHint": "Confirm only after you checked the photos yourself. V2 then calculates the case and starts a new 72 hours.",
@@ -1224,6 +1226,7 @@
     },
     "verificationLabel": "Camera check",
     "verificationResult": "What the cameras show",
-    "yes": "Yes"
+    "yes": "Yes",
+    "ownCase": "You logged this case: a WeCare Supervisor, a WeCare Admin or the Administrator approves or rejects it."
   }
 }

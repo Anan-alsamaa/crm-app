@@ -267,8 +267,15 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     /* Owner, 2026-11-12: back, made safe (edit in place). */
     edit_approved_coupons: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
     manage_compensation_rules: nameIn('administrator', 'wecare admin'),
-    /* Yiji v2 compensation cases (owner, 18 Nov 2026): nobody until ticked. */
-    approve_compensation_cases: never,
+    /* Yiji v2 compensation cases (owner, 18 Nov 2026): agents log,
+       the WeCare Supervisor / WeCare Admin approve, the Administrator always. */
+    log_compensation_cases: nameIn(
+      'wecare agent',
+      'wecare supervisor',
+      'wecare admin',
+      'administrator',
+    ),
+    approve_compensation_cases: nameIn('wecare supervisor', 'wecare admin', 'administrator'),
     view_agent_dashboard: (p) => p.view_dashboard === true && p.view_all_chats === true,
     view_agent_reports: holds('view_all_chats'),
     view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
@@ -746,6 +753,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
        session and calls V2 itself; the case rows are written by the gateway
        and the workers (service tokens), never by a person in Directus. */
     approve_compensation_cases: [...readOnly('compensation_cases')],
+    /* Logging a V2 complaint goes through the AI gateway too (it checks this
+       switch from the caller's session); the panel reads the ticket's cases
+       through the gateway, so no Directus grant is needed. */
+    log_compensation_cases: [],
     view_agent_dashboard: [], // UI gate; its reads come with REPORT_ACCESS below
     view_agent_reports: [],
     view_sla_report: [],
