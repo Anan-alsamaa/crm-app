@@ -831,6 +831,9 @@ export const roles: RoleSpec[] = [
       /* Whether a Yiji ticket tells its branch: the Administrator's rules. */
       ...readOnly('store_notify_rules'),
       ...readOnly('compensation_rules'),
+      /* The complaint / service types a Yiji ticket may carry are the Lists
+         page's, the same ones the agents pick from (owner, 25 Nov 2026). */
+      ...readOnly('option_lists'),
       /* The rule coupons' per-customer limit lives in app_settings - read only. */
       { collection: 'app_settings', action: 'read' },
       /* Its own record only: the history line names who acted (readMe). */

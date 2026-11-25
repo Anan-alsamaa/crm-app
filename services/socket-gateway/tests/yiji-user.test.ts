@@ -55,6 +55,8 @@ describe('the svc-yiji role', () => {
       'store_notifications:create',
       'compensation_rules:read',
       'store_notify_rules:read',
+      // The complaint / service types a ticket may carry (owner, 25 Nov 2026).
+      'option_lists:read',
       'app_settings:read',
     ];
     for (const g of need) expect(grants(yiji)).toContain(g);
@@ -78,6 +80,7 @@ describe('the svc-yiji role', () => {
       'store_notifications:create',
       'compensation_rules:read',
       'store_notify_rules:read',
+      'option_lists:read',
       'app_settings:read',
       'directus_users:read',
     ]);
