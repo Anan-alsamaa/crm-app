@@ -145,6 +145,15 @@ export const RoutingJob = z.object({
    * for an owned chat only when this is true; see the note above.
    */
   sessionStarted: z.boolean().optional(),
+  /**
+   * `assign` only: the session was started by REOPENING a solved chat less
+   * than ROUTING_SESSION_GAP_MS after its last message - the customer is
+   * carrying on the conversation the agent just closed ("thanks", one more
+   * question). Owner, 25 Nov 2026: a chat in progress must not move to another
+   * agent. The owner keeps it while signed in; the ladder runs only when they
+   * are not.
+   */
+  resumedWithinGap: z.boolean().optional(),
 });
 export type RoutingJob = z.infer<typeof RoutingJob>;
 
