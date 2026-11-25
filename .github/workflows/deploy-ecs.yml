@@ -25,11 +25,18 @@ name: Deploy to ECS
 on:
   # STAGING DEPLOYS ONCE A DAY, NOT ON EVERY MERGE (owner, 25 Nov 2026: the
   # repo goes private on the Free plan, 2,000 Actions minutes a month, 400 a
-  # week planned). 03:00 UTC = 06:00 Riyadh, before the 09:00 shift. A day
-  # with no change to main stops after one short job. For anything urgent,
-  # "Run workflow" -> staging builds and deploys main at once.
+  # week planned). Before the 09:00 Riyadh shift. A day with no change to main
+  # stops after one short job. For anything urgent, "Run workflow" -> staging
+  # builds and deploys main at once.
+  #
+  # TWO SLOTS, OFF THE HOUR (26 Nov 2026): GitHub drops scheduled runs under
+  # load, worst at the top of the hour - the first '0 3 * * *' never ran. The
+  # second slot is the safety net: if the first deployed, "Anything new on
+  # main?" stops it in about a minute (and the concurrency group queues it
+  # behind a first run still in progress).
   schedule:
-    - cron: '0 3 * * *'
+    - cron: '17 3 * * *' # 06:17 Riyadh
+    - cron: '47 4 * * *' # 07:47 Riyadh
   push:
     tags: ['v*']
   workflow_dispatch:
