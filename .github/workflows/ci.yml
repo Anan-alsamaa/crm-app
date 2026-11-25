@@ -54,7 +54,9 @@ jobs:
           HEAD=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha 2>/dev/null) || verdict false "could not read PR #$PR"
           T1=$(gh api "repos/$REPO/git/commits/$SHA" --jq .tree.sha 2>/dev/null) || verdict false "could not read $SHA"
           T2=$(gh api "repos/$REPO/git/commits/$HEAD" --jq .tree.sha 2>/dev/null) || verdict false "could not read $HEAD"
-          [ -n "$T1" ] && [ "$T1" = "$T2" ] || verdict false "PR #$PR head ($HEAD) has a different tree - it was not up to date with main"
+          if [ -z "$T1" ] || [ "$T1" != "$T2" ]; then
+            verdict false "PR #$PR head ($HEAD) has a different tree - it was not up to date with main"
+          fi
           for CHECK in "Lint, typecheck & unit tests (+ coverage)" "Playwright E2E" "AI/commerce auth contract (C-1/C-2)"; do
             C=$(gh api -X GET "repos/$REPO/commits/$HEAD/check-runs" -f check_name="$CHECK" -f filter=latest \
               --jq '[.check_runs[] | select(.app.slug == "github-actions")][0].conclusion // empty' 2>/dev/null) \
