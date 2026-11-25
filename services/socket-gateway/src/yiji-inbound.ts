@@ -241,6 +241,13 @@ export interface YijiInboundStore {
    * without them, or a read that fails, tells no branch.
    */
   branchNotifyRules?(): Promise<BranchNotifyRule[]>;
+  /**
+   * The ACTIVE values of one dropdown on the admin portal's Lists page
+   * (`option_lists`), in their display order - the same list the agents pick
+   * from (owner, 25 Nov 2026). Optional: a store without it, or a read that
+   * fails or comes back empty, falls back to the built-in vocabulary.
+   */
+  optionList?(list: 'complaint_type' | 'service_type'): Promise<string[]>;
 }
 
 /* ── The CRM-side compensation policy (OFF by default) ────────────────────── */
@@ -360,6 +367,25 @@ const SERVICE_TYPE_ALIASES: Record<string, string> = {
   'drive-thru': 'Drive Thru',
   'drive thru': 'Drive Thru',
   carhop: 'Drive Thru',
+};
+
+/**
+ * Older spellings of a service type, onto the words operations' Lists page
+ * uses (owner, 25 Nov 2026). The API used to store "Dinning" / "TakeOut" /
+ * "Drive Thru" while agents picked "Dine-in" / "Takeout" / "Carhop", so one
+ * service type was counted under two names. A caller still sending the old
+ * spelling keeps working; the ticket gets the Lists-page word.
+ */
+const LIVE_SERVICE_TYPE_ALIASES: Record<string, string> = {
+  dinning: 'Dine-in',
+  dining: 'Dine-in',
+  'dine in': 'Dine-in',
+  dinein: 'Dine-in',
+  takeout: 'Takeout',
+  'take out': 'Takeout',
+  takeaway: 'Takeout',
+  'drive thru': 'Carhop',
+  'drive-thru': 'Carhop',
 };
 
 /** The delivery-type words the coupon form stores (option_lists.delivery_type). */
@@ -813,6 +839,33 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     }
   }
 
+  /*
+   * THE AGENTS' OWN LISTS (owner, 25 Nov 2026: "give them the ready values").
+   * Complaint and service types are checked against the Lists page - what the
+   * agents pick from - not a list frozen in this file, which had drifted ("Other"
+   * and "Wrong order" were refused; two retired types were still accepted).
+   * Read at most once a minute. An unreadable or empty list answers null and
+   * the built-in vocabulary is used instead: never a refusal because the CRM
+   * could not read its own settings.
+   */
+  const VOCAB_TTL_MS = 60_000;
+  const vocabCache = new Map<string, { at: number; values: string[] | null }>();
+  async function liveList(list: 'complaint_type' | 'service_type'): Promise<string[] | null> {
+    if (!store.optionList) return null;
+    const hit = vocabCache.get(list);
+    const t = now().getTime();
+    if (hit && t - hit.at < VOCAB_TTL_MS) return hit.values;
+    let values: string[] | null = null;
+    try {
+      const v = await store.optionList(list);
+      values = v.length > 0 ? v : null;
+    } catch (err) {
+      logger.warn({ err: (err as Error)?.message, list }, 'yiji inbound: option list unreadable');
+    }
+    vocabCache.set(list, { at: t, values });
+    return values;
+  }
+
   async function vendor(): Promise<string> {
     let id: string | null;
     try {
@@ -1144,18 +1197,22 @@ export function createYijiInboundService(opts: YijiInboundOptions) {
     const b = parsed.data;
 
     const fields: Record<string, string> = {};
-    const complaintType = canonical(ComplaintType.options, b.complaintType);
+    const complaintTypes = (await liveList('complaint_type')) ?? ComplaintType.options;
+    const complaintType = canonical(complaintTypes, b.complaintType);
     if (!complaintType) {
-      fields.complaintType = `Unknown complaint type. Use one of: ${ComplaintType.options.join(', ')}.`;
+      fields.complaintType = `Unknown complaint type. Use one of: ${complaintTypes.join(', ')}.`;
     }
     let serviceType: string | null = null;
     if (b.serviceType) {
-      serviceType =
-        canonical(ServiceType.options, b.serviceType) ??
-        SERVICE_TYPE_ALIASES[b.serviceType.trim().toLowerCase()] ??
-        null;
+      const raw = b.serviceType.trim().toLowerCase();
+      const liveServices = await liveList('service_type');
+      serviceType = liveServices
+        ? (canonical(liveServices, b.serviceType) ??
+          canonical(liveServices, LIVE_SERVICE_TYPE_ALIASES[raw] ?? '') ??
+          null)
+        : (canonical(ServiceType.options, b.serviceType) ?? SERVICE_TYPE_ALIASES[raw] ?? null);
       if (!serviceType) {
-        fields.serviceType = `Unknown service type. Use one of: ${ServiceType.options.join(', ')}.`;
+        fields.serviceType = `Unknown service type. Use one of: ${(liveServices ?? ServiceType.options).join(', ')}.`;
       }
     }
     const phone = normalizePhone(b.customer.phone);
@@ -1616,7 +1673,6 @@ export function registerYijiInboundApi(app: FastifyInstance, deps: YijiInboundRo
         if (!(await guard(req, reply))) return reply;
         return answer(reply, () => deps.service.readCompensationRules());
       });
-
       /*
        * ORDER EVENTS (owner, 2026-11-15): the platform tells the CRM every
        * order status change; the workers keep the live orders table and the

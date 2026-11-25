@@ -606,6 +606,23 @@ export class YijiInboundDirectus implements YijiInboundStore {
     return rows;
   }
 
+  /** The active values of one Lists-page dropdown, in display order. */
+  async optionList(list: 'complaint_type' | 'service_type'): Promise<string[]> {
+    const rows = await this.req<Array<{ value: string | null }>>(
+      readItems(
+        'option_lists' as never,
+        {
+          filter: { list: { _eq: list }, active: { _neq: false } },
+          fields: ['value'],
+          sort: ['sort', 'value'],
+          limit: -1,
+        } as never,
+      ),
+    );
+    if (!Array.isArray(rows)) throw new Error('option_lists: unexpected response');
+    return rows.map((r) => (r.value ?? '').trim()).filter((v) => v.length > 0);
+  }
+
   async queueStoreNotification(draft: StoreNotificationDraft & { vendor: string }): Promise<void> {
     await this.req(createItem('store_notifications' as never, draft as never));
   }
