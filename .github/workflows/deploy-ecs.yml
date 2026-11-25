@@ -23,8 +23,14 @@ name: Deploy to ECS
 # the door rather than half-deploying.
 
 on:
+  # STAGING DEPLOYS ONCE A DAY, NOT ON EVERY MERGE (owner, 25 Nov 2026: the
+  # repo goes private on the Free plan, 2,000 Actions minutes a month, 400 a
+  # week planned). 03:00 UTC = 06:00 Riyadh, before the 09:00 shift. A day
+  # with no change to main stops after one short job. For anything urgent,
+  # "Run workflow" -> staging builds and deploys main at once.
+  schedule:
+    - cron: '0 3 * * *'
   push:
-    branches: [main]
     tags: ['v*']
   workflow_dispatch:
     inputs:
@@ -51,12 +57,50 @@ env:
   ECR_REGISTRY: 408568863712.dkr.ecr.us-east-2.amazonaws.com
 
 jobs:
+  # ── 0. Anything new for staging? (the daily run only) ─────────────────────
+  # The scheduled run deploys main only when main moved since the last
+  # SUCCESSFUL daily or push-triggered staging deploy. Every doubt - an API
+  # error, no earlier run, a different commit - answers "deploy". A tag or a
+  # manual run always proceeds.
+  changed:
+    name: Anything new on main?
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      skip: ${{ steps.c.outputs.skip }}
+    steps:
+      - id: c
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ]; then
+            echo "skip=false" >> "$GITHUB_OUTPUT"; echo "::notice::${{ github.event_name }} - always proceeds"; exit 0
+          fi
+          LAST=""
+          for EV in schedule push; do
+            S=$(gh api "repos/${{ github.repository }}/actions/workflows/deploy-ecs.yml/runs?branch=main&event=$EV&status=success&per_page=1" \
+              --jq '.workflow_runs[0] | "\(.head_sha) \(.created_at)"' 2>/dev/null || true)
+            case "$S" in null*|"") continue ;; esac
+            # The newer of the two.
+            if [ -z "$LAST" ] || [[ "${S#* }" > "${LAST#* }" ]]; then LAST="$S"; fi
+          done
+          BASE="${LAST%% *}"
+          if [ -n "$BASE" ] && [ "$BASE" = "${{ github.sha }}" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::main (${{ github.sha }}) is already on staging - nothing to deploy today"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::main moved (last good staging deploy: ${BASE:-none found}) - deploying"
+          fi
+
   # ── 1. The gate ───────────────────────────────────────────────────────────
   # Deploy fires on push/tag while CI fires separately, so without this a tag
   # could ship over a red pipeline. That is not hypothetical: v1.1.2 through
   # v1.2.0 all published with a green Deploy badge and failing tests.
   gate:
     name: Quality gate
+    needs: changed
+    if: needs.changed.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
@@ -85,6 +129,11 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             ENVIRONMENT="${{ inputs.environment }}"; TAG="main"; BUILD=false
+            # "Deploy staging now" (owner, 25 Nov 2026): builds main, exactly
+            # what a merge used to do. ONLY from main - a run started on any
+            # other branch must never write the `:main` images that a
+            # production tag promotes (it re-deploys the existing :main).
+            if [ "$ENVIRONMENT" = "staging" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then BUILD=true; fi
           elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
             # A TAG IS A PROMOTION, NOT A BUILD. The images already exist from
             # the merge to main; production re-tags those exact digests, so what
