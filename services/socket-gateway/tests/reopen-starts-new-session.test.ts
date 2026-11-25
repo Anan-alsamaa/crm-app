@@ -223,6 +223,47 @@ describe('a customer coming back to an OPEN chat', () => {
     } as never);
     expect(r.newSession).toBe(true);
     expect(r.sessionStarted).toBe(true);
+    // No last message to measure from: not a carry-on.
+    expect(r.resumedWithinGap).toBeUndefined();
+  });
+
+  /* Owner, 25 Nov 2026: a customer who writes again minutes after "solved" is
+     carrying on the conversation; routing keeps it with a signed-in owner. */
+  const reopened = (lastMessageAt: string) => {
+    request
+      .mockResolvedValueOnce({ id: 'msg-1', date_created: '2026-11-16T09:00:00.000Z' })
+      .mockResolvedValueOnce([
+        {
+          unread_count_agent: 0,
+          status: 'solved',
+          initiated_by: 'customer',
+          last_message_at: lastMessageAt,
+        },
+      ])
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined);
+  };
+
+  it('a reopen minutes after the last message is flagged resumedWithinGap', async () => {
+    reopened(new Date(Date.now() - 60_000).toISOString());
+    const r = await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'thanks!',
+    } as never);
+    expect(r.newSession).toBe(true); // still a session for the SLA and the reports
+    expect(r.resumedWithinGap).toBe(true);
+  });
+
+  it('a reopen after the session gap is NOT a carry-on', async () => {
+    reopened(hoursAgo(5));
+    const r = await gateway().persistMessage({
+      conversationId: 'convo-1',
+      senderType: 'customer',
+      content: 'new problem',
+    } as never);
+    expect(r.newSession).toBe(true);
+    expect(r.resumedWithinGap).toBeUndefined();
   });
 });
 
