@@ -169,12 +169,23 @@ export interface RoutingDeps {
  * chat moves only if the agent LOGGED OUT and did not come back, never because
  * they were quiet.
  *
- * Membership alone answers that. `online()` adds on connect and `offline()`
- * removes on disconnect and on sign-out, so presence in the set means "holds a
- * session", independent of how long ago they last typed.
+ * `online()` adds on connect, `offline()` removes on disconnect and sign-out,
+ * and since 26 Nov 2026 the gateway re-adds every agent it holds a socket for
+ * every 45 s - so "in the set and refreshed within the TTL" means "holds a
+ * session", however long ago they last typed. (It does not SWEEP: removing
+ * entries is the gateway's and `nextAgent`'s business.)
  */
 async function isSignedIn(redis: Redis | Cluster, agentId: string): Promise<boolean> {
-  return (await redis.zscore(PRESENCE_KEY, agentId)) !== null;
+  /*
+   * PRESENT AND RECENT (26 Nov 2026). The gateway now re-scores every agent it
+   * holds a socket for every 45 s, so the score means "still connected", not
+   * "last typed": a quiet agent at their desk is always within the TTL. Recency
+   * is what stops a leftover entry (a socket that closed between two ticks)
+   * from passing for a signed-in agent - the same test the gateway's own
+   * `isOnline` applies.
+   */
+  const score = await redis.zscore(PRESENCE_KEY, agentId);
+  return score !== null && Number(score) > Date.now() - PRESENCE_TTL_MS;
 }
 
 async function nextAgent(
