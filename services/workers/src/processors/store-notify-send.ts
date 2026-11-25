@@ -27,8 +27,9 @@ import { describeError } from '../lib/errors.js';
  *    would be refused the same way.
  *
  * Staging: `SARAPOS_REDIRECT_OUTLET_ID` sends every message to one test outlet
- * (LCP LAB), the way staging coupons go to the owner's phone. Refused at start
- * on a worker pointed at production.
+ * (a lab outlet, never a real branch), the way staging coupons go to the
+ * owner's phone. Refused at start on a worker pointed at production; REQUIRED
+ * anywhere else - without it a non-production worker sends nothing.
  */
 
 export const STORE_NOTIFY_SEND_JOB = 'store_notify_send';
@@ -56,21 +57,38 @@ export interface SaraposConfig {
  * Throws when a redirect is set on a worker pointed at production: that would
  * send every branch's complaints to one test outlet while reporting success.
  */
-export function saraposConfigFromEnv(env: NodeJS.ProcessEnv): SaraposConfig | null {
+export function saraposConfigFromEnv(
+  env: NodeJS.ProcessEnv,
+  warn: (message: string) => void = (m) => console.error(m),
+): SaraposConfig | null {
   const baseUrl = (env.SARAPOS_API_URL ?? '').trim().replace(/\/+$/, '');
   const bearerToken = (env.SARAPOS_BEARER_TOKEN ?? '').trim();
   const secretKey = (env.SARAPOS_SECRET_KEY ?? '').trim();
   const redirect = (env.SARAPOS_REDIRECT_OUTLET_ID ?? '').trim();
-  if (redirect) {
-    const directus = (env.DIRECTUS_INTERNAL_URL ?? '').toLowerCase();
-    if (directus.includes('prod-directus') || directus.includes('crm-api.anan.sa')) {
-      throw new Error(
-        'SARAPOS_REDIRECT_OUTLET_ID is set on a worker pointed at PRODUCTION Directus. ' +
-          "That would send every branch's complaints to one test outlet. Unset it.",
-      );
-    }
+  const directus = (env.DIRECTUS_INTERNAL_URL ?? '').toLowerCase();
+  const production = directus.includes('prod-directus') || directus.includes('crm-api.anan.sa');
+  if (redirect && production) {
+    throw new Error(
+      'SARAPOS_REDIRECT_OUTLET_ID is set on a worker pointed at PRODUCTION Directus. ' +
+        "That would send every branch's complaints to one test outlet. Unset it.",
+    );
   }
   if (!baseUrl || !bearerToken || !secretKey) return null;
+  /*
+   * OUTSIDE PRODUCTION, NEVER A REAL BRANCH (owner, 25 Nov 2026: "branch
+   * shouldn't be notified on staging; the only branch notified on staging
+   * could be the lab"). Staging shares SaraPOS's PRODUCTION API, so a staging
+   * worker whose redirect was lost would post every test complaint to the real
+   * branch it names. Without a redirect, a non-production worker sends nothing
+   * - the rows stay queued, visibly unsent - and says so at start.
+   */
+  if (!production && !redirect) {
+    warn(
+      'SaraPOS sender OFF: this worker is not pointed at production and has no ' +
+        'SARAPOS_REDIRECT_OUTLET_ID, so it would notify REAL branches. Set the lab outlet.',
+    );
+    return null;
+  }
   return { baseUrl, bearerToken, secretKey, ...(redirect ? { redirectOutletId: redirect } : {}) };
 }
 
