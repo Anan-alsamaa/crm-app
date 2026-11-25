@@ -308,10 +308,38 @@ describe('saraposConfigFromEnv', () => {
     SARAPOS_SECRET_KEY: 's',
   };
 
+  const PROD = { DIRECTUS_INTERNAL_URL: 'http://prod-directus.crm.local:8055' };
+  const STAGING = { DIRECTUS_INTERNAL_URL: 'http://directus.crm.local:8055' };
+  const quiet = () => {};
+
   it('is off unless all three settings are present', () => {
-    expect(saraposConfigFromEnv({})).toBeNull();
-    expect(saraposConfigFromEnv({ ...full, SARAPOS_SECRET_KEY: '' })).toBeNull();
-    expect(saraposConfigFromEnv(full)).toMatchObject({ baseUrl: 'https://pos.example/api' });
+    expect(saraposConfigFromEnv({ ...PROD })).toBeNull();
+    expect(saraposConfigFromEnv({ ...full, ...PROD, SARAPOS_SECRET_KEY: '' })).toBeNull();
+    expect(saraposConfigFromEnv({ ...full, ...PROD })).toMatchObject({
+      baseUrl: 'https://pos.example/api',
+    });
+  });
+
+  it('production (its real Directus URL) sends to each branch, as before', () => {
+    const cfg = saraposConfigFromEnv({ ...full, ...PROD }, quiet);
+    expect(cfg).not.toBeNull();
+    expect(cfg?.redirectOutletId).toBeUndefined();
+  });
+
+  /* Owner, 25 Nov 2026: no real branch is ever notified from staging. */
+  it('outside production, NO redirect means the sender is OFF - never a real branch', () => {
+    const warned: string[] = [];
+    expect(saraposConfigFromEnv({ ...full, ...STAGING }, (m) => warned.push(m))).toBeNull();
+    expect(warned.join()).toMatch(/SaraPOS sender OFF/);
+    // A worker with no Directus URL at all is not production either.
+    expect(saraposConfigFromEnv({ ...full }, quiet)).toBeNull();
+  });
+
+  it('outside production, the redirect sends everything to the lab outlet', () => {
+    expect(
+      saraposConfigFromEnv({ ...full, ...STAGING, SARAPOS_REDIRECT_OUTLET_ID: '2' }, quiet)
+        ?.redirectOutletId,
+    ).toBe('2');
   });
 
   it('refuses a redirect on a worker pointed at production', () => {
