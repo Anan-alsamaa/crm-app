@@ -1422,6 +1422,7 @@ function registerHandlers(socket: Socket, deps: ConnectionDeps): void {
             attemptedAgentIds: [],
             outboundCountAtSchedule: 0,
             sessionStarted,
+            ...(saved.resumedWithinGap === true ? { resumedWithinGap: true } : {}),
           })
           .catch((err: unknown) => logger.warn({ err }, 'auto-assign enqueue failed'));
         /* AI auto-reply draft (shadow, owner 2026-10-13). The worker asks the

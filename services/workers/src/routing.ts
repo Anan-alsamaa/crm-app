@@ -35,6 +35,7 @@ import {
   ROUTING_FIRST_WAIT_MS,
   ROUTING_SECOND_WAIT_MS,
   ROUTING_RECLAIM_WAIT_MS,
+  ROUTING_SESSION_GAP_MS,
   normaliseConversationStatus,
   type RoutingJob,
 } from '@yiji/shared-types';
@@ -42,6 +43,19 @@ import {
 /** Same key the gateway writes; see services/socket-gateway/src/presence-store.ts. */
 const PRESENCE_KEY = 'presence:agents';
 const PRESENCE_TTL_MS = 90_000;
+
+/**
+ * "THE LADDER ALREADY RELEASED THIS CHAT TO THE POOL IN THIS SESSION."
+ *
+ * Set when the last rung opens a chat to everyone; cleared when a new session
+ * starts; expires after ROUTING_SESSION_GAP_MS (a later message is a new
+ * session by then anyway). Without it every customer message into a pooled
+ * chat ran the whole ladder again - measured on production 19 Nov, chat
+ * f10a9a3e went Mohamed -> Sultan -> pool, four times in 16 minutes, one
+ * round per customer line (owner, 25 Nov 2026: a chat in progress must not
+ * move to another agent).
+ */
+const pooledKey = (conversationId: string) => `routing:pooled:${conversationId}`;
 
 export interface RoutingDeps {
   redis: Redis | Cluster;
@@ -249,9 +263,11 @@ async function releaseToPoolAndAlert(
   /** Everyone who could take it now. They are the point of releasing it. */
   eligible: string[] = [],
 ): Promise<void> {
-  const { directus, notify, log } = deps;
+  const { directus, notify, log, redis } = deps;
   await directus.assign(convo.id, null);
   log(reason, { id: convo.id, ...extra });
+  // Best-effort: a missing marker only means the next message re-offers it.
+  await redis.set(pooledKey(convo.id), '1', 'PX', ROUTING_SESSION_GAP_MS).catch(() => undefined);
 
   if (!notify) return;
 
@@ -474,6 +490,8 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
   }
 
   if (job.stage === 'assign') {
+    // A new session starts the pool question afresh.
+    if (job.sessionStarted) await redis.del(pooledKey(convo.id)).catch(() => undefined);
     if (convo.assigned_agent) {
       /*
        * OWNED. THE LADDER BELONGS TO THE FIRST MESSAGE OF A SESSION - AND TO
@@ -511,6 +529,27 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
         return;
       }
       const owner = convo.assigned_agent;
+      /*
+       * THE CUSTOMER IS CARRYING ON, NOT COMING BACK (owner, 25 Nov 2026: "when
+       * an agent is chatting with the customer, also after the first response,
+       * when chat is in process, the chat gets reassigned to other agent. This
+       * shouldn't happen.").
+       *
+       * The agent marks the chat solved, the customer writes "thanks" or one
+       * more question a few minutes later, and that reopen counted as a new
+       * session: the owner got 60 s, then the chat went to a colleague and the
+       * pool. Measured on production 18-25 Nov: 15 of the 32 hand-offs after a
+       * reply were this (chats 70f4f45f, 07e1a554, 722c276a...). Within the
+       * session gap the owner simply keeps it while signed in - no timer. A
+       * signed-out owner, or a return after the gap, still runs the ladder.
+       */
+      if (job.resumedWithinGap && (await isSignedIn(redis, owner))) {
+        log('routing: reopened within the session gap - kept with its signed-in owner', {
+          id: convo.id,
+          agent: owner,
+        });
+        return;
+      }
       const chosen = await nextAgent(redis, [], eligible, owner);
       if (!chosen) {
         log('routing: NO ELIGIBLE AGENTS for a new session - left with its owner', {
@@ -544,6 +583,14 @@ export async function handleRouting(job: RoutingJob, deps: RoutingDeps): Promise
         id: convo.id,
         owner,
         agent: chosen,
+      });
+      return;
+    }
+    /* RELEASED TO EVERYONE ALREADY: it stays in the pool, which every agent
+       sees, until somebody takes it or a new session starts (see pooledKey). */
+    if (!job.sessionStarted && (await redis.exists(pooledKey(convo.id)).catch(() => 0)) > 0) {
+      log('routing: already released to every agent this session - left in the pool', {
+        id: convo.id,
       });
       return;
     }

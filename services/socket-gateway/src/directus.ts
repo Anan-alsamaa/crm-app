@@ -918,6 +918,13 @@ export class GatewayDirectus {
      * customer comes back to must still be answered by somebody who is here.
      */
     newSession?: boolean;
+    /**
+     * The new session is a REOPEN less than ROUTING_SESSION_GAP_MS after the
+     * thread's last message: the customer carrying on the conversation an
+     * agent just marked solved (owner, 25 Nov 2026). Routing keeps it with a
+     * signed-in owner instead of passing it on.
+     */
+    resumedWithinGap?: boolean;
   }> {
     /* The automatic welcome: agent-STYLE, but no person sent it (owner,
        2026-10-06). It must not stop the first-response clock or clear the
@@ -928,6 +935,7 @@ export class GatewayDirectus {
     });
     let sessionStarted = false;
     let newSession = false;
+    let resumedWithinGap = false;
     const created = (await this.client.request(
       createItem('messages', {
         conversation: input.conversationId,
@@ -1038,6 +1046,9 @@ export class GatewayDirectus {
           patch.session_started_at = now;
           sessionStarted = rows[0]?.initiated_by !== 'agent';
           newSession = true;
+          resumedWithinGap =
+            !!rows[0]?.last_message_at &&
+            Date.now() - Date.parse(rows[0].last_message_at) <= ROUTING_SESSION_GAP_MS;
         } else if (
           /*
            * A RETURN AFTER HOURS OF SILENCE IS A NEW SESSION TOO (owner,
@@ -1115,6 +1126,7 @@ export class GatewayDirectus {
       createdAt: now,
       ...(sessionStarted ? { sessionStarted: true } : {}),
       ...(newSession ? { newSession: true } : {}),
+      ...(resumedWithinGap ? { resumedWithinGap: true } : {}),
     };
   }
 

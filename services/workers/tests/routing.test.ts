@@ -11,8 +11,15 @@ import { ROUTING_FIRST_WAIT_MS, ROUTING_SECOND_WAIT_MS, type RoutingJob } from '
  */
 
 /** Redis stand-in: a sorted set is just an ordered list of ids for our purposes. */
-function fakeRedis(onlineIdleFirst: string[]) {
+function fakeRedis(onlineIdleFirst: string[], keys: Set<string> = new Set()) {
   return {
+    // Plain keys, for the "already released to the pool" marker.
+    set: vi.fn().mockImplementation(async (k: string) => {
+      keys.add(k);
+      return 'OK';
+    }),
+    del: vi.fn().mockImplementation(async (k: string) => (keys.delete(k) ? 1 : 0)),
+    exists: vi.fn().mockImplementation(async (k: string) => (keys.has(k) ? 1 : 0)),
     zremrangebyscore: vi.fn().mockResolvedValue(0),
     zrange: vi.fn().mockResolvedValue(onlineIdleFirst),
     // Membership, for the reclaim stage's "did they come back?" check. A score
@@ -40,6 +47,8 @@ function deps(over: {
   outbound?: number;
   /** Who the supervisor alert would reach. Empty models a real prod risk. */
   supervisors?: string[];
+  /** Shared Redis keys, so a sequence of jobs can see each other's markers. */
+  keys?: Set<string>;
 }) {
   const assign = vi.fn().mockResolvedValue(undefined);
   const schedule = vi.fn().mockResolvedValue(undefined);
@@ -57,7 +66,7 @@ function deps(over: {
     supervisorIds,
     notify,
     d: {
-      redis: fakeRedis(over.online ?? []),
+      redis: fakeRedis(over.online ?? [], over.keys),
       directus: {
         getConversation: vi
           .fn()
@@ -250,6 +259,111 @@ describe('auto-assignment ladder', () => {
       });
       await handleRouting(job(), d);
       expect(assign).not.toHaveBeenCalled();
+    });
+  });
+
+  /*
+   * A CHAT IN PROGRESS MUST NOT MOVE TO ANOTHER AGENT (owner, 25 Nov 2026).
+   *
+   * Replays of what production did 18-25 Nov. 32 hand-offs happened after an
+   * agent had already replied; 15 were a customer writing again minutes after
+   * the agent pressed "solved" (70f4f45f: solved 01:51:35, customer 01:52:15,
+   * moved to Naif 01:53:16, to the pool 01:53:46), and the pooled chats then
+   * re-ran the whole ladder on every customer line (f10a9a3e: Mohamed ->
+   * Sultan -> pool four times in 16 minutes).
+   */
+  describe('regression: a chat in progress stays with its agent (owner, 25 Nov 2026)', () => {
+    const owned = { id: 'c1', assigned_agent: 'faisal', assigned_team: null, status: 'open' };
+
+    it('a solved chat the customer carries on within the gap STAYS with its signed-in owner', async () => {
+      const { d, assign, schedule, notify } = deps({
+        online: ['naif', 'faisal'],
+        roster: ['naif', 'faisal'],
+        convo: owned,
+        outbound: 4,
+      });
+      await handleRouting(job({ sessionStarted: true, resumedWithinGap: true }), d);
+      expect(assign).not.toHaveBeenCalled();
+      expect(schedule).not.toHaveBeenCalled(); // no 60-second timer to expire
+      expect(notify).not.toHaveBeenCalled();
+    });
+
+    it('...but goes to someone who is here when that owner has signed out', async () => {
+      const { d, assign, schedule } = deps({
+        online: ['naif'],
+        roster: ['naif', 'faisal'],
+        convo: owned,
+      });
+      await handleRouting(job({ sessionStarted: true, resumedWithinGap: true }), d);
+      expect(assign).toHaveBeenCalledWith('c1', 'naif');
+      expect(schedule).toHaveBeenCalledWith(
+        expect.objectContaining({ stage: 'escalate' }),
+        ROUTING_FIRST_WAIT_MS,
+      );
+    });
+
+    it('a return AFTER the gap keeps the 16 Nov rule: owner first refusal, then the ladder', async () => {
+      const { d, schedule } = deps({
+        online: ['naif', 'faisal'],
+        roster: ['naif', 'faisal'],
+        convo: owned,
+        outbound: 4,
+      });
+      await handleRouting(job({ sessionStarted: true }), d);
+      expect(schedule).toHaveBeenCalledWith(
+        expect.objectContaining({ stage: 'escalate', attemptedAgentIds: ['faisal'] }),
+        ROUTING_FIRST_WAIT_MS,
+      );
+    });
+
+    it('a chat the ladder released to everyone is NOT re-offered on each customer line', async () => {
+      // f10a9a3e, replayed: new chat -> Mohamed (60 s) -> Sultan (30 s) -> pool,
+      // then the customer writes again in the same session.
+      const keys = new Set<string>();
+      const roster = ['mohamed', 'sultan'];
+      const unowned = { id: 'c1', assigned_agent: null, assigned_team: null, status: 'open' };
+
+      const first = deps({ online: roster, roster, convo: unowned, keys });
+      await handleRouting(job({ sessionStarted: true }), first.d);
+      expect(first.assign).toHaveBeenCalledWith('c1', 'mohamed');
+
+      const rung2 = deps({
+        online: roster,
+        roster,
+        convo: { ...unowned, assigned_agent: 'mohamed' },
+        keys,
+      });
+      await handleRouting(job({ stage: 'escalate', attemptedAgentIds: ['mohamed'] }), rung2.d);
+      expect(rung2.assign).toHaveBeenCalledWith('c1', 'sultan');
+
+      const rung3 = deps({
+        online: roster,
+        roster,
+        convo: { ...unowned, assigned_agent: 'sultan' },
+        keys,
+      });
+      await handleRouting(
+        job({ stage: 'broadcast', attemptedAgentIds: ['mohamed', 'sultan'] }),
+        rung3.d,
+      );
+      expect(rung3.assign).toHaveBeenCalledWith('c1', null); // the pool
+
+      // The customer's next line, same session: it stays in the pool.
+      const next = deps({ online: roster, roster, convo: unowned, keys });
+      await handleRouting(job(), next.d);
+      expect(next.assign).not.toHaveBeenCalled();
+      expect(next.schedule).not.toHaveBeenCalled();
+
+      // A NEW session (e.g. the next day) runs the ladder again.
+      const later = deps({ online: roster, roster, convo: unowned, keys });
+      await handleRouting(job({ sessionStarted: true }), later.d);
+      expect(later.assign).toHaveBeenCalledWith('c1', 'mohamed');
+    });
+
+    it('a chat that was never released (nobody online at first) is still routed later', async () => {
+      const { d, assign } = deps({ online: ['a1'], roster: ['a1'] });
+      await handleRouting(job(), d);
+      expect(assign).toHaveBeenCalledWith('c1', 'a1');
     });
   });
 
