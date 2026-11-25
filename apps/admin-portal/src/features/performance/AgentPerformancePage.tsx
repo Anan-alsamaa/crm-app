@@ -41,6 +41,7 @@ import {
 import { directus } from '../../lib/directus.js';
 import { useSlaHours } from '../../lib/sla-hours.js';
 import { downloadCsv, toCsv } from '../restaurants/csv.js';
+import { agentSummaryExport } from './agent-summary-export.js';
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { exportFileName } from '@yiji/shared-config';
 import { ViewSwitch } from '../../components/ViewSwitch.js';
@@ -290,37 +291,21 @@ export function AgentPerformancePage() {
 
   /**
    * Export what is on screen, not a second query: the CSV is built from the
-   * same `rows` the table renders, so a filtered view exports the filtered
-   * numbers and the file can never disagree with the page that produced it.
-   *
-   * Durations leave as SECONDS. A spreadsheet can average a number; it cannot
-   * average "5h 6m", and an export exists to be calculated with.
+   * same `rows` the table renders, with the table's columns, order and values
+   * (owner, 25 Nov 2026 - see agent-summary-export.ts), so a filtered view
+   * exports the filtered numbers and the file cannot disagree with the page.
    */
   const exportCsv = () => {
-    const header = [
-      t('performance.agent', { defaultValue: 'Agent' }),
-      t('performance.chats', { defaultValue: 'Chats' }),
-      t('performance.answered', { defaultValue: 'Answered' }),
-      t('performance.unanswered', { defaultValue: 'No reply yet' }),
-      t('performance.solved', { defaultValue: 'Solved' }),
-      t('performance.commonChats', { defaultValue: 'Common chats taken' }),
-      t('performance.avgFirstSec', { defaultValue: 'First response (seconds, avg)' }),
-      t('performance.medFirstSec', { defaultValue: 'First response (seconds, median)' }),
-      t('performance.avgSolveSec', { defaultValue: 'Time to solve (seconds, avg)' }),
-      t('performance.medSolveSec', { defaultValue: 'Time to solve (seconds, median)' }),
-    ];
-    const body = rows.map((r) => [
-      r.agentName,
-      r.chats,
-      r.answered,
-      r.unanswered,
-      r.solved,
-      r.commonChats,
-      r.avgFirstResponseSec ?? '',
-      r.medianFirstResponseSec ?? '',
-      r.avgTimeToSolveSec ?? '',
-      r.medianTimeToSolveSec ?? '',
-    ]);
+    const { header, body } = agentSummaryExport(rows, csatByAgent, {
+      agent: t('performance.agent', { defaultValue: 'Agent' }),
+      chats: t('performance.chats', { defaultValue: 'Chats' }),
+      noReplyYet: t('performance.noReplyYet', { defaultValue: 'No reply yet' }),
+      commonChats: t('performance.commonChats', { defaultValue: 'Common chats taken' }),
+      firstResponse: t('performance.avgFirstCol', { defaultValue: 'First response' }),
+      solved: t('performance.solved', { defaultValue: 'Solved' }),
+      timeToSolve: t('performance.avgSolveCol', { defaultValue: 'Time to solve (avg)' }),
+      rating: t('performance.csat', { defaultValue: 'Customer rating' }),
+    });
     // Name the file after the window it covers, so two exports taken on the
     // same day from different date filters cannot be mistaken for each other.
     const scope =
