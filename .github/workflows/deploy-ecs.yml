@@ -147,6 +147,27 @@ jobs:
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "::notice::Deploying $ENVIRONMENT at tag $TAG (build=$BUILD)"
 
+      # ── PRODUCTION GUARD: only the owner's account releases (25 Nov 2026) ───
+      # The repo goes private on the Free plan, where rulesets (the `v*` tag
+      # rule: only CodeByEmad may create release tags) are not enforced. This
+      # keeps that rule in the workflow itself: a production run fails here,
+      # before anything is promoted, unless the account that CREATED the tag
+      # (or started the run) AND the one that (re-)ran it are both the owner's.
+      # `github.actor` / `triggering_actor` come from GitHub, not from the tag,
+      # so they cannot be faked the way a tag's "tagger" name can.
+      - name: 'Guard: only the owner releases to production'
+        if: steps.p.outputs.environment == 'prod'
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING: ${{ github.triggering_actor }}
+          ALLOWED: CodeByEmad
+        run: |
+          if [ "$ACTOR" != "$ALLOWED" ] || [ "$TRIGGERING" != "$ALLOWED" ]; then
+            echo "::error::production releases are created and run by $ALLOWED only (created by '$ACTOR', run by '$TRIGGERING') - nothing was deployed"
+            exit 1
+          fi
+          echo "::notice::production release by $ACTOR"
+
       # ── PRODUCTION GUARD: Yiji v2 (owner, 17 Nov 2026) ──────────────────────
       # Yiji v2 (platform 'yiji2') is approved for STAGING ONLY and "must NOT
       # reach production in any way". This runs in `plan`, which every other
