@@ -106,16 +106,26 @@ export function createPresenceStore(redis: Redis | Cluster): PresenceStore {
     async heartbeatAll(userIds) {
       if (userIds.length === 0) return;
       /*
-       * Refresh only agents ALREADY present. A heartbeat must never re-add
-       * someone who signed out — that is the same resurrection `touch` guards
-       * against, and here it would undo a logout on the very next tick.
+       * EVERY AGENT THIS GATEWAY HOLDS A LIVE SOCKET FOR - present or not
+       * (26 Nov 2026).
+       *
+       * This used to refresh only agents already in the set, so it could never
+       * re-add one. During a rollout an agent reconnects to the NEW task first
+       * and the OLD task then processes the old socket's disconnect and removes
+       * them: connected and working, but out of the set, and nothing ever put
+       * them back. Measured on production 25 Nov after the 22:23 rollout: Ali's
+       * chat was reclaimed at 22:36 while he typed, and reopened chats of Ali
+       * and Mohamed were handed to colleagues at 23:26 and 23:51 because the
+       * worker saw them as signed out.
+       *
+       * The ids are this process's CONNECTED agents. A signed-out agent has no
+       * socket here (logout closes them), so they are not in the list and are
+       * not resurrected; a leftover entry ages out (90 s), and the worker's
+       * "signed in" test now checks that age too.
        */
-      const scores = await Promise.all(userIds.map((id) => redis.zscore(KEY, id)));
-      const live = userIds.filter((_, i) => scores[i] !== null);
-      if (live.length === 0) return;
       const at = now();
       const pipe = redis.multi();
-      for (const id of live) pipe.zadd(KEY, at, id);
+      for (const id of userIds) pipe.zadd(KEY, at, id);
       await pipe.exec();
     },
     async idleFirst() {

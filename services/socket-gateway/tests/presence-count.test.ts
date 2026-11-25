@@ -84,12 +84,40 @@ describe('cross-instance agent presence', () => {
     expect(piped).toHaveBeenCalledWith('presence:agents', expect.any(Number), 'quiet-but-present');
   });
 
-  it('a heartbeat never resurrects an agent who signed out', async () => {
-    /*
-     * `zscore` null = not in the set. Re-adding them would undo a logout on the
-     * very next tick — the same resurrection `touch` already guards against,
-     * and here it would run every 45 seconds for ever.
-     */
+  /*
+   * REGRESSION, production 25 Nov 2026. During the 22:23 rollout an agent
+   * reconnected to the NEW gateway task, then the OLD task processed the old
+   * socket's disconnect and removed them from the set. They were connected
+   * and working, but the heartbeat refreshed only agents already present, so
+   * nothing put them back: Ali's chat was reclaimed at 22:36 while he typed,
+   * and reopened chats went to colleagues at 23:26 and 23:51.
+   */
+  it('a heartbeat RE-ADDS a connected agent a racing disconnect removed', async () => {
+    const piped = vi.fn();
+    const chain = { zadd: piped, exec: vi.fn().mockResolvedValue([]) };
+    chain.zadd.mockReturnValue(chain);
+    const redis = {
+      zadd: vi.fn().mockResolvedValue(1),
+      zrem: vi.fn().mockResolvedValue(1),
+      zscore: vi.fn().mockResolvedValue(null), // removed by the old task
+      zcard: vi.fn().mockResolvedValue(0),
+      zrange: vi.fn().mockResolvedValue([]),
+      zremrangebyscore: vi.fn().mockResolvedValue(0),
+      multi: vi.fn(() => chain),
+    } as never;
+    const store = createPresenceStore(redis);
+    await store.heartbeatAll(['still-connected-agent']);
+    expect(piped).toHaveBeenCalledWith(
+      'presence:agents',
+      expect.any(Number),
+      'still-connected-agent',
+    );
+  });
+
+  it('a heartbeat touches only the agents it is given (a signed-out agent has no socket)', async () => {
+    const piped = vi.fn();
+    const chain = { zadd: piped, exec: vi.fn().mockResolvedValue([]) };
+    chain.zadd.mockReturnValue(chain);
     const redis = {
       zadd: vi.fn().mockResolvedValue(1),
       zrem: vi.fn().mockResolvedValue(1),
@@ -97,11 +125,12 @@ describe('cross-instance agent presence', () => {
       zcard: vi.fn().mockResolvedValue(0),
       zrange: vi.fn().mockResolvedValue([]),
       zremrangebyscore: vi.fn().mockResolvedValue(0),
-      multi: vi.fn(),
+      multi: vi.fn(() => chain),
     } as never;
     const store = createPresenceStore(redis);
-    await store.heartbeatAll(['signed-out-agent']);
-    expect((redis as unknown as { zadd: ReturnType<typeof vi.fn> }).zadd).not.toHaveBeenCalled();
+    await store.heartbeatAll(['connected-a']);
+    expect(piped).toHaveBeenCalledTimes(1);
+    expect(piped).not.toHaveBeenCalledWith('presence:agents', expect.any(Number), 'signed-out-b');
   });
 
   it('does nothing at all when no agents are connected', async () => {

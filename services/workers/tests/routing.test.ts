@@ -22,12 +22,12 @@ function fakeRedis(onlineIdleFirst: string[], keys: Set<string> = new Set()) {
     exists: vi.fn().mockImplementation(async (k: string) => (keys.has(k) ? 1 : 0)),
     zremrangebyscore: vi.fn().mockResolvedValue(0),
     zrange: vi.fn().mockResolvedValue(onlineIdleFirst),
-    // Membership, for the reclaim stage's "did they come back?" check. A score
-    // exists exactly for the agents in the online set.
+    // Presence for the "is this agent signed in?" check: a FRESH score (the
+    // gateway's 45 s heartbeat) exactly for the agents in the online set.
     zscore: vi
       .fn()
       .mockImplementation(async (_k: string, id: string) =>
-        onlineIdleFirst.includes(id) ? '1' : null,
+        onlineIdleFirst.includes(id) ? String(Date.now()) : null,
       ),
   } as never;
 }
@@ -883,18 +883,27 @@ describe('reclaim: the assigned agent went offline', () => {
      * THE OWNER'S RULE (2026-09-10): a chat moves only if the agent logged out
      * and did not come back within 90 s — never because they went quiet.
      *
-     * The presence score is last-activity, refreshed only on sending a message,
-     * so an agent reading rather than typing falls past the TTL. Sweeping it
-     * here (as the assignment path does) would take a live conversation off
-     * somebody sitting at their desk. Membership, not recency, decides.
+     * Since 26 Nov 2026 the gateway re-scores every CONNECTED agent every 45 s,
+     * so a quiet agent at their desk always has a fresh score.
      */
     const t = deps({ convo: owned, online: ['gone'], roster: ['other'] });
-    // A stale score: signed in, silent far longer than the TTL.
+    // Silent for an hour, but connected: the heartbeat re-scored them 10 s ago.
     (t.d.redis as unknown as { zscore: ReturnType<typeof vi.fn> }).zscore = vi
       .fn()
-      .mockResolvedValue('1');
+      .mockResolvedValue(String(Date.now() - 10_000));
     await handleRouting(job(), t.d);
     expect(t.assign).not.toHaveBeenCalled();
+  });
+
+  it('a leftover entry with no heartbeat for over 90 s is NOT a signed-in agent', async () => {
+    // A socket that closed between two ticks leaves an entry behind; with no
+    // connection, nothing refreshes it, and it must not keep the chat pinned.
+    const t = deps({ convo: owned, online: [], roster: ['other'] });
+    (t.d.redis as unknown as { zscore: ReturnType<typeof vi.fn> }).zscore = vi
+      .fn()
+      .mockResolvedValue(String(Date.now() - 5 * 60_000));
+    await handleRouting(job(), t.d);
+    expect(t.assign).toHaveBeenCalled();
   });
 
   it('does NOT sweep the presence set when checking the previous owner', async () => {
