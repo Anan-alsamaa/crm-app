@@ -108,6 +108,15 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
      can list but not open is not history. */
   const MESSAGE_OF_VISIBLE_CONVERSATION = { conversation: ASSIGNED_UNASSIGNED_OR_SOLVED };
   const SELF_RECIPIENT = { recipient: { _eq: '$CURRENT_USER' } };
+  /**
+   * EVERYONE EDITS THEIR OWN PROFILE (notification preferences, language,
+   * name) - never their role: the grant lists those four fields only. The
+   * protected-role and role-fence wraps below SKIP this one grant (matched by
+   * identity), because they are about the users you MANAGE. Wrapping it locked
+   * WeCare Supervisors out of their own preferences once the fence stopped
+   * them handing out their own role (staging, 26 Nov 2026).
+   */
+  const SELF_PROFILE = { id: { _eq: '$CURRENT_USER' } };
   const OWN_TICKET = { assigned_agent: { _eq: '$CURRENT_USER' } };
 
   /* What an agent may change on their own PENDING coupon request - the same
@@ -390,7 +399,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     ...readOnly('compensation_rules'),
     g('notifications', 'read', SELF_RECIPIENT),
     g('notifications', 'update', SELF_RECIPIENT),
-    g('directus_users', 'update', { id: { _eq: '$CURRENT_USER' } }, [
+    g('directus_users', 'update', SELF_PROFILE, [
       'notification_preferences',
       'locale',
       'first_name',
@@ -928,7 +937,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     if (protectedRoles.length > 0) {
       const notProtected = { role: { _nin: protectedRoles } };
       for (const grant of grants) {
-        if (grant.collection !== 'directus_users') continue;
+        if (grant.collection !== 'directus_users' || grant.filter === SELF_PROFILE) continue;
         if (grant.action === 'create' || grant.action === 'update') {
           grant.validation = notProtected;
         }
@@ -943,7 +952,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     /*
      * THE ROLE FENCE (owner, 18 Nov 2026): a role that manages users without
      * managing roles may hand out, and touch users of, only the roles it may
-     * assign (WeCare Supervisor -> WeCare Agent and WeCare Supervisor). It can
+     * assign (WeCare Supervisor -> WeCare Agent only, since 26 Nov). It can
      * READ those roles, so the Users page offers them. A payload that does not
      * set a role (a profile edit) still passes: `role _null` covers the
      * absent field.
@@ -952,7 +961,7 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       const inSet = { role: { _in: assignableRoles } };
       const valid = { _or: [{ role: { _null: true } }, inSet] };
       for (const grant of grants) {
-        if (grant.collection !== 'directus_users') continue;
+        if (grant.collection !== 'directus_users' || grant.filter === SELF_PROFILE) continue;
         if (grant.action === 'create' || grant.action === 'update') {
           grant.validation = grant.validation ? { _and: [grant.validation, valid] } : valid;
         }
