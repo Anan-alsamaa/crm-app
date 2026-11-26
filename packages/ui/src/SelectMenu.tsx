@@ -52,6 +52,15 @@ export interface SelectMenuProps {
    * force the box on a shorter one.
    */
   searchable?: boolean;
+  /**
+   * Whether typing on the CLOSED, focused trigger opens the menu (with the
+   * letters in its search box, or by jumping to a match). ON by default.
+   * `false` for a control whose choice must be deliberate (owner, 26 Nov 2026:
+   * a chat's assignee) - focus left on it must not turn a reply being typed
+   * into "assign the first match" on the next Enter. Click, Enter, Space and
+   * ArrowDown still open it.
+   */
+  openOnType?: boolean;
   /** Overrides the built-in (EN/AR, from `<html lang>`) search placeholder. */
   searchPlaceholder?: string;
   /** Overrides the built-in (EN/AR) "no matches" wording. */
@@ -89,6 +98,7 @@ export function SelectMenu({
   variant = 'field',
   leading,
   searchable,
+  openOnType = true,
   searchPlaceholder,
   noMatchesText,
   title,
@@ -248,7 +258,7 @@ export function SelectMenu({
       if (e.key === 'Enter' || e.key === ' ' || e.key === 'ArrowDown') {
         e.preventDefault();
         setOpen(true);
-      } else if (withSearch && isPrintable(e) && /\S/.test(e.key)) {
+      } else if (openOnType && withSearch && isPrintable(e) && /\S/.test(e.key)) {
         // Typing on the closed control starts a search, like an input would.
         e.preventDefault();
         seed.current = e.key;

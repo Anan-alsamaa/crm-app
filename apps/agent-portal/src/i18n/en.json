@@ -385,7 +385,13 @@
       "delete_failed": "Couldn't delete the message. Please retry."
     },
     "editShort": "Edit",
-    "deleteShort": "Delete"
+    "deleteShort": "Delete",
+    "moveTitle": "Move this chat from {{from}} to {{to}}?",
+    "unassignTitle": "Take this chat away from {{from}}?",
+    "moveTeamTitle": "Hand this chat over to {{team}}?",
+    "moveBody": "{{from}} has this chat now. They stop seeing it as theirs and the new owner is notified.",
+    "moveTeamBody": "{{from}} has this chat now. It will be given to someone in that team.",
+    "moveConfirm": "Move chat"
   },
   "sidebar": {
     "contact": "Contact",
