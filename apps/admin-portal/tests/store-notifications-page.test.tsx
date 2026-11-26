@@ -282,6 +282,81 @@ describe('StoreNotificationsPage', () => {
     expect(screen.getByText('No ticket')).toBeInTheDocument();
   });
 
+  /* Owner, 26 Nov 2026: "ensure the user who sends a message and the message
+     and everything is tracked". */
+  it('shows the sender kept on the message, with their employee id, even if the account is gone', () => {
+    api.useSenderNames.mockReturnValue({ data: new Map() });
+    api.useStoreNotifications.mockReturnValue({
+      isLoading: false,
+      data: [
+        {
+          id: 'c1',
+          kind: 'custom',
+          user_created: 'u-deleted',
+          sender_name: 'Nada Ali',
+          sender_login: '04174',
+          description: 'Please call WeCare.',
+          status: 'sent',
+          attempts: 1,
+          sent_at: '2026-11-26T09:29:11.000Z',
+          date_created: '2026-11-26T09:28:48.000Z',
+          ticket: null,
+          store: { id: 's9', code: 'LCP-095', name: 'One Square RYD' },
+        },
+      ],
+    });
+    renderPage();
+    const row = screen.getByRole('row', { name: /LCP-095/ });
+    expect(within(row).getByText('by Nada Ali (04174)')).toBeInTheDocument();
+    expect(within(row).getByText(/^Queued /)).toBeInTheDocument();
+    expect(within(row).getByText(/^Sent /)).toBeInTheDocument();
+  });
+
+  it("a failed message shows SaraPOS's reason and how many tries", () => {
+    api.useStoreNotifications.mockReturnValue({
+      isLoading: false,
+      data: [
+        {
+          id: 'c2',
+          kind: 'custom',
+          sender_name: 'Nada Ali',
+          sender_login: '04174',
+          description: 'Please call WeCare.',
+          status: 'failed',
+          attempts: 5,
+          error: 'SaraPOS 500: outlet offline',
+          sent_at: null,
+          date_created: '2026-11-26T09:28:48.000Z',
+          ticket: null,
+          store: { id: 's9', code: 'LCP-095', name: 'One Square RYD' },
+        },
+      ],
+    });
+    renderPage();
+    const row = screen.getByRole('row', { name: /LCP-095/ });
+    expect(within(row).getByText('SaraPOS 500: outlet offline')).toBeInTheDocument();
+    expect(within(row).getByText('5 attempts')).toBeInTheDocument();
+    expect(within(row).queryByText(/^Sent /)).toBeNull();
+  });
+
+  it('pages through the whole history, 50 more at a time', async () => {
+    const many = Array.from({ length: 50 }, (_, i) => ({
+      id: `n${i}`,
+      complaint_type: 'Missing item',
+      description: 'x',
+      status: 'sent',
+      sent_at: null,
+      date_created: null,
+      ticket: null,
+      store: { id: 's1', code: `B-${i}`, name: 'Branch' },
+    }));
+    api.useStoreNotifications.mockReturnValue({ isLoading: false, data: many });
+    renderPage();
+    expect(api.useStoreNotifications).toHaveBeenLastCalledWith(50, 'all');
+    await userEvent.click(screen.getByRole('button', { name: 'Show 50 more' }));
+    expect(api.useStoreNotifications).toHaveBeenLastCalledWith(100, 'all');
+  });
+
   it('filters the queue: all, from tickets, custom messages', async () => {
     renderPage();
     expect(api.useStoreNotifications).toHaveBeenLastCalledWith(50, 'all');

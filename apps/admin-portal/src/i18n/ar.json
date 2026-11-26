@@ -1674,7 +1674,11 @@
     "showAll": "الكل",
     "showCustom": "الرسائل المخصصة",
     "showLabel": "عرض",
-    "showTicket": "من التذاكر"
+    "showTicket": "من التذاكر",
+    "queuedAt": "أُضيفت {{time}}",
+    "sentAt": "أُرسلت {{time}}",
+    "attempts": "{{n}} محاولات",
+    "showMore": "عرض 50 أخرى"
   },
   "stores": {
     "title": "الفروع",
