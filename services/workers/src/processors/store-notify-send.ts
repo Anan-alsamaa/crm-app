@@ -2,6 +2,7 @@ import type { Queue } from 'bullmq';
 import type { Logger } from 'pino';
 import { createItem, readItems, updateItem } from '@directus/sdk';
 import type { YijiDirectusClient } from '@yiji/shared-config';
+import { BRANCH_MESSAGE_KIND, branchMessageHeading } from '@yiji/shared-types';
 import { describeError } from '../lib/errors.js';
 
 /**
@@ -95,6 +96,8 @@ export function saraposConfigFromEnv(
 interface OutboxRow {
   id: string;
   ticket?: string | null;
+  /** `custom` = an agent's own message, no ticket (owner, 26 Nov 2026). */
+  kind?: string | null;
   complaint_type?: string | null;
   description?: string | null;
   resolution_notes?: string | null;
@@ -106,6 +109,7 @@ interface OutboxRow {
 
 const FIELDS = [
   'id',
+  'kind',
   'complaint_type',
   'description',
   'resolution_notes',
@@ -121,6 +125,15 @@ export function complaintMessage(row: OutboxRow): {
   message_heading: string;
   customer_message: string;
 } {
+  /* AN AGENT'S OWN MESSAGE (owner, 26 Nov 2026): printed as written, under
+     "WeCare message" and the order number when one was given. Nothing is
+     added to it - no type, no items. */
+  if (row.kind === BRANCH_MESSAGE_KIND) {
+    return {
+      message_heading: branchMessageHeading(row.order_id),
+      customer_message: row.description?.trim() || branchMessageHeading(row.order_id),
+    };
+  }
   const type = row.complaint_type?.trim() || 'Customer complaint';
   const order = row.order_id?.trim();
   const items = (row.order_items ?? [])

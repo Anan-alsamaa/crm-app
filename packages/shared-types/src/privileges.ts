@@ -129,6 +129,13 @@ export const OWNER_PRIVILEGES = [
   'view_late_orders_report',
   'export_late_orders',
   'view_order_details',
+  // ── branches ────────────────────────────────────────────────────────────
+  /**
+   * A custom message to a branch's SaraPOS printer, with no ticket (owner,
+   * 26 Nov 2026: "send a custom only notification without creating a
+   * ticket"). The automatic notification on ticket creation is not this.
+   */
+  'send_branch_messages',
   // ── coupons ─────────────────────────────────────────────────────────────
   'request_coupons',
   'view_coupon_spend',
@@ -322,6 +329,13 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   view_late_orders_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
   export_late_orders: nameIn('wecare admin', 'wecare supervisor'),
   view_order_details: (_p, role) => role.startsWith('wecare'),
+  /* Owner, 26 Nov 2026: "open for administrator, wecare agent/admin/supervisor". */
+  send_branch_messages: nameIn(
+    'administrator',
+    'wecare agent',
+    'wecare supervisor',
+    'wecare admin',
+  ),
   request_coupons: holds('create_tickets'),
   view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
   view_compensation_reports: holds('approve_coupons'),
@@ -457,6 +471,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_late_orders_report: 'reporting',
   export_late_orders: 'lateOrders',
   view_order_details: 'lateOrders',
+  send_branch_messages: 'tickets',
   request_coupons: 'coupons',
   view_compensation_reports: 'coupons',
   view_coupon_spend: 'coupons',
@@ -632,6 +647,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   export_ticket_excel: 'agent',
   work_late_orders: 'agent',
   view_order_details: 'agent',
+  send_branch_messages: 'agent',
   request_coupons: 'agent',
   manage_ticket_compensation: 'agent',
   log_compensation_cases: 'agent',

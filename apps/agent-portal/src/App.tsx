@@ -29,6 +29,7 @@ import { NotificationBell } from './features/notifications/NotificationBell.js';
 import { HelpAssistant } from './features/help-assistant/HelpAssistant.js';
 import { LanguageToggle } from './components/LanguageToggle.js';
 import { BusyToggle } from './components/BusyToggle.js';
+import { BranchMessageButton } from './features/branch-message/BranchMessage.js';
 import { PageRefresh } from './components/PageRefresh.js';
 import { SoundToggle } from './components/SoundToggle.js';
 import { AppCommandPalette } from './components/AppCommandPalette.js';
@@ -424,6 +425,11 @@ function Shell({ children }: { children: React.ReactNode }) {
             <span className="agent-icon-btn px-1">
               <PageRefresh />
             </span>
+            {/* Message a branch (owner, 26 Nov 2026) - renders nothing without
+                send_branch_messages. */}
+            <span className="agent-icon-btn empty:hidden">
+              <BranchMessageButton />
+            </span>
             <span className="agent-icon-btn">
               <NotificationBell />
             </span>
@@ -464,6 +470,7 @@ function Shell({ children }: { children: React.ReactNode }) {
                 thing. */}
             <BusyToggle />
             <PageRefresh />
+            <BranchMessageButton />
             <NotificationBell />
             <HelpAssistant />
             <SoundToggle />

@@ -796,9 +796,9 @@ export const collections: CollectionSpec[] = [
       {
         field: 'kind',
         type: 'string',
-        choices: ['chat', 'late_order_reason', 'late_order_action'],
+        choices: ['chat', 'late_order_reason', 'late_order_action', 'branch_message'],
         defaultValue: 'chat',
-        note: 'WHICH LIBRARY this row belongs to. `chat` is the inbox composer; `late_order_reason` and `late_order_action` are the two boxes on a late-order decision. They are deliberately SEPARATE sets (ops, 2026-10-04): a reason explains why an order was late, an action says what was done about it, and neither is a reply to a customer — one shared list would offer an agent mostly wrong answers in all three places. Rows written before this existed have no value and read as `chat`, which is where they came from.',
+        note: 'WHICH LIBRARY this row belongs to. `chat` is the inbox composer; `late_order_reason` and `late_order_action` are the two boxes on a late-order decision; `branch_message` is the "Message a branch" form (owner, 26 Nov 2026). They are deliberately SEPARATE sets (ops, 2026-10-04): a reason explains why an order was late, an action says what was done about it, and neither is a reply to a customer — one shared list would offer an agent mostly wrong answers in all three places. Rows written before this existed have no value and read as `chat`, which is where they came from.',
       },
       { field: 'sort', type: 'integer', defaultValue: 0 },
       { field: 'active', type: 'boolean', defaultValue: true },
@@ -1347,6 +1347,19 @@ export const collections: CollectionSpec[] = [
     collection: 'store_notifications',
     note: 'OUTBOX of branch notifications. A row is the decision that this ticket should reach this branch, taken at save time with the rules as they stood; sending it is a separate concern and waits on the POS integration. Deliberately holds only the description and the resolution notes — a branch needs to know what went wrong and what was promised on their behalf, not the customer’s details or the coupon.',
     fields: [
+      /**
+       * WHAT KIND OF NOTIFICATION (owner, 26 Nov 2026). Empty = raised by a
+       * ticket, as every row was before. `custom` = an agent's own message to
+       * the branch with no ticket: the server rebuilds such a row from the
+       * branch, the text and an optional order number, nothing else.
+       */
+      {
+        field: 'kind',
+        type: 'string',
+        choices: ['custom'],
+        index: true,
+        note: "Empty = raised by a ticket. `custom` = an agent's own message to the branch, no ticket (owner, 26 Nov 2026).",
+      },
       { field: 'complaint_type', type: 'string', index: true },
       { field: 'description', type: 'text' },
       { field: 'resolution_notes', type: 'text' },

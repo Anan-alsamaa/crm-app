@@ -1,13 +1,15 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Pill, Skeleton, cn, toast } from '@yiji/ui';
+import { Pill, Skeleton, cn, formatDate, toast } from '@yiji/ui';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
-import { branchNotifies, normalizeOrderId } from '@yiji/shared-types';
+import { BRANCH_MESSAGE_KIND, branchNotifies, normalizeOrderId } from '@yiji/shared-types';
 import { optionsWith, useOptionLists } from '../../lib/option-lists.js';
 import {
   useSetStoreNotifyRule,
   useStoreNotifications,
   useStoreNotifyRules,
+  useSenderNames,
+  type StoreNotificationKindFilter,
   type StoreNotificationRow,
 } from './api.js';
 
@@ -65,6 +67,8 @@ function TypeToggle({
   );
 }
 
+const isCustom = (row: StoreNotificationRow) => row.kind === BRANCH_MESSAGE_KIND;
+
 function Preview({ row }: { row: StoreNotificationRow }) {
   const { t } = useTranslation();
   const none = (
@@ -72,6 +76,23 @@ function Preview({ row }: { row: StoreNotificationRow }) {
       {t('storeNotify.notWritten', { defaultValue: 'not written' })}
     </span>
   );
+  /* A custom message is printed exactly as the agent wrote it - so it is
+     shown that way, whole, with the order only when one was given. */
+  if (isCustom(row)) {
+    return (
+      <div className="space-y-1 text-xs leading-relaxed">
+        {normalizeOrderId(row.order_id) && (
+          <p>
+            <span className="text-muted-foreground">
+              {t('storeNotify.order', { defaultValue: 'Order' })}:{' '}
+            </span>
+            <span className="font-mono">#{row.order_id}</span>
+          </p>
+        )}
+        <p className="whitespace-pre-wrap break-words">{row.description ?? none}</p>
+      </div>
+    );
+  }
   return (
     <div className="space-y-1 text-xs leading-relaxed">
       {/* The order leads: a branch reads "which order" before it reads
@@ -107,7 +128,13 @@ export function StoreNotificationsPage() {
   const { t } = useTranslation();
   const rules = useStoreNotifyRules();
   const setRule = useSetStoreNotifyRule();
-  const queue = useStoreNotifications();
+  /* Ticket notifications and custom messages, together or apart (owner,
+     26 Nov 2026: "should clearly list and mention it properly"). */
+  const [show, setShow] = useState<StoreNotificationKindFilter>('all');
+  const queue = useStoreNotifications(50, show);
+  const senders = useSenderNames(
+    (queue.data ?? []).filter(isCustom).map((r) => r.user_created ?? ''),
+  );
   const lists = useOptionLists();
   /* The ticket types agents can actually pick, live from Dropdown values. */
   const types = useMemo(() => optionsWith(lists.data, 'complaint_type'), [lists.data]);
@@ -203,6 +230,32 @@ export function StoreNotificationsPage() {
             <h2 className="text-base font-semibold tracking-tight text-foreground">
               {t('storeNotify.queueTitle', { defaultValue: 'What has been queued' })}
             </h2>
+            <div
+              role="group"
+              aria-label={t('storeNotify.showLabel', { defaultValue: 'Show' })}
+              className="ms-3 flex gap-1"
+            >
+              {(['all', 'ticket', 'custom'] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={show === k}
+                  onClick={() => setShow(k)}
+                  className={cn(
+                    'rounded-full px-3 py-1 text-xs font-medium transition-colors duration-fast',
+                    show === k
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-secondary text-foreground/80 hover:text-foreground',
+                  )}
+                >
+                  {k === 'all'
+                    ? t('storeNotify.showAll', { defaultValue: 'All' })
+                    : k === 'ticket'
+                      ? t('storeNotify.showTicket', { defaultValue: 'From tickets' })
+                      : t('storeNotify.showCustom', { defaultValue: 'Custom messages' })}
+                </button>
+              ))}
+            </div>
             <span className="ms-auto text-xs text-muted-foreground">
               {/* Said plainly rather than implied by a row of "queued" pills that
                 an admin could read as "delivered". */}
@@ -232,7 +285,7 @@ export function StoreNotificationsPage() {
                       {t('storeNotify.branch', { defaultValue: 'Branch' })}
                     </th>
                     <th className="h-11 px-4 text-start font-semibold first:ps-5 last:pe-5">
-                      {t('storeNotify.type', { defaultValue: 'Ticket type' })}
+                      {t('storeNotify.kind', { defaultValue: 'Type' })}
                     </th>
                     <th className="h-11 px-4 text-start font-semibold first:ps-5 last:pe-5">
                       {t('storeNotify.sends', { defaultValue: 'What the branch gets' })}
@@ -248,8 +301,31 @@ export function StoreNotificationsPage() {
                       <td className="px-4 py-3.5 ps-5 font-medium text-foreground">
                         {[row.store?.code, row.store?.name].filter(Boolean).join(' ') || '—'}
                       </td>
-                      <td className="px-4 py-3.5 text-muted-foreground">
-                        {row.complaint_type ?? '—'}
+                      <td className="px-4 py-3.5">
+                        {isCustom(row) ? (
+                          <div className="space-y-1">
+                            <Pill tone="purple" size="sm">
+                              {t('storeNotify.customMessage', { defaultValue: 'Custom message' })}
+                            </Pill>
+                            <p className="text-xs text-muted-foreground">
+                              {senders.data?.get(row.user_created ?? '')
+                                ? t('storeNotify.sentBy', {
+                                    defaultValue: 'by {{name}}',
+                                    name: senders.data.get(row.user_created ?? ''),
+                                  })
+                                : t('storeNotify.noTicket', { defaultValue: 'No ticket' })}
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="space-y-1">
+                            <Pill tone="neutral" size="sm">
+                              {t('storeNotify.fromTicket', { defaultValue: 'Ticket' })}
+                            </Pill>
+                            <p className="text-xs text-muted-foreground">
+                              {row.complaint_type ?? '—'}
+                            </p>
+                          </div>
+                        )}
                       </td>
                       <td className="max-w-[32rem] px-4 py-3.5">
                         <Preview row={row} />
@@ -258,6 +334,9 @@ export function StoreNotificationsPage() {
                         <Pill tone={STATUS_TONE[row.status] ?? 'neutral'} size="sm">
                           {row.status}
                         </Pill>
+                        <p className="mt-1 whitespace-nowrap text-2xs text-muted-foreground">
+                          {formatDate(row.sent_at ?? row.date_created)}
+                        </p>
                       </td>
                     </tr>
                   ))}

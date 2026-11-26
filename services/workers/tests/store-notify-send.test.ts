@@ -214,6 +214,36 @@ describe('runStoreNotifySend', () => {
     expect(body.customer_message).toContain('real branch: LCP-002 Dhahran Mall (SaraPOS 54)');
   });
 
+  it('delivers a custom message with no ticket, and writes no ticket note', async () => {
+    const h = harness([
+      row('c1', {
+        kind: 'custom',
+        ticket: null,
+        description: 'Please call WeCare.',
+        order_id: null,
+      }),
+    ]);
+    const fetch = vi.fn(async () => reply(200, OK));
+    const res = await runStoreNotifySend({
+      directus: h.directus,
+      sarapos: CFG,
+      logger,
+      fetch,
+      now: () => NOW,
+    });
+    expect(res).toMatchObject({ sent: 1, failed: 0 });
+    const body = JSON.parse(
+      String((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body),
+    );
+    expect(body).toMatchObject({
+      outlet_id: 54,
+      message_heading: 'WeCare message',
+      customer_message: 'Please call WeCare.',
+    });
+    expect(h.patches).toHaveLength(1);
+    expect(h.notes).toHaveLength(0);
+  });
+
   it('is inert when the outbox cannot be read (fields not applied yet)', async () => {
     const h = harness([row('n1')], { readFails: true });
     const fetch = vi.fn();
@@ -291,6 +321,29 @@ describe('complaintMessage', () => {
     expect(m.customer_message).toBe(
       'Fries were missing\nItems: 2x Pasta, Fries\nAction taken: Apologised, coupon offered',
     );
+  });
+
+  /* Owner, 26 Nov 2026: an agent's own message to a branch, no ticket. */
+  it("a custom message prints the agent's text as written, under WeCare message", () => {
+    const text = 'Please call WeCare.\nThe customer is on the way.';
+    expect(
+      complaintMessage({ id: 'c', kind: 'custom', description: `  ${text}  `, order_id: null }),
+    ).toEqual({ message_heading: 'WeCare message', customer_message: text });
+    expect(
+      complaintMessage({
+        id: 'c',
+        kind: 'custom',
+        description: 'Customer arriving to collect.',
+        order_id: '1350658',
+        // A custom row never carries these; if one did, none of it is printed.
+        complaint_type: 'Missing item',
+        resolution_notes: 'coupon',
+        order_items: [{ name: 'Pasta', qty: 2 }],
+      }),
+    ).toEqual({
+      message_heading: 'WeCare message - Order 1350658',
+      customer_message: 'Customer arriving to collect.',
+    });
   });
 
   it('falls back to the complaint type when the row is bare', () => {
