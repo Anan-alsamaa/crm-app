@@ -773,7 +773,9 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
    * only its own role (what its Users page could always offer).
    */
   const ROLE_ASSIGNABLE_ROLES = {
-    'wecare supervisor': ['wecare agent', 'wecare supervisor'],
+    /* WeCare Agent ONLY (owner, 26 Nov 2026) - giving the Supervisor role is
+       WeCare Admin's and the Administrator's. */
+    'wecare supervisor': ['wecare agent'],
   };
 
   /** Role ids `row` may assign, or null when it is not fenced. */
@@ -1372,6 +1374,77 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
         throw conflict;
       }
     }
+    return keys;
+  });
+
+  /*
+   * A PER-PERSON BLOCK ON MANAGING USERS (owner, 26 Nov 2026).
+   *
+   * On 25 Nov a WeCare Supervisor promoted an agent to WeCare Supervisor. User
+   * management is a ROLE privilege that colleagues share, so the owner asked
+   * for a block on one PERSON instead: `directus_users.user_admin_blocked_until`.
+   * While that date is in the future the person cannot create, edit or delete
+   * other users - however they reach Directus (portal, API, SDK). Their own
+   * profile stays editable. It lifts by itself on the date.
+   *
+   * Only the Administrator (admin_access) sets the field: anyone else's payload
+   * has it removed, so a blocked person cannot clear their own block. Mirrors
+   * `isUserAdminBlocked` in packages/shared-types. A database without the
+   * column yet blocks nobody.
+   */
+  const USER_ADMIN_BLOCK_FIELD = 'user_admin_blocked_until';
+
+  async function userAdminBlockedUntil(userId) {
+    if (!userId) return null;
+    try {
+      const row = await database('directus_users')
+        .where({ id: userId })
+        .first(USER_ADMIN_BLOCK_FIELD);
+      const raw = row?.[USER_ADMIN_BLOCK_FIELD];
+      if (!raw) return null;
+      const t = new Date(raw).getTime();
+      return Number.isFinite(t) && t > Date.now() ? new Date(t) : null;
+    } catch {
+      return null; // the column is not there yet: nobody is blocked
+    }
+  }
+
+  function stripUserAdminBlock(payload, context) {
+    const acc = context?.accountability;
+    if (payload && typeof payload === 'object' && acc && !acc.admin) {
+      delete payload[USER_ADMIN_BLOCK_FIELD];
+    }
+  }
+
+  async function refuseIfUserAdminBlocked(context, touchesOthers) {
+    const acc = context?.accountability;
+    if (!touchesOthers || !acc || acc.admin || !acc.user) return;
+    const until = await userAdminBlockedUntil(acc.user);
+    if (until) {
+      throw new ForbiddenishError(
+        `You may not create or change users until ${until.toISOString().slice(0, 10)} - blocked by the Administrator.`,
+      );
+    }
+  }
+
+  filter('users.create', async (payload, _meta, context) => {
+    stripUserAdminBlock(payload, context);
+    await refuseIfUserAdminBlocked(context, true);
+    return payload;
+  });
+
+  filter('users.update', async (payload, meta, context) => {
+    stripUserAdminBlock(payload, context);
+    const self = context?.accountability?.user;
+    const others = (meta?.keys ?? []).some((k) => String(k) !== String(self));
+    await refuseIfUserAdminBlocked(context, others);
+    return payload;
+  });
+
+  filter('users.delete', async (keys, _meta, context) => {
+    const self = context?.accountability?.user;
+    const others = (keys ?? []).some((k) => String(k) !== String(self));
+    await refuseIfUserAdminBlocked(context, others);
     return keys;
   });
 
