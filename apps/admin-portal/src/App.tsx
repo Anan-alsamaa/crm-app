@@ -176,9 +176,15 @@ function Rail({ ctx, sections }: { ctx: AppShellRailContext; sections: NavSectio
         )}
       </div>
 
+      {/* THE MENU SCROLLS ON A PHONE (owner, 26 Nov 2026: "should be able to
+          swipe down the sidebar for mobile"). In the drawer's flex column a
+          `flex-1` list without `min-h-0` grows to its full length instead of
+          scrolling, so the lower items sat past the bottom of the screen with
+          the page behind locked. `overscroll-contain` keeps the swipe in the
+          menu rather than handing it to the page. */}
       <div
         className={cn(
-          'flex-1 overflow-y-auto overflow-x-hidden py-3 space-y-4',
+          'min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain py-3 space-y-4',
           isCollapsed ? 'px-2' : 'px-2.5',
         )}
       >
