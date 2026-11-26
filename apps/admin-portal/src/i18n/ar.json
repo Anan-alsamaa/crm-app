@@ -1134,7 +1134,8 @@
     "lateOrdersReport": "الطلبات المتأخرة",
     "busyReport": "وقت الانشغال",
     "adminKpiGroup": "مؤشرات الإدارة",
-    "compensationRules": "قواعد التعويض"
+    "compensationRules": "قواعد التعويض",
+    "branchNotifyReport": "إشعارات الفروع"
   },
   "pagination": {
     "prev": "السابق",
@@ -1477,7 +1478,8 @@
       "useMarketingPortal": "فتح بوابة التسويق",
       "manageMarketing": "إعداد كوبونات التسويق والإرسال الجماعي والحملات والنقاط",
       "approveMarketing": "اعتماد أعمال التسويق قبل وصولها إلى العملاء",
-      "sendBranchMessages": "مراسلة فرع (تُطبع على SaraPOS بدون تذكرة)"
+      "sendBranchMessages": "مراسلة فرع (تُطبع على SaraPOS بدون تذكرة)",
+      "viewBranchNotifyReport": "عرض تقرير إشعارات الفروع (مؤشرات الموظفين)"
     },
     "pending": "قيد التطبيق…",
     "privCount": "{{n}} صلاحية",
@@ -2406,5 +2408,43 @@
     "couponsPaused": "الكوبونات الآن قيد الصيانة لجميع المستخدمين.",
     "couponsResumed": "عادت الكوبونات للعمل لجميع المستخدمين.",
     "saveError": "تعذّر حفظ هذا الإعداد"
+  },
+  "branchReport": {
+    "branch": "الفرع",
+    "branches": "الفروع",
+    "byBranch": "حسب الفرع",
+    "bySender": "حسب المرسل",
+    "byType": "حسب نوع التذكرة",
+    "custom": "رسالة مخصصة",
+    "customMessages": "الرسائل المخصصة",
+    "empty": "لم يُرسل شيء إلى أي فرع في هذه الفترة.",
+    "error": "تعذّر تحميل إشعارات الفروع.",
+    "every": "كل الرسائل",
+    "failed": "فشلت",
+    "fromTickets": "من التذاكر",
+    "kind": "النوع",
+    "kpiAvg": "متوسط وقت الطباعة",
+    "kpiProblems": "فشلت / في الانتظار",
+    "kpiSent": "طُبعت",
+    "kpiSplit": "من التذاكر / مخصصة",
+    "kpiTotal": "أُرسلت إلى الفروع",
+    "last": "آخر مرة",
+    "message": "ما أُرسل",
+    "messages": "الرسائل",
+    "noCustom": "لا توجد رسائل مخصصة في هذه الفترة.",
+    "noTicketRows": "لا توجد إشعارات تذاكر في هذه الفترة.",
+    "notifications": "الإشعارات",
+    "queued": "وقت الإضافة",
+    "search": "بحث",
+    "searchPlaceholder": "الفرع أو المرسل أو الطلب أو النص",
+    "sender": "المرسل",
+    "status": "الحالة",
+    "statusFailed": "فشلت",
+    "statusQueued": "في الانتظار",
+    "statusSent": "أُرسلت",
+    "ticket": "تذكرة",
+    "ticketType": "نوع التذكرة",
+    "total": "الإجمالي",
+    "views": "طرق عرض إشعارات الفروع"
   }
 }

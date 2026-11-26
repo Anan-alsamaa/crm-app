@@ -171,6 +171,8 @@ export const OWNER_PRIVILEGES = [
   'view_sla_report',
   'view_chat_status_report',
   'view_busy_report',
+  /** Agent KPI -> Branch notifications (owner, 26 Nov 2026). */
+  'view_branch_notifications_report',
   'view_chat_breakdown',
   'view_own_performance',
   'view_preferences',
@@ -342,6 +344,9 @@ export const OWNER_PRIVILEGE_DEFAULTS: Record<
   // defaults keep everyone else exactly where they were.
   view_chat_status_report: holds('view_agent_reports'),
   view_busy_report: holds('view_agent_reports'),
+  /* Owner, 26 Nov 2026: "wecare admin and those who have access to this page"
+     - whoever holds the Agent summary, like Busy time and Chat status. */
+  view_branch_notifications_report: holds('view_agent_reports'),
   view_chat_breakdown: holds('view_agent_reports'),
   view_own_performance: holds('use_chat'),
   view_preferences: () => true,
@@ -457,6 +462,7 @@ export const PRIVILEGE_GROUP: Record<Privilege, PrivilegeGroup> = {
   view_sla_report: 'reporting',
   view_chat_status_report: 'reporting',
   view_busy_report: 'reporting',
+  view_branch_notifications_report: 'reporting',
   view_chat_breakdown: 'reporting',
   view_own_performance: 'reporting',
   view_preferences: 'admin',
@@ -512,6 +518,7 @@ export const ADMIN_PORTAL_PRIVILEGES: readonly Privilege[] = [
   'view_agent_reports',
   'view_sla_report',
   'view_late_orders_report',
+  'view_branch_notifications_report',
   'view_all_tickets',
   'view_all_chats',
   'approve_coupons',
@@ -647,6 +654,7 @@ export const PRIVILEGE_PORTAL: Record<Privilege, PrivilegePortal> = {
   export_late_orders: 'admin',
   view_chat_status_report: 'admin',
   view_busy_report: 'admin',
+  view_branch_notifications_report: 'admin',
   view_chat_breakdown: 'admin',
   view_data_warnings: 'admin',
   manage_lists: 'admin',

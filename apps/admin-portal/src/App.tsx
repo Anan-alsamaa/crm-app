@@ -52,6 +52,11 @@ const LateOrdersReportPage = lazy(() =>
     default: m.LateOrdersReportPage,
   })),
 );
+const BranchNotifyReportPage = lazy(() =>
+  import('./features/branch-notify-report/BranchNotifyReportPage.js').then((m) => ({
+    default: m.BranchNotifyReportPage,
+  })),
+);
 const BusyReportPage = lazy(() =>
   import('./features/busy-report/BusyReportPage.js').then((m) => ({
     default: m.BusyReportPage,
@@ -665,6 +670,7 @@ const AGENT_KPI_PRIVILEGES = [
   'view_sla_report',
   'view_late_orders_report',
   'view_compensation_reports',
+  'view_branch_notifications_report',
 ] as const;
 
 /** The section's landing: its first tab this role may open. */
@@ -715,6 +721,13 @@ function reportTabs(t: TFunction) {
         to: 'compensation',
         label: t('nav.compensationAll', { defaultValue: 'Compensation' }),
         requires: 'view_compensation_reports' as const,
+      },
+      {
+        /* Everything sent to a branch's printer, from tickets and from
+           agents' own messages (owner, 26 Nov 2026). */
+        to: 'branch-notifications',
+        label: t('nav.branchNotifyReport', { defaultValue: 'Branch notifications' }),
+        requires: 'view_branch_notifications_report' as const,
       },
     ],
     opsKpi: [
@@ -887,6 +900,14 @@ export function App() {
               element={
                 <ProtectedRoute requires="view_compensation_reports">
                   <AllCompensationPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="branch-notifications"
+              element={
+                <ProtectedRoute requires="view_branch_notifications_report">
+                  <BranchNotifyReportPage />
                 </ProtectedRoute>
               }
             />

@@ -68,7 +68,8 @@
     "aiConfigShort": "AI settings",
     "busyReport": "Busy time",
     "adminKpiGroup": "Admin KPI",
-    "compensationRules": "Compensation rules"
+    "compensationRules": "Compensation rules",
+    "branchNotifyReport": "Branch notifications"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -1481,7 +1482,8 @@
       "useMarketingPortal": "Open the Marketing portal",
       "manageMarketing": "Prepare marketing coupons, bulk sends, campaigns and points",
       "approveMarketing": "Approve marketing work before it reaches customers",
-      "sendBranchMessages": "Message a branch (printed on its SaraPOS, no ticket)"
+      "sendBranchMessages": "Message a branch (printed on its SaraPOS, no ticket)",
+      "viewBranchNotifyReport": "View the Branch notifications report (Agent KPI)"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1912,5 +1914,43 @@
     "couponsPaused": "Coupons are now under maintenance for every user.",
     "couponsResumed": "Coupons are back on for every user.",
     "saveError": "Could not save that setting"
+  },
+  "branchReport": {
+    "branch": "Branch",
+    "branches": "Branches",
+    "byBranch": "By branch",
+    "bySender": "By sender",
+    "byType": "By ticket type",
+    "custom": "Custom message",
+    "customMessages": "Custom messages",
+    "empty": "Nothing was sent to a branch in this period.",
+    "error": "Could not load branch notifications.",
+    "every": "Every message",
+    "failed": "Failed",
+    "fromTickets": "From tickets",
+    "kind": "Type",
+    "kpiAvg": "Average time to print",
+    "kpiProblems": "Failed / waiting",
+    "kpiSent": "Printed",
+    "kpiSplit": "From tickets / custom",
+    "kpiTotal": "Sent to branches",
+    "last": "Last",
+    "message": "What was sent",
+    "messages": "Messages",
+    "noCustom": "No custom messages in this period.",
+    "noTicketRows": "No ticket notifications in this period.",
+    "notifications": "Notifications",
+    "queued": "Queued",
+    "search": "Search",
+    "searchPlaceholder": "Branch, sender, order or text",
+    "sender": "Sender",
+    "status": "Status",
+    "statusFailed": "Failed",
+    "statusQueued": "Waiting",
+    "statusSent": "Sent",
+    "ticket": "Ticket",
+    "ticketType": "Ticket type",
+    "total": "Total",
+    "views": "Branch notification views"
   }
 }
