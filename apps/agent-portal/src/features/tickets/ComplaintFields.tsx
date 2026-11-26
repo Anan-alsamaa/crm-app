@@ -396,14 +396,20 @@ export function StorePicker({
   onChange,
   /** Where a pre-filled value came from, shown so the agent knows to check it. */
   inferredFrom,
+  allow,
 }: {
   value: string;
   onChange: (storeId: string) => void;
   inferredFrom?: string | null;
+  /** Only these branches are offered (e.g. the ones connected to SaraPOS). Omitted = all. */
+  allow?: (s: StoreRow) => boolean;
 }) {
   const { t } = useTranslation();
   const stores = useStores();
-  const rows = useMemo(() => stores.data ?? [], [stores.data]);
+  const rows = useMemo(
+    () => (allow ? (stores.data ?? []).filter(allow) : (stores.data ?? [])),
+    [stores.data, allow],
+  );
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState<string | null>(null);

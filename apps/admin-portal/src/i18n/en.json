@@ -1176,7 +1176,16 @@
     "status": "Status",
     "description": "Description",
     "resolution": "Resolution notes",
-    "notWritten": "not written"
+    "notWritten": "not written",
+    "customMessage": "Custom message",
+    "fromTicket": "Ticket",
+    "kind": "Type",
+    "noTicket": "No ticket",
+    "sentBy": "by {{name}}",
+    "showAll": "All",
+    "showCustom": "Custom messages",
+    "showLabel": "Show",
+    "showTicket": "From tickets"
   },
   "couponApprovals": {
     "description": "Description",
@@ -1469,7 +1478,8 @@
       "manageMarketing": "Prepare marketing coupons, bulk sends, campaigns and points",
       "approveMarketing": "Approve marketing work before it reaches customers",
       "approveCompensationCases": "Yiji V2 compensation cases: approve or reject a case, confirm photos and the camera check (never a case the same person logged)",
-      "logCompensationCases": "Yiji V2 compensation cases: log a V2 complaint from a ticket"
+      "logCompensationCases": "Yiji V2 compensation cases: log a V2 complaint from a ticket",
+      "sendBranchMessages": "Message a branch (printed on its SaraPOS, no ticket)"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1606,8 +1616,11 @@
     "kind": {
       "late_order_reason": "Late orders: Reason",
       "late_order_action": "Late orders: Action taken",
-      "chat": "Inbox: Quick replies"
-    }
+      "chat": "Inbox: Quick replies",
+      "branch_message": "Branch messages"
+    },
+    "hintBranch": "Ready wordings for the Message a branch form - printed on the branch’s SaraPOS printer. Never put customer details here. The button is what the agent sees; the text is what gets inserted. Drag to reorder.",
+    "textPlaceholderBranch": "What the branch will read..."
   },
   "busyReport": {
     "unknown": "Unknown agent",
