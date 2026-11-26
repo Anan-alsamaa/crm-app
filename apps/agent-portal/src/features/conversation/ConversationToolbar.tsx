@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftIcon, Avatar, Button, cn, GhostSelect, InfoIcon, toast } from '@yiji/ui';
+import {
+  ArrowLeftIcon,
+  Avatar,
+  Button,
+  cn,
+  ConfirmDialog,
+  GhostSelect,
+  InfoIcon,
+  toast,
+} from '@yiji/ui';
 import {
   SOCKET_EVENTS,
   displayContactName,
@@ -211,6 +220,43 @@ export function ConversationToolbar({
     currentAgent?.first_name ?? currentAgent?.email ?? t('conversation.unassigned');
   const teamLabel = currentTeam?.name ?? t('conversation.noTeam');
 
+  /*
+   * A CHAT IS NEVER TAKEN FROM ITS AGENT WITHOUT A YES (owner, 26 Nov 2026:
+   * chat 18:56 - Naif had replied, and the chat moved to Mohamed from his own
+   * picker with nothing asked). Moving a chat AWAY from someone - another
+   * agent, Unassigned, or a team handover that picks a new owner - waits for
+   * an explicit "Move"; giving an unassigned chat its first owner does not.
+   * Together with `openOnType={false}` on the picker, a stray keystroke can no
+   * longer reassign a chat.
+   */
+  const [pendingMove, setPendingMove] = useState<
+    { kind: 'agent'; to: string | null } | { kind: 'team'; to: string } | null
+  >(null);
+  useEffect(() => setPendingMove(null), [conversation.id]);
+  const personName = (id: string | null) => {
+    if (!id) return t('conversation.unassigned');
+    const a = [...(assignable.data ?? []), ...(agents.data ?? [])].find((x) => x.id === id);
+    return a?.first_name ?? a?.email ?? t('conversation.unassigned');
+  };
+  const chooseAgent = (v: string) => {
+    const to = v || null;
+    if (to === (conversation.assigned_agent ?? null)) return;
+    if (conversation.assigned_agent) setPendingMove({ kind: 'agent', to });
+    else void patch({ assigned_agent: to });
+  };
+  const chooseTeam = (v: string) => {
+    // Clearing the team never moves the chat (see handoverToTeam).
+    if (v && conversation.assigned_agent) setPendingMove({ kind: 'team', to: v });
+    else void handoverToTeam(v || null);
+  };
+  const confirmMove = () => {
+    const move = pendingMove;
+    setPendingMove(null);
+    if (!move) return;
+    if (move.kind === 'agent') void patch({ assigned_agent: move.to });
+    else void handoverToTeam(move.to);
+  };
+
   const statusDot: Record<ConversationStatus, string> = {
     open: 'bg-success',
     solved: 'bg-primary',
@@ -356,7 +402,8 @@ export function ConversationToolbar({
                     aria-label={t('conversation.agent')}
                     value={conversation.assigned_agent ?? ''}
                     display={agentLabel}
-                    onChange={(v) => void patch({ assigned_agent: v || null })}
+                    onChange={chooseAgent}
+                    openOnType={false}
                     options={[
                       { value: '', label: t('conversation.unassigned') },
                       ...(assignable.data ?? agents.data ?? []).map((a) => ({
@@ -371,11 +418,50 @@ export function ConversationToolbar({
                     aria-label={t('conversation.team')}
                     value={conversation.assigned_team ?? ''}
                     display={teamLabel}
-                    onChange={(v) => void handoverToTeam(v || null)}
+                    onChange={chooseTeam}
+                    openOnType={false}
                     options={[
                       { value: '', label: t('conversation.noTeam') },
                       ...(teams.data ?? []).map((tm) => ({ value: tm.id, label: tm.name })),
                     ]}
+                  />
+                  <ConfirmDialog
+                    open={pendingMove !== null}
+                    title={
+                      pendingMove?.kind === 'team'
+                        ? t('conversation.moveTeamTitle', {
+                            defaultValue: 'Hand this chat over to {{team}}?',
+                            team:
+                              (teams.data ?? []).find((tm) => tm.id === pendingMove.to)?.name ?? '',
+                          })
+                        : pendingMove?.to
+                          ? t('conversation.moveTitle', {
+                              defaultValue: 'Move this chat from {{from}} to {{to}}?',
+                              from: agentLabel,
+                              to: personName(pendingMove.to),
+                            })
+                          : t('conversation.unassignTitle', {
+                              defaultValue: 'Take this chat away from {{from}}?',
+                              from: agentLabel,
+                            })
+                    }
+                    description={
+                      pendingMove?.kind === 'team'
+                        ? t('conversation.moveTeamBody', {
+                            defaultValue:
+                              '{{from}} has this chat now. It will be given to someone in that team.',
+                            from: agentLabel,
+                          })
+                        : t('conversation.moveBody', {
+                            defaultValue:
+                              '{{from}} has this chat now. They stop seeing it as theirs and the new owner is notified.',
+                            from: agentLabel,
+                          })
+                    }
+                    confirmLabel={t('conversation.moveConfirm', { defaultValue: 'Move chat' })}
+                    cancelLabel={t('actions.cancel', { ns: 'common', defaultValue: 'Cancel' })}
+                    onConfirm={confirmMove}
+                    onCancel={() => setPendingMove(null)}
                   />
                 </>
               ) : (

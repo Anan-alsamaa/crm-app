@@ -21,6 +21,8 @@ export interface GhostSelectProps {
   size?: 'sm' | 'md';
   className?: string;
   'aria-label'?: string;
+  /** See SelectMenu `openOnType`: `false` = typing on the closed control does nothing. */
+  openOnType?: boolean;
 }
 
 /**
@@ -35,6 +37,7 @@ export function GhostSelect({
   options,
   size = 'md',
   className,
+  openOnType,
   ...aria
 }: GhostSelectProps): JSX.Element {
   return (
@@ -46,6 +49,7 @@ export function GhostSelect({
       options={options}
       size={size}
       className={className}
+      openOnType={openOnType}
       aria-label={aria['aria-label']}
     />
   );
