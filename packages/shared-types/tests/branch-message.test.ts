@@ -33,6 +33,7 @@ let stores: Record<
   { id: string; sarapos_outlet_id: string | null; vendor?: string | null }
 > = {};
 let recentCount = 0;
+let users: Record<string, Record<string, string | null>> = {};
 
 function fakeDatabase(table: string) {
   const where: Record<string, unknown> = {};
@@ -48,6 +49,7 @@ function fakeDatabase(table: string) {
       if (table === 'app_roles') return roles[String(where.directus_role)];
       if (table === 'stores') return stores[String(where.id)];
       if (table === 'store_notifications') return { n: String(recentCount) };
+      if (table === 'directus_users') return users[String(where.id)];
       return undefined;
     },
   };
@@ -84,6 +86,9 @@ beforeEach(() => {
     noPos: { id: 'noPos', sarapos_outlet_id: null },
   };
   recentCount = 0;
+  users = {
+    u1: { first_name: 'Nada', last_name: 'Ali', login_name: '04174', email: '04174@staff.local' },
+  };
 });
 
 const as = (role: string | null, admin = false) => ({
@@ -128,8 +133,37 @@ describe('the server guard on custom branch messages', () => {
       order_id: '1350658',
       status: 'queued',
       attempts: 0,
+      sender_name: 'Nada Ali',
+      sender_login: '04174',
       vendor: 'v-anan',
     });
+  });
+
+  /* Owner, 26 Nov 2026: "ensure the user who sends a message ... is tracked".
+     The name and employee id are kept ON the message, so it still says who
+     after the account is renamed or deleted. */
+  it('keeps who sent it on the message itself', async () => {
+    const out = (await send(custom(), as('r-agent'))) as Record<string, unknown>;
+    users.u1 = { first_name: 'Renamed', last_name: null, login_name: '99999', email: null };
+    expect(out).toMatchObject({ sender_name: 'Nada Ali', sender_login: '04174' });
+  });
+
+  it('a sender whose account cannot be read still sends; the account link remains', async () => {
+    delete users.u1;
+    await expect(send(custom(), as('r-agent'))).resolves.toMatchObject({
+      sender_name: null,
+      sender_login: null,
+      status: 'queued',
+    });
+  });
+
+  it('the caller cannot write the sender fields themselves', async () => {
+    const out = await send(
+      custom({ sender_name: 'Someone Else', sender_login: '00000', user_created: 'u-other' }),
+      as('r-agent'),
+    );
+    expect(out).toMatchObject({ sender_name: 'Nada Ali', sender_login: '04174' });
+    expect(out).not.toHaveProperty('user_created');
   });
 
   it('a role without the privilege is refused, by default or by an unticked switch', async () => {

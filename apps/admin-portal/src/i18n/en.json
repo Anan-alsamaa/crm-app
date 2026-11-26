@@ -1185,7 +1185,11 @@
     "showAll": "All",
     "showCustom": "Custom messages",
     "showLabel": "Show",
-    "showTicket": "From tickets"
+    "showTicket": "From tickets",
+    "queuedAt": "Queued {{time}}",
+    "sentAt": "Sent {{time}}",
+    "attempts": "{{n}} attempts",
+    "showMore": "Show 50 more"
   },
   "couponApprovals": {
     "description": "Description",
