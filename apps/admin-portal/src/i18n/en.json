@@ -496,7 +496,10 @@
     "noTeamShort": "no team",
     "statActiveCap": "active",
     "statAdminCap": "admin",
-    "statNoTeamCap": "no team"
+    "statNoTeamCap": "no team",
+    "blockedNotice": "You cannot create or change users until {{date}}. The Administrator has blocked it.",
+    "blockUntil": "Blocked from managing users until",
+    "blockUntilHint": "Until the end of this day (Riyadh time) they cannot create, edit or delete users. Leave empty for no block."
   },
   "teams": {
     "title": "Teams",
