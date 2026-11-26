@@ -417,6 +417,25 @@ async function applyUserFields(client: AnyClient): Promise<void> {
       } as never),
     ),
   );
+
+  /**
+   * The Administrator's per-person block on managing users (owner, 26 Nov
+   * 2026): while in the future, app-roles-sync refuses this person's user
+   * create/update/delete. Only the Administrator may set it.
+   */
+  await idempotent('directus_users.user_admin_blocked_until', () =>
+    client.request(
+      createField('directus_users', {
+        field: 'user_admin_blocked_until',
+        type: 'timestamp',
+        meta: {
+          interface: 'datetime',
+          note: 'Blocked from creating/editing/deleting users until this moment. Set by the Administrator only.',
+        },
+        schema: { is_nullable: true, default_value: null },
+      } as never),
+    ),
+  );
 }
 
 async function applyRoles(client: AnyClient): Promise<void> {

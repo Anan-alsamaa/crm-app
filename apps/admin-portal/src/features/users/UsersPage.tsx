@@ -32,15 +32,24 @@ import {
   useCreateUser,
   useUpdateUser,
   useDeleteUser,
+  useMyUserAdminBlock,
   type AdminUser,
 } from './api.js';
 import { useTeams } from '../teams/api.js';
 import {
+  isUserAdminBlocked,
   loginIdentity,
   loginNameFromIdentity,
   normalizeLoginName,
   staffFullName,
 } from '@yiji/shared-types';
+
+/** The last moment of a Riyadh calendar day, as an ISO instant. */
+const endOfRiyadhDay = (yyyyMmDd: string): string =>
+  new Date(`${yyyyMmDd}T23:59:59+03:00`).toISOString();
+/** An ISO instant as the Riyadh calendar day it falls on. */
+const riyadhDay = (iso: string): string =>
+  new Date(Date.parse(iso) + 3 * 3_600_000).toISOString().slice(0, 10);
 import { useAuth } from '../../lib/auth/AuthContext.js';
 import { PAGE_BODY, PageHeader } from '../../components/shell/Page.js';
 import { SearchField } from '../../components/SearchField.js';
@@ -88,6 +97,8 @@ const schema = z.object({
   team: z.string().optional(),
   status: z.enum(['active', 'inactive']).optional(),
   locale: z.enum(['en', 'ar']).optional(),
+  /** YYYY-MM-DD, or '' for no block. The Administrator's field only. */
+  user_admin_blocked_until: z.string().optional(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -95,7 +106,11 @@ const PAGE_SIZE = 20;
 
 export function UsersPage() {
   const { t } = useTranslation();
-  const { user: currentUser, can } = useAuth();
+  const { user: currentUser, can, isOwner: viewerIsAdministrator } = useAuth();
+  /* The Administrator's per-person block on the SIGNED-IN user (owner, 26 Nov
+     2026). The server refuses anyway; this stops offering what it would refuse. */
+  const myBlock = useMyUserAdminBlock();
+  const iAmBlocked = isUserAdminBlocked(myBlock.data);
   const users = useUsers();
   const roles = useRoles();
   const teams = useTeams();
@@ -147,6 +162,9 @@ export function UsersPage() {
       role: u.role?.id ?? '',
       team: u.team?.id ?? '',
       status: (u.status as 'active' | 'inactive') ?? 'active',
+      user_admin_blocked_until: u.user_admin_blocked_until
+        ? riyadhDay(u.user_admin_blocked_until)
+        : '',
     });
     setOpen(true);
   };
@@ -227,6 +245,12 @@ export function UsersPage() {
         // must not be able to change somebody's password. Belt and braces
         // with the autocomplete above — either alone would have prevented it.
         if (values.password && dirtyFields.password) patch.password = values.password;
+        /* The per-person block: the Administrator's alone, sent only when
+           changed (the server strips it from anyone else's save anyway). */
+        if (viewerIsAdministrator && dirtyFields.user_admin_blocked_until) {
+          const day = (values.user_admin_blocked_until ?? '').trim();
+          patch.user_admin_blocked_until = day ? endOfRiyadhDay(day) : null;
+        }
         await updateUser.mutateAsync({ id: editing.id, patch });
         toast.success(t('users.updated', { defaultValue: 'User updated.' }));
       } else {
@@ -336,7 +360,13 @@ export function UsersPage() {
               value={search}
               onValueChange={setSearch}
             />
-            <Button type="button" size="sm" onClick={openCreate} iconStart={<PlusIcon />}>
+            <Button
+              type="button"
+              size="sm"
+              onClick={openCreate}
+              iconStart={<PlusIcon />}
+              disabled={iAmBlocked}
+            >
               {t('users.create')}
             </Button>
           </>
@@ -344,6 +374,18 @@ export function UsersPage() {
       />
 
       <div className={PAGE_BODY}>
+        {iAmBlocked && myBlock.data && (
+          <p
+            role="status"
+            className="mb-4 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          >
+            {t('users.blockedNotice', {
+              defaultValue:
+                'You cannot create or change users until {{date}}. The Administrator has blocked it.',
+              date: riyadhDay(myBlock.data),
+            })}
+          </p>
+        )}
         {!users.isLoading && !users.isError && list.length > 0 && (
           <div className="mb-4">
             {/* Boxed board tiles — tinted icon chips, hero numerals; tone lives
@@ -413,7 +455,12 @@ export function UsersPage() {
               defaultValue: 'Invite your first teammate by clicking Create user.',
             })}
             action={
-              <Button type="button" onClick={openCreate} iconStart={<PlusIcon />}>
+              <Button
+                type="button"
+                onClick={openCreate}
+                iconStart={<PlusIcon />}
+                disabled={iAmBlocked}
+              >
                 {t('users.create')}
               </Button>
             }
@@ -588,7 +635,12 @@ export function UsersPage() {
             >
               {t('actions.cancel', { ns: 'common' })}
             </Button>
-            <Button type="submit" form="create-user-form" loading={isSubmitting}>
+            <Button
+              type="submit"
+              form="create-user-form"
+              loading={isSubmitting}
+              disabled={iAmBlocked && !isSelf}
+            >
               {editing
                 ? t('actions.save', { ns: 'common', defaultValue: 'Save' })
                 : t('users.create')}
@@ -727,6 +779,22 @@ export function UsersPage() {
                     />
                   )}
                 />
+              </FormField>
+            )}
+            {/* The Administrator's per-person block (owner, 26 Nov 2026): stops
+                ONE person managing users until a date, without touching the
+                role they share with colleagues. Never shown for the owner. */}
+            {editing && viewerIsAdministrator && !isOwner && (
+              <FormField
+                label={t('users.blockUntil', {
+                  defaultValue: 'Blocked from managing users until',
+                })}
+                hint={t('users.blockUntilHint', {
+                  defaultValue:
+                    'Until the end of this day (Riyadh time) they cannot create, edit or delete users. Leave empty for no block.',
+                })}
+              >
+                <Input type="date" {...register('user_admin_blocked_until')} />
               </FormField>
             )}
           </DrawerSection>
