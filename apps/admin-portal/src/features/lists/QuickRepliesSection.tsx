@@ -41,7 +41,7 @@ import { directus } from '../../lib/directus.js';
  * column's own `choices` in `directus/bootstrap/src/collections.ts` is the
  * third copy. Changing one means changing all three.
  */
-const KINDS = ['chat', 'late_order_reason', 'late_order_action'] as const;
+const KINDS = ['chat', 'late_order_reason', 'late_order_action', 'branch_message'] as const;
 const LANG_OPTIONS = [
   { value: 'en', label: 'EN' },
   { value: 'ar', label: 'AR' },
@@ -334,7 +334,9 @@ export function QuickRepliesSection() {
       ? t('replies.kind.late_order_reason', { defaultValue: 'Late orders: Reason' })
       : k === 'late_order_action'
         ? t('replies.kind.late_order_action', { defaultValue: 'Late orders: Action taken' })
-        : t('replies.kind.chat', { defaultValue: 'Inbox: Quick replies' });
+        : k === 'branch_message'
+          ? t('replies.kind.branch_message', { defaultValue: 'Branch messages' })
+          : t('replies.kind.chat', { defaultValue: 'Inbox: Quick replies' });
 
   const kindHint =
     kind === 'late_order_reason'
@@ -347,10 +349,15 @@ export function QuickRepliesSection() {
             defaultValue:
               'Ready wordings for the Action taken box on a late-order decision — what was done about it. The button is what the agent sees; the text is what gets inserted. Drag to reorder.',
           })
-        : t('replies.hint', {
-            defaultValue:
-              'The buttons above the reply box in the inbox. The button is what the agent sees; the text is what gets inserted. Drag to reorder.',
-          });
+        : kind === 'branch_message'
+          ? t('replies.hintBranch', {
+              defaultValue:
+                'Ready wordings for the Message a branch form - printed on the branch’s SaraPOS printer. Never put customer details here. The button is what the agent sees; the text is what gets inserted. Drag to reorder.',
+            })
+          : t('replies.hint', {
+              defaultValue:
+                'The buttons above the reply box in the inbox. The button is what the agent sees; the text is what gets inserted. Drag to reorder.',
+            });
 
   /* The body placeholder, per library. "What gets inserted into the reply box"
      is a lie under the Reasons tab — nothing there goes into a reply box — and
@@ -365,9 +372,13 @@ export function QuickRepliesSection() {
         ? t('replies.textPlaceholderAction', {
             defaultValue: 'What gets inserted into the Action taken box...',
           })
-        : t('replies.textPlaceholder', {
-            defaultValue: 'What gets inserted into the reply box...',
-          });
+        : k === 'branch_message'
+          ? t('replies.textPlaceholderBranch', {
+              defaultValue: 'What the branch will read...',
+            })
+          : t('replies.textPlaceholder', {
+              defaultValue: 'What gets inserted into the reply box...',
+            });
 
   return (
     <section className="space-y-4">

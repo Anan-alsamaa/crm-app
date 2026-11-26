@@ -62,7 +62,12 @@ export function defaultReplyLang(customerText: string): ReplyLang {
  * shared list would offer an agent mostly wrong answers in all three places,
  * which is how a convenience becomes a thing people scroll past.
  */
-export type QuickReplyKind = 'chat' | 'late_order_reason' | 'late_order_action';
+export type QuickReplyKind =
+  | 'chat'
+  | 'late_order_reason'
+  | 'late_order_action'
+  /** The "Message a branch" form (owner, 26 Nov 2026). */
+  | 'branch_message';
 
 export interface QuickReply {
   id: string;
@@ -423,7 +428,9 @@ export function QuickReplies({
       ? t('quickReplies.openReasons', { defaultValue: 'Ready reasons' })
       : kind === 'late_order_action'
         ? t('quickReplies.openActions', { defaultValue: 'Ready actions' })
-        : t('quickReplies.open', { defaultValue: 'Quick replies' });
+        : kind === 'branch_message'
+          ? t('quickReplies.openBranchMessages', { defaultValue: 'Ready messages' })
+          : t('quickReplies.open', { defaultValue: 'Quick replies' });
 
   const list = (
     <div

@@ -25,6 +25,7 @@ const api = vi.hoisted(() => ({
   useStoreNotifyRules: vi.fn(),
   useSetStoreNotifyRule: vi.fn(),
   useStoreNotifications: vi.fn(),
+  useSenderNames: vi.fn(),
 }));
 vi.mock('../src/features/store-notifications/api.js', () => api);
 
@@ -75,6 +76,7 @@ beforeEach(() => {
   });
   api.useSetStoreNotifyRule.mockReturnValue({ mutate, isPending: false });
   api.useStoreNotifications.mockReturnValue({ data: [], isLoading: false });
+  api.useSenderNames.mockReturnValue({ data: undefined });
   lists.useOptionLists.mockReturnValue({
     data: { complaint_type: LIVE_TYPES },
     isLoading: false,
@@ -205,6 +207,92 @@ describe('StoreNotificationsPage', () => {
     // ticket. Two here: the order that was never attached, and the notes
     // nobody typed.
     expect(within(row).getAllByText('not written')).toHaveLength(2);
+  });
+
+  /* Owner, 26 Nov 2026: a custom message (no ticket) must be listed clearly
+     and apart from a ticket's notification. */
+  it('labels each row Ticket or Custom message, with who sent the custom one', () => {
+    api.useSenderNames.mockReturnValue({ data: new Map([['u-nada', 'Nada Ali']]) });
+    api.useStoreNotifications.mockReturnValue({
+      isLoading: false,
+      data: [
+        {
+          id: 'c1',
+          kind: 'custom',
+          user_created: 'u-nada',
+          complaint_type: null,
+          order_id: '1350658',
+          order_items: null,
+          description: 'Customer is on the way to collect.\nPlease have it ready.',
+          resolution_notes: null,
+          status: 'sent',
+          sent_at: '2026-11-26T08:11:11.000Z',
+          date_created: '2026-11-26T08:10:00.000Z',
+          ticket: null,
+          store: { id: 's9', code: 'LCP-095', name: 'One Square RYD' },
+        },
+        {
+          id: 'n1',
+          complaint_type: 'Missing item',
+          order_id: '946641',
+          order_items: null,
+          description: 'Two burgers missing.',
+          resolution_notes: 'Refunded.',
+          status: 'queued',
+          sent_at: null,
+          date_created: '2026-11-26T07:00:00.000Z',
+          ticket: { id: 't1', subject: 'Missing item' },
+          store: { id: 's1', code: 'LCP-002', name: 'Marina Mall 2' },
+        },
+      ],
+    });
+    renderPage();
+    const custom = screen.getByRole('row', { name: /LCP-095/ });
+    expect(within(custom).getByText('Custom message')).toBeInTheDocument();
+    expect(within(custom).getByText('by Nada Ali')).toBeInTheDocument();
+    expect(within(custom).getByText('#1350658')).toBeInTheDocument();
+    // Printed as written, so shown whole - and never as "not written" notes.
+    expect(
+      within(custom).getByText(/Customer is on the way to collect\.\s+Please have it ready\./),
+    ).toBeInTheDocument();
+    expect(within(custom).queryByText('not written')).toBeNull();
+    const ticket = screen.getByRole('row', { name: /LCP-002/ });
+    expect(within(ticket).getByText('Ticket')).toBeInTheDocument();
+    expect(within(ticket).getByText('Missing item')).toBeInTheDocument();
+  });
+
+  it('a custom message whose sender cannot be named still says it had no ticket', () => {
+    api.useStoreNotifications.mockReturnValue({
+      isLoading: false,
+      data: [
+        {
+          id: 'c1',
+          kind: 'custom',
+          user_created: 'u-x',
+          description: 'Please call WeCare.',
+          status: 'queued',
+          sent_at: null,
+          date_created: null,
+          ticket: null,
+          store: { id: 's9', code: 'LCP-095', name: 'One Square RYD' },
+        },
+      ],
+    });
+    renderPage();
+    expect(screen.getByText('No ticket')).toBeInTheDocument();
+  });
+
+  it('filters the queue: all, from tickets, custom messages', async () => {
+    renderPage();
+    expect(api.useStoreNotifications).toHaveBeenLastCalledWith(50, 'all');
+    await userEvent.click(screen.getByRole('button', { name: 'Custom messages' }));
+    expect(api.useStoreNotifications).toHaveBeenLastCalledWith(50, 'custom');
+    expect(screen.getByRole('button', { name: 'Custom messages' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'From tickets' }));
+    expect(api.useStoreNotifications).toHaveBeenLastCalledWith(50, 'ticket');
   });
 
   it('says where the notifications go', async () => {

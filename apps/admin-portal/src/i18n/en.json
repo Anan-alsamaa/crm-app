@@ -1176,7 +1176,16 @@
     "status": "Status",
     "description": "Description",
     "resolution": "Resolution notes",
-    "notWritten": "not written"
+    "notWritten": "not written",
+    "customMessage": "Custom message",
+    "fromTicket": "Ticket",
+    "kind": "Type",
+    "noTicket": "No ticket",
+    "sentBy": "by {{name}}",
+    "showAll": "All",
+    "showCustom": "Custom messages",
+    "showLabel": "Show",
+    "showTicket": "From tickets"
   },
   "couponApprovals": {
     "description": "Description",
@@ -1453,7 +1462,8 @@
       "manageTicketCompensation": "Manage a ticket's compensation (assign a coupon; Not Compensated removes it, also from the customer's Yiji app)",
       "deleteCompensation": "Delete a compensation record",
       "editApprovedCoupons": "Edit an approved coupon (applies at once: a new coupon replaces it, also in the customer's Yiji app; a used coupon cannot be edited)",
-      "manageCompensationRules": "Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)"
+      "manageCompensationRules": "Edit the compensation rules (which complaint gets which coupon by default; a supervisor still approves every coupon)",
+      "sendBranchMessages": "Message a branch (printed on its SaraPOS, no ticket)"
     },
     "brands": "Brand access",
     "brandsHelp": "Tick brands to fence this role to them: their tickets, their branches, their names in the pickers. Nothing ticked means every brand. Tickets not yet linked to a branch stay visible either way, and chats cannot be brand-fenced — a chat has no brand until a ticket gives it one.",
@@ -1588,8 +1598,11 @@
     "kind": {
       "late_order_reason": "Late orders: Reason",
       "late_order_action": "Late orders: Action taken",
-      "chat": "Inbox: Quick replies"
-    }
+      "chat": "Inbox: Quick replies",
+      "branch_message": "Branch messages"
+    },
+    "hintBranch": "Ready wordings for the Message a branch form - printed on the branch’s SaraPOS printer. Never put customer details here. The button is what the agent sees; the text is what gets inserted. Drag to reorder.",
+    "textPlaceholderBranch": "What the branch will read..."
   },
   "busyReport": {
     "unknown": "Unknown agent",
