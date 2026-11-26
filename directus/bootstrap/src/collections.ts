@@ -1360,6 +1360,22 @@ export const collections: CollectionSpec[] = [
         index: true,
         note: "Empty = raised by a ticket. `custom` = an agent's own message to the branch, no ticket (owner, 26 Nov 2026).",
       },
+      /**
+       * WHO SENT A CUSTOM MESSAGE, as they were at the time (owner, 26 Nov
+       * 2026: "ensure the user who sends a message ... is tracked"). Written by
+       * the server, never the caller; `user_created` still links the account.
+       */
+      {
+        field: 'sender_name',
+        type: 'string',
+        note: "Custom messages: the sender's name when it was sent (kept if the account is renamed or deleted).",
+      },
+      {
+        field: 'sender_login',
+        type: 'string',
+        index: true,
+        note: "Custom messages: the sender's employee ID when it was sent.",
+      },
       { field: 'complaint_type', type: 'string', index: true },
       { field: 'description', type: 'text' },
       { field: 'resolution_notes', type: 'text' },

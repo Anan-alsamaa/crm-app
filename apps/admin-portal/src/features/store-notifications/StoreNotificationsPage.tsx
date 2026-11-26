@@ -131,10 +131,20 @@ export function StoreNotificationsPage() {
   /* Ticket notifications and custom messages, together or apart (owner,
      26 Nov 2026: "should clearly list and mention it properly"). */
   const [show, setShow] = useState<StoreNotificationKindFilter>('all');
-  const queue = useStoreNotifications(50, show);
+  /* The whole history, 50 at a time (owner, 26 Nov 2026: "everything is
+     tracked") - Show more widens the window rather than paging away. */
+  const [limit, setLimit] = useState(50);
+  const queue = useStoreNotifications(limit, show);
+  /* Older custom messages have no kept name: look those senders up. */
   const senders = useSenderNames(
-    (queue.data ?? []).filter(isCustom).map((r) => r.user_created ?? ''),
+    (queue.data ?? [])
+      .filter((r) => isCustom(r) && !r.sender_name)
+      .map((r) => r.user_created ?? ''),
   );
+  const senderOf = (row: StoreNotificationRow) => {
+    const name = row.sender_name || senders.data?.get(row.user_created ?? '') || '';
+    return name && row.sender_login ? `${name} (${row.sender_login})` : name;
+  };
   const lists = useOptionLists();
   /* The ticket types agents can actually pick, live from Dropdown values. */
   const types = useMemo(() => optionsWith(lists.data, 'complaint_type'), [lists.data]);
@@ -240,7 +250,10 @@ export function StoreNotificationsPage() {
                   key={k}
                   type="button"
                   aria-pressed={show === k}
-                  onClick={() => setShow(k)}
+                  onClick={() => {
+                    setShow(k);
+                    setLimit(50);
+                  }}
                   className={cn(
                     'rounded-full px-3 py-1 text-xs font-medium transition-colors duration-fast',
                     show === k
@@ -308,10 +321,10 @@ export function StoreNotificationsPage() {
                               {t('storeNotify.customMessage', { defaultValue: 'Custom message' })}
                             </Pill>
                             <p className="text-xs text-muted-foreground">
-                              {senders.data?.get(row.user_created ?? '')
+                              {senderOf(row)
                                 ? t('storeNotify.sentBy', {
                                     defaultValue: 'by {{name}}',
-                                    name: senders.data.get(row.user_created ?? ''),
+                                    name: senderOf(row),
                                   })
                                 : t('storeNotify.noTicket', { defaultValue: 'No ticket' })}
                             </p>
@@ -334,14 +347,51 @@ export function StoreNotificationsPage() {
                         <Pill tone={STATUS_TONE[row.status] ?? 'neutral'} size="sm">
                           {row.status}
                         </Pill>
+                        {/* The trail: when it was queued, when SaraPOS took it,
+                            how many tries, and SaraPOS's reason if it failed. */}
                         <p className="mt-1 whitespace-nowrap text-2xs text-muted-foreground">
-                          {formatDate(row.sent_at ?? row.date_created)}
+                          {t('storeNotify.queuedAt', {
+                            defaultValue: 'Queued {{time}}',
+                            time: formatDate(row.date_created),
+                          })}
                         </p>
+                        {row.sent_at && (
+                          <p className="whitespace-nowrap text-2xs text-muted-foreground">
+                            {t('storeNotify.sentAt', {
+                              defaultValue: 'Sent {{time}}',
+                              time: formatDate(row.sent_at),
+                            })}
+                          </p>
+                        )}
+                        {(row.attempts ?? 0) > 1 && (
+                          <p className="whitespace-nowrap text-2xs text-muted-foreground">
+                            {t('storeNotify.attempts', {
+                              defaultValue: '{{n}} attempts',
+                              n: row.attempts,
+                            })}
+                          </p>
+                        )}
+                        {row.status !== 'sent' && row.error && (
+                          <p className="ms-auto mt-1 max-w-[14rem] text-start text-2xs text-destructive">
+                            {row.error}
+                          </p>
+                        )}
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              {(queue.data ?? []).length >= limit && (
+                <div className="border-t border-foreground/[0.06] p-3 text-center">
+                  <button
+                    type="button"
+                    onClick={() => setLimit((n) => n + 50)}
+                    className="rounded-full bg-secondary px-4 py-1.5 text-xs font-medium text-foreground/80 transition-colors duration-fast hover:text-foreground"
+                  >
+                    {t('storeNotify.showMore', { defaultValue: 'Show 50 more' })}
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </section>
