@@ -102,6 +102,27 @@ jobs:
           echo "build=$BUILD" >> "$GITHUB_OUTPUT"
           echo "::notice::Deploying $ENVIRONMENT at tag $TAG (build=$BUILD)"
 
+      # ── PRODUCTION GUARD: only the owner's account releases (25 Nov 2026) ───
+      # The repo goes private on the Free plan, where rulesets (the `v*` tag
+      # rule: only CodeByEmad may create release tags) are not enforced. This
+      # keeps that rule in the workflow itself: a production run fails here,
+      # before anything is promoted, unless the account that CREATED the tag
+      # (or started the run) AND the one that (re-)ran it are both the owner's.
+      # `github.actor` / `triggering_actor` come from GitHub, not from the tag,
+      # so they cannot be faked the way a tag's "tagger" name can.
+      - name: 'Guard: only the owner releases to production'
+        if: steps.p.outputs.environment == 'prod'
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING: ${{ github.triggering_actor }}
+          ALLOWED: CodeByEmad
+        run: |
+          if [ "$ACTOR" != "$ALLOWED" ] || [ "$TRIGGERING" != "$ALLOWED" ]; then
+            echo "::error::production releases are created and run by $ALLOWED only (created by '$ACTOR', run by '$TRIGGERING') - nothing was deployed"
+            exit 1
+          fi
+          echo "::notice::production release by $ACTOR"
+
   # ── 3. Build and push the service images ──────────────────────────────────
   build:
     name: Build ${{ matrix.name }}
@@ -590,13 +611,15 @@ jobs:
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
-      # DIRECTUS FIRST, THE REST TOGETHER (owner, 2026-10-07).
+      # PREPARE IN PARALLEL, ROLL OUT IN ONE JOB (owner, 25 Nov 2026: cut
+      # Actions minutes, change nothing that is deployed or checked).
       #
-      # This was `max-parallel: 1`: all four one after another, ~12 of every
-      # deploy's ~16 minutes, because each waits for its rollout to settle.
-      # Only Directus has to lead — the gateway, AI gateway and workers talk to
-      # it, not to each other — so they now start together and each one's
-      # first step waits for Directus to be live on THIS run's rollout.
+      # Each leg renders, guards, promotes, verifies and REGISTERS its task
+      # definition - nothing here touches a running service. The `rollout`
+      # job below then updates Directus first, waits for it, and updates the
+      # rest together: the "Directus first" order of 2026-10-07. These legs
+      # used to do the rollout themselves, so three of the four sat billed
+      # for ~7 minutes waiting for Directus and then for their own rollout.
       max-parallel: 4
       matrix:
         service: [directus, socket-gateway, ai-gateway, workers]
@@ -609,41 +632,8 @@ jobs:
           role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
           aws-region: ${{ env.AWS_REGION }}
 
-      # The ordering `max-parallel: 1` used to give: nothing but Directus
-      # rolls until Directus has finished rolling out in THIS run. Judged by
-      # the rollout's start time, not the image tag — staging always deploys
-      # `:main`, so "directus runs :main" is true before it has moved at all.
-      # Every leg starts together after the approval, so Directus's new
-      # deployment is created after this step begins (a minute of slack).
-      # WAITS FOR THIS RELEASE'S IMAGE, not for a recent timestamp (2026-10-12).
-      # It used to accept only a Directus rollout that STARTED within 60 s of
-      # this job starting. With 2 Directus tasks the rollout takes longer, so it
-      # began before that window: v1.50.3's gateway jobs waited 30 minutes for a
-      # rollout that had already completed, then failed undeployed.
-      - name: Wait for Directus to go live first
-        if: matrix.service != 'directus'
-        env:
-          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
-          IMAGE_TAG: ${{ needs.plan.outputs.image_tag }}
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # The RUN's start, not this job's: matrix jobs start minutes apart.
-          # Staging always runs `:main`, so the tag alone cannot tell a new
-          # Directus from the old one - the rollout must also postdate the run.
-          RUN_START=$(gh api "repos/${{ github.repository }}/actions/runs/${{ github.run_id }}" --jq .run_started_at)
-          SINCE=$(date -d "$RUN_START" +%s)
-          for i in $(seq 1 90); do
-            read -r TD STATE CREATED < <(aws ecs describe-services --cluster "crm-${ENVIRONMENT}" --services directus --query 'services[0].deployments[?status==`PRIMARY`]|[0].[taskDefinition,rolloutState,createdAt]' --output text)
-            CREATED_S=$(date -d "$CREATED" +%s 2>/dev/null || echo 0)
-            IMAGE=$(aws ecs describe-task-definition --task-definition "$TD" --query 'taskDefinition.containerDefinitions[0].image' --output text 2>/dev/null || echo "")
-            if [ "$STATE" = "COMPLETED" ] && [ "${IMAGE##*:}" = "$IMAGE_TAG" ] && [ "$CREATED_S" -ge "$SINCE" ]; then
-              echo "::notice::directus live on :$IMAGE_TAG — deploying ${{ matrix.service }}"
-              exit 0
-            fi
-            sleep 20
-          done
-          echo "::error::directus did not finish a new rollout within 30 minutes — not deploying ${{ matrix.service }}"
-          exit 1
+      # (The "wait for Directus to go live first" step that was here is now
+      # the first half of the `rollout` job.)
 
       # DERIVED FROM WHAT IS RUNNING, not from the repo template.
       #
@@ -846,20 +836,63 @@ jobs:
           echo "arn=$ARN" >> "$GITHUB_OUTPUT"
           echo "::notice::registered $ARN"
 
-      - name: Update service
-        env:
-          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+      # Handed to `rollout`, which performs the update-service. Written only
+      # after every guard above passed and the definition registered.
+      - name: Hand the registered task definition to the rollout
         run: |
-          aws ecs update-service \
-            --cluster "crm-${ENVIRONMENT}" \
-            --service "${{ matrix.service }}" \
-            --task-definition "${{ steps.reg.outputs.arn }}" \
-            --query 'service.serviceName' --output text
+          mkdir -p /tmp/taskdef-arn
+          echo "${{ steps.reg.outputs.arn }}" > "/tmp/taskdef-arn/${{ matrix.service }}"
+      - uses: actions/upload-artifact@v6
+        with:
+          name: taskdef-arn-${{ matrix.service }}
+          path: /tmp/taskdef-arn/${{ matrix.service }}
+          retention-days: 1
+          # "Re-run all jobs" uploads again under the same name.
+          overwrite: true
 
-      - name: Wait for the rollout to stabilise
+  # ── 5c. Roll the services out: Directus first, then the rest together ─────
+  rollout:
+    name: Roll out to ${{ needs.plan.outputs.environment }}
+    needs: [plan, deploy]
+    # Runs whenever the legs ran, even if one failed - as before, when each leg
+    # rolled itself out independently (fail-fast: false): the legs that passed
+    # their guards still go out, and this job then fails for the one that did
+    # not. Kept from before: if DIRECTUS did not register, nothing else is
+    # rolled out (the other legs used to wait for Directus and then give up).
+    if: always() && needs.plan.result == 'success' && (needs.deploy.result == 'success' || needs.deploy.result == 'failure')
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::408568863712:role/crm-github-deploy
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: actions/download-artifact@v6
+        with:
+          pattern: taskdef-arn-*
+          path: /tmp/taskdef-arn
+          merge-multiple: true
+
+      - name: Update the services and wait for each rollout to stabilise
         env:
           ENVIRONMENT: ${{ needs.plan.outputs.environment }}
         run: |
+          CL="crm-${ENVIRONMENT}"
+          WANTED="directus socket-gateway ai-gateway workers"
+          fail=0
+          missing=""
+          for s in $WANTED; do [ -s "/tmp/taskdef-arn/$s" ] || missing="$missing $s"; done
+          if [ -n "$missing" ]; then
+            echo "::error::no registered task definition for:$missing (that leg failed above)"
+            fail=1
+          fi
+
+          update() {
+            aws ecs update-service --cluster "$CL" --service "$1" \
+              --task-definition "$(cat "/tmp/taskdef-arn/$1")" \
+              --query 'service.serviceName' --output text
+          }
           # Fails if the new tasks never reach steady state, which is what turns
           # a broken deploy into a failed workflow rather than a silent one.
           # ECS keeps the old tasks serving until the new ones are healthy.
@@ -868,33 +901,59 @@ jobs:
           # 10 minutes timed out on a slow-but-healthy Directus rollout, and it
           # failed with only "Max attempts exceeded" - the real reason (e.g.
           # "your account is currently blocked") sat unread in the ECS events.
-          # This waits up to 20 minutes, ends early if the rollout FAILS, and
-          # always prints ECS's own last events when it gives up.
-          SVC="${{ matrix.service }}"; CL="crm-${ENVIRONMENT}"
-          for i in $(seq 1 80); do
-            read -r STATE RUN WANT <<<"$(aws ecs describe-services --cluster "$CL" --services "$SVC" \
-              --query 'services[0].[deployments[?status==`PRIMARY`]|[0].rolloutState, runningCount, desiredCount]' --output text)"
-            if [ "$STATE" = "COMPLETED" ] && [ "$RUN" = "$WANT" ]; then
-              echo "::notice::$SVC stable ($RUN/$WANT)"; exit 0
-            fi
-            [ "$STATE" = "FAILED" ] && break
-            sleep 15
+          # This waits up to 20 minutes per service (the rest in parallel), ends
+          # early if a rollout FAILS, and always prints ECS's own last events.
+          wait_stable() {
+            SVC="$1"
+            for i in $(seq 1 80); do
+              read -r STATE RUN WANT <<<"$(aws ecs describe-services --cluster "$CL" --services "$SVC" \
+                --query 'services[0].[deployments[?status==`PRIMARY`]|[0].rolloutState, runningCount, desiredCount]' --output text)"
+              if [ "$STATE" = "COMPLETED" ] && [ "$RUN" = "$WANT" ]; then
+                echo "::notice::$SVC stable ($RUN/$WANT)"; return 0
+              fi
+              [ "$STATE" = "FAILED" ] && break
+              sleep 15
+            done
+            echo "::error::$SVC did not stabilise (rollout: $STATE, running $RUN/$WANT). ECS says:"
+            aws ecs describe-services --cluster "$CL" --services "$SVC" \
+              --query 'services[0].events[:6].[createdAt,message]' --output text
+            return 1
+          }
+
+          # DIRECTUS FIRST (owner, 2026-10-07): the gateway, AI gateway and
+          # workers talk to it, so nothing else moves until it is live.
+          if [ ! -s /tmp/taskdef-arn/directus ]; then
+            echo "::error::directus did not register - not rolling out anything else"; exit 1
+          fi
+          if ! update directus; then
+            echo "::error::update-service failed for directus - not rolling out anything else"; exit 1
+          fi
+          wait_stable directus || { echo "::error::directus did not go live - not rolling out anything else"; exit 1; }
+
+          # The rest together. One failed update-service (throttling, a
+          # transient API error) must not stop the others: record it, carry on,
+          # and fail the job at the end.
+          REST=""
+          for s in socket-gateway ai-gateway workers; do
+            [ -s "/tmp/taskdef-arn/$s" ] || continue
+            if update "$s"; then REST="$REST $s"; else echo "::error::update-service failed for $s"; fail=1; fi
           done
-          echo "::error::$SVC did not stabilise (rollout: $STATE, running $RUN/$WANT). ECS says:"
-          aws ecs describe-services --cluster "$CL" --services "$SVC" \
-            --query 'services[0].events[:6].[createdAt,message]' --output text
-          exit 1
+          pids=""
+          for s in $REST; do wait_stable "$s" & pids="$pids $!"; done
+          for p in $pids; do wait "$p" || fail=1; done
+          exit $fail
 
   # ── 6. Smoke ──────────────────────────────────────────────────────────────
   smoke:
     name: Smoke
-    needs: [plan, deploy]
+    needs: [plan, rollout]
     # RUN THIS, OR THE RELEASE IS UNVERIFIED.
     #
     # With no condition, a single skipped/gated leg in `deploy` left this job
     # skipped — so the v1.14.1 production release shipped with nothing probing
-    # it. Stated explicitly: if the deploys succeeded, the smoke test runs.
-    if: always() && needs.deploy.result == 'success'
+    # it. Stated explicitly: if the rollout succeeded (every service went out
+    # and stabilised), the smoke test runs.
+    if: always() && needs.rollout.result == 'success'
     runs-on: ubuntu-24.04
     steps:
       - name: Probe the public endpoints

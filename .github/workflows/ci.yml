@@ -19,11 +19,60 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ALREADY VERIFIED ON ITS PULL REQUEST? (owner, 25 Nov 2026: cut Actions
+  # minutes with no new failure modes.)
+  #
+  # A merge to main re-ran all three jobs on a tree the pull request had just
+  # passed. On a push, this checks: is the pushed commit the merge of a PR whose
+  # head has the IDENTICAL tree, and did all three required checks succeed on
+  # that head? Only then do the jobs below skip. Anything else - a direct push,
+  # a merge whose tree differs (the PR was behind main), a red or missing check,
+  # an API error - answers "no", and everything runs exactly as before.
+  already-verified:
+    name: Already verified on its pull request?
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+      checks: read
+    outputs:
+      verified: ${{ steps.v.outputs.verified }}
+    steps:
+      - id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.sha }}
+        run: |
+          verdict() { echo "verified=$1" >> "$GITHUB_OUTPUT"; echo "::notice::verified=$1 - $2"; exit 0; }
+          PR=$(gh api "repos/$REPO/commits/$SHA/pulls" \
+            --jq "[.[] | select(.merged_at != null and .merge_commit_sha == \"$SHA\")][0].number // empty" 2>/dev/null) \
+            || verdict false "could not list the pull requests of $SHA"
+          [ -n "$PR" ] || verdict false "$SHA is not the merge of a pull request"
+          HEAD=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha 2>/dev/null) || verdict false "could not read PR #$PR"
+          T1=$(gh api "repos/$REPO/git/commits/$SHA" --jq .tree.sha 2>/dev/null) || verdict false "could not read $SHA"
+          T2=$(gh api "repos/$REPO/git/commits/$HEAD" --jq .tree.sha 2>/dev/null) || verdict false "could not read $HEAD"
+          if [ -z "$T1" ] || [ "$T1" != "$T2" ]; then
+            verdict false "PR #$PR head ($HEAD) has a different tree - it was not up to date with main"
+          fi
+          for CHECK in "Lint, typecheck & unit tests (+ coverage)" "Playwright E2E" "AI/commerce auth contract (C-1/C-2)"; do
+            C=$(gh api -X GET "repos/$REPO/commits/$HEAD/check-runs" -f check_name="$CHECK" -f filter=latest \
+              --jq '[.check_runs[] | select(.app.slug == "github-actions")][0].conclusion // empty' 2>/dev/null) \
+              || verdict false "could not read the check runs of $HEAD"
+            [ "$C" = success ] || verdict false "'$CHECK' on PR #$PR head is '${C:-missing}'"
+          done
+          verdict true "identical tree passed all three required checks on PR #$PR ($HEAD)"
+
   # Lint + typecheck + unit tests with coverage. Independent of e2e so the two
   # jobs run in parallel (the e2e job no longer `needs: quality`), keeping total
   # wall-clock down. Coverage thresholds are enforced here (see vitest configs).
   quality:
     name: Lint, typecheck & unit tests (+ coverage)
+    needs: already-verified
+    # On a PR `already-verified` is skipped and this runs as always.
+    if: ${{ !cancelled() && needs.already-verified.outputs.verified != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -106,10 +155,12 @@ jobs:
     # and could not go green. Targeting the base branch instead of the event is
     # the honest version of that rule: a PR INTO main has everything present, so
     # it can and must pass; a stream-to-stream PR still skips.
+    needs: already-verified
     if: >-
+      !cancelled() && needs.already-verified.outputs.verified != 'true' && (
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
-      (github.event_name == 'pull_request' && github.base_ref == 'main')
+      (github.event_name == 'pull_request' && github.base_ref == 'main'))
     timeout-minutes: 40 # room for 3 browser-install attempts (2026-10-22)
     services:
       postgres:
@@ -427,6 +478,8 @@ jobs:
   # derived from the verified Directus role (not a client header).
   auth-contract:
     name: AI/commerce auth contract (C-1/C-2)
+    needs: already-verified
+    if: ${{ !cancelled() && needs.already-verified.outputs.verified != 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
