@@ -297,6 +297,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_sla_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
     view_chat_status_report: holds('view_agent_reports'),
     view_busy_report: holds('view_agent_reports'),
+    /* Agent KPI -> Branch notifications (owner, 26 Nov 2026). */
+    view_branch_notifications_report: holds('view_agent_reports'),
     view_chat_breakdown: holds('view_agent_reports'),
     view_own_performance: holds('use_chat'),
     view_preferences: () => true,
@@ -789,6 +791,10 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_sla_report: [],
     view_chat_status_report: [],
     view_busy_report: [],
+    /* Agent KPI -> Branch notifications (owner, 26 Nov 2026): every
+       notification and custom message to a branch, READ ONLY - the report
+       never changes what was sent. */
+    view_branch_notifications_report: [...readOnly('store_notifications'), ...readOnly('stores')],
     view_chat_breakdown: [],
     view_own_performance: [],
     view_preferences: [],
