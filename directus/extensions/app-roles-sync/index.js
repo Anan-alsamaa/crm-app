@@ -259,6 +259,13 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_late_orders_report: (p) => p.view_all_tickets === true && p.view_all_chats === true,
     export_late_orders: nameIn('wecare admin', 'wecare supervisor'),
     view_order_details: (_p, role) => role.startsWith('wecare'),
+    /* Owner, 26 Nov 2026: "open for administrator, wecare agent/admin/supervisor". */
+    send_branch_messages: nameIn(
+      'administrator',
+      'wecare agent',
+      'wecare supervisor',
+      'wecare admin',
+    ),
     request_coupons: holds('create_tickets'),
     view_coupon_spend: nameIn('administrator', 'wecare admin', 'wecare supervisor'),
     view_compensation_reports: holds('approve_coupons'),
@@ -699,6 +706,17 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     view_late_orders_report: [...readOnly('late_order_decisions')],
     export_late_orders: [],
     view_order_details: [],
+    /* A custom message to a branch, no ticket (owner, 26 Nov 2026). Writing
+       goes through the guard on store_notifications.items.create below; the
+       sender reads back their OWN custom messages to see whether they went. */
+    send_branch_messages: [
+      g('store_notifications', 'create'),
+      g('store_notifications', 'read', {
+        _and: [{ user_created: { _eq: '$CURRENT_USER' } }, { kind: { _eq: 'custom' } }],
+      }),
+      ...readOnly('stores'),
+      ...readOnly('quick_replies'),
+    ],
     /* Owner, 2026-11-14: "if it is in the pending state, then the agent can also
        edit it". Their OWN request, while it is PENDING, the coupon terms only -
        never the status, the decision, the customer or the order. Once approved
@@ -1544,6 +1562,70 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     const others = (keys ?? []).some((k) => String(k) !== String(self));
     await refuseIfUserAdminBlocked(context, others);
     return keys;
+  });
+
+  /*
+   * A CUSTOM MESSAGE TO A BRANCH (owner, 26 Nov 2026) - `kind: 'custom'` on
+   * the branch-notification outbox, no ticket. Mirrors BRANCH_MESSAGE_* in
+   * packages/shared-types/src/branch-message.ts (branch-message.test.ts fails
+   * if they drift). A ticket's notification (no kind) is not touched here.
+   *
+   * The row is REBUILT from four things - the branch, the text, an optional
+   * order number, and queued - so a custom message can never carry a ticket,
+   * customer details or a pre-set status, whatever the caller sent.
+   */
+  const BRANCH_MESSAGE_KIND = 'custom';
+  const BRANCH_MESSAGE_MAX = 500;
+  const BRANCH_MESSAGE_PER_HOUR = 5;
+
+  filter('store_notifications.items.create', async (payload, _meta, context) => {
+    if (payload?.kind !== BRANCH_MESSAGE_KIND) return payload;
+    const acc = context?.accountability;
+    if (acc && !acc.admin) {
+      if (!acc.role) throw new ForbiddenishError('No role on this session.');
+      const mine = await database('app_roles').where({ directus_role: acc.role }).first();
+      const held = effectivePrivileges(parseJson(mine?.privileges) ?? {}, mine?.name ?? '');
+      if (held.send_branch_messages !== true) {
+        throw new ForbiddenishError('Your role does not include sending messages to branches.');
+      }
+    }
+    const text = String(payload.description ?? '').trim();
+    if (!text) throw new ValidationError('Write the message first.');
+    if (text.length > BRANCH_MESSAGE_MAX) {
+      throw new ValidationError(`The message is longer than ${BRANCH_MESSAGE_MAX} characters.`);
+    }
+    const storeId = typeof payload.store === 'object' ? payload.store?.id : payload.store;
+    if (!storeId) throw new ValidationError('Choose a branch.');
+    const store = await database('stores').where({ id: storeId }).first();
+    if (!store) throw new ValidationError('That branch does not exist.');
+    if (!String(store.sarapos_outlet_id ?? '').trim()) {
+      throw new ValidationError(
+        'This branch is not connected to SaraPOS, so it cannot receive messages.',
+      );
+    }
+    const since = new Date(Date.now() - 3_600_000);
+    const recent = await database('store_notifications')
+      .where({ store: storeId, kind: BRANCH_MESSAGE_KIND })
+      .where('date_created', '>', since)
+      .count({ n: '*' })
+      .first();
+    if (Number(recent?.n ?? 0) >= BRANCH_MESSAGE_PER_HOUR) {
+      throw new ValidationError(
+        `This branch already received ${BRANCH_MESSAGE_PER_HOUR} messages in the last hour. Call the branch instead, or try again later.`,
+      );
+    }
+    const order = String(payload.order_id ?? '')
+      .trim()
+      .slice(0, 40);
+    return {
+      kind: BRANCH_MESSAGE_KIND,
+      store: storeId,
+      description: text,
+      order_id: order || null,
+      status: 'queued',
+      attempts: 0,
+      ...(store.vendor ? { vendor: store.vendor } : {}),
+    };
   });
 
   action('app_roles.items.create', async (meta) => {

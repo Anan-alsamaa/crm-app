@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { createItem, readItems, updateItem } from '@directus/sdk';
+import { createItem, readItems, readUsers, updateItem } from '@directus/sdk';
 import { directus } from '../../lib/directus.js';
 
 /**
@@ -75,6 +75,10 @@ export function useSetStoreNotifyRule() {
 
 export interface StoreNotificationRow {
   id: string;
+  /** `custom` = an agent's own message, no ticket (owner, 26 Nov 2026). Empty = a ticket's. */
+  kind?: string | null;
+  /** Who queued it - for a custom message, the agent who wrote it. */
+  user_created?: string | null;
   complaint_type: string | null;
   description: string | null;
   resolution_notes: string | null;
@@ -87,10 +91,13 @@ export interface StoreNotificationRow {
   store: { id: string; code: string | null; name: string | null } | null;
 }
 
+/** Which rows the queue shows: everything, ticket notifications, or custom messages. */
+export type StoreNotificationKindFilter = 'all' | 'ticket' | 'custom';
+
 /** The outbox, newest first. Read-only here: nothing rewrites what was sent. */
-export function useStoreNotifications(limit = 50) {
+export function useStoreNotifications(limit = 50, show: StoreNotificationKindFilter = 'all') {
   return useQuery({
-    queryKey: ['store-notifications', limit],
+    queryKey: ['store-notifications', limit, show],
     queryFn: async () =>
       (await directus.request(
         readItems(
@@ -98,6 +105,8 @@ export function useStoreNotifications(limit = 50) {
           {
             fields: [
               'id',
+              'kind',
+              'user_created',
               'complaint_type',
               'description',
               'resolution_notes',
@@ -107,10 +116,47 @@ export function useStoreNotifications(limit = 50) {
               { ticket: ['id', 'subject'] },
               { store: ['id', 'code', 'name'] },
             ],
+            ...(show === 'custom'
+              ? { filter: { kind: { _eq: 'custom' } } }
+              : show === 'ticket'
+                ? { filter: { kind: { _null: true } } }
+                : {}),
             sort: ['-date_created'],
             limit,
           } as never,
         ),
       )) as unknown as StoreNotificationRow[],
+  });
+}
+
+/**
+ * Names for the people who sent custom messages. Its own query and allowed to
+ * fail: a role that may read the queue but not the user list still sees every
+ * message, just without the sender's name.
+ */
+export function useSenderNames(ids: string[]) {
+  const unique = [...new Set(ids.filter(Boolean))].sort();
+  return useQuery({
+    queryKey: ['store-notifications', 'senders', unique],
+    enabled: unique.length > 0,
+    staleTime: 5 * 60_000,
+    queryFn: async () => {
+      const rows = (await directus
+        .request(
+          readUsers({
+            filter: { id: { _in: unique } },
+            fields: ['id', 'first_name', 'last_name'],
+            limit: -1,
+          } as never),
+        )
+        .catch(() => [])) as Array<{
+        id: string;
+        first_name?: string | null;
+        last_name?: string | null;
+      }>;
+      return new Map(
+        rows.map((u) => [u.id, [u.first_name, u.last_name].filter(Boolean).join(' ').trim()]),
+      );
+    },
   });
 }

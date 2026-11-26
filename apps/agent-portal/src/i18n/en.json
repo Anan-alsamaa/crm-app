@@ -1143,5 +1143,29 @@
     "done": "Let’s go",
     "close": "Close",
     "goTo": "Go to slide {{n}}"
+  },
+  "quickReplies": {
+    "openBranchMessages": "Ready messages"
+  },
+  "branchMessage": {
+    "open": "Message a branch",
+    "title": "Message a branch",
+    "subtitle": "Prints on the branch’s SaraPOS printer. No ticket is created. Never include customer details.",
+    "order": "Order number (optional)",
+    "message": "Message",
+    "placeholder": "What the branch needs to know or do.",
+    "phoneWarning": "This looks like a phone number. Do not send a customer’s number to a branch.",
+    "limit": "Up to {{n}} messages per branch per hour.",
+    "preview": "What the branch will see",
+    "send": "Send to branch",
+    "close": "Close",
+    "queued": "Sent to the branch printer queue. It prints within a minute.",
+    "failed": "The message was not sent. Check your connection and try again.",
+    "recent": "Your recent messages",
+    "status": {
+      "sent": "Sent",
+      "failed": "Failed",
+      "queued": "Queued"
+    }
   }
 }

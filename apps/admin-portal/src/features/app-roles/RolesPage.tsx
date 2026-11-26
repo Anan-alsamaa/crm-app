@@ -465,6 +465,9 @@ export function RolesPage() {
     view_order_details: t('roles.p.viewOrderDetails', {
       defaultValue: 'See the order details panel',
     }),
+    send_branch_messages: t('roles.p.sendBranchMessages', {
+      defaultValue: 'Message a branch (printed on its SaraPOS, no ticket)',
+    }),
     request_coupons: t('roles.p.requestCoupons', { defaultValue: 'Request a coupon' }),
     view_coupon_spend: t('roles.p.viewCouponSpend', { defaultValue: 'See coupon spend amounts' }),
     view_compensation_reports: t('roles.p.viewCompensationReports', {

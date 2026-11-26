@@ -18,9 +18,12 @@ import { kindOf, labelTaken } from '../src/features/lists/QuickRepliesSection.js
  */
 
 describe('which library a row belongs to', () => {
-  it.each(['chat', 'late_order_reason', 'late_order_action'])('keeps a known kind: %s', (k) => {
-    expect(kindOf({ kind: k })).toBe(k);
-  });
+  it.each(['chat', 'late_order_reason', 'late_order_action', 'branch_message'])(
+    'keeps a known kind: %s',
+    (k) => {
+      expect(kindOf({ kind: k })).toBe(k);
+    },
+  );
 
   /*
    * ROWS WRITTEN BEFORE THE COLUMN EXISTED have no `kind`, and they came from
