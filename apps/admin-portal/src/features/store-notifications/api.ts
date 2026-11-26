@@ -79,6 +79,12 @@ export interface StoreNotificationRow {
   kind?: string | null;
   /** Who queued it - for a custom message, the agent who wrote it. */
   user_created?: string | null;
+  /** Custom messages: the sender's name and employee id as they were when sent. */
+  sender_name?: string | null;
+  sender_login?: string | null;
+  /** SaraPOS's reason for the last failed attempt, and how many attempts. */
+  error?: string | null;
+  attempts?: number | null;
   complaint_type: string | null;
   description: string | null;
   resolution_notes: string | null;
@@ -107,6 +113,10 @@ export function useStoreNotifications(limit = 50, show: StoreNotificationKindFil
               'id',
               'kind',
               'user_created',
+              'sender_name',
+              'sender_login',
+              'error',
+              'attempts',
               'complaint_type',
               'description',
               'resolution_notes',

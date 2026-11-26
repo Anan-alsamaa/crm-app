@@ -1528,6 +1528,22 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
     const order = String(payload.order_id ?? '')
       .trim()
       .slice(0, 40);
+    /* WHO SENT IT, KEPT ON THE MESSAGE (owner, 26 Nov 2026: "ensure the user
+       who sends a message and the message and everything is tracked").
+       `user_created` links the account; this is the name and employee id as
+       they were when it was sent, so the record still says who even after the
+       account is renamed or deleted. */
+    let sender = null;
+    if (acc?.user) {
+      try {
+        sender = await database('directus_users')
+          .where({ id: acc.user })
+          .first('first_name', 'last_name', 'login_name', 'email');
+      } catch {
+        sender = null;
+      }
+    }
+    const senderName = [sender?.first_name, sender?.last_name].filter(Boolean).join(' ').trim();
     return {
       kind: BRANCH_MESSAGE_KIND,
       store: storeId,
@@ -1535,6 +1551,8 @@ export default ({ filter, action }, { services, database, getSchema, logger }) =
       order_id: order || null,
       status: 'queued',
       attempts: 0,
+      sender_name: senderName || null,
+      sender_login: String(sender?.login_name ?? sender?.email ?? '').trim() || null,
       ...(store.vendor ? { vendor: store.vendor } : {}),
     };
   });
