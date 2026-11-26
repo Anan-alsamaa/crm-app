@@ -34,11 +34,19 @@ function extensionBuildGrants() {
     start,
     SYNC.indexOf('\n  }\n', SYNC.indexOf('Branch restriction', start)) + 4,
   );
+  // The real own-profile filter and grant, cut from the source like the rest.
+  const selfLine = SYNC.slice(
+    SYNC.indexOf('  const SELF_PROFILE = '),
+    SYNC.indexOf('\n', SYNC.indexOf('  const SELF_PROFILE = ')),
+  );
+  const selfGrantStart = SYNC.indexOf("    g('directus_users', 'update', SELF_PROFILE, [");
+  const selfGrant = SYNC.slice(selfGrantStart, SYNC.indexOf(']),', selfGrantStart) + 2);
   // A minimal stand-in for the real catalogue: only what this test needs.
   const prelude = `
     ${helpers}
     ${isWide}
-    const BASELINE = [];
+    ${selfLine}
+    const BASELINE = [${selfGrant}];
     const REPORT_ACCESS = [];
     const warn = () => {};
     const CATALOG = {
@@ -97,8 +105,11 @@ describe('the grants a WeCare Supervisor gets', () => {
   const PROTECTED = ['admin-role', 'svc-role'];
   const ASSIGNABLE = ['agent-role', 'supervisor-role'];
   const grants = buildGrants({ manage_users: true }, null, null, PROTECTED, ASSIGNABLE);
+  const isSelf = (x: { filter: Record<string, unknown> }) =>
+    JSON.stringify(x.filter) === '{"id":{"_eq":"$CURRENT_USER"}}';
+  /** The MANAGE grant (the own-profile grant is checked on its own below). */
   const users = (action: string) =>
-    grants.find((x) => x.collection === 'directus_users' && x.action === action)!;
+    grants.find((x) => x.collection === 'directus_users' && x.action === action && !isSelf(x))!;
 
   it('can read exactly the roles it may assign, id and name only', () => {
     const roles = grants.filter((x) => x.collection === 'directus_roles');
@@ -123,6 +134,27 @@ describe('the grants a WeCare Supervisor gets', () => {
     expect(f).toContain('"_nin":["admin-role","svc-role"]');
     const v = JSON.stringify(users('update').validation);
     expect(v).toContain('"_in":["agent-role","supervisor-role"]');
+  });
+
+  /* Staging, 26 Nov 2026: once a supervisor could no longer give out the
+     Supervisor role, the fence also wrapped the own-profile grant and every
+     supervisor lost their own notification preferences. */
+  it('still edits their OWN profile - four fields, never the role - outside the fence', () => {
+    for (const assignable of [ASSIGNABLE, ['agent-role'], null]) {
+      const self = buildGrants({ manage_users: true }, null, null, PROTECTED, assignable).filter(
+        (x) => x.collection === 'directus_users' && x.action === 'update' && isSelf(x),
+      );
+      expect(self).toHaveLength(1);
+      expect(self[0]!.filter).toEqual({ id: { _eq: '$CURRENT_USER' } });
+      expect(self[0]!.validation).toBeNull();
+      expect(self[0]!.fields).toEqual([
+        'notification_preferences',
+        'locale',
+        'first_name',
+        'last_name',
+      ]);
+      expect(self[0]!.fields).not.toContain('role');
+    }
   });
 
   it('reads every user as before (the list is unchanged)', () => {
