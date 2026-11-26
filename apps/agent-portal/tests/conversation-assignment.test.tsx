@@ -12,7 +12,12 @@ import { MemoryRouter } from 'react-router-dom';
 // existing toolbar/E2E tests do not cover.
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (k: string, o?: { defaultValue?: string }) => o?.defaultValue ?? k,
+    t: (k: string, o?: Record<string, unknown> & { defaultValue?: string }) => {
+      let out = o?.defaultValue ?? k;
+      for (const [name, val] of Object.entries(o ?? {}))
+        out = out.replace(`{{${name}}}`, String(val));
+      return out;
+    },
   }),
 }));
 vi.mock('../src/lib/auth/AuthContext.js', () => ({
@@ -114,8 +119,84 @@ describe('ConversationToolbar — agent assignment', () => {
     const listbox = await screen.findByRole('listbox');
     await userEvent.click(within(listbox).getByRole('button', { name: 'conversation.unassigned' }));
 
+    // Taking a chat away from its agent asks first (owner, 26 Nov 2026).
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(await screen.findByText('Take this chat away from Bob?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Move chat' }));
     expect(mutateAsync).toHaveBeenCalledTimes(1);
     // Empty-string option value is normalised to null in the toolbar handler.
     expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { assigned_agent: null } });
+  });
+});
+
+/*
+ * REPORTED 26 Nov 2026 (Muhammad Al-Jauf): a chat Naif had answered moved to
+ * Mohamed at 18:56:18 from Naif's own picker, with nothing asked. The picker
+ * left focused turned typing into its search ("m" -> Mohamed first) and Enter
+ * committed. Now: typing never opens it, and moving a chat away from its
+ * agent always asks.
+ */
+describe('a chat is never taken from its agent without a yes', () => {
+  const owned = { ...baseConversation, assigned_agent: 'a1' };
+
+  it('moving to another agent waits for "Move chat"', async () => {
+    renderToolbar(owned);
+    await userEvent.click(screen.getByLabelText('conversation.agent'));
+    await userEvent.click(
+      within(await screen.findByRole('listbox')).getByRole('button', { name: 'Carol' }),
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByText('Move this chat from Bob to Carol?')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Move chat' }));
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { assigned_agent: 'a2' } });
+  });
+
+  it('Cancel leaves the chat with its agent', async () => {
+    renderToolbar(owned);
+    await userEvent.click(screen.getByLabelText('conversation.agent'));
+    await userEvent.click(
+      within(await screen.findByRole('listbox')).getByRole('button', { name: 'Carol' }),
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(screen.queryByText('Move this chat from Bob to Carol?')).toBeNull();
+  });
+
+  it('picking the agent who already has it does nothing', async () => {
+    renderToolbar(owned);
+    await userEvent.click(screen.getByLabelText('conversation.agent'));
+    await userEvent.click(
+      within(await screen.findByRole('listbox')).getByRole('button', { name: 'Bob' }),
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Move this chat/)).toBeNull();
+  });
+
+  it('typing while the picker has focus does not open it or assign anyone', async () => {
+    renderToolbar(owned);
+    screen.getByLabelText('conversation.agent').focus();
+    await userEvent.keyboard('carol');
+    expect(screen.queryByRole('listbox')).toBeNull();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it('a team handover that would replace the agent asks first', async () => {
+    renderToolbar(owned);
+    await userEvent.click(screen.getByLabelText('conversation.team'));
+    await userEvent.click(
+      within(await screen.findByRole('listbox')).getByRole('button', { name: 'Support' }),
+    );
+    expect(mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByText('Hand this chat over to Support?')).toBeInTheDocument();
+  });
+
+  it('an unassigned chat still gets its first owner in one step', async () => {
+    renderToolbar();
+    await userEvent.click(screen.getByLabelText('conversation.agent'));
+    await userEvent.click(
+      within(await screen.findByRole('listbox')).getByRole('button', { name: 'Carol' }),
+    );
+    expect(mutateAsync).toHaveBeenCalledWith({ id: 'c1', patch: { assigned_agent: 'a2' } });
+    expect(screen.queryByText(/Move this chat/)).toBeNull();
   });
 });
