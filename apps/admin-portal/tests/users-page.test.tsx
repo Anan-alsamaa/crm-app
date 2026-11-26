@@ -17,6 +17,7 @@ const usersApi = vi.hoisted(() => ({
   useCreateUser: vi.fn(),
   useUpdateUser: vi.fn(),
   useDeleteUser: vi.fn(),
+  useMyUserAdminBlock: vi.fn(),
 }));
 vi.mock('../src/features/users/api.js', () => usersApi);
 vi.mock('../src/features/teams/api.js', () => ({
@@ -45,9 +46,36 @@ beforeEach(() => {
   usersApi.useCreateUser.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
   usersApi.useUpdateUser.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
   usersApi.useDeleteUser.mockReturnValue({ mutateAsync: vi.fn().mockResolvedValue({}) });
+  usersApi.useMyUserAdminBlock.mockReturnValue({ data: null });
 });
 
 describe('UsersPage', () => {
+  /* Owner, 26 Nov 2026: the Administrator can block one person from managing
+     users until a date. The server refuses; the page stops offering it. */
+  it('a blocked viewer sees why and cannot press Create user', () => {
+    usersApi.useUsers.mockReturnValue({ data: [], isLoading: false });
+    usersApi.useMyUserAdminBlock.mockReturnValue({
+      data: new Date(Date.now() + 5 * 86_400_000).toISOString(),
+    });
+    renderPage();
+    expect(screen.getByRole('status')).toHaveTextContent(/cannot create or change users until/i);
+    for (const b of screen.getAllByRole('button', { name: 'users.create' })) {
+      expect(b).toBeDisabled();
+    }
+  });
+
+  it('an expired block changes nothing', () => {
+    usersApi.useUsers.mockReturnValue({ data: [], isLoading: false });
+    usersApi.useMyUserAdminBlock.mockReturnValue({
+      data: new Date(Date.now() - 86_400_000).toISOString(),
+    });
+    renderPage();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    for (const b of screen.getAllByRole('button', { name: 'users.create' })) {
+      expect(b).not.toBeDisabled();
+    }
+  });
+
   it('shows empty state when there are no users', () => {
     usersApi.useUsers.mockReturnValue({ data: [], isLoading: false });
     renderPage();

@@ -66,10 +66,12 @@ describe('who may assign which roles', () => {
     expect(extensionMap()).toEqual(ROLE_ASSIGNABLE_ROLES);
   });
 
-  it('a WeCare Supervisor may assign WeCare Agent and WeCare Supervisor', () => {
+  /* Owner, 26 Nov 2026: on 25 Nov a supervisor promoted an agent to WeCare
+     Supervisor. Supervisors may now give the WeCare Agent role ONLY. */
+  it('a WeCare Supervisor may assign WeCare Agent ONLY, never WeCare Supervisor', () => {
     expect(
       assignableRoleNames('WeCare Supervisor', { manage_users: true, manage_roles: false }),
-    ).toEqual(['wecare agent', 'wecare supervisor']);
+    ).toEqual(['wecare agent']);
   });
 
   it('a role with manage_roles is not fenced (WeCare Admin, Department Manager)', () => {

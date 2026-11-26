@@ -19,8 +19,27 @@
  * import this); `role-assignment.test.ts` fails if the two disagree.
  */
 export const ROLE_ASSIGNABLE_ROLES: Readonly<Record<string, readonly string[]>> = {
-  'wecare supervisor': ['wecare agent', 'wecare supervisor'],
+  /* WeCare Agent ONLY (owner, 26 Nov 2026): on 25 Nov a supervisor promoted an
+     agent to WeCare Supervisor. Giving the Supervisor role is WeCare Admin's
+     and the Administrator's. */
+  'wecare supervisor': ['wecare agent'],
 };
+
+/**
+ * A PER-PERSON BLOCK ON MANAGING USERS (owner, 26 Nov 2026): the Administrator
+ * can stop one person creating, editing or deleting users until a date,
+ * without touching their role (which colleagues share). Active while `until`
+ * is in the future; it lifts by itself. Mirrored in app-roles-sync, which
+ * enforces it on the server.
+ */
+export function isUserAdminBlocked(
+  until: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (!until) return false;
+  const t = Date.parse(until);
+  return Number.isFinite(t) && t > now.getTime();
+}
 
 /**
  * The role names `roleName` may assign, lowercased - or `null` when it is not

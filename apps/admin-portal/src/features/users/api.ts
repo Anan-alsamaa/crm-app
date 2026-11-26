@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { readUsers, createUser, updateUser, deleteUser, readRoles } from '@directus/sdk';
+import { readUsers, createUser, updateUser, deleteUser, readRoles, readMe } from '@directus/sdk';
 import { NotificationType, NotificationChannel } from '@yiji/shared-types';
 import { directus } from '../../lib/directus.js';
 
@@ -24,6 +24,8 @@ export interface AdminUser {
   status: string;
   role: { id: string; name: string } | null;
   team: { id: string; name: string } | null;
+  /** Blocked from managing users until this moment (owner, 26 Nov 2026). */
+  user_admin_blocked_until?: string | null;
 }
 
 export interface RoleOption {
@@ -55,6 +57,7 @@ export function useUsers() {
               'status',
               { role: ['id', 'name'] },
               { team: ['id', 'name'] },
+              'user_admin_blocked_until',
             ],
             sort: ['login_name', 'email'],
           }),
@@ -124,6 +127,28 @@ export interface UpdateUserPatch {
   locale?: 'en' | 'ar';
   /** Only sent when the admin types a new password. */
   password?: string;
+  /** The Administrator's per-person block (owner, 26 Nov 2026); null lifts it. */
+  user_admin_blocked_until?: string | null;
+}
+
+/**
+ * Until when the SIGNED-IN person is blocked from managing users, or null
+ * (owner, 26 Nov 2026). The server enforces the block; this only lets the page
+ * say so instead of offering buttons that would be refused. A read that fails
+ * answers null - the server still refuses.
+ */
+export function useMyUserAdminBlock() {
+  return useQuery({
+    queryKey: ['users', 'me', 'user-admin-block'],
+    queryFn: () =>
+      directus
+        .request(readMe({ fields: ['user_admin_blocked_until'] } as never))
+        .then(
+          (me) =>
+            (me as { user_admin_blocked_until?: string | null })?.user_admin_blocked_until ?? null,
+        )
+        .catch(() => null),
+  });
 }
 
 export function useUpdateUser() {
