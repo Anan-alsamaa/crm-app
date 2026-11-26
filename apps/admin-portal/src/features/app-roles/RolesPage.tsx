@@ -418,6 +418,9 @@ export function RolesPage() {
       defaultValue: 'View the Chat status report',
     }),
     view_busy_report: t('roles.p.viewBusyReport', { defaultValue: 'View the Busy time report' }),
+    view_branch_notifications_report: t('roles.p.viewBranchNotifyReport', {
+      defaultValue: 'View the Branch notifications report (Agent KPI)',
+    }),
     view_chat_breakdown: t('roles.p.viewChatBreakdown', {
       defaultValue: 'See the Chat by chat table on Agent performance',
     }),
